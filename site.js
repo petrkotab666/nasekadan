@@ -1,5 +1,5 @@
-// Oprava politického propojení předkladatelky petice: 23. 7. 2026
-// Verze 4 – Vlasta Štaubrová je uvedena na kandidátce Dáme Kadani novou šanci.
+// Doplnění politického propojení předkladatelky petice: 23. 7. 2026
+// Vlasta Štaubrová je uvedena na kandidátce Dáme Kadani novou šanci.
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.head').forEach(head=>{
     const nav=head.querySelector('nav');
@@ -43,8 +43,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <h3>Kdo petici předkládá</h3>
-    <p>Jako předkladatelka je uvedena <strong>Vlasta Štaubrová</strong>. Na zveřejněné kandidátní listině uskupení <strong>Dáme Kadani novou šanci</strong> je Vlasta Štaubrová uvedena na <strong>12. místě</strong> jako spa terapeutka. Předchozí verze článku proto nesprávně tvrdila, že jsme ji mezi kandidáty tohoto uskupení nenašli. Za tuto chybu se omlouváme.</p>
-    <p>Její kandidatura představuje veřejně doložené politické propojení s uskupením Dáme Kadani novou šanci. Sama kandidatura však ještě nedokazuje, že petice je oficiální akcí uskupení, že ji uskupení zadalo nebo koordinovalo. Takové tvrzení by vyžadovalo další podklad nebo vyjádření zúčastněných.</p>
+    <p>Jako předkladatelka je uvedena <strong>Vlasta Štaubrová</strong>. Na zveřejněné kandidátní listině uskupení <strong>Dáme Kadani novou šanci</strong> je uvedena na <strong>12. místě</strong> jako spa terapeutka. Vedle podnikatelské činnosti a působení ve vedení místního SVJ je tedy veřejně doložitelné také její přímé politické propojení s tímto kandidujícím uskupením.</p>
+    <p>Tato skutečnost je při hodnocení petice podstatná a čtenář by ji měl znát. Sama kandidatura však ještě nedokazuje, že petice je oficiální akcí uskupení, že ji uskupení zadalo nebo koordinovalo. Takové tvrzení by vyžadovalo další podklad nebo vyjádření zúčastněných.</p>
 
     <div class="factcheck">
       <h3>Co lze o petici doložit</h3>
