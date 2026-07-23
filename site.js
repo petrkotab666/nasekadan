@@ -1,3 +1,5 @@
+// Nasazení petice: 23. 7. 2026 22:15
+// Verze 2 – vložení doplnění přímo po načtení článku.
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.head').forEach(head=>{
     const nav=head.querySelector('nav');
