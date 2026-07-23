@@ -18,6 +18,7 @@ python3 "$APP_DIR/scripts/update_sports.py"
 python3 "$APP_DIR/scripts/update_city_news.py"
 python3 "$APP_DIR/scripts/generate_complete_guides.py"
 python3 "$APP_DIR/scripts/ensure_favicon.py"
+python3 "$APP_DIR/scripts/finalize_site.py"
 rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' "$APP_DIR/" "$WEB_DIR/"
 chown -R www-data:www-data "$WEB_DIR"
 nginx -t
@@ -52,4 +53,4 @@ sudo systemctl reset-failed nasekadan-refresh.service || true
 sudo systemctl enable --now nasekadan-refresh.timer
 sudo systemctl restart nasekadan-refresh.timer
 sudo systemctl start nasekadan-refresh.service
-echo "Automatizace je aktivní každých 30 minut přes Nginx."
+echo "Automatizace je aktivní každých 30 minut přes Nginx včetně SEO postprocesoru."
