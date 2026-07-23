@@ -1,5 +1,5 @@
 // Nasazení petice: 23. 7. 2026 22:15
-// Verze 2 – vložení doplnění přímo po načtení článku.
+// Verze 3 – doplnění článku a správné označení data vydání.
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.head').forEach(head=>{
     const nav=head.querySelector('nav');
@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   const path=window.location.pathname.replace(/\/+$/,'');
   if(path!='/clanky/nemocnice-kadan.html')return;
+
+  const tag=document.querySelector('.article .tag');
+  if(tag)tag.textContent='ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 23. ČERVENCE 2026';
+  const published=document.querySelector('.sidebox .updated');
+  if(published)published.textContent='Publikováno: 23. 7. 2026';
 
   const article=document.querySelector('.article');
   const scenarios=document.getElementById('scenare');
