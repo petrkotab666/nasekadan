@@ -54,8 +54,12 @@ def app(env,start):
   try:
    raw=env['wsgi.input'].read(int(env.get('CONTENT_LENGTH') or 0)).decode();data=json.loads(raw or '{}');email=str(data.get('email','')).strip().lower();consent=bool(data.get('consent'))
    if '@' not in email or len(email)>254 or not consent:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Zkontrolujte e-mail a potvrďte souhlas.'},ensure_ascii=False))
-   token=secrets.token_urlsafe(32);now=datetime.now(timezone.utc).isoformat();ip=env.get('HTTP_X_FORWARDED_FOR',env.get('REMOTE_ADDR','')).split(',')[0].strip();ua=env.get('HTTP_USER_AGENT','')[:500]
-   c=db();c.execute('INSERT INTO subscribers(email,status,token,created_at,ip,user_agent) VALUES(?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET status="pending",token=excluded.token,created_at=excluded.created_at,confirmed_at=NULL,unsubscribed_at=NULL,ip=excluded.ip,user_agent=excluded.user_agent',(email,'pending',token,now,ip,ua));c.commit();c.close()
+   now=datetime.now(timezone.utc).isoformat();ip=env.get('HTTP_X_FORWARDED_FOR',env.get('REMOTE_ADDR','')).split(',')[0].strip();ua=env.get('HTTP_USER_AGENT','')[:500]
+   c=db();existing=c.execute('SELECT status,token FROM subscribers WHERE email=?',(email,)).fetchone()
+   if existing and existing[0]=='active':
+    c.close();return response(start,'200 OK',json.dumps({'ok':True,'message':'Tento e-mail už je k newsletteru přihlášený.'},ensure_ascii=False))
+   token=existing[1] if existing and existing[0]=='pending' else secrets.token_urlsafe(32)
+   c.execute('INSERT INTO subscribers(email,status,token,created_at,ip,user_agent) VALUES(?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET status="pending",token=excluded.token,created_at=excluded.created_at,confirmed_at=NULL,unsubscribed_at=NULL,ip=excluded.ip,user_agent=excluded.user_agent',(email,'pending',token,now,ip,ua));c.commit();c.close()
    link=f'{BASE}/api/newsletter/confirm?token={token}'
    send_mail(email,'Potvrďte odběr Naše Kadaň',f'Kliknutím potvrďte odběr týdenního přehledu Naše Kadaň:\n\n{link}\n\nPokud jste se nepřihlašovali, zprávu ignorujte.')
    return response(start,'200 OK',json.dumps({'ok':True,'message':'Na e-mail jsme poslali potvrzovací odkaz.'},ensure_ascii=False))
@@ -71,10 +75,12 @@ def app(env,start):
  if path in ('/confirm','/unsubscribe'):
   token=parse_qs(env.get('QUERY_STRING','')).get('token',[''])[0]
   if not token:return response(start,'400 Bad Request','Chybí token.','text/plain; charset=utf-8')
-  c=db();row=c.execute('SELECT email FROM subscribers WHERE token=?',(token,)).fetchone()
-  if not row:c.close();return response(start,'404 Not Found','Odkaz není platný.','text/plain; charset=utf-8')
+  c=db();row=c.execute('SELECT email,status FROM subscribers WHERE token=?',(token,)).fetchone()
+  if not row:c.close();return response(start,'404 Not Found','Odkaz není platný. Požádejte o nový potvrzovací e-mail.','text/plain; charset=utf-8')
   now=datetime.now(timezone.utc).isoformat()
-  if path=='/confirm':c.execute('UPDATE subscribers SET status="active",confirmed_at=?,unsubscribed_at=NULL WHERE token=?',(now,token));msg='Odběr je potvrzen. Děkujeme.'
+  if path=='/confirm':
+   if row[1]=='active':msg='Odběr už byl potvrzen.'
+   else:c.execute('UPDATE subscribers SET status="active",confirmed_at=?,unsubscribed_at=NULL WHERE token=?',(now,token));msg='Odběr je potvrzen. Děkujeme.'
   else:c.execute('UPDATE subscribers SET status="unsubscribed",unsubscribed_at=? WHERE token=?',(now,token));msg='Odběr byl zrušen.'
   c.commit();c.close();return response(start,'200 OK',f'<!doctype html><meta charset="utf-8"><title>Naše Kadaň</title><h1>{msg}</h1><p><a href="/">Zpět na Naše Kadaň</a></p>','text/html; charset=utf-8')
  return response(start,'404 Not Found',json.dumps({'ok':False}))
