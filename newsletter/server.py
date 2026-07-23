@@ -3,7 +3,6 @@ from __future__ import annotations
 import json, os, secrets, smtplib, sqlite3
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from http import HTTPStatus
 from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
@@ -14,7 +13,9 @@ SMTP_HOST=os.environ.get('SMTP_HOST','')
 SMTP_PORT=int(os.environ.get('SMTP_PORT','587'))
 SMTP_USER=os.environ.get('SMTP_USER','')
 SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
-SMTP_TLS=os.environ.get('SMTP_TLS','1')=='1'
+SMTP_MODE=os.environ.get('SMTP_TLS','1').strip().lower()
+SMTP_TIMEOUT=int(os.environ.get('SMTP_TIMEOUT','12'))
+
 
 def db():
  os.makedirs(os.path.dirname(DB),exist_ok=True)
@@ -22,17 +23,24 @@ def db():
  c.execute('''CREATE TABLE IF NOT EXISTS subscribers(id INTEGER PRIMARY KEY,email TEXT UNIQUE NOT NULL,status TEXT NOT NULL,token TEXT UNIQUE NOT NULL,created_at TEXT NOT NULL,confirmed_at TEXT,unsubscribed_at TEXT,ip TEXT,user_agent TEXT)''')
  return c
 
+
 def send_mail(to,subject,text):
  if not SMTP_HOST: raise RuntimeError('SMTP není nastaveno')
  m=EmailMessage();m['From']=FROM;m['To']=to;m['Subject']=subject;m.set_content(text)
- with smtplib.SMTP(SMTP_HOST,SMTP_PORT,timeout=30) as s:
-  if SMTP_TLS:s.starttls()
-  if SMTP_USER:s.login(SMTP_USER,SMTP_PASSWORD)
+ if SMTP_MODE in {'ssl','smtps','465'}:
+  connection=smtplib.SMTP_SSL(SMTP_HOST,SMTP_PORT,timeout=SMTP_TIMEOUT)
+ else:
+  connection=smtplib.SMTP(SMTP_HOST,SMTP_PORT,timeout=SMTP_TIMEOUT)
+ with connection as s:
+  if SMTP_MODE in {'1','true','yes','starttls','tls'}: s.starttls()
+  if SMTP_USER: s.login(SMTP_USER,SMTP_PASSWORD)
   s.send_message(m)
+
 
 def response(start,status,body,ctype='application/json; charset=utf-8'):
  data=body if isinstance(body,bytes) else body.encode('utf-8')
  start(status,[('Content-Type',ctype),('Content-Length',str(len(data))),('Cache-Control','no-store')]);return [data]
+
 
 def app(env,start):
  path=env.get('PATH_INFO','');method=env.get('REQUEST_METHOD','GET')
@@ -46,7 +54,12 @@ def app(env,start):
    link=f'{BASE}/api/newsletter/confirm?token={token}'
    send_mail(email,'Potvrďte odběr Naše Kadaň',f'Kliknutím potvrďte odběr týdenního přehledu Naše Kadaň:\n\n{link}\n\nPokud jste se nepřihlašovali, zprávu ignorujte.')
    return response(start,'200 OK',json.dumps({'ok':True,'message':'Na e-mail jsme poslali potvrzovací odkaz.'},ensure_ascii=False))
-  except Exception as e:return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Přihlášení se nepodařilo. Zkuste to později.'},ensure_ascii=False))
+  except smtplib.SMTPAuthenticationError:
+   return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Odeslání selhalo: Seznam odmítl přihlášení ke schránce.'},ensure_ascii=False))
+  except (TimeoutError,OSError,smtplib.SMTPException):
+   return response(start,'502 Bad Gateway',json.dumps({'ok':False,'message':'Poštovní server nyní neodpovídá. Zkuste to znovu za chvíli.'},ensure_ascii=False))
+  except Exception:
+   return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Přihlášení se nepodařilo. Zkuste to později.'},ensure_ascii=False))
  if path in ('/confirm','/unsubscribe'):
   token=parse_qs(env.get('QUERY_STRING','')).get('token',[''])[0]
   if not token:return response(start,'400 Bad Request','Chybí token.','text/plain; charset=utf-8')
@@ -57,6 +70,7 @@ def app(env,start):
   else:c.execute('UPDATE subscribers SET status="unsubscribed",unsubscribed_at=? WHERE token=?',(now,token));msg='Odběr byl zrušen.'
   c.commit();c.close();return response(start,'200 OK',f'<!doctype html><meta charset="utf-8"><title>Naše Kadaň</title><h1>{msg}</h1><p><a href="/">Zpět na Naše Kadaň</a></p>','text/html; charset=utf-8')
  return response(start,'404 Not Found',json.dumps({'ok':False}))
+
 
 if __name__=='__main__':
  with make_server('127.0.0.1',8765,app) as s:s.serve_forever()
