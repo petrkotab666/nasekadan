@@ -1,0 +1,45 @@
+name: Spustit finální předstartovní balík
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/run-finalize-launch-trigger.txt'
+permissions:
+  contents: write
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Načíst a spustit připravený finální skript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path('.github/workflows/finalize-launch.yml').read_text(encoding='utf-8')
+          marker="          python3 - <<'PY'\n"
+          start=source.index(marker)+len(marker)
+          end=source.index("          PY\n",start)
+          lines=source[start:end].splitlines()
+          code='\n'.join(line[10:] if line.startswith('          ') else line for line in lines)+'\n'
+          Path('/tmp/finalize_launch.py').write_text(code,encoding='utf-8')
+          PY
+          python3 /tmp/finalize_launch.py
+      - name: Uložit změny do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-launch-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Bez změn.'
+          else
+            git commit -m 'Dokončit Naše Kadaň před veřejným spuštěním'
+            git push origin HEAD:main
+          fi
