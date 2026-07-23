@@ -1,0 +1,7 @@
+services:
+  web:
+    build: .
+    container_name: nasekadan-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3224:80"
