@@ -1,18 +1,17 @@
 const promoItems=[
-  {label:'Náš projekt',title:'Pojistime.to',text:'Přehledné pojištění auta, domácnosti, cestování i dalších životních situací.',url:'https://pojistime.to'},
-  {label:'Místní služba',title:'VYKLIDIME.TO',text:'Vyklízení bytů, domů, sklepů a pozůstalostí v Kadani a okolí.',url:'https://vyklidime.to'},
-  {label:'Místní služba',title:'Vaše uklízečka',text:'Úklid domácností, firem a bytových domů v Kadani a na Kadaňsku.',url:'https://vaseuklizecka.cz'}
+  {title:'Pojistime.to',text:'Srovnání pojištění auta, domácnosti, cestování a dalších rizik na jednom místě.',url:'https://pojistime.to',tag:'Pojištění'},
+  {title:'VYKLIDIME.TO',text:'Vyklízení bytů, domů, sklepů a pozůstalostí v Kadani a širokém okolí.',url:'https://vyklidime.to',tag:'Místní služba'},
+  {title:'Vaše uklízečka',text:'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',url:'https://vaseuklizecka.cz',tag:'Místní služba'},
+  {title:'Haffit',text:'Krmivo pro psy připravené na míru podle potřeb konkrétního psa.',url:'https://www.haffit.cz/?a_box=cbhtyjjm&a_cam=1',tag:'Pro chovatele'},
+  {title:'Zonky půjčka',text:'Online půjčka od Zonky s přehledným vyřízením a možností předčasného splacení.',url:'https://www.zonky.cz/pujcka-od-zonky/?a_box=s8m27mmy',tag:'Finance'}
 ];
-
-// LastMinuteSlevy.cz se přidá až po dokončení opravy webu.
-// DilyNaZakazku.cz je záměrně vypnuté do dokončení projektu.
-// RealityKadan.cz zůstává samostatný projekt bez křížové propagace.
 
 function renderPromos(){
   document.querySelectorAll('[data-promos]').forEach((box,i)=>{
-    const shift=i%promoItems.length;
-    const items=[...promoItems.slice(shift),...promoItems.slice(0,shift)];
-    box.innerHTML='<div class="promo-label">REKLAMA</div><div class="promo-grid">'+items.map(x=>`<a class="promo-card" href="${x.url}" target="_blank" rel="sponsored noopener"><small>${x.label}</small><strong>${x.title}</strong><span>${x.text}</span><b>Zjistit více →</b></a>`).join('')+'</div>';
+    const count=box.dataset.count?Number(box.dataset.count):3;
+    const shift=(i*2)%promoItems.length;
+    const ordered=[...promoItems.slice(shift),...promoItems.slice(0,shift)].slice(0,count);
+    box.innerHTML='<div class="promo-label">REKLAMA</div><div class="promo-grid">'+ordered.map(x=>`<a class="promo-card" href="${x.url}" target="_blank" rel="sponsored noopener"><small>${x.tag}</small><strong>${x.title}</strong><span>${x.text}</span><b>Zjistit více →</b></a>`).join('')+'</div>';
   });
 }
 
