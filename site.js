@@ -1,4 +1,4 @@
-// Doplnění politického propojení předkladatelky petice: 23. 7. 2026
+// Doplnění politického propojení předkladatelky petice a datum vydání 24. 7. 2026
 // Vlasta Štaubrová je uvedena na kandidátce Dáme Kadani novou šanci.
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.head').forEach(head=>{
@@ -23,9 +23,26 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(path!='/clanky/nemocnice-kadan.html')return;
 
   const tag=document.querySelector('.article .tag');
-  if(tag)tag.textContent='ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 23. ČERVENCE 2026';
+  if(tag)tag.textContent='ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 24. ČERVENCE 2026';
   const published=document.querySelector('.sidebox .updated');
-  if(published)published.textContent='Publikováno: 23. 7. 2026';
+  if(published)published.textContent='Publikováno: 24. 7. 2026';
+
+  const structured=document.querySelector('script[type="application/ld+json"]');
+  if(structured){
+    try{
+      const data=JSON.parse(structured.textContent);
+      if(data&&data['@type']==='NewsArticle'){
+        data.datePublished='2026-07-24';
+        data.dateModified='2026-07-24';
+        structured.textContent=JSON.stringify(data);
+      }
+    }catch(error){
+      console.warn('Nepodařilo se upravit strukturované datum článku.',error);
+    }
+  }
+
+  const sourceNote=document.querySelector('.source-list small');
+  if(sourceNote)sourceNote.textContent=sourceNote.textContent.replace('23. července 2026','24. července 2026');
 
   const article=document.querySelector('.article');
   const scenarios=document.getElementById('scenare');
