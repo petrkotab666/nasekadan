@@ -20,71 +20,119 @@ const promoItems=[
 
 const usedPromoIds=new Set();
 
-function hashSeed(value){return [...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,0)}
+function hashSeed(value){
+  return [...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,0);
+}
 
 function pickPromos(context,count,offset){
-  const exact=promoItems.filter(x=>x.contexts.includes(context));
-  const fallback=promoItems.filter(x=>!exact.includes(x));
+  const exact=promoItems.filter(item=>item.contexts.includes(context));
+  const fallback=promoItems.filter(item=>!exact.includes(item));
   const pool=[...exact,...fallback];
   const day=new Date().toISOString().slice(0,10);
   const shift=(hashSeed(location.pathname+day)+offset)%pool.length;
   const rotated=[...pool.slice(shift),...pool.slice(0,shift)];
-  const fresh=rotated.filter(x=>!usedPromoIds.has(x.id));
-  const ordered=[...fresh,...rotated.filter(x=>!fresh.includes(x))];
+  const fresh=rotated.filter(item=>!usedPromoIds.has(item.id));
+  const ordered=[...fresh,...rotated.filter(item=>!fresh.includes(item))];
   const selected=[];
   for(const item of ordered){
-    if(selected.some(x=>x.id===item.id))continue;
+    if(selected.some(entry=>entry.id===item.id))continue;
     selected.push(item);
     if(selected.length===count)break;
   }
-  selected.forEach(x=>usedPromoIds.add(x.id));
+  selected.forEach(item=>usedPromoIds.add(item.id));
   return selected;
 }
 
 function inferPromoContext(text){
   const value=String(text||'').toLocaleLowerCase('cs');
-  if(/nemocnic|zdrav|porod|péč|audit/.test(value))return 'health';
-  if(/peněz|financ|dotac|náklad|výnos|hospodař/.test(value))return 'finance';
-  if(/budov|energie|opravy|domác/.test(value))return 'home';
-  if(/kadaň|ods|volb|kandid|politik|měst/.test(value))return 'local';
+  if(/nemocnic|zdrav|porod|péč|audit|lékař|pacient/.test(value))return 'health';
+  if(/peněz|financ|dotac|náklad|výnos|hospodař|milion/.test(value))return 'finance';
+  if(/budov|energie|opravy|domác|investic/.test(value))return 'home';
+  if(/kadaň|ods|volb|kandid|politik|měst|zastupitel/.test(value))return 'local';
   return 'general';
 }
 
-function hasPromoNearby(heading){
-  let node=heading.previousElementSibling;
-  for(let i=0;i<4&&node;i++,node=node.previousElementSibling){
-    if(node.matches('[data-promos]'))return true;
-  }
-  node=heading.nextElementSibling;
-  for(let i=0;i<2&&node;i++,node=node.nextElementSibling){
-    if(node.matches('[data-promos]'))return true;
-  }
-  return false;
+function isPlacementCandidate(node){
+  if(!node||node.matches('[data-promos],.source-list,.tag,h1,.leadtext,.hero-visual,.toc'))return false;
+  return node.matches('p,table,ul,ol,blockquote,.numbers,.callout,.factcheck,.scenario-grid');
 }
 
-function insertAutomaticArticlePromos(){
+function nearbyText(node){
+  const parts=[node.textContent||''];
+  let cursor=node.nextElementSibling;
+  for(let i=0;i<3&&cursor;i++,cursor=cursor.nextElementSibling){
+    if(cursor.matches('.source-list'))break;
+    parts.push(cursor.textContent||'');
+  }
+  return parts.join(' ');
+}
+
+function redistributeArticlePromos(){
   const article=document.querySelector('article.article');
   if(!article)return;
-  const headings=[...article.querySelectorAll(':scope > h2')];
-  if(headings.length<7)return;
-  const existing=[...article.querySelectorAll(':scope > [data-promos]')].length;
-  const desired=Math.min(7,Math.max(5,Math.ceil(headings.length/2.4)));
-  let needed=Math.max(0,desired-existing);
-  const candidates=[2,4,6,8,10,12,14,16];
-  for(const index of candidates){
-    if(needed<=0)break;
-    const heading=headings[index];
-    if(!heading||hasPromoNearby(heading))continue;
+
+  article.querySelectorAll(':scope > [data-promos]').forEach(node=>node.remove());
+
+  const children=[...article.children];
+  const firstHeading=article.querySelector(':scope > h2');
+  const sourceList=article.querySelector(':scope > .source-list');
+  if(!firstHeading||!sourceList)return;
+
+  const firstIndex=children.indexOf(firstHeading);
+  const sourceIndex=children.indexOf(sourceList);
+  const candidates=children.slice(firstIndex+1,sourceIndex).filter(isPlacementCandidate);
+  if(candidates.length<4)return;
+
+  const articleTop=article.getBoundingClientRect().top;
+  const startY=firstHeading.getBoundingClientRect().bottom-articleTop;
+  const endY=sourceList.getBoundingClientRect().top-articleTop;
+  const contentHeight=Math.max(0,endY-startY);
+  const desired=contentHeight>=7200?6:contentHeight>=5600?5:contentHeight>=4000?4:3;
+  const edgePadding=Math.min(520,Math.max(280,contentHeight*0.07));
+  const usableStart=startY+edgePadding;
+  const usableEnd=endY-edgePadding;
+  const usableHeight=Math.max(1,usableEnd-usableStart);
+  const minGap=Math.max(620,usableHeight/(desired+0.7)*0.58);
+
+  const points=candidates.map((node,index)=>({
+    node,
+    index,
+    y:node.getBoundingClientRect().bottom-articleTop
+  })).filter(point=>point.y>=usableStart&&point.y<=usableEnd);
+
+  const selected=[];
+  let previousY=-Infinity;
+
+  for(let position=0;position<desired;position++){
+    const target=usableStart+(usableHeight*(position+0.5)/desired);
+    const remaining=desired-position-1;
+    const eligible=points.filter(point=>{
+      if(selected.some(entry=>entry.index===point.index))return false;
+      if(point.y-previousY<minGap)return false;
+      const roomAfter=usableEnd-point.y;
+      return remaining===0||roomAfter>=remaining*minGap*0.78;
+    });
+
+    const pool=eligible.length?eligible:points.filter(point=>
+      !selected.some(entry=>entry.index===point.index)&&
+      point.y-previousY>=minGap*0.72
+    );
+    if(!pool.length)break;
+
+    pool.sort((a,b)=>Math.abs(a.y-target)-Math.abs(b.y-target));
+    const chosen=pool[0];
+    selected.push(chosen);
+    previousY=chosen.y;
+  }
+
+  selected.forEach((entry,index)=>{
     const block=document.createElement('section');
     block.className='article-ad article-ad-auto';
     block.dataset.promos='';
-    block.dataset.context=inferPromoContext(heading.textContent);
-    heading.before(block);
-    needed--;
-  }
-  [...article.querySelectorAll(':scope > [data-promos]')].forEach((box,index)=>{
-    if(!box.dataset.layout)box.dataset.layout=index%2===0?'banner':'feed';
-    if(!box.dataset.count)box.dataset.count=box.dataset.layout==='banner'?'1':'3';
+    block.dataset.context=inferPromoContext(nearbyText(entry.node));
+    block.dataset.layout=index%2===0?'banner':'feed';
+    block.dataset.count=block.dataset.layout==='banner'?'1':'3';
+    entry.node.after(block);
   });
 }
 
@@ -105,11 +153,12 @@ function ensurePromoStyles(){
     .promo-wide-copy strong{font:700 28px/1.15 Georgia,serif;margin:6px 0;overflow-wrap:anywhere}
     .promo-wide-copy .promo-description{color:#53616a;flex:1;overflow-wrap:anywhere}
     .promo-wide-copy b{color:var(--red);margin-top:12px}
-    .article-ad-auto{margin:42px 0}
+    .article-ad-auto{margin:52px 0}
     @media(max-width:700px){
       .promo-card-wide{grid-template-columns:1fr}
       .promo-card-wide .promo-banner{height:112px!important;min-height:112px;border-right:0;border-bottom:1px solid var(--line)}
       .promo-wide-copy strong{font-size:23px}
+      .article-ad-auto{margin:44px 0}
     }
   `;
   document.head.appendChild(style);
@@ -142,6 +191,6 @@ function renderPromos(){
 
 document.addEventListener('DOMContentLoaded',()=>{
   ensurePromoStyles();
-  insertAutomaticArticlePromos();
+  redistributeArticlePromos();
   renderPromos();
 });
