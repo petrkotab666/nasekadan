@@ -7,6 +7,7 @@ BASE='https://nasekadan.cz'
 TODAY='2026-07-23'
 SOCIAL=f'{BASE}/social-card.png'
 LEGAL='<div class="footer-legal"><a href="/o-webu/">O webu</a><a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="mailto:info@nasekadan.cz">Kontakt</a></div>'
+HEADER='''<header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav aria-label="Hlavní menu"><a href="/zpravy/">Zprávy</a><a href="/#akce">Akce</a><a href="/pruvodce/">Průvodce</a><a href="/prakticke/">Praktická Kadaň</a><a href="/doprava/">Doprava</a><a href="/organizace/">Organizace</a><a href="/zapojte-se/">Zapojte se</a></nav></div></header>'''
 
 
 def canonical_for(path:Path)->str:
@@ -33,6 +34,11 @@ def get_description(text:str)->str:
 def finish_html(path:Path)->None:
  text=path.read_text(encoding='utf-8')
  text=text.replace('mirove-namesti.html','mestske-namesti.html').replace('<span class="logo-mark">K</span>','<span class="logo-mark">NK</span>')
+ # Jediný centrální header pro všechny současné i budoucí stránky.
+ if re.search(r'<header\b[^>]*>.*?</header>',text,re.I|re.S):
+  text=re.sub(r'<header\b[^>]*>.*?</header>',HEADER,text,count=1,flags=re.I|re.S)
+ else:
+  text=text.replace('<body>','<body>'+HEADER,1)
  patterns=[r'<link\b[^>]*rel=["\']canonical["\'][^>]*>\s*',r'<meta\b[^>]*(?:property=["\']og:[^"\']+["\']|name=["\']twitter:[^"\']+["\']|name=["\']robots["\']|name=["\']theme-color["\'])[^>]*>\s*']
  for pattern in patterns:text=re.sub(pattern,'',text,flags=re.I)
  canonical=canonical_for(path)
