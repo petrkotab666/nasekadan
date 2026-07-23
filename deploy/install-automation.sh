@@ -22,6 +22,7 @@ chown -R ubuntu:ubuntu "$APP_DIR"
 su - ubuntu -c "git -C '$APP_DIR' fetch origin && git -C '$APP_DIR' reset --hard origin/main"
 python3 "$APP_DIR/scripts/update_events.py"
 python3 "$APP_DIR/scripts/update_sports.py"
+python3 "$APP_DIR/scripts/ensure_favicon.py"
 rsync -a --delete \
   --exclude='.git' --exclude='.github' --exclude='deploy' \
   --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' \
