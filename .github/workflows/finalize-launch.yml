@@ -10,7 +10,7 @@ permissions:
   pull-requests: read
 jobs:
   finalize:
-    runs-on: [self-hosted, ovh, ocenime-to]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -21,165 +21,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/finalize_launch.py
           python3 - <<'PY'
           from pathlib import Path
           from datetime import datetime
-          import binascii, html, json, re, struct, zlib
+          import json,re,unicodedata
+          from difflib import SequenceMatcher
 
-          ROOT=Path.cwd()
-          BASE='https://nasekadan.cz'
-          TODAY='2026-07-23'
-          SOCIAL=f'{BASE}/social-card.png'
-
-          def write(path,content):
-            path=ROOT/path
-            path.parent.mkdir(parents=True,exist_ok=True)
-            path.write_text(content,encoding='utf-8')
-
-          def canonical_for(path):
-            rel=path.relative_to(ROOT).as_posix()
-            if rel=='index.html': return BASE+'/'
-            if rel.endswith('/index.html'): return BASE+'/'+rel[:-10]
-            return BASE+'/'+rel
-
-          def get_tag(text,tag):
-            m=re.search(rf'<{tag}[^>]*>(.*?)</{tag}>',text,re.I|re.S)
-            return re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',m.group(1))).strip() if m else ''
-
-          def get_description(text):
-            for m in re.finditer(r'<meta\b[^>]*>',text,re.I):
-              tag=m.group(0)
-              if re.search(r'\bname=["\']description["\']',tag,re.I):
-                c=re.search(r'\bcontent=["\']([^"\']*)',tag,re.I)
-                if c:return html.unescape(c.group(1)).strip()
-            return ''
-
-          # 404 stránka
-          write(Path('404.html'),'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stránka nenalezena | Naše Kadaň</title><meta name="description" content="Požadovaná stránka na portálu Naše Kadaň nebyla nalezena."><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head><body><header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav><a href="/">Úvod</a><a href="/zpravy/">Zprávy</a><a href="/pruvodce/">Průvodce</a></nav></div></header><main class="wrap error-page"><p class="tag">CHYBA 404</p><h1>Tahle stránka v Kadani není</h1><p>Odkaz mohl být změněn nebo stránka už neexistuje. Pokračujte na úvodní stránku, do zpráv nebo do průvodce městem.</p><div class="error-actions"><a class="btn" href="/">Na úvod</a><a class="btn btn-secondary" href="/zpravy/">Zprávy</a><a class="btn btn-secondary" href="/pruvodce/">Průvodce</a></div></main><footer><div class="wrap">© 2026 Naše Kadaň</div></footer><script src="/site.js" defer></script></body></html>''')
-
-          # Transparentnost webu
-          write(Path('o-webu/index.html'),'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>O webu Naše Kadaň</title><meta name="description" content="Jak vzniká portál Naše Kadaň, jak ověřujeme informace, opravujeme chyby a financujeme provoz webu."><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head><body><header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav><a href="/">Úvod</a><a href="/zpravy/">Zprávy</a><a href="/pruvodce/">Průvodce</a><a href="/zapojte-se/">Zapojte se</a></nav></div></header><main class="wrap legal-page"><p class="tag">O PROJEKTU</p><h1>Naše Kadaň</h1><p class="section-intro">Nezávislý místní informační portál se zprávami, akcemi, praktickými informacemi a průvodcem městem.</p><h2>Jak pracujeme s informacemi</h2><p>U důležitých témat vycházíme především z veřejných dokumentů, původních vyjádření, oficiálních registrů a ověřitelných zdrojů. V článcích rozlišujeme doložená fakta, tvrzení jednotlivých stran a vlastní redakční vysvětlení.</p><h2>Akce a proměnlivé údaje</h2><p>Kalendář pravidelně kontrolujeme a podle možností odkazujeme přímo na detail pořadatele. Časy, vstupné a program se však mohou změnit, proto je před návštěvou rozhodující původní stránka akce.</p><h2>Opravy a podněty</h2><p>Chybu, doplnění nebo podnět můžete poslat na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>. Doložené chyby opravujeme a u významných změn aktualizujeme datum článku.</p><h2>Financování provozu</h2><p>Web obsahuje reklamní a partnerské odkazy označené slovem „Reklama“. Případná odměna pomáhá financovat provoz portálu a nemění cenu pro návštěvníka. Reklama neurčuje obsah článků ani jejich závěry.</p><h2>Návštěvnost a soukromí</h2><p>Pro základní souhrnnou statistiku používáme serverové provozní záznamy bez reklamních cookies a bez vytváření uživatelských profilů. Newsletter je dobrovolný a funguje až po potvrzení odkazu zaslaného e-mailem.</p><h2>Kontakt</h2><p><a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a></p></main><footer><div class="wrap">© 2026 Naše Kadaň</div></footer><script src="/site.js" defer></script></body></html>''')
-
-          # Ochrana soukromí – newsletter, serverové logy a externí odkazy
-          write(Path('ochrana-osobnich-udaju/index.html'),'''<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ochrana osobních údajů | Naše Kadaň</title><meta name="description" content="Informace o ochraně soukromí, serverových záznamech a newsletteru portálu Naše Kadaň."><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head><body><header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav><a href="/">Úvod</a><a href="/o-webu/">O webu</a><a href="/zapojte-se/">Newsletter</a></nav></div></header><main class="wrap legal-page"><p class="tag">OCHRANA SOUKROMÍ</p><h1>Ochrana osobních údajů</h1><h2>Serverové provozní záznamy</h2><p>Při návštěvě webu server technicky zaznamenává požadovanou adresu, čas, stav odpovědi, IP adresu, typ prohlížeče a případnou odkazující stránku. Záznamy používáme pro zabezpečení, hledání chyb a souhrnnou statistiku návštěvnosti. Nepoužíváme je k vytváření reklamních profilů návštěvníků.</p><h2>Newsletter</h2><p>Pro zasílání newsletteru ukládáme e-mailovou adresu, stav odběru, čas přihlášení a potvrzení a nezbytný technický záznam pro doložení souhlasu. Odběr začne až po potvrzení odkazu zaslaného na uvedený e-mail.</p><p>Odběr lze kdykoli zrušit odkazem v newsletteru nebo zprávou na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>. Údaje neprodáváme ani neposkytujeme inzerentům.</p><h2>Reklamní a externí odkazy</h2><p>Po kliknutí na odkaz opouštíte nasekadan.cz a další zpracování se řídí pravidly cílového webu. Partnerské odkazy mohou obsahovat technický identifikátor kampaně, který cílovému partnerovi umožní připsat případnou odměnu tomuto webu.</p><h2>Cookies</h2><p>Naše vlastní měření návštěvnosti nevyžaduje analytické ani reklamní cookies. Cílové externí weby mohou používat vlastní cookies podle svých pravidel.</p><h2>Vaše práva a kontakt</h2><p>Můžete požádat o přístup, opravu, výmaz nebo omezení zpracování údajů vztahujících se k newsletteru. Kontakt: <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>.</p><p><small>Aktualizováno 23. července 2026.</small></p></main><footer><div class="wrap">© 2026 Naše Kadaň</div></footer><script src="/site.js" defer></script></body></html>''')
-
-          # Mobilní menu
-          write(Path('site.js'),'''document.addEventListener('DOMContentLoaded',()=>{document.querySelectorAll('.head').forEach(head=>{const nav=head.querySelector('nav');if(!nav||head.querySelector('.menu-toggle'))return;const button=document.createElement('button');button.className='menu-toggle';button.type='button';button.setAttribute('aria-label','Otevřít hlavní menu');button.setAttribute('aria-expanded','false');button.innerHTML='<span></span><span></span><span></span>';button.addEventListener('click',()=>{const open=nav.classList.toggle('is-open');button.classList.toggle('is-open',open);button.setAttribute('aria-expanded',String(open));button.setAttribute('aria-label',open?'Zavřít hlavní menu':'Otevřít hlavní menu')});head.appendChild(button)});});''')
-
-          # Vizuál pro sdílení – PNG vytvořený bez externích knihoven
-          W,H=1200,630
-          pixels=[[(19,35,45) for _ in range(W)] for __ in range(H)]
-          def rect(x1,y1,x2,y2,c):
-            for y in range(max(0,y1),min(H,y2)):
-              row=pixels[y]
-              for x in range(max(0,x1),min(W,x2)):row[x]=c
-          FONT={
-            'A':['01110','10001','10001','11111','10001','10001','10001'],
-            'D':['11110','10001','10001','10001','10001','10001','11110'],
-            'E':['11111','10000','10000','11110','10000','10000','11111'],
-            'K':['10001','10010','10100','11000','10100','10010','10001'],
-            'N':['10001','11001','10101','10011','10001','10001','10001'],
-            'S':['01111','10000','10000','01110','00001','00001','11110'],
-            ' ':['00000']*7,
-          }
-          def text_bitmap(text,x,y,scale,color,spacing=1):
-            cursor=x
-            for ch in text:
-              glyph=FONT.get(ch,FONT[' '])
-              for gy,line in enumerate(glyph):
-                for gx,val in enumerate(line):
-                  if val=='1':rect(cursor+gx*scale,y+gy*scale,cursor+(gx+1)*scale,y+(gy+1)*scale,color)
-              cursor+=(5+spacing)*scale
-          rect(0,0,W,18,(169,35,43));rect(70,120,330,510,(169,35,43));rect(385,435,1100,449,(169,35,43))
-          text_bitmap('NK',92,205,20,(255,255,255),2)
-          text_bitmap('NASE KADAN',385,220,12,(255,255,255),1)
-          # jemné dekorativní pruhy
-          rect(385,330,1080,342,(201,164,90));rect(385,365,930,373,(78,103,116))
-          raw=bytearray()
-          for row in pixels:
-            raw.append(0)
-            for r,g,b in row:raw.extend((r,g,b))
-          def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',binascii.crc32(t+d)&0xffffffff)
-          png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',W,H,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(bytes(raw),9))+chunk(b'IEND',b'')
-          (ROOT/'social-card.png').write_bytes(png)
-
-          # Společné styly
-          css=ROOT/'style.css'
-          style=css.read_text(encoding='utf-8')
-          additions='''.menu-toggle{display:none;margin-left:auto;width:44px;height:42px;border:1px solid var(--line);border-radius:10px;background:#fff;align-items:center;justify-content:center;flex-direction:column;gap:5px;cursor:pointer}.menu-toggle span{display:block;width:22px;height:2px;background:var(--ink);transition:.2s}.menu-toggle.is-open span:nth-child(1){transform:translateY(7px) rotate(45deg)}.menu-toggle.is-open span:nth-child(2){opacity:0}.menu-toggle.is-open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}.footer-legal{width:min(1180px,calc(100% - 32px));margin:22px auto 0;padding-top:17px;border-top:1px solid rgba(255,255,255,.16);display:flex;gap:18px;flex-wrap:wrap;font-size:14px}.footer-legal a{color:#eef4f6}.legal-page,.error-page{max-width:880px;padding:58px 0}.legal-page h1,.error-page h1{font:800 50px/1.06 Georgia,serif}.legal-page h2{font:800 30px/1.2 Georgia,serif;margin-top:38px}.legal-page p,.legal-page li,.error-page p{font-size:18px}.error-actions{display:flex;gap:12px;flex-wrap:wrap;margin:28px 0 70px}.btn-secondary{background:#fff;color:var(--red);border:1px solid var(--red);box-shadow:none}@media(max-width:850px){.head{position:relative}.menu-toggle{display:flex}.head nav{display:none;position:absolute;left:0;right:0;top:78px;background:#fff;border:1px solid var(--line);border-radius:0 0 16px 16px;padding:14px 20px;box-shadow:var(--shadow);flex-direction:column;gap:0;z-index:50}.head nav.is-open{display:flex}.head nav a{padding:13px 4px;border-bottom:1px solid var(--line)}.head nav a:last-child{border-bottom:0}.legal-page h1,.error-page h1{font-size:38px}}'''
-          if '.menu-toggle{' not in style:style+=additions
-          css.write_text(style,encoding='utf-8')
-
-          # Opravit přímý rozbitý odkaz
-          for path in ROOT.rglob('*.html'):
-            text=path.read_text(encoding='utf-8')
-            text=text.replace('mirove-namesti.html','mestske-namesti.html')
-            text=text.replace('<span class="logo-mark">K</span>','<span class="logo-mark">NK</span>')
-            path.write_text(text,encoding='utf-8')
-
-          LEGAL='<div class="footer-legal"><a href="/o-webu/">O webu</a><a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="mailto:info@nasekadan.cz">Kontakt</a></div>'
-          META_PATTERNS=[
-            r'<link\b[^>]*rel=["\']canonical["\'][^>]*>\s*',
-            r'<meta\b[^>]*(?:property=["\']og:[^"\']+["\']|name=["\']twitter:[^"\']+["\']|name=["\']robots["\']|name=["\']theme-color["\'])[^>]*>\s*',
-          ]
-          for path in sorted(ROOT.rglob('*.html')):
-            if any(part in {'.git','.github'} for part in path.parts):continue
-            text=path.read_text(encoding='utf-8')
-            for pattern in META_PATTERNS:text=re.sub(pattern,'',text,flags=re.I)
-            canonical=canonical_for(path)
-            title=get_tag(text,'title') or 'Naše Kadaň'
-            desc=get_description(text) or 'Zprávy, akce, praktické informace a průvodce městem Kadaň.'
-            is404=path.name=='404.html'
-            ogtype='article' if 'clanky' in path.parts else 'website'
-            robots='noindex,follow' if is404 else 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1'
-            meta=(f'<link rel="canonical" href="{html.escape(canonical,quote=True)}">'
-                  f'<meta name="robots" content="{robots}">'
-                  '<meta name="theme-color" content="#a9232b">'
-                  '<meta property="og:locale" content="cs_CZ">'
-                  f'<meta property="og:type" content="{ogtype}">'
-                  f'<meta property="og:site_name" content="Naše Kadaň">'
-                  f'<meta property="og:title" content="{html.escape(title,quote=True)}">'
-                  f'<meta property="og:description" content="{html.escape(desc,quote=True)}">'
-                  f'<meta property="og:url" content="{html.escape(canonical,quote=True)}">'
-                  f'<meta property="og:image" content="{SOCIAL}">'
-                  '<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">'
-                  '<meta property="og:image:alt" content="Naše Kadaň – zprávy, akce a průvodce městem">'
-                  '<meta name="twitter:card" content="summary_large_image">'
-                  f'<meta name="twitter:title" content="{html.escape(title,quote=True)}">'
-                  f'<meta name="twitter:description" content="{html.escape(desc,quote=True)}">'
-                  f'<meta name="twitter:image" content="{SOCIAL}">')
-            text=text.replace('</head>',meta+'</head>',1)
-            if 'footer-legal' not in text:
-              if '</footer>' in text:text=text.replace('</footer>',LEGAL+'</footer>',1)
-              else:text=text.replace('</body>',f'<footer><div class="wrap">© 2026 Naše Kadaň</div>{LEGAL}</footer></body>',1)
-            if '/site.js' not in text:text=text.replace('</body>','<script src="/site.js" defer></script></body>',1)
-            path.write_text(text,encoding='utf-8')
-
-          # Strukturovaná data homepage
-          home=ROOT/'index.html';text=home.read_text(encoding='utf-8')
-          if '"@type":"WebSite"' not in text:
-            data={"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":BASE+"/#website","url":BASE+"/","name":"Naše Kadaň","inLanguage":"cs","publisher":{"@id":BASE+"/#organization"}},{"@type":"Organization","@id":BASE+"/#organization","name":"Naše Kadaň","url":BASE+"/","email":"info@nasekadan.cz","logo":{"@type":"ImageObject","url":SOCIAL}}]}
-            text=text.replace('</head>',f'<script type="application/ld+json">{json.dumps(data,ensure_ascii=False,separators=(",",":"))}</script></head>',1)
-            home.write_text(text,encoding='utf-8')
-
-          # robots a sitemap
-          write(Path('robots.txt'),'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /data/\nDisallow: /statistiky/\nSitemap: https://nasekadan.cz/sitemap.xml\n')
-          urls=[]
-          for path in sorted(ROOT.rglob('*.html')):
-            if any(part in {'.git','.github'} for part in path.parts) or path.name=='404.html':continue
-            urls.append(canonical_for(path))
-          sitemap='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'  <url><loc>{html.escape(url)}</loc><lastmod>{TODAY}</lastmod></url>\n' for url in sorted(set(urls)))+'</urlset>\n'
-          write(Path('sitemap.xml'),sitemap)
-
-          # Silnější odstranění téměř duplicitních akcí z obecných zdrojů
-          script=ROOT/'scripts/update_events.py'
-          source=script.read_text(encoding='utf-8')
-          if 'def collapse_near_duplicates' not in source:
-            marker='def main():\n'
-            helper='''def collapse_near_duplicates(events):\n result=[]\n stop={"vystava","akce","kadan","kadani","program","vernisaz","vyroci","mesto"}\n def tokens(e):return {x for x in slug(e.get("title","")).split("-") if len(x)>=3 and x not in stop}\n def date(e):\n  try:return datetime.fromisoformat(str(e.get("start", ""))[:10]).date()\n  except Exception:return None\n for event in sorted(events,key=lambda e:(source_quality(e),len(clean(e.get("description")))),reverse=True):\n  if clean(event.get("category")).lower()=="kino":result.append(event);continue\n  et=tokens(event);ed=date(event);duplicate=False\n  for kept in result:\n   if clean(kept.get("category")).lower()=="kino":continue\n   kd=date(kept)\n   if not ed or not kd or abs((ed-kd).days)>2:continue\n   kt=tokens(kept);overlap=len(et & kt)/max(1,min(len(et),len(kt)))\n   a,b=slug(event.get("title","")),slug(kept.get("title",""))\n   if overlap>=0.55 or (len(a)>=8 and len(b)>=8 and (a.startswith(b) or b.startswith(a))):duplicate=True;break\n  if not duplicate:result.append(event)\n return result\n\n'''
-            source=source.replace(marker,helper+marker,1)
-            source=source.replace("payload={'generatedAt':datetime.now(timezone.utc).isoformat(),'sources':used,'errors':errors,'events':sorted(unique.values(),key=lambda x:x['start'])}","payload={'generatedAt':datetime.now(timezone.utc).isoformat(),'sources':used,'errors':errors,'events':sorted(collapse_near_duplicates(list(unique.values())),key=lambda x:x['start'])}")
-            script.write_text(source,encoding='utf-8')
+          ROOT=Path.cwd();p=ROOT/'data/events.json'
+          if p.exists():
+            data=json.loads(p.read_text(encoding='utf-8'));events=data.get('events',[])
+            def norm(v):
+              v=unicodedata.normalize('NFKD',str(v or '')).encode('ascii','ignore').decode().lower()
+              return re.sub(r'[^a-z0-9]+',' ',v).strip()
+            def generic(e):
+              u=str(e.get('source','')).lower().rstrip('/')
+              return '/redakce/index.php' in u or '/cely-program' in u or u.endswith('/akce/mesto-kadan') or u.endswith('/kultura')
+            direct=[e for e in events if not generic(e)]
+            kept=[]
+            for e in events:
+              if not generic(e):kept.append(e);continue
+              duplicate=False
+              for d in direct:
+                if str(e.get('start',''))[:10]!=str(d.get('start',''))[:10]:continue
+                if SequenceMatcher(None,norm(e.get('title')),norm(d.get('title'))).ratio()>=0.38:duplicate=True;break
+              if not duplicate:kept.append(e)
+            unique={}
+            for e in kept:
+              key=(norm(e.get('title')),str(e.get('start',''))[:16],norm(e.get('place')))
+              old=unique.get(key)
+              if old is None or (generic(old) and not generic(e)):unique[key]=e
+            data['events']=sorted(unique.values(),key=lambda x:str(x.get('start','')))
+            p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+            print('Akce:',len(events),'->',len(data['events']))
           PY
       - name: Uložit finální balík do main
         shell: bash
