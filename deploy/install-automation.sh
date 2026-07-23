@@ -49,8 +49,9 @@ sudo tee /etc/systemd/system/nasekadan-refresh.timer >/dev/null <<'EOF'
 Description=Pravidelná aktualizace Naše Kadaň
 
 [Timer]
-OnCalendar=*-*-* 05,11,17,23:20:00
-RandomizedDelaySec=600
+OnBootSec=2min
+OnUnitActiveSec=30min
+RandomizedDelaySec=90
 Persistent=true
 Unit=nasekadan-refresh.service
 
@@ -60,6 +61,7 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now nasekadan-refresh.timer
+sudo systemctl restart nasekadan-refresh.timer
 sudo systemctl start nasekadan-refresh.service
 
-echo "Automatizace je aktivní. Kontrola: systemctl status nasekadan-refresh.timer"
+echo "Automatizace je aktivní každých 30 minut. Kontrola: systemctl status nasekadan-refresh.timer"
