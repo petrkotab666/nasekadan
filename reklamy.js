@@ -142,7 +142,6 @@ function ensurePromoStyles(){
   style.id='promo-dynamic-styles';
   style.textContent=`
     .promo-label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .promo-label span{font-size:10px;letter-spacing:0;text-transform:none;color:#8a949a}
     .promo-grid-banner{grid-template-columns:minmax(0,1fr)!important}
     .promo-card-wide{display:grid!important;grid-template-columns:minmax(210px,34%) minmax(0,1fr);padding:0!important;min-height:154px!important}
     .promo-card-wide .promo-banner{height:100%!important;min-height:154px;margin:0!important;border:0;border-right:1px solid var(--line)}
@@ -185,7 +184,7 @@ function renderPromos(){
     const compact=context==='sidebar'?' promo-grid-compact':'';
     const bannerClass=isBanner?' promo-grid-banner':'';
     const cards=items.map(item=>isBanner?renderBannerCard(item):renderFeedCard(item)).join('');
-    box.innerHTML=`<div class="promo-label">REKLAMA <span>Některé odkazy jsou affiliate a mohou podpořit provoz webu.</span></div><div class="promo-grid${compact}${bannerClass}">${cards}</div>`;
+    box.innerHTML=`<div class="promo-label">REKLAMA</div><div class="promo-grid${compact}${bannerClass}">${cards}</div>`;
   });
 }
 
