@@ -1,0 +1,46 @@
+name: Opravit proměnnou statistik Nginx
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/fix-stats-log-variable-trigger.txt'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Doplnit kompatibilní map proměnnou
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/scripts/nasekadan-stats/install-stats.sh')
+          text=path.read_text(encoding='utf-8')
+          needle="cat > \"$GLOBAL_CONF\" <<'NGINX'\n# Naše Kadaň – samostatný JSON log pro soukromé statistiky.\nlog_format nasekadan_stats escape=json\n"
+          replacement="cat > \"$GLOBAL_CONF\" <<'NGINX'\n# Naše Kadaň – samostatný JSON log pro soukromé statistiky.\n# Kompatibilita se staršími vhosty, které logují přes if=$nasekadan_stats_loggable.\nmap $request_uri $nasekadan_stats_loggable {\n    default 1;\n}\n\nlog_format nasekadan_stats escape=json\n"
+          if replacement in text:
+              print('Proměnná už je doplněná.')
+          elif needle in text:
+              path.write_text(text.replace(needle,replacement,1),encoding='utf-8')
+          else:
+              raise SystemExit('Nelze najít blok globální konfigurace statistik.')
+          PY
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-launch-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/scripts/nasekadan-stats/install-stats.sh
+          if git diff --cached --quiet; then
+            echo 'Bez změn.'
+          else
+            git commit -m 'Opravit proměnnou logování statistik Nginx'
+            git push origin HEAD:main
+          fi
