@@ -29,7 +29,7 @@ def get_description(text:str)->str:
 
 def finish_html(path:Path)->None:
  text=path.read_text(encoding='utf-8')
- text=text.replace('mirove-namesti.html','mestske-namesti.html').replace('<span class="logo-mark">K</span>','<span class="logo-mark">NK</span>')
+ text=text.replace('mirove-namesti.html','mestske-namesti.html').replace('<span class="logo-mark">K</span>','<span class="logo-mark">NK</span>').replace('Přečíst celý vlastní článek','Přečíst celý článek')
  if re.search(r'<header\b[^>]*>.*?</header>',text,re.I|re.S):
   text=re.sub(r'<header\b[^>]*>.*?</header>',HEADER,text,count=1,flags=re.I|re.S)
  else:
