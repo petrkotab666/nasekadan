@@ -1,0 +1,62 @@
+name: Nasadit Naše Kadaň na OVH
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: nasekadan-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout zdrojový kód
+        uses: actions/checkout@v4
+
+      - name: Sestavit a spustit web
+        run: |
+          set -euo pipefail
+          docker compose up -d --build --remove-orphans
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs --tail=100
+          exit 1
+
+      - name: Nastavit reverzní proxy pro doménu
+        run: |
+          set -euo pipefail
+          sudo tee /etc/nginx/sites-available/nasekadan.cz >/dev/null <<'EOF'
+          server {
+            listen 80;
+            listen [::]:80;
+            server_name nasekadan.cz www.nasekadan.cz;
+
+            location / {
+              proxy_pass http://127.0.0.1:3224;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+            }
+          }
+          EOF
+          sudo ln -sfn /etc/nginx/sites-available/nasekadan.cz /etc/nginx/sites-enabled/nasekadan.cz
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+      - name: Aktivovat HTTPS po nasměrování DNS
+        continue-on-error: true
+        run: |
+          if command -v certbot >/dev/null 2>&1; then
+            sudo certbot --nginx --non-interactive --agree-tos --redirect \
+              -m admin@nasekadan.cz \
+              -d nasekadan.cz -d www.nasekadan.cz
+          fi
