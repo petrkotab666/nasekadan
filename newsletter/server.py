@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json, os, secrets, smtplib, sqlite3
+import json, os, secrets, smtplib, sqlite3, sys, traceback
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from urllib.parse import parse_qs
@@ -15,6 +15,11 @@ SMTP_USER=os.environ.get('SMTP_USER','')
 SMTP_PASSWORD=os.environ.get('SMTP_PASSWORD','')
 SMTP_MODE=os.environ.get('SMTP_TLS','1').strip().lower()
 SMTP_TIMEOUT=int(os.environ.get('SMTP_TIMEOUT','12'))
+
+
+def log_error(label,exc):
+ print(f'[{datetime.now(timezone.utc).isoformat()}] {label}: {type(exc).__name__}: {exc}',file=sys.stderr,flush=True)
+ traceback.print_exc(file=sys.stderr)
 
 
 def db():
@@ -54,11 +59,14 @@ def app(env,start):
    link=f'{BASE}/api/newsletter/confirm?token={token}'
    send_mail(email,'Potvrďte odběr Naše Kadaň',f'Kliknutím potvrďte odběr týdenního přehledu Naše Kadaň:\n\n{link}\n\nPokud jste se nepřihlašovali, zprávu ignorujte.')
    return response(start,'200 OK',json.dumps({'ok':True,'message':'Na e-mail jsme poslali potvrzovací odkaz.'},ensure_ascii=False))
-  except smtplib.SMTPAuthenticationError:
+  except smtplib.SMTPAuthenticationError as exc:
+   log_error('SMTP_AUTH',exc)
    return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Odeslání selhalo: Seznam odmítl přihlášení ke schránce.'},ensure_ascii=False))
-  except (TimeoutError,OSError,smtplib.SMTPException):
+  except (TimeoutError,OSError,smtplib.SMTPException) as exc:
+   log_error('SMTP_CONNECTION',exc)
    return response(start,'502 Bad Gateway',json.dumps({'ok':False,'message':'Poštovní server nyní neodpovídá. Zkuste to znovu za chvíli.'},ensure_ascii=False))
-  except Exception:
+  except Exception as exc:
+   log_error('SUBSCRIBE',exc)
    return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Přihlášení se nepodařilo. Zkuste to později.'},ensure_ascii=False))
  if path in ('/confirm','/unsubscribe'):
   token=parse_qs(env.get('QUERY_STRING','')).get('token',[''])[0]
