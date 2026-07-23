@@ -47,13 +47,24 @@ def response(start,status,body,ctype='application/json; charset=utf-8'):
  start(status,[('Content-Type',ctype),('Content-Length',str(len(data))),('Cache-Control','no-store')]);return [data]
 
 
+def read_json(env):
+ raw=env['wsgi.input'].read(int(env.get('CONTENT_LENGTH') or 0)).decode()
+ return json.loads(raw or '{}')
+
+
+def valid_email(value):
+ email=str(value or '').strip().lower()
+ return email if '@' in email and len(email)<=254 else ''
+
+
 def app(env,start):
  path=env.get('PATH_INFO','');method=env.get('REQUEST_METHOD','GET')
  if path=='/health': return response(start,'200 OK',json.dumps({'ok':True}))
+
  if path=='/subscribe' and method=='POST':
   try:
-   raw=env['wsgi.input'].read(int(env.get('CONTENT_LENGTH') or 0)).decode();data=json.loads(raw or '{}');email=str(data.get('email','')).strip().lower();consent=bool(data.get('consent'))
-   if '@' not in email or len(email)>254 or not consent:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Zkontrolujte e-mail a potvrďte souhlas.'},ensure_ascii=False))
+   data=read_json(env);email=valid_email(data.get('email'));consent=bool(data.get('consent'))
+   if not email or not consent:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Zkontrolujte e-mail a potvrďte souhlas.'},ensure_ascii=False))
    now=datetime.now(timezone.utc).isoformat();ip=env.get('HTTP_X_FORWARDED_FOR',env.get('REMOTE_ADDR','')).split(',')[0].strip();ua=env.get('HTTP_USER_AGENT','')[:500]
    c=db();existing=c.execute('SELECT status,token FROM subscribers WHERE email=?',(email,)).fetchone()
    if existing and existing[0]=='active':
@@ -64,25 +75,39 @@ def app(env,start):
    send_mail(email,'Potvrďte odběr Naše Kadaň',f'Kliknutím potvrďte odběr týdenního přehledu Naše Kadaň:\n\n{link}\n\nPokud jste se nepřihlašovali, zprávu ignorujte.')
    return response(start,'200 OK',json.dumps({'ok':True,'message':'Na e-mail jsme poslali potvrzovací odkaz.'},ensure_ascii=False))
   except smtplib.SMTPAuthenticationError as exc:
-   log_error('SMTP_AUTH',exc)
-   return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Odeslání selhalo: Seznam odmítl přihlášení ke schránce.'},ensure_ascii=False))
+   log_error('SMTP_AUTH',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Odeslání selhalo: Seznam odmítl přihlášení ke schránce.'},ensure_ascii=False))
   except (TimeoutError,OSError,smtplib.SMTPException) as exc:
-   log_error('SMTP_CONNECTION',exc)
-   return response(start,'502 Bad Gateway',json.dumps({'ok':False,'message':'Poštovní server nyní neodpovídá. Zkuste to znovu za chvíli.'},ensure_ascii=False))
+   log_error('SMTP_CONNECTION',exc);return response(start,'502 Bad Gateway',json.dumps({'ok':False,'message':'Poštovní server nyní neodpovídá. Zkuste to znovu za chvíli.'},ensure_ascii=False))
   except Exception as exc:
-   log_error('SUBSCRIBE',exc)
-   return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Přihlášení se nepodařilo. Zkuste to později.'},ensure_ascii=False))
+   log_error('SUBSCRIBE',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Přihlášení se nepodařilo. Zkuste to později.'},ensure_ascii=False))
+
+ if path=='/unsubscribe-request' and method=='POST':
+  generic={'ok':True,'message':'Pokud je e-mail v seznamu odběratelů, poslali jsme na něj odkaz pro zrušení odběru.'}
+  try:
+   email=valid_email(read_json(env).get('email'))
+   if not email:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Zadejte platný e-mail.'},ensure_ascii=False))
+   c=db();row=c.execute('SELECT token,status FROM subscribers WHERE email=?',(email,)).fetchone();c.close()
+   if row and row[1] in {'active','pending'}:
+    link=f'{BASE}/api/newsletter/unsubscribe?token={row[0]}'
+    send_mail(email,'Zrušení odběru Naše Kadaň',f'Kliknutím na následující odkaz zrušíte odběr newsletteru Naše Kadaň:\n\n{link}\n\nPokud jste o zrušení nežádali, zprávu ignorujte.')
+   return response(start,'200 OK',json.dumps(generic,ensure_ascii=False))
+  except Exception as exc:
+   log_error('UNSUBSCRIBE_REQUEST',exc)
+   return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Žádost se nepodařilo odeslat. Zkuste to později.'},ensure_ascii=False))
+
  if path in ('/confirm','/unsubscribe'):
   token=parse_qs(env.get('QUERY_STRING','')).get('token',[''])[0]
   if not token:return response(start,'400 Bad Request','Chybí token.','text/plain; charset=utf-8')
   c=db();row=c.execute('SELECT email,status FROM subscribers WHERE token=?',(token,)).fetchone()
-  if not row:c.close();return response(start,'404 Not Found','Odkaz není platný. Požádejte o nový potvrzovací e-mail.','text/plain; charset=utf-8')
+  if not row:c.close();return response(start,'404 Not Found','Odkaz není platný. Požádejte o nový e-mail.','text/plain; charset=utf-8')
   now=datetime.now(timezone.utc).isoformat()
   if path=='/confirm':
    if row[1]=='active':msg='Odběr už byl potvrzen.'
    else:c.execute('UPDATE subscribers SET status="active",confirmed_at=?,unsubscribed_at=NULL WHERE token=?',(now,token));msg='Odběr je potvrzen. Děkujeme.'
-  else:c.execute('UPDATE subscribers SET status="unsubscribed",unsubscribed_at=? WHERE token=?',(now,token));msg='Odběr byl zrušen.'
-  c.commit();c.close();return response(start,'200 OK',f'<!doctype html><meta charset="utf-8"><title>Naše Kadaň</title><h1>{msg}</h1><p><a href="/">Zpět na Naše Kadaň</a></p>','text/html; charset=utf-8')
+  else:
+   if row[1]=='unsubscribed':msg='Odběr už byl zrušen.'
+   else:c.execute('UPDATE subscribers SET status="unsubscribed",unsubscribed_at=? WHERE token=?',(now,token));msg='Odběr byl zrušen.'
+  c.commit();c.close();return response(start,'200 OK',f'<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Naše Kadaň</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head><body><main class="wrap section"><h1>{msg}</h1><p><a class="btn" href="/">Zpět na Naše Kadaň</a></p></main></body></html>','text/html; charset=utf-8')
  return response(start,'404 Not Found',json.dumps({'ok':False}))
 
 
