@@ -31,6 +31,11 @@ jobs:
           docker compose logs --tail=100
           exit 1
 
+      - name: Nainstalovat soukromé statistiky
+        run: |
+          set -euo pipefail
+          sudo bash .github/scripts/nasekadan-stats/install-stats.sh
+
       - name: Nastavit reverzní proxy pro doménu
         run: |
           set -euo pipefail
@@ -39,6 +44,8 @@ jobs:
             listen 80;
             listen [::]:80;
             server_name nasekadan.cz www.nasekadan.cz;
+
+            include /etc/nginx/snippets/nasekadan-statistiky-server.conf;
 
             location / {
               proxy_pass http://127.0.0.1:3224;
@@ -61,3 +68,51 @@ jobs:
               -m admin@nasekadan.cz \
               -d nasekadan.cz -d www.nasekadan.cz
           fi
+
+      - name: Ověřit zápis návštěvy a ochranu statistik
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 3 http://127.0.0.1:3225/healthz >/dev/null
+
+          token="NaseKadanStatsSelfTest/3.0-${GITHUB_RUN_ID}-${RANDOM}"
+          if code=$(curl --noproxy '*' -k -sS --max-time 10 \
+              --resolve nasekadan.cz:443:127.0.0.1 \
+              -A "$token" -o /dev/null -w '%{http_code}' \
+              https://nasekadan.cz/ 2>/dev/null) && [[ "$code" =~ ^2 ]]; then
+            scheme=https
+          else
+            code=$(curl --noproxy '*' -sS --max-time 10 \
+              --resolve nasekadan.cz:80:127.0.0.1 \
+              -A "$token" -o /dev/null -w '%{http_code}' \
+              http://nasekadan.cz/ 2>/dev/null || true)
+            [[ "$code" =~ ^2 ]] || {
+              echo "Hlavní stránka nevrátila úspěšný kód: ${code:-žádný}" >&2
+              exit 1
+            }
+            scheme=http
+          fi
+
+          sleep 1
+          sudo grep -Fq "$token" /var/log/nginx/nasekadan.access.log || {
+            echo "Kontrolní návštěva se nezapsala do statistického logu." >&2
+            sudo tail -n 20 /var/log/nginx/nasekadan.access.log >&2 || true
+            exit 1
+          }
+
+          if [[ "$scheme" == "https" ]]; then
+            stats_code=$(curl --noproxy '*' -k -sS --max-time 10 \
+              --resolve nasekadan.cz:443:127.0.0.1 \
+              -o /dev/null -w '%{http_code}' \
+              https://nasekadan.cz/statistiky/ 2>/dev/null || true)
+          else
+            stats_code=$(curl --noproxy '*' -sS --max-time 10 \
+              --resolve nasekadan.cz:80:127.0.0.1 \
+              -o /dev/null -w '%{http_code}' \
+              http://nasekadan.cz/statistiky/ 2>/dev/null || true)
+          fi
+          [[ "$stats_code" == "401" ]] || {
+            echo "Statistiky nejsou správně chráněné; HTTP kód: $stats_code" >&2
+            exit 1
+          }
+
+          echo "Statistiky jsou aktivní, návštěvy se zapisují a stránka je chráněná heslem."
