@@ -20,13 +20,14 @@ python3 "$APP_DIR/scripts/generate_complete_guides.py"
 python3 "$APP_DIR/scripts/ensure_favicon.py"
 rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' "$APP_DIR/" "$WEB_DIR/"
 chown -R www-data:www-data "$WEB_DIR"
-systemctl reload caddy
+nginx -t
+systemctl reload nginx
 EOF
 sudo chmod 755 /usr/local/sbin/nasekadan-refresh
 sudo tee /etc/systemd/system/nasekadan-refresh.service >/dev/null <<'EOF'
 [Unit]
 Description=Aktualizace webu Naše Kadaň
-After=network-online.target caddy.service
+After=network-online.target nginx.service
 Wants=network-online.target
 [Service]
 Type=oneshot
@@ -47,7 +48,8 @@ Unit=nasekadan-refresh.service
 WantedBy=timers.target
 EOF
 sudo systemctl daemon-reload
+sudo systemctl reset-failed nasekadan-refresh.service || true
 sudo systemctl enable --now nasekadan-refresh.timer
 sudo systemctl restart nasekadan-refresh.timer
 sudo systemctl start nasekadan-refresh.service
-echo "Automatizace je aktivní každých 30 minut."
+echo "Automatizace je aktivní každých 30 minut přes Nginx."
