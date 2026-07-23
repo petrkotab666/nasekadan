@@ -1,0 +1,34 @@
+name: Opravit runner finálního balíku
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/fix-finalize-runner-trigger.txt'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Přepnout finální workflow na GitHub runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/finalize-launch.yml')
+          text=path.read_text(encoding='utf-8')
+          old='    runs-on: [self-hosted, ovh, ocenime-to]'
+          new='    runs-on: ubuntu-latest'
+          if old not in text:raise SystemExit('Původní runner nebyl nalezen.')
+          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/finalize-launch.yml
+          git commit -m 'Použít GitHub runner pro finální předstartovní balík'
+          git push origin HEAD:main
