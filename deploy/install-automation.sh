@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 APP_DIR="/opt/nasekadan"
 WEB_DIR="/var/www/nasekadan"
-
-if [[ ! -d "$APP_DIR/.git" ]]; then
-  echo "Chybí $APP_DIR/.git – nejdřív nasaďte repozitář." >&2
-  exit 1
-fi
-
+if [[ ! -d "$APP_DIR/.git" ]]; then echo "Chybí $APP_DIR/.git – nejdřív nasaďte repozitář." >&2; exit 1; fi
 sudo tee /usr/local/sbin/nasekadan-refresh >/dev/null <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -17,53 +11,42 @@ WEB_DIR="/var/www/nasekadan"
 LOCK="/run/lock/nasekadan-refresh.lock"
 exec 9>"$LOCK"
 flock -n 9 || exit 0
-
 chown -R ubuntu:ubuntu "$APP_DIR"
 su - ubuntu -c "git -C '$APP_DIR' fetch origin && git -C '$APP_DIR' reset --hard origin/main"
 python3 "$APP_DIR/scripts/update_events.py"
 python3 "$APP_DIR/scripts/update_sports.py"
 python3 "$APP_DIR/scripts/update_city_news.py"
 python3 "$APP_DIR/scripts/ensure_favicon.py"
-rsync -a --delete \
-  --exclude='.git' --exclude='.github' --exclude='deploy' \
-  --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' \
-  "$APP_DIR/" "$WEB_DIR/"
+rsync -a --delete --exclude='.git' --exclude='.github' --exclude='deploy' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' "$APP_DIR/" "$WEB_DIR/"
 chown -R www-data:www-data "$WEB_DIR"
 systemctl reload caddy
 EOF
 sudo chmod 755 /usr/local/sbin/nasekadan-refresh
-
 sudo tee /etc/systemd/system/nasekadan-refresh.service >/dev/null <<'EOF'
 [Unit]
-Description=Aktualizace webu a kalendáře Naše Kadaň
+Description=Aktualizace webu Naše Kadaň
 After=network-online.target caddy.service
 Wants=network-online.target
-
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/nasekadan-refresh
 User=root
 Nice=10
 EOF
-
 sudo tee /etc/systemd/system/nasekadan-refresh.timer >/dev/null <<'EOF'
 [Unit]
 Description=Pravidelná aktualizace Naše Kadaň
-
 [Timer]
 OnBootSec=2min
 OnUnitActiveSec=30min
 RandomizedDelaySec=90
 Persistent=true
 Unit=nasekadan-refresh.service
-
 [Install]
 WantedBy=timers.target
 EOF
-
 sudo systemctl daemon-reload
 sudo systemctl enable --now nasekadan-refresh.timer
 sudo systemctl restart nasekadan-refresh.timer
 sudo systemctl start nasekadan-refresh.service
-
-echo "Automatizace je aktivní každých 30 minut. Kontrola: systemctl status nasekadan-refresh.timer"
+echo "Automatizace je aktivní každých 30 minut."
