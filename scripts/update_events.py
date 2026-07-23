@@ -3,13 +3,13 @@ from __future__ import annotations
 import hashlib, html, json, re, sys, unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 ROOT=Path(__file__).resolve().parents[1]
 SEED=ROOT/'data'/'events-seed.json'
 OUT=ROOT/'data'/'events.json'
-UA='NaseKadanBot/1.3 (+https://nasekadan.cz; info@nasekadan.cz)'
+UA='NaseKadanBot/1.4 (+https://nasekadan.cz; info@nasekadan.cz)'
 SOURCES=[
  {'name':'Kultura Kadaň','url':'https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&xuser=','kind':'culture','category':'Kultura'},
  {'name':'Kino Hvězda Kadaň','url':'https://www.kinokadan.cz/cely-program','kind':'cinema','category':'Kino'},
@@ -17,6 +17,15 @@ SOURCES=[
  {'name':'e-region – Kadaň','url':'https://www.e-region.cz/akce/mesto-kadan','kind':'eregion','category':'Akce'},
  {'name':'RADKA Kadaň','url':'https://radka.kadan.cz/','kind':'ranges','category':'Komunitní'},
 ]
+
+GENERIC_PATHS={
+ '/','',
+ '/cely-program',
+ '/akce/mesto-kadan',
+ '/akce/frantiskansky-klaster-kadan',
+ '/kultura',
+ '/aktivity/galerie-josefa-lieslera',
+}
 
 def fetch(url):
  with urlopen(Request(url,headers={'User-Agent':UA,'Accept-Language':'cs,en;q=0.7'}),timeout=30) as r:
@@ -35,13 +44,61 @@ def normalize(e,s):
  place=clean(e.get('place') or e.get('location') or 'Kadaň');raw=f'{title}|{start[:10]}|{place}'.lower()
  return {'id':e.get('id') or f'{slug(title)}-{start[:10]}-{hashlib.sha1(raw.encode()).hexdigest()[:7]}','title':title,'start':start,**({'end':e['end']} if e.get('end') else {}),'time':clean(e.get('time')),'place':place,'category':clean(e.get('category') or s['category']),'description':clean(e.get('description'))[:1400],'price':clean(e.get('price')),'format':clean(e.get('format')),'image':str(e.get('image') or ''),'source':str(e.get('source') or s['url']),'sourceName':str(e.get('sourceName') or s['name']),'verified':bool(e.get('verified',True))}
 
+def normalized_path(url):
+ try:return urlparse(str(url or '')).path.rstrip('/').lower()
+ except Exception:return ''
+
+def source_quality(event):
+ url=str(event.get('source') or '').strip();lower=url.lower();path=normalized_path(url);score=0
+ if not url:return -100
+ if '/dre-cs/' in lower:score+=140
+ if 'dodila.cz/akce/' in lower:score+=140
+ if re.search(r'[?&]detail=\d+',lower):score+=135
+ if re.search(r'/akce/[^/?#]+/?$',urlparse(url).path,re.I) and path not in GENERIC_PATHS:score+=100
+ if '/calendar/' in lower or '/udalost/' in lower or '/event/' in lower:score+=80
+ if path and path not in GENERIC_PATHS:score+=25
+ if '/redakce/index.php' in lower or path in GENERIC_PATHS:score-=100
+ if 'e-region.cz' in lower:score-=20
+ name=str(event.get('sourceName') or '').lower()
+ if 'kultura kadaň' in name:score+=12
+ if 'detail akce' in name:score+=15
+ if event.get('verified'):score+=3
+ return score
+
+def event_key(event):
+ title=slug(event.get('title',''));start=str(event.get('start') or '')
+ if clean(event.get('category')).lower()=='kino':when=start[:16]
+ else:when=start[:10]
+ return title,when
+
+def prefer_event(candidate,current):
+ cq,oq=source_quality(candidate),source_quality(current)
+ if cq!=oq:return candidate if cq>oq else current
+ c_info=sum(len(clean(candidate.get(k))) for k in ('description','time','place','price','format'))
+ o_info=sum(len(clean(current.get(k))) for k in ('description','time','place','price','format'))
+ return candidate if c_info>o_info else current
+
+def detail_url_near_title(page,title,base):
+ needles={title,html.escape(title,quote=False)};best=[]
+ for needle in needles:
+  for match in re.finditer(re.escape(needle),page,re.I):
+   chunk=page[max(0,match.start()-2400):match.start()+3000]
+   for href in re.findall(r'href=["\']([^"\']+)["\']',chunk,re.I):
+    absolute=urljoin(base,html.unescape(href));low=absolute.lower();score=0
+    if re.search(r'[?&]detail=\d+',low):score=100
+    elif '/detail/' in low or '/film/' in low:score=90
+    elif '/program/' in low and not low.rstrip('/').endswith('/cely-program'):score=60
+    if score:best.append((score,absolute))
+   break
+ return max(best,key=lambda item:item[0])[1] if best else base
+
 def parse_cinema(page,s):
  text=clean(page);out=[]
  rx=re.compile(r'(?:Hlavní obrázek pro\s+)?(.{2,100}?)\s+(.{0,260}?)\s+(?:Dnes|Zítra|Pondělí|Úterý|Středa|Čtvrtek|Pátek|Sobota|Neděle)\s*[•-]\s*(\d{1,2})\.\s*(\d{1,2})\.\s*(20\d{2})\s*[•-]\s*(\d{1,2}:\d{2})\s+KINO HVĚZDA KADAŇ\s+(.{0,170}?)(?=Zůstává|Vstupenky|Hlavní obrázek pro|$)',re.I)
  for title,desc,d,m,y,tm,fmt in rx.findall(text):
   title=clean(title)
   if len(title)>100 or title.lower()=='celý program':continue
-  out.append({'title':title,'start':f'{y}-{int(m):02d}-{int(d):02d}T{tm}:00+02:00','time':tm,'place':'Kino Hvězda Kadaň','description':clean(desc),'format':clean(fmt),'source':s['url'],'category':'Kino'})
+  out.append({'title':title,'start':f'{y}-{int(m):02d}-{int(d):02d}T{tm}:00+02:00','time':tm,'place':'Kino Hvězda Kadaň','description':clean(desc),'format':clean(fmt),'source':detail_url_near_title(page,title,s['url']),'sourceName':'Kino Hvězda Kadaň','category':'Kino'})
  return out
 
 def detail_value(text,label,next_labels):
@@ -130,9 +187,9 @@ def main():
    used.append(f"{s['name']} ({count})")
   except Exception as exc:errors.append(f"{s['name']}: {exc}")
  unique={}
- for e in events:
-  key=(slug(e['title']),e['start'][:10],slug(e.get('place','')));old=unique.get(key)
-  if old is None or (e.get('sourceName')=='Kultura Kadaň' and old.get('sourceName')!='Kultura Kadaň') or len(e.get('description',''))>len(old.get('description','')):unique[key]=e
+ for event in events:
+  key=event_key(event);old=unique.get(key)
+  unique[key]=event if old is None else prefer_event(event,old)
  payload={'generatedAt':datetime.now(timezone.utc).isoformat(),'sources':used,'errors':errors,'events':sorted(unique.values(),key=lambda x:x['start'])}
  OUT.parent.mkdir(parents=True,exist_ok=True);tmp=OUT.with_suffix('.tmp');tmp.write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8');tmp.replace(OUT)
  print(f'Uloženo {len(payload["events"])} akcí.');print(*used,sep='\n- ')
