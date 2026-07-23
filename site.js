@@ -1,5 +1,5 @@
-// Nasazení petice: 23. 7. 2026 22:15
-// Verze 3 – doplnění článku a správné označení data vydání.
+// Oprava politického propojení předkladatelky petice: 23. 7. 2026
+// Verze 4 – Vlasta Štaubrová je uvedena na kandidátce Dáme Kadani novou šanci.
 document.addEventListener('DOMContentLoaded',()=>{
   document.querySelectorAll('.head').forEach(head=>{
     const nav=head.querySelector('nav');
@@ -43,17 +43,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     </div>
 
     <h3>Kdo petici předkládá</h3>
-    <p>Jako předkladatelka je uvedena <strong>Vlasta Štaubrová</strong>. Ve veřejných rejstřících je dohledatelná jako kadaňská podnikatelka a předsedkyně výboru Společenství vlastníků jednotek Chomutovská 1220–1222. V prověřených veřejných zdrojích jsme ji nenašli mezi kandidáty ani funkcionáři ODS, uskupení Dáme Kadani novou šanci nebo jiného politického subjektu.</p>
-    <p>To nevylučuje osobní názory, kontakty nebo neformální podporu některé skupiny, ale bez veřejně doložitelného podkladu by nebylo korektní tvrdit, že je petice řízena konkrétní stranou. Samotné načasování petice v době vyhroceného sporu o nemocnici a před komunálními volbami politické propojení nedokazuje.</p>
+    <p>Jako předkladatelka je uvedena <strong>Vlasta Štaubrová</strong>. Na zveřejněné kandidátní listině uskupení <strong>Dáme Kadani novou šanci</strong> je Vlasta Štaubrová uvedena na <strong>12. místě</strong> jako spa terapeutka. Předchozí verze článku proto nesprávně tvrdila, že jsme ji mezi kandidáty tohoto uskupení nenašli. Za tuto chybu se omlouváme.</p>
+    <p>Její kandidatura představuje veřejně doložené politické propojení s uskupením Dáme Kadani novou šanci. Sama kandidatura však ještě nedokazuje, že petice je oficiální akcí uskupení, že ji uskupení zadalo nebo koordinovalo. Takové tvrzení by vyžadovalo další podklad nebo vyjádření zúčastněných.</p>
 
     <div class="factcheck">
       <h3>Co lze o petici doložit</h3>
       <ul>
         <li><strong>Doložené:</strong> petice je datována 21. 7. 2026 a žádá zachování nemocnice ve vlastnictví města.</li>
         <li><strong>Doložené:</strong> předkladatelkou je Vlasta Štaubrová.</li>
+        <li><strong>Doložené:</strong> Vlasta Štaubrová je na kandidátní listině uskupení Dáme Kadani novou šanci uvedena na 12. místě.</li>
         <li><strong>Doložené:</strong> veřejné rejstříky ji spojují s podnikáním a vedením místního SVJ.</li>
         <li><strong>Nedoložené:</strong> že město již rozhodlo o prodeji nebo privatizaci nemocnice.</li>
-        <li><strong>Nedoložené:</strong> že předkladatelka jedná jménem ODS, uskupení Dáme Kadani novou šanci nebo jiné politické strany.</li>
+        <li><strong>Nedoložené:</strong> že petice vznikla jako oficiální nebo koordinovaná akce uskupení Dáme Kadani novou šanci.</li>
       </ul>
     </div>`;
   scenarios.before(petition);
@@ -71,12 +72,15 @@ document.addEventListener('DOMContentLoaded',()=>{
     const copy=document.createElement('li');
     copy.setAttribute('data-petition-source','copy');
     copy.textContent='Kopie petice „Petice za zachování Nemocnice Kadaň s.r.o. ve vlastnictví města“, datovaná 21. 7. 2026, poskytnutá redakci.';
+    const candidates=document.createElement('li');
+    candidates.setAttribute('data-petition-source','candidates');
+    candidates.innerHTML='<a href="https://damekadaninovousanci.cz/#kandidati" target="_blank" rel="noopener noreferrer">Dáme Kadani novou šanci: zveřejněná kandidátní listina</a>';
     const registry=document.createElement('li');
     registry.setAttribute('data-petition-source','registry');
     registry.innerHTML='<a href="https://www.podnikatel.cz/rejstrik/vlasta-staubrova-72623195/" target="_blank" rel="noopener noreferrer">Veřejný rejstřík: Vlasta Štaubrová a její podnikatelská činnost</a>';
     const svj=document.createElement('li');
     svj.setAttribute('data-petition-source','svj');
     svj.innerHTML='<a href="https://www.podnikatel.cz/rejstrik/spolecenstvi-vlastniku-jednotek-chomutovska-1220-1222-kadan-28678338/" target="_blank" rel="noopener noreferrer">Veřejný rejstřík: vedení SVJ Chomutovská 1220–1222</a>';
-    sources.append(copy,registry,svj);
+    sources.append(copy,candidates,registry,svj);
   }
 });
