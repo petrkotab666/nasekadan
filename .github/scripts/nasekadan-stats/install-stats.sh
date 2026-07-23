@@ -374,6 +374,11 @@ chmod 0640 "$AUTH_FILE"
 
 cat > "$GLOBAL_CONF" <<'NGINX'
 # Naše Kadaň – samostatný JSON log pro soukromé statistiky.
+# Kompatibilita se staršími vhosty, které logují přes if=$nasekadan_stats_loggable.
+map $request_uri $nasekadan_stats_loggable {
+    default 1;
+}
+
 log_format nasekadan_stats escape=json
     '{"ts":"$time_iso8601","ip":"$remote_addr","method":"$request_method",'
     '"uri":"$request_uri","status":$status,"bytes":$body_bytes_sent,'
