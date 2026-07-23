@@ -172,6 +172,26 @@ def parse_ranges(page,s):
   title,d1,m1,d2,m2,y=m.groups();out.append({'title':clean(title)[-90:],'start':f'{y}-{int(m1):02d}-{int(d1):02d}','end':f'{y}-{int(m2):02d}-{int(d2):02d}','place':'RADKA / dle pořadatele','category':s['category'],'source':s['url']})
  return out
 
+def collapse_near_duplicates(events):
+ result=[]
+ stop={"vystava","akce","kadan","kadani","program","vernisaz","vyroci","mesto"}
+ def tokens(e):return {x for x in slug(e.get("title","")).split("-") if len(x)>=3 and x not in stop}
+ def date(e):
+  try:return datetime.fromisoformat(str(e.get("start", ""))[:10]).date()
+  except Exception:return None
+ for event in sorted(events,key=lambda e:(source_quality(e),len(clean(e.get("description")))),reverse=True):
+  if clean(event.get("category")).lower()=="kino":result.append(event);continue
+  et=tokens(event);ed=date(event);duplicate=False
+  for kept in result:
+   if clean(kept.get("category")).lower()=="kino":continue
+   kd=date(kept)
+   if not ed or not kd or abs((ed-kd).days)>2:continue
+   kt=tokens(kept);overlap=len(et & kt)/max(1,min(len(et),len(kt)))
+   a,b=slug(event.get("title","")),slug(kept.get("title",""))
+   if overlap>=0.55 or (len(a)>=8 and len(b)>=8 and (a.startswith(b) or b.startswith(a))):duplicate=True;break
+  if not duplicate:result.append(event)
+ return result
+
 def main():
  seed=json.loads(SEED.read_text(encoding='utf-8')).get('events',[]) if SEED.exists() else [];events=[];used=['ručně ověřený základ'];errors=[]
  for e in seed:
@@ -190,7 +210,7 @@ def main():
  for event in events:
   key=event_key(event);old=unique.get(key)
   unique[key]=event if old is None else prefer_event(event,old)
- payload={'generatedAt':datetime.now(timezone.utc).isoformat(),'sources':used,'errors':errors,'events':sorted(unique.values(),key=lambda x:x['start'])}
+ payload={'generatedAt':datetime.now(timezone.utc).isoformat(),'sources':used,'errors':errors,'events':sorted(collapse_near_duplicates(list(unique.values())),key=lambda x:x['start'])}
  OUT.parent.mkdir(parents=True,exist_ok=True);tmp=OUT.with_suffix('.tmp');tmp.write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8');tmp.replace(OUT)
  print(f'Uloženo {len(payload["events"])} akcí.');print(*used,sep='\n- ')
  if errors:print(*errors,sep='\n',file=sys.stderr)
