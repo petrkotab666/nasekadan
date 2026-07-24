@@ -1,0 +1,48 @@
+name: Sestavit fotografie Slovanu a lávky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.image-parts/slovan-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconstruct-slovan-photos
+  cancel-in-progress: true
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sestavit čtyři redakční fotografie
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets
+          for base in slovan-lavka-hero-20260724 slovan-detail-20260724 lavka-shell-20260724 slovan-vstup-20260724; do
+            cat .image-parts/${base}.part-* | tr -d '\n\r ' | base64 -d > assets/${base}.jpg
+          done
+          echo '6fd5d7171cba8577f6401e7b40cea4d9657a78b4ad4862faafc2b94bfa97edfd  assets/slovan-lavka-hero-20260724.jpg' | sha256sum -c -
+          echo '5fac9aeafaa0aa26b728a1800a57e31baa93bf5102aac1b68ecfa0ae0fc8f65a  assets/slovan-detail-20260724.jpg' | sha256sum -c -
+          echo '768434b37059bbdd0259540e33656f5a10f6eb633e221f04a8343bdc263337f6  assets/lavka-shell-20260724.jpg' | sha256sum -c -
+          echo '167ad133d6c85551b9c9b47150825ff2e318973a46de51a0d5c57ed65ce9dae3  assets/slovan-vstup-20260724.jpg' | sha256sum -c -
+          file assets/*.jpg
+
+      - name: Uložit fotografie a odstranit přenosové části
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .image-parts
+          git config user.name 'Naše Kadaň automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add assets .image-parts
+          git commit -m 'Přidat vlastní fotografie Slovanu a lávky u Shellu'
+          git push origin main
