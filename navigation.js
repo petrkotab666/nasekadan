@@ -3,17 +3,25 @@
 document.addEventListener('DOMContentLoaded',()=>{
   const items=[
     {href:'/',label:'Úvod',section:'home'},
-    {href:'/clanky/',label:'Články',section:'articles'},
+    {href:'/clanky/',label:'Naše články',section:'articles'},
+    {href:'/prehled-zdroju/',label:'Přehled zdrojů',section:'sources'},
     {href:'/#akce',label:'Akce',section:'events'},
     {href:'/pruvodce/',label:'Průvodce',section:'guide'},
-    {href:'/zapojte-se/',label:'Poslat tip',section:'tips'}
+    {href:'/prakticke/',label:'Praktická Kadaň',section:'practical'},
+    {href:'/doprava/',label:'Doprava',section:'transport'},
+    {href:'/organizace/',label:'Organizace',section:'organizations'},
+    {href:'/zapojte-se/',label:'Zapojte se',section:'tips'}
   ];
 
   const path=window.location.pathname.replace(/\/+$/,'')||'/';
   const hash=window.location.hash;
   const activeSection=(()=>{
     if(path.startsWith('/clanky')||path.startsWith('/zpravy'))return 'articles';
+    if(path.startsWith('/prehled-zdroju'))return 'sources';
     if(path.startsWith('/pruvodce'))return 'guide';
+    if(path.startsWith('/prakticke'))return 'practical';
+    if(path.startsWith('/doprava'))return 'transport';
+    if(path.startsWith('/organizace'))return 'organizations';
     if(path.startsWith('/zapojte-se'))return 'tips';
     if(path==='/'&&hash==='#akce')return 'events';
     if(path==='/')return 'home';
