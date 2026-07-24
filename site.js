@@ -58,12 +58,19 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(politics&&!document.getElementById('hossner-stanovisko')){
     const hossner=document.createElement('section');
     hossner.innerHTML=`
-      <h2 id="hossner-stanovisko">Jak svou roli popisuje bývalý ředitel Petr Hossner</h2>
+      <h2 id="hossner-stanovisko">Proč byl Petr Hossner odvolán: jeho pohled a stanovisko města</h2>
+
+      <h3>Jak svou roli popisuje bývalý ředitel</h3>
       <p>Petr Hossner na vlastním webu uvádí, že nemocnici vedl od listopadu 2016 do září 2024. Své působení hodnotí jako období rozvoje, otevírání nových ambulancí, růstu objemu péče, ziskového hospodaření a vytváření finančních rezerv. Současně tvrdí, že po změně vedení města odmítal předávat citlivé informace z veřejných soutěží neoprávněným osobám a že po jeho odvolání následovaly spory o pracovní smlouvy, odměňování a požadovanou náhradu škody.</p>
       <p>Na své časové ose uvádí, že byl 24. září 2024 odvolán z funkce jednatele, v březnu 2025 podal žalobu na neplatnost výpovědi a nemocnice po něm následně žalobou požadovala 25,9 milionu korun. Ve svých textech z června a července 2026 varuje před možností hrozícího úpadku, požaduje zveřejnění aktuálního cash-flow a stabilizačního plánu a kritizuje některé kroky současného vedení nemocnice a města.</p>
+
+      <h3>Jak odvolání vysvětlovalo město</h3>
+      <p>V tiskové zprávě zveřejněné po změně vedení město uvedlo, že důvodem odvolání byly <strong>zásadní neshody v přístupech k řízení a nedostatečná komunikace při realizaci klíčových kroků</strong>, které podle města vyžadovaly větší koordinaci s vlastníkem nemocnice. Starosta Jan Losenický současně veřejně uznal, že Petr Hossner nemocnici ekonomicky stabilizoval, pozvedl a učinil konkurenceschopnou. Podle starosty ale neshody trvaly delší dobu a město necítilo ochotu ke změně způsobu řízení a komunikace.</p>
+      <p>Jako konkrétní příklad město uvádělo, že rada nebyla včas informována o některých strategických organizačních a finančních rozhodnutích. Starosta v říjnu 2024 zmínil také koupi společnosti ARC-MED za 16 milionů korun, o níž se podle jeho vyjádření radní dozvěděli až poté, co byla smlouva podepsána. V dubnu 2025 pak uvedl, že město nebylo spokojeno se systémem řízení a postrádalo některé důležité dokumenty.</p>
+
       <div class="callout">
-        <strong>Stanovisko účastníka sporu</strong>
-        Hossnerův web je důležitým přímým zdrojem jeho pohledu, nikoli nezávislým potvrzením uvedených tvrzení. Článek proto jeho vyjádření odděluje od auditovaných účetních údajů, stanovisek nemocnice a pravomocných závěrů soudů nebo orgánů činných v trestním řízení.
+        <strong>Důležité časové rozlišení</strong>
+        Původním veřejným zdůvodněním odvolání v září 2024 byly neshody o řízení, koordinaci a komunikaci. Spory o souběh funkcí jednatele a ředitele, pracovní smlouvy, odměňování, požadované vrácení peněz a další výsledky následných prověrek se veřejně rozvinuly až později. Článek proto tyto dvě fáze neslučuje a uvádí stanoviska obou stran jako tvrzení účastníků dosud neuzavřeného sporu.
       </div>`;
     politics.before(hossner);
   }
@@ -103,7 +110,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(toc){
     if(!toc.querySelector('a[href="#hossner-stanovisko"]')){
       const item=document.createElement('li');
-      item.innerHTML='<a href="#hossner-stanovisko">Stanovisko Petra Hossnera</a>';
+      item.innerHTML='<a href="#hossner-stanovisko">Odvolání Petra Hossnera: oba pohledy</a>';
       const politicsLink=toc.querySelector('a[href="#politika"]');
       if(politicsLink)politicsLink.closest('li').before(item);else toc.appendChild(item);
     }
@@ -124,7 +131,16 @@ document.addEventListener('DOMContentLoaded',()=>{
       const warning=document.createElement('li');
       warning.setAttribute('data-hossner-source','warning');
       warning.innerHTML='<a href="https://petrhossnerkadan.cz/aktuality/upozorneni-na-povinnosti-jednatele-nemocnice-kadan-a-vyzva-k-prevenci-dalsich-skod/" target="_blank" rel="noopener noreferrer">Petr Hossner: upozornění na povinnosti jednatele a jeho hodnocení ekonomické situace</a>';
-      sources.append(homepage,warning);
+      const cityRelease=document.createElement('li');
+      cityRelease.setAttribute('data-hossner-source','city-release');
+      cityRelease.innerHTML='<a href="https://petrhossnerkadan.cz/wp-content/uploads/2025/09/1.-TZ_Kadan_odvolani_Hossner.pdf" target="_blank" rel="noopener noreferrer">Tisková zpráva města Kadaně k odvolání Petra Hossnera ze září 2024</a>';
+      const cityReason=document.createElement('li');
+      cityReason.setAttribute('data-hossner-source','city-reason');
+      cityReason.innerHTML='<a href="https://www.idnes.cz/usti/zpravy/kadan-nemocnice-jednatel-odvolani-hossner.A241002_100431_usti-zpravy_grr" target="_blank" rel="noopener noreferrer">iDNES: veřejné vysvětlení důvodů odvolání starostou Janem Losenickým</a>';
+      const laterPosition=document.createElement('li');
+      laterPosition.setAttribute('data-hossner-source','later-position');
+      laterPosition.innerHTML='<a href="https://www.irozhlas.cz/zpravy-domov/reditel-a-zaroven-jednatel-kadan-odvolala-sefa-nemocnice-ten-se-chce-soudit_2504232104_elev" target="_blank" rel="noopener noreferrer">Český rozhlas: pozdější stanovisko města a nemocnice ke způsobu řízení, dokumentům a odměňování</a>';
+      sources.append(homepage,warning,cityRelease,cityReason,laterPosition);
     }
     if(!sources.querySelector('[data-petition-source]')){
       const copy=document.createElement('li');
