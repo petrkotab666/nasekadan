@@ -1,0 +1,132 @@
+name: Obnovit runner LastMinuteSlevy přes GitHub cloud
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Vybrat dostupný SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lms-recovery"
+          : > "$RUNNER_TEMP/lms-recovery/result.txt"
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              printf '%s\n' "$value" > "$RUNNER_TEMP/lms-recovery/id_key"
+              selected="$name"
+              break
+            fi
+          done
+          if [ -z "$selected" ]; then
+            echo 'NO_SSH_KEY' | tee "$RUNNER_TEMP/lms-recovery/result.txt"
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          chmod 600 "$RUNNER_TEMP/lms-recovery/id_key"
+          echo "Použitelný SSH secret: $selected" | tee "$RUNNER_TEMP/lms-recovery/result.txt"
+          echo 'available=true' >> "$GITHUB_OUTPUT"
+          echo "selected=$selected" >> "$GITHUB_OUTPUT"
+
+      - name: Restartovat runner na OVH
+        id: restart
+        if: steps.key.outputs.available == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/lms-recovery/id_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=2 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee -a "$RUNNER_TEMP/lms-recovery/result.txt"
+          set -euo pipefail
+          echo "Host: $(hostname), čas: $(date -Is)"
+          sudo -n true
+          mapfile -t services < <(
+            systemctl list-unit-files --type=service --no-legend 'actions.runner*' 2>/dev/null \
+              | awk '{print $1}' \
+              | while read -r service; do
+                  if [[ "$service" == *lastminuteslevy* ]] || sudo systemctl cat "$service" 2>/dev/null | grep -qiE 'lastminuteslevy|/home/ubuntu/actions-runner(/|$)'; then
+                    echo "$service"
+                  fi
+                done \
+              | sort -u
+          )
+          if [ "${#services[@]}" -eq 0 ]; then
+            echo 'Runner service nebyla nalezena.' >&2
+            systemctl list-unit-files --type=service --no-legend 'actions.runner*' || true
+            exit 31
+          fi
+          printf 'Restartované služby:\n%s\n' "${services[*]}"
+          for service in "${services[@]}"; do
+            sudo systemctl reset-failed "$service" || true
+            sudo systemctl restart "$service"
+          done
+          sleep 10
+          for service in "${services[@]}"; do
+            systemctl is-active "$service"
+            sudo systemctl --no-pager --full status "$service" | sed -n '1,24p' || true
+          done
+          REMOTE
+
+      - name: Zapsat výsledek do PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          KEY_AVAILABLE: ${{ steps.key.outputs.available }}
+          KEY_NAME: ${{ steps.key.outputs.selected }}
+          RESTART_OUTCOME: ${{ steps.restart.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/lms-recovery/result.txt`, 'utf8'); } catch {}
+            const body = [
+              '## Obnova runneru LastMinuteSlevy přes GitHub cloud',
+              '',
+              `- SSH klíč dostupný: **${process.env.KEY_AVAILABLE || 'false'}**`,
+              `- Použitý název secretu: \`${process.env.KEY_NAME || 'žádný'}\``,
+              `- Výsledek restartu: **${process.env.RESTART_OUTCOME || 'neprovedeno'}**`,
+              '',
+              '```text',
+              log.slice(-30000),
+              '```'
+            ].join('\n');
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          AVAILABLE: ${{ steps.key.outputs.available }}
+          RESTART: ${{ steps.restart.outcome }}
+        run: |
+          test "$AVAILABLE" = true
+          test "$RESTART" = success
