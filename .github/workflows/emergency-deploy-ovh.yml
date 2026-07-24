@@ -18,6 +18,10 @@ on:
       - emergency-deploy-trigger.txt
   workflow_dispatch:
 
+permissions:
+  contents: read
+  statuses: write
+
 concurrency:
   group: nasekadan-emergency-production
   cancel-in-progress: true
@@ -27,6 +31,15 @@ jobs:
     runs-on: [self-hosted, ovh, lastminuteslevy]
     timeout-minutes: 15
     steps:
+      - name: Označit nouzové nasazení jako spuštěné
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -d '{"state":"pending","context":"nasekadan/emergency-deploy","description":"Nouzové nasazení právě probíhá"}' >/dev/null
+
       - name: Stáhnout aktuální web
         uses: actions/checkout@v4
         with:
@@ -107,3 +120,20 @@ jobs:
             https://nasekadan.cz/nahled/petice-nemocnice-kadan-a8f4c2.html 2>/dev/null || true)
           [[ "$code" == "401" ]] || { echo "Náhled není chráněný; HTTP $code" >&2; exit 1; }
           echo 'Aktuální web i soukromý náhled jsou nasazené a náhled je chráněn heslem.'
+
+      - name: Zapsat výsledek nouzového nasazení
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            state=success
+            description='Náhled je nasazený a chráněný heslem'
+          else
+            state=failure
+            description='Nouzové nasazení nebo ověření selhalo'
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -d "{\"state\":\"$state\",\"context\":\"nasekadan/emergency-deploy\",\"description\":\"$description\"}" >/dev/null
