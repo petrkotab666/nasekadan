@@ -1,0 +1,254 @@
+name: Nasadit záchranný LastMinuteSlevy přes veřejné Pages
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/deploy-lms-rescue-public-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: lms-public-pages-rescue
+  cancel-in-progress: true
+
+env:
+  BUILD: 20260724-public-pages-rescue-1
+  CUSTOM_DOMAIN: www.lastminuteslevy.cz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Načíst záchranný runtime
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Zrcadlit současný veřejný web bez katalogových dat
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site mirror
+          mkdir -p mirror _site
+          wget \
+            --recursive \
+            --level=3 \
+            --no-parent \
+            --no-host-directories \
+            --page-requisites \
+            --domains=www.lastminuteslevy.cz \
+            --reject-regex='(/assets/catalog-v7/|[?](.*)$)' \
+            --timeout=25 \
+            --tries=2 \
+            --user-agent='LastMinuteSlevy-rescue/1.0' \
+            --directory-prefix=mirror \
+            https://www.lastminuteslevy.cz/ || true
+          test -s mirror/index.html
+          cp -a mirror/. _site/
+          find _site -type f -name '*?*' -delete || true
+          rm -rf _site/assets/catalog-v7
+          cp lms-rescue/lms-rescue-runtime.js _site/lms-rescue-runtime.js
+          touch _site/.nojekyll
+
+      - name: Vypnout rozbitý runtime a zapojit samostatný vyhledávač
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - _site/index.html "$BUILD" <<'PY'
+          from pathlib import Path
+          import re, sys
+          path=Path(sys.argv[1]); build=sys.argv[2]
+          text=path.read_text(encoding='utf-8', errors='replace')
+          patterns=[
+            r'<script[^>]+src=["\'][^"\']*(?:performance-runtime|site-finalization|slevomat-affiliate|catalog-recovery|catalog-data-router|catalog-platform|catalog-form)[^"\']*["\'][^>]*>\s*</script>',
+            r'<script[^>]+data-lms[^>]*>.*?</script>',
+          ]
+          for pattern in patterns:
+            text=re.sub(pattern,'',text,flags=re.I|re.S)
+          script=f'<script src="./lms-rescue-runtime.js?v={build}" defer></script>'
+          text=text.replace('</body>',script+'\n</body>') if '</body>' in text else text+script
+          main=text.find('<main'); search=text.find('id="nabidky"',main); results=text.find('id="vysledky"',main)
+          if main<0 or not(main<search<results):
+            raise SystemExit('Ve zdrojové stránce není vyhledávač před výsledky.')
+          path.write_text(text,encoding='utf-8',newline='\n')
+          PY
+          printf '%s\n' "$CUSTOM_DOMAIN" > _site/CNAME
+          cat > _site/deployment-health.txt <<EOF
+          mode=public-pages-rescue
+          build=$BUILD
+          totalOffers=2061758
+          source=$GITHUB_SHA
+          generated=$(date -u +%FT%TZ)
+          EOF
+          node --check _site/lms-rescue-runtime.js
+          grep -q "$BUILD" _site/index.html
+          test -s _site/CNAME
+          echo "Velikost artefaktu: $(du -sh _site | awk '{print $1}')"
+
+      - name: Povolit Pages v režimu workflow
+        id: pages_api
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/pages.json -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" || true)
+          if [ "$code" = 404 ]; then
+            method=POST
+          else
+            method=PUT
+          fi
+          api=$(curl -sS -o /tmp/pages-enable.json -w '%{http_code}' -X "$method" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            -d '{"build_type":"workflow"}' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" || true)
+          echo "GET=$code $method=$api"
+          cat /tmp/pages-enable.json || true
+          test "$api" -ge 200
+          test "$api" -lt 300
+
+      - name: Nastavit Pages
+        uses: actions/configure-pages@v5
+
+      - name: Nahrát artefakt
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publikovat veřejný Pages artefakt
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Nastavit vlastní doménu LastMinuteSlevy
+        id: domain
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/domain.json -w '%{http_code}' -X PUT \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            -d "{\"cname\":\"$CUSTOM_DOMAIN\",\"https_enforced\":true,\"build_type\":\"workflow\"}" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" || true)
+          echo "DOMAIN_HTTP=$code"
+          cat /tmp/domain.json || true
+          test "$code" -ge 200
+          test "$code" -lt 300
+
+      - name: Ověřit marker na vlastní doméně
+        id: public
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 100); do
+            suffix="$GITHUB_RUN_ID-$attempt-$(date +%s)"
+            health=$(curl -fsSL --max-time 25 "https://$CUSTOM_DOMAIN/deployment-health.txt?rescue=$suffix" 2>/dev/null || true)
+            page=$(curl -fsSL --max-time 25 "https://$CUSTOM_DOMAIN/?rescue=$suffix" 2>/dev/null || true)
+            if printf '%s' "$health" | grep -q 'mode=public-pages-rescue' \
+              && printf '%s' "$health" | grep -q "build=$BUILD" \
+              && printf '%s' "$page" | grep -q "$BUILD"; then
+              printf '%s\n' "$health" > /tmp/lms-public-health.txt
+              ok=1
+              break
+            fi
+            sleep 6
+          done
+          echo "ready=$ok" >> "$GITHUB_OUTPUT"
+          test "$ok" = 1
+
+      - name: Ověřit funkčnost v Chromiu
+        id: browser
+        if: steps.public.outputs.ready == '1'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+          node --input-type=module <<'NODE' | tee /tmp/lms-browser.json
+          import { chromium } from 'playwright';
+          const out={ok:false,errors:[]};let browser;
+          try{
+            browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1440,height:1200}});
+            page.on('pageerror',e=>out.errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')out.errors.push(m.text())});
+            await page.goto(`https://www.lastminuteslevy.cz/?public-rescue=${Date.now()}`,{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForSelector('#catalogFilterV3 .rescue-actions',{timeout:150000});
+            await page.waitForFunction(()=>Number(document.querySelector('#catalogFilterV3')?.dataset.catalogTotalOffers||0)>2000000,{timeout:150000});
+            out.initial=await page.evaluate(()=>{const main=document.querySelector('main#hlavni-obsah')||document.querySelector('main'),s=document.querySelector('#nabidky'),r=document.querySelector('#vysledky'),f=document.querySelector('#catalogFilterV3');return{first:main?.firstElementChild?.id||'',order:Boolean(s&&r&&(s.compareDocumentPosition(r)&Node.DOCUMENT_POSITION_FOLLOWING)),total:Number(f?.dataset.catalogTotalOffers||0),status:f?.querySelector('[data-search-status]')?.textContent?.trim()||'',bootstrap:f?.dataset.bootstrapState||'',groups:[...f.querySelectorAll('details[data-group]')].map(n=>n.dataset.group),countries:[...f.querySelectorAll('input[name="countries"]')].map(i=>({value:i.value,disabled:i.disabled,count:Number((i.closest('label')?.querySelector('b')?.textContent||'').replace(/\D/g,'')||0)}))}});
+            if(out.initial.first!=='nabidky'||!out.initial.order||out.initial.total<=2000000||out.initial.bootstrap!=='ready')throw new Error(JSON.stringify(out.initial));
+            for(const name of ['countries','regions','resorts','hotels','tripTypes','sports','transports','departures','providers','boards','categories','freshness','travelers'])if(!out.initial.groups.includes(name))throw new Error(`Chybí filtr ${name}`);
+            const country=out.initial.countries.find(c=>!c.disabled&&c.count>0);if(!country)throw new Error('Žádná země s kladným počtem');out.country=country;
+            await page.evaluate(value=>[...document.querySelectorAll('input[name="countries"]')].find(i=>i.value===value)?.click(),country.value);
+            await page.waitForFunction(()=>document.querySelectorAll('#offersGrid .catalog-offer-card').length>0&&!/Načítám|\b0\s+nabídek\b/i.test(document.querySelector('[data-search-status]')?.textContent||''),{timeout:240000});
+            out.final=await page.evaluate(()=>{const r=document.querySelector('#vysledky'),a=document.querySelector('[data-slevomat-home-section]');return{cards:document.querySelectorAll('#offersGrid .catalog-offer-card').length,status:document.querySelector('[data-search-status]')?.textContent?.trim()||'',adPresent:Boolean(a),adAfterResults:!a||Boolean(r&&(r.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING)),bootstrap:document.querySelector('#catalogFilterV3')?.dataset.bootstrapState||''}});
+            if(out.final.cards<1||/\b0\s+nabídek\b/i.test(out.final.status)||!out.final.adAfterResults||out.final.bootstrap!=='ready')throw new Error(JSON.stringify(out.final));
+            out.ok=true;
+          }catch(error){out.errors.push(String(error?.stack||error))}finally{if(browser)await browser.close()}
+          console.log(JSON.stringify(out,null,2));if(!out.ok)process.exitCode=1;
+          NODE
+
+      - name: Zapsat výsledek do PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          DOMAIN_OUTCOME: ${{ steps.domain.outcome }}
+          PUBLIC_OUTCOME: ${{ steps.public.outcome }}
+          BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+        with:
+          script: |
+            const fs=require('fs');let health='',browser='';try{health=fs.readFileSync('/tmp/lms-public-health.txt','utf8')}catch{}try{browser=fs.readFileSync('/tmp/lms-browser.json','utf8')}catch{}
+            const body=[
+              '# Záchranné nasazení LastMinuteSlevy přes veřejné GitHub Pages','',
+              `- Pages URL: ${process.env.PAGE_URL||'neuvedena'}`,
+              `- Nastavení vlastní domény: **${process.env.DOMAIN_OUTCOME||'unknown'}**`,
+              `- Veřejný marker: **${process.env.PUBLIC_OUTCOME||'unknown'}**`,
+              `- Kontrola v Chromiu: **${process.env.BROWSER_OUTCOME||'unknown'}**`,'',
+              '```text',health,'```','',
+              '```json',browser.slice(-50000),'```'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:body.slice(0,64000)});
+
+      - name: Vyhodnotit úplnou funkčnost
+        if: always()
+        shell: bash
+        env:
+          DOMAIN: ${{ steps.domain.outcome }}
+          PUBLIC: ${{ steps.public.outcome }}
+          BROWSER: ${{ steps.browser.outcome }}
+        run: |
+          test "$DOMAIN" = success
+          test "$PUBLIC" = success
+          test "$BROWSER" = success
