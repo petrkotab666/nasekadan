@@ -10,6 +10,10 @@ on:
       - zpravy/**
       - sitemap.xml
       - .github/workflows/emergency-deploy-ovh.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - emergency-deploy-trigger.txt
   workflow_dispatch:
 
 concurrency:
@@ -23,6 +27,8 @@ jobs:
     steps:
       - name: Stáhnout aktuální web
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Sestavit a okamžitě přepnout web
         shell: bash
