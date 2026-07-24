@@ -52,5 +52,6 @@ sudo systemctl daemon-reload
 sudo systemctl reset-failed nasekadan-refresh.service || true
 sudo systemctl enable --now nasekadan-refresh.timer
 sudo systemctl restart nasekadan-refresh.timer
-sudo systemctl start nasekadan-refresh.service
+# Dlouhá aktualizace běží mimo deploy; ostré soubory hned poté nasadí finální krok workflow.
+sudo systemctl start --no-block nasekadan-refresh.service || true
 echo "Automatizace je aktivní každých 30 minut přes Nginx včetně SEO postprocesoru."
