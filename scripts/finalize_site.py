@@ -5,7 +5,7 @@ import html, json, re
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://nasekadan.cz'
 TODAY='2026-07-24'
-ASSET_VERSION='20260724-mobile-4'
+ASSET_VERSION='20260724-mobile-5'
 SOCIAL=f'{BASE}/social-card.png'
 LEGAL='<div class="footer-legal"><a href="/o-webu/">O webu</a><a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="mailto:info@nasekadan.cz">Kontakt</a></div>'
 HEADER='''<header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav aria-label="Hlavní menu"><a href="/">Úvod</a><a href="/#clanky">Naše články</a><a href="/prehled-zdroju/">Přehled zdrojů</a><a href="/#akce">Akce</a><a href="/pruvodce/">Průvodce</a><a href="/prakticke/">Praktická Kadaň</a><a href="/doprava/">Doprava</a><a href="/organizace/">Organizace</a><a href="/zapojte-se/">Zapojte se</a></nav></div></header>'''
@@ -33,14 +33,12 @@ def get_description(text:str)->str:
 
 
 def version_assets(text:str)->str:
- # Hlavní CSS vždy načítat z kořene a s novou verzí, bez ohledu na původní relativní cestu.
  text=re.sub(
   r'<link\b(?=[^>]*\brel=["\']stylesheet["\'])(?=[^>]*\bhref=["\'](?:\.\./|\./|/)?style\.css(?:\?[^"\']*)?["\'])[^>]*>',
   f'<link rel="stylesheet" href="/style.css?v={ASSET_VERSION}">',
   text,
   flags=re.I,
  )
- # Odstranit staré či opakovaně vložené mobilní styly a vložit přesně jeden aktuální.
  text=re.sub(
   r'<link\b(?=[^>]*\brel=["\']stylesheet["\'])(?=[^>]*\bhref=["\'](?:\.\./|\./|/)?mobile\.css(?:\?[^"\']*)?["\'])[^>]*>\s*',
   '',
@@ -49,7 +47,6 @@ def version_assets(text:str)->str:
  )
  mobile=f'<link rel="stylesheet" href="/mobile.css?v={ASSET_VERSION}">'
  text=text.replace('</head>',mobile+'</head>',1)
- # Totéž pro JavaScript, který doplňuje menu a obsah článku.
  text=re.sub(
   r'<script\b[^>]*\bsrc=["\'](?:\.\./|\./|/)?site\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
   f'<script src="/site.js?v={ASSET_VERSION}" defer></script>',
@@ -59,8 +56,22 @@ def version_assets(text:str)->str:
  return text
 
 
+def normalize_hospital_article(path:Path,text:str)->str:
+ if path.relative_to(ROOT).as_posix()!='clanky/nemocnice-kadan.html':
+  return text
+ text=text.replace('ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · AKTUALIZOVÁNO 23. ČERVENCE 2026','ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 24. ČERVENCE 2026')
+ text=text.replace('ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 23. ČERVENCE 2026','ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 24. ČERVENCE 2026')
+ text=text.replace('<p class="updated">Aktualizováno: 23. 7. 2026</p>','<p class="updated">Publikováno: 24. 7. 2026</p>')
+ text=text.replace('<p class="updated">Publikováno: 23. 7. 2026</p>','<p class="updated">Publikováno: 24. 7. 2026</p>')
+ text=text.replace('"datePublished":"2026-07-23"','"datePublished":"2026-07-24"')
+ text=text.replace('"dateModified":"2026-07-23"','"dateModified":"2026-07-24"')
+ text=text.replace('Stav informací k 23. červenci 2026.','Stav informací k 24. červenci 2026.')
+ return text
+
+
 def finish_html(path:Path)->None:
  text=path.read_text(encoding='utf-8')
+ text=normalize_hospital_article(path,text)
  text=text.replace('mirove-namesti.html','mestske-namesti.html').replace('<span class="logo-mark">K</span>','<span class="logo-mark">NK</span>').replace('Přečíst celý vlastní článek','Přečíst celý článek')
  if re.search(r'<header\b[^>]*>.*?</header>',text,re.I|re.S):
   text=re.sub(r'<header\b[^>]*>.*?</header>',HEADER,text,count=1,flags=re.I|re.S)
