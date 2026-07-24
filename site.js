@@ -8,6 +8,14 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.head.appendChild(mobile);
   }
 
+  if(document.querySelector('main.article-shell')&&!document.querySelector('script[data-article-adstream]')){
+    const adstream=document.createElement('script');
+    adstream.src='/reklamy-sidebar.js?v=20260724-adstream-1';
+    adstream.async=true;
+    adstream.setAttribute('data-article-adstream','true');
+    document.head.appendChild(adstream);
+  }
+
   document.querySelectorAll('.head').forEach(head=>{
     const nav=head.querySelector('nav');
     if(!nav||head.querySelector('.menu-toggle'))return;
