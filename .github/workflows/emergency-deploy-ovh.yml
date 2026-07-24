@@ -1,0 +1,57 @@
+name: Nouzově nasadit Naše Kadaň na OVH
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - emergency-deploy-trigger.txt
+      - index.html
+      - clanky/**
+      - zpravy/**
+      - sitemap.xml
+      - .github/workflows/emergency-deploy-ovh.yml
+  workflow_dispatch:
+
+concurrency:
+  group: nasekadan-emergency-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout aktuální web
+        uses: actions/checkout@v4
+
+      - name: Sestavit a okamžitě přepnout web
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE='docker-compose'
+          elif docker compose version >/dev/null 2>&1; then
+            COMPOSE='docker compose'
+          else
+            echo 'Na serveru není dostupný docker-compose ani docker compose.' >&2
+            exit 1
+          fi
+          $COMPOSE build web
+          docker rm -f nasekadan-web 2>/dev/null || true
+          $COMPOSE up -d --no-build --remove-orphans
+
+      - name: Ověřit článek a titulní stránku
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3224/healthz >/dev/null
+          curl -fsS http://127.0.0.1:3224/clanky/vypadek-internetu-kadan-kradez-kabelu.html | grep -F 'Policie prověřuje poškození kabelů' >/dev/null
+          curl -fsS http://127.0.0.1:3224/ | grep -F 'Kadaň zasáhl rozsáhlý výpadek internetu a televize' >/dev/null
+          curl -fsS http://127.0.0.1:3224/sitemap.xml | grep -F 'vypadek-internetu-kadan-kradez-kabelu.html' >/dev/null
+          echo 'Aktuální článek je nasazený na OVH.'
