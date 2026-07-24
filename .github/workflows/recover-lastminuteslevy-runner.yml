@@ -1,0 +1,53 @@
+name: Obnovit runner LastMinuteSlevy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recover-lastminuteslevy-runner.yml'
+      - '.github/recover-lastminuteslevy-runner-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recover:
+    runs-on: self-hosted
+    timeout-minutes: 10
+    steps:
+      - name: Obnovit službu runneru LastMinuteSlevy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n true
+          echo "Běžím na $(hostname) jako $(id -un)"
+          mapfile -t services < <(
+            systemctl list-unit-files --type=service --no-legend 'actions.runner*' 2>/dev/null \
+              | awk '{print $1}' \
+              | while read -r service; do
+                  if [[ "$service" == *lastminuteslevy* ]] || sudo systemctl cat "$service" 2>/dev/null | grep -qiE 'lastminuteslevy|/home/ubuntu/actions-runner(/|$)'; then
+                    echo "$service"
+                  fi
+                done \
+              | sort -u
+          )
+          if [ "${#services[@]}" -eq 0 ]; then
+            echo 'Nenalezena systemd služba runneru LastMinuteSlevy.' >&2
+            sudo systemctl list-unit-files --type=service --no-legend 'actions.runner*' || true
+            exit 1
+          fi
+          printf 'Obnovuji služby:\n%s\n' "${services[*]}"
+          for service in "${services[@]}"; do
+            sudo systemctl reset-failed "$service" || true
+            sudo systemctl restart "$service"
+          done
+          sleep 8
+          failed=0
+          for service in "${services[@]}"; do
+            echo "=== $service ==="
+            sudo systemctl --no-pager --full status "$service" | sed -n '1,30p' || true
+            if ! systemctl is-active --quiet "$service"; then failed=1; fi
+          done
+          test "$failed" = 0
+          echo 'Runner LastMinuteSlevy byl obnoven.'
