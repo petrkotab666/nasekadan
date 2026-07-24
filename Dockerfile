@@ -2,10 +2,6 @@ FROM nginx:1.27-alpine
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY . /usr/share/nginx/html
 
-# Z jednotlivých textových částí sestavit ověřené fotografie a idempotentně
-# přidat analýzu Slovanu na titulní stránku, do archivu a sitemap.
-RUN apk add --no-cache python3 \
- && python3 /usr/share/nginx/html/scripts/publish_slovan.py
 
 # Mobilní pravidla přidat přímo do hlavního CSS. Tím nejsou závislá na načtení dalšího souboru.
 RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n' >> /usr/share/nginx/html/style.css \
