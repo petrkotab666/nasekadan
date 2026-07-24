@@ -2,6 +2,11 @@ FROM nginx:1.27-alpine
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY . /usr/share/nginx/html
 
+# Z jednotlivých textových částí sestavit ověřené fotografie a idempotentně
+# přidat analýzu Slovanu na titulní stránku, do archivu a sitemap.
+RUN apk add --no-cache python3 \
+ && python3 /usr/share/nginx/html/scripts/publish_slovan.py
+
 # Mobilní pravidla přidat přímo do hlavního CSS. Tím nejsou závislá na načtení dalšího souboru.
 RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n' >> /usr/share/nginx/html/style.css \
  && cat /usr/share/nginx/html/mobile.css >> /usr/share/nginx/html/style.css
@@ -22,6 +27,6 @@ RUN sed -i \
   -e 's#Stav informací k 23. červenci 2026.#Stav informací k 24. červenci 2026.#g' \
   /usr/share/nginx/html/clanky/nemocnice-kadan.html
 
-RUN rm -rf /usr/share/nginx/html/.git /usr/share/nginx/html/.github /usr/share/nginx/html/nginx /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/docker-compose.yml
+RUN rm -rf /usr/share/nginx/html/.git /usr/share/nginx/html/.github /usr/share/nginx/html/.image-parts /usr/share/nginx/html/nginx /usr/share/nginx/html/scripts /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/docker-compose.yml
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1/healthz || exit 1
