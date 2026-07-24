@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     return '';
   })();
 
-  document.querySelectorAll('header .head').forEach(head=>{
+  document.querySelectorAll('header .head').forEach((head,index)=>{
     const nav=head.querySelector('nav');
     if(!nav)return;
 
@@ -30,14 +30,24 @@ document.addEventListener('DOMContentLoaded',()=>{
       return `<a href="${item.href}"${current}>${item.label}</a>`;
     }).join('');
 
-    let button=head.querySelector('.menu-toggle');
-    if(!button){
+    // Starší site.js mohl již tlačítku přidat vlastní posluchač. Klon odstraní
+    // původní posluchače a zabrání dvojímu otevření/zavření mobilního menu.
+    const oldButton=head.querySelector('.menu-toggle');
+    let button;
+    if(oldButton){
+      button=oldButton.cloneNode(true);
+      oldButton.replaceWith(button);
+    }else{
       button=document.createElement('button');
       button.className='menu-toggle';
       button.type='button';
       button.innerHTML='<span></span><span></span><span></span>';
       head.appendChild(button);
     }
+
+    const navId=index===0?'main-navigation':`main-navigation-${index+1}`;
+    nav.id=navId;
+    button.setAttribute('aria-controls',navId);
 
     const setMenuState=open=>{
       nav.classList.toggle('is-open',open);
@@ -46,16 +56,8 @@ document.addEventListener('DOMContentLoaded',()=>{
       button.setAttribute('aria-label',open?'Zavřít hlavní menu':'Otevřít hlavní menu');
     };
 
-    button.setAttribute('aria-controls','main-navigation');
-    nav.id='main-navigation';
     setMenuState(false);
-
-    // Vlastní obsluha je potřeba také na stránkách, které starší site.js nenačítají.
-    if(!button.dataset.unifiedMenu){
-      button.dataset.unifiedMenu='true';
-      button.addEventListener('click',()=>setMenuState(!nav.classList.contains('is-open')));
-    }
-
+    button.addEventListener('click',()=>setMenuState(!nav.classList.contains('is-open')));
     nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>setMenuState(false)));
   });
 });
