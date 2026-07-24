@@ -1,0 +1,130 @@
+/* Mobilní a responzivní úpravy celého webu Naše Kadaň */
+html,body{max-width:100%;overflow-x:hidden}
+img,svg,video,canvas,iframe{max-width:100%;height:auto}
+main,section,article,aside,header,footer,div{min-width:0}
+pre,code{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+
+@media (max-width:850px){
+  body{font-size:16px;line-height:1.65;-webkit-text-size-adjust:100%}
+  .wrap{width:calc(100% - 24px);max-width:none}
+
+  header{position:sticky;top:0}
+  .head{height:64px}
+  .logo{font-size:21px;line-height:1;letter-spacing:-.6px;gap:9px;white-space:nowrap}
+  .logo-mark{width:38px;height:36px;min-width:38px;border-radius:10px}
+  .logo-mark::before{font-size:14px}
+  .menu-toggle{width:42px;height:40px;min-width:42px;margin-left:12px}
+  .head nav{top:64px;left:-12px;right:-12px;border-left:0;border-right:0;border-radius:0 0 14px 14px;padding:8px 18px;max-height:calc(100vh - 64px);overflow-y:auto}
+  .head nav a{min-height:48px;display:flex;align-items:center;font-size:16px}
+
+  .ticker{padding:9px 0;font-size:13px;line-height:1.45}
+  .ticker .wrap{overflow-wrap:anywhere}
+
+  .hero{display:block;padding:22px 0 30px}
+  .lead{border-radius:16px;margin-bottom:18px}
+  .photo{height:190px}
+  .photo span{left:16px;top:16px;padding:7px 10px}
+  .photo strong{font-size:42px;letter-spacing:4px}
+  .copy{padding:20px}
+  .copy h1{font-size:32px;line-height:1.08;letter-spacing:-.025em;margin:.38em 0}
+  .copy p{font-size:17px;line-height:1.65}
+  .copy small,.tag{font-size:12px;line-height:1.45;letter-spacing:.055em}
+
+  .btn{width:100%;min-height:48px;justify-content:center;text-align:center;padding:12px 15px;line-height:1.35}
+  aside{padding:20px;border-radius:16px}
+  aside h2{font-size:28px}
+  aside a{padding:15px 0}
+
+  .section{padding:40px 0}
+  .section h2{font-size:32px;line-height:1.12;margin:.2em 0 18px}
+  .section-intro{font-size:17px}
+  .cards,.promo-grid,.guide-strip,.tip-box,.footer-grid{grid-template-columns:minmax(0,1fr)!important}
+  .cards{gap:16px}
+  .cards article{padding:18px}
+  .event{grid-template-columns:58px minmax(0,1fr);gap:13px;min-height:0}
+  .date{height:66px;padding:9px 5px}
+  .date b{font-size:25px}
+  .event h3{font-size:20px;overflow-wrap:anywhere}
+  .events-group{margin:22px 0 34px}
+  .events-group-head h3{font-size:27px}
+
+  .promo-wrap{padding:28px 0}
+  .promo-card{min-height:0;padding:18px}
+  .promo-card strong{font-size:22px}
+  .guide-strip{gap:10px}
+  .guide-strip a{padding:16px}
+  .tip-box{padding:22px;gap:18px}
+  footer{padding:30px 0}
+  .footer-grid{gap:22px}
+  .footer-legal{width:calc(100% - 24px);gap:12px;font-size:13px}
+
+  /* Články */
+  .article-shell{display:block!important;width:calc(100% - 24px)!important;padding:24px 0 38px!important}
+  .article{width:100%;min-width:0;overflow-wrap:anywhere}
+  .article h1{font-size:clamp(32px,9.2vw,42px)!important;line-height:1.08!important;letter-spacing:-.03em!important;margin:12px 0 18px!important;overflow-wrap:anywhere}
+  .article h2{font-size:28px!important;line-height:1.18!important;margin:38px 0 13px!important;scroll-margin-top:82px}
+  .article h3{font-size:22px!important;line-height:1.25!important;margin:28px 0 10px!important}
+  .article p,.article li{font-size:17px!important;line-height:1.72!important}
+  .article .leadtext{font-size:20px!important;line-height:1.58!important}
+  .article ul,.article ol{padding-left:23px}
+  .article li{margin-bottom:7px}
+
+  .hero-visual{min-height:220px!important;padding:20px!important;border-radius:17px!important;margin:22px 0!important}
+  .hero-visual strong{font-size:25px!important;line-height:1.25!important}
+  .hero-visual:after{font-size:48px!important;right:-7px!important;top:18px!important}
+
+  .numbers{grid-template-columns:minmax(0,1fr)!important;gap:10px!important;margin:24px 0!important}
+  .numbers div{padding:18px!important;border-radius:13px!important}
+  .numbers b{font-size:26px!important}
+
+  .toc{padding:18px!important;border-radius:14px!important;margin:22px 0!important}
+  .toc strong{font-size:21px!important}
+  .toc ol{columns:1!important;padding-left:22px;margin-bottom:0}
+  .toc li{font-size:15px!important;line-height:1.45!important;margin:9px 0!important}
+  .toc a{display:inline;padding:3px 0}
+
+  .data-table{display:block!important;width:100%!important;max-width:100%!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch;border-radius:12px!important;font-size:14px}
+  .data-table table{width:100%}
+  .data-table th,.data-table td{padding:11px 10px!important;min-width:125px;line-height:1.4!important;white-space:normal!important}
+  .data-table th:first-child,.data-table td:first-child{min-width:155px}
+  body .article .data-table td:nth-child(n+2){white-space:normal!important}
+
+  .callout,.factcheck{margin:26px 0!important;padding:18px!important;border-radius:0 13px 13px 0!important}
+  .factcheck{border-radius:14px!important}
+  .callout strong{font-size:22px!important}
+  blockquote{margin:30px 0!important;padding:19px 20px!important;font-size:22px!important;line-height:1.42!important;border-radius:0 14px 14px 0!important}
+  .scenario-grid{grid-template-columns:minmax(0,1fr)!important;gap:11px!important}
+  .scenario{padding:17px!important}
+  .scenario strong{font-size:21px!important}
+  .source-list{padding:18px!important;margin-top:32px!important;border-radius:14px!important}
+  .source-list ul{padding-left:20px}
+  .source-list li{font-size:14px!important;line-height:1.55!important;overflow-wrap:anywhere}
+  .article-ad{margin:28px 0!important}
+
+  .article-shell>.sticky{position:static!important;margin-top:30px}
+  .sidebox{padding:18px!important;border-radius:14px!important;margin-bottom:14px!important}
+  .sidebox h3{font-size:22px!important}
+  .sidebox p,.sidebox li{font-size:15px!important;line-height:1.55!important}
+
+  .legal-page,.error-page{padding:36px 0}
+  .legal-page h1,.error-page h1{font-size:36px;overflow-wrap:anywhere}
+  .legal-page h2{font-size:27px}
+  .legal-page p,.legal-page li,.error-page p{font-size:17px}
+}
+
+@media (max-width:420px){
+  .wrap,.article-shell{width:calc(100% - 20px)!important}
+  .logo{font-size:19px}
+  .copy{padding:17px}
+  .copy h1{font-size:29px}
+  .section h2{font-size:29px}
+  .article h1{font-size:30px!important}
+  .article h2{font-size:26px!important}
+  .article .leadtext{font-size:18px!important}
+  .article p,.article li{font-size:16.5px!important}
+  .hero-visual{min-height:190px!important}
+  .hero-visual strong{font-size:23px!important}
+  .data-table th,.data-table td{min-width:115px;padding:10px 9px!important}
+  .data-table th:first-child,.data-table td:first-child{min-width:145px}
+  .footer-legal{width:calc(100% - 20px)}
+}
