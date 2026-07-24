@@ -31,9 +31,9 @@ jobs:
             cat .image-parts/${base}.part-* | tr -d '\n\r ' | base64 -d > assets/${base}.jpg
           done
           echo '6fd5d7171cba8577f6401e7b40cea4d9657a78b4ad4862faafc2b94bfa97edfd  assets/slovan-lavka-hero-20260724.jpg' | sha256sum -c -
-          echo '5fac9aeafaa0aa26b728a1800a57e31baa93bf5102aac1b68ecfa0ae0fc8f65a  assets/slovan-detail-20260724.jpg' | sha256sum -c -
-          echo '768434b37059bbdd0259540e33656f5a10f6eb633e221f04a8343bdc263337f6  assets/lavka-shell-20260724.jpg' | sha256sum -c -
-          echo '167ad133d6c85551b9c9b47150825ff2e318973a46de51a0d5c57ed65ce9dae3  assets/slovan-vstup-20260724.jpg' | sha256sum -c -
+          echo '1a10fd44da4f611f0d04baff2e18a6003ec180c06b13e90ac83b942871dee963  assets/slovan-detail-20260724.jpg' | sha256sum -c -
+          echo 'a29657c7c695aa7c43272576c0abaaf99de72be81527ef9e82fa447322e93adb  assets/lavka-shell-20260724.jpg' | sha256sum -c -
+          echo '3e7ca08bdf7bc7912a9539ba10c14845b12bbf359fa9447c62bb7e6bc6e90746  assets/slovan-vstup-20260724.jpg' | sha256sum -c -
           file assets/*.jpg
 
       - name: Uložit fotografie a odstranit přenosové části
