@@ -9,7 +9,7 @@ RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n
 # Na všech stránkách vynutit stažení nové verze hlavního CSS a JavaScriptu bez staré cache.
 RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
   -e 's#style.css"#style.css?v=20260724-mobile-2"#g' \
-  -e 's#site.js"#site.js?v=20260724-mobile-2"#g' {} +
+  -e 's#site.js"#site.js?v=20260724-nemocnice-5"#g' {} +
 
 # Připravit nemocniční článek k prvnímu vydání 24. 7. 2026.
 RUN sed -i \
