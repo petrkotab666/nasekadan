@@ -103,7 +103,7 @@ jobs:
           sudo nginx -t
           sudo systemctl reload nginx
 
-      - name: Ověřit web a chráněný náhled
+      - name: Ověřit web, RSS a chráněný náhled
         shell: bash
         run: |
           set -euo pipefail
@@ -114,6 +114,7 @@ jobs:
             sleep 2
           done
           curl -fsS http://127.0.0.1:3224/healthz >/dev/null
+          curl -fsS http://127.0.0.1:3224/rss.xml | grep -F '<geo:lat>50.429725</geo:lat>' >/dev/null
           curl -fsS http://127.0.0.1:3224/nahled/petice-nemocnice-kadan-a8f4c2.html | grep -F 'Petice rozjela volební spor' >/dev/null
 
           code=$(curl --noproxy '*' -k -sS --max-time 10 \
@@ -121,7 +122,7 @@ jobs:
             -o /dev/null -w '%{http_code}' \
             https://nasekadan.cz/nahled/petice-nemocnice-kadan-a8f4c2.html 2>/dev/null || true)
           [[ "$code" == "401" ]] || { echo "Náhled není chráněný; HTTP $code" >&2; exit 1; }
-          echo 'Aktuální web i soukromý náhled jsou nasazené a náhled je chráněn heslem.'
+          echo 'Aktuální web, RSS i soukromý náhled jsou nasazené; náhled je chráněn heslem.'
 
       - name: Zapsat výsledek nouzového nasazení
         if: ${{ always() }}
@@ -129,7 +130,7 @@ jobs:
         run: |
           if [[ "${{ job.status }}" == "success" ]]; then
             state=success
-            description='Náhled je nasazený a chráněný heslem'
+            description='Web a RSS jsou nasazené; náhled je chráněný'
           else
             state=failure
             description='Nouzové nasazení nebo ověření selhalo'
