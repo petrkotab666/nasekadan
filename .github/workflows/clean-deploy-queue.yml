@@ -1,0 +1,63 @@
+name: Vyčistit frontu nasazení Naše Kadaň
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/cloud-clean-deploy-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  clean-and-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Zrušit staré běhy a spustit jediné nouzové nasazení
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const targets = new Set([
+              'Nasadit Naše Kadaň na OVH',
+              'Nouzově nasadit Naše Kadaň na OVH',
+              'Chránit soukromé náhledy Naše Kadaň'
+            ]);
+
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner, repo, branch: 'main', per_page: 100
+            });
+
+            const cancelled = [];
+            for (const run of runs) {
+              if (!targets.has(run.name)) continue;
+              if (!['queued', 'in_progress', 'waiting', 'pending', 'requested'].includes(run.status)) continue;
+              try {
+                await github.rest.actions.cancelWorkflowRun({owner, repo, run_id: run.id});
+                cancelled.push(`#${run.run_number} ${run.name} (${run.status})`);
+              } catch (error) {
+                core.warning(`Běh ${run.id} nešlo zrušit: ${error.message}`);
+              }
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            await github.rest.actions.createWorkflowDispatch({
+              owner, repo, workflow_id: 'emergency-deploy-ovh.yml', ref: 'main'
+            });
+
+            const body = [
+              '## Vyčištění fronty nasazení',
+              '',
+              cancelled.length ? `Zrušené běhy:\n- ${cancelled.join('\n- ')}` : 'Nebyl nalezen žádný starý aktivní běh.',
+              '',
+              'Spuštěno nové samostatné nouzové nasazení z větve `main`.'
+            ].join('\n');
+
+            if (context.issue.number) {
+              await github.rest.issues.createComment({owner, repo, issue_number: context.issue.number, body});
+            }
