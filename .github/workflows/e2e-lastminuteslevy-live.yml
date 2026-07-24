@@ -1,0 +1,96 @@
+name: Ověřit živý LastMinuteSlevy v prohlížeči
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/e2e-lastminuteslevy-live-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Nainstalovat Playwright
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Ověřit všechny podmínky
+        id: e2e
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE' | tee /tmp/lms-live-e2e.json
+          import { chromium } from 'playwright';
+          const out={ok:false,errors:[],consoleErrors:[],requestsFailed:[]};let browser;
+          try{
+            browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1440,height:1200}});
+            page.on('pageerror',e=>out.errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')out.consoleErrors.push(m.text())});
+            page.on('requestfailed',r=>out.requestsFailed.push({url:r.url(),failure:r.failure()?.errorText||''}));
+            const response=await page.goto(`https://www.lastminuteslevy.cz/?e2e=${Date.now()}`,{waitUntil:'domcontentloaded',timeout:120000});
+            out.http=response?.status()||0;
+            await page.waitForSelector('#catalogFilterV3 .cf7-panel',{timeout:180000});
+            await page.waitForFunction(()=>{
+              const f=document.querySelector('#catalogFilterV3');
+              const status=document.querySelector('[data-search-status]')?.textContent||'';
+              return f?.dataset.bootstrapState==='ready' && (Number(f.dataset.catalogTotalOffers||0)>2000000 || Number(status.replace(/\D/g,''))>2000000);
+            },{timeout:180000});
+            out.initial=await page.evaluate(()=>{
+              const main=document.querySelector('main#hlavni-obsah');const search=document.querySelector('#nabidky');const results=document.querySelector('#vysledky');const f=document.querySelector('#catalogFilterV3');
+              return{title:document.title,first:main?.firstElementChild?.id||'',searchBeforeResults:Boolean(search&&results&&(search.compareDocumentPosition(results)&Node.DOCUMENT_POSITION_FOLLOWING)),total:Number(f?.dataset.catalogTotalOffers||0),loaded:Number(f?.dataset.catalogLoadedOffers||0),status:document.querySelector('[data-search-status]')?.textContent?.trim()||'',bootstrap:f?.dataset.bootstrapState||'',groups:[...f.querySelectorAll('.cf7-group[data-group]')].map(x=>x.dataset.group),countries:[...f.querySelectorAll('input[name="countries"]')].map(i=>({value:i.value,disabled:i.disabled,count:Number((i.closest('.cf7-option')?.querySelector('[data-facet-count]')?.textContent||'').replace(/\D/g,'')||0)})),adBeforeSearch:[...document.querySelectorAll('[data-slevomat-home-section],.lms-slevomat-home')].some(a=>Boolean(a.compareDocumentPosition(search)&Node.DOCUMENT_POSITION_FOLLOWING))};
+            });
+            const required=['countries','tripTypes','sports','transports','departures','providers','boards','categories','freshness','travelers'];
+            if(out.initial.first!=='nabidky')throw new Error(`První obsah není vyhledávač: ${out.initial.first}`);
+            if(!out.initial.searchBeforeResults)throw new Error('Vyhledávač není před výsledky.');
+            if(out.initial.total<=2000000)throw new Error(`Celkový katalog není přes 2 miliony: ${out.initial.total}`);
+            if(out.initial.bootstrap!=='ready')throw new Error(`Bootstrap není ready: ${out.initial.bootstrap}`);
+            for(const name of required)if(!out.initial.groups.includes(name))throw new Error(`Chybí filtr ${name}`);
+            if(out.initial.adBeforeSearch)throw new Error('Reklama je před vyhledávačem.');
+            const country=out.initial.countries.find(x=>!x.disabled&&x.count>0);
+            if(!country)throw new Error('Žádná země nemá kladný a použitelný počet.');
+            out.selectedCountry=country;
+            await page.evaluate(value=>{const i=[...document.querySelectorAll('input[name="countries"]')].find(x=>x.value===value);if(!i)throw new Error('Země nenalezena');i.click();},country.value);
+            await page.waitForFunction(()=>{
+              const status=document.querySelector('[data-search-status]')?.textContent||'';
+              return document.querySelectorAll('#offersGrid .catalog-offer-card').length>0 && !/Načítám|\b0\s+nabídek\b/i.test(status);
+            },{timeout:240000});
+            out.final=await page.evaluate(()=>{
+              const results=document.querySelector('#vysledky');const ad=document.querySelector('[data-slevomat-home-section],.lms-slevomat-home');const f=document.querySelector('#catalogFilterV3');
+              return{cards:document.querySelectorAll('#offersGrid .catalog-offer-card').length,status:document.querySelector('[data-search-status]')?.textContent?.trim()||'',resultInfo:document.querySelector('#resultInfo')?.textContent?.trim()||'',bootstrap:f?.dataset.bootstrapState||'',total:Number(f?.dataset.catalogTotalOffers||0),adPresent:Boolean(ad),adAfterResults:!ad||Boolean(results&&(results.compareDocumentPosition(ad)&Node.DOCUMENT_POSITION_FOLLOWING)),runtime:document.documentElement.dataset.performanceRuntime||'',catalogSource:document.documentElement.dataset.catalogDataSource||'',catalogMode:document.documentElement.dataset.catalogMode||'',router:window.__LMS_CATALOG_ROUTER_DIAGNOSTICS__||null};
+            });
+            if(out.final.cards<1)throw new Error('Po výběru země nejsou karty výsledků.');
+            if(/\b0\s+nabídek\b/i.test(out.final.status))throw new Error(`Falešná nula: ${out.final.status}`);
+            if(!out.final.adAfterResults)throw new Error('Reklama není až za výsledky.');
+            if(out.final.bootstrap!=='ready')throw new Error(`Bootstrap po filtru není ready: ${out.final.bootstrap}`);
+            out.ok=true;
+          }catch(e){out.errors.push(String(e?.stack||e))}finally{if(browser)await browser.close()}
+          console.log(JSON.stringify(out,null,2));if(!out.ok)process.exitCode=1;
+          NODE
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.e2e.outcome }}
+        with:
+          script: |
+            const fs=require('fs');let body='';try{body=fs.readFileSync('/tmp/lms-live-e2e.json','utf8')}catch{}
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`# E2E kontrola živého LastMinuteSlevy\n\nVýsledek kroku: **${process.env.OUTCOME}**\n\n\`\`\`json\n${body.slice(-60000)}\n\`\`\``});
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.e2e.outcome }}
+        run: test "$OUTCOME" = success
