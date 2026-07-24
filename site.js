@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   if(document.querySelector('main.article-shell')&&!document.querySelector('script[data-article-adstream]')){
     const adstream=document.createElement('script');
-    adstream.src='/reklamy-sidebar.js?v=20260724-adstream-2';
+    adstream.src='/reklamy-sidebar.js?v=20260724-adstream-3';
     adstream.async=true;
     adstream.setAttribute('data-article-adstream','true');
     document.head.appendChild(adstream);
