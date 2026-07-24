@@ -1,5 +1,5 @@
 (function(){
-  const ASSET_VERSION='20260724-adstream-2';
+  const ASSET_VERSION='20260724-adstream-3';
 
   if(!document.querySelector('link[data-article-adstream-css]')){
     const style=document.createElement('link');
@@ -116,6 +116,10 @@
     return `<a class="article-rail-card article-rail-card-custom" href="${url}" target="_blank" rel="nofollow sponsored noopener noreferrer"><span class="article-rail-label">Reklama</span><span class="article-rail-copy"><strong>${title}</strong><span>${String(item.text||'Vybraná partnerská nabídka.')}</span><b>Zjistit více →</b></span></a>`;
   }
 
+  function isDomainTitle(value){
+    return /^[^\s]+\.[a-z0-9-]{2,}$/i.test(String(value||'').trim());
+  }
+
   function rebuildArticleAdStream(){
     const shell=document.querySelector('main.article-shell');
     const article=shell?.querySelector('article.article');
@@ -143,7 +147,7 @@
     const desktopCount=Math.max(1,Math.ceil(availableHeight/560));
     const count=desktop?Math.min(24,desktopCount):Math.min(2,Math.max(1,pool.length));
     const day=new Date().toISOString().slice(0,10);
-    const seed=typeof hashSeed==='function'?hashSeed(`${location.pathname}|${day}|sidebar-stream-v2`):0;
+    const seed=typeof hashSeed==='function'?hashSeed(`${location.pathname}|${day}|sidebar-stream-v3`):0;
     const selected=selectVariedAds(pool,count,seed);
     if(!selected.length)return;
 
@@ -157,6 +161,12 @@
       slot.dataset.adIndex=String(index+1);
       slot.dataset.partner=entry.key;
       slot.innerHTML=renderEntry(entry);
+      const title=String(entry.item?.title||'').trim();
+      const heading=slot.querySelector('.article-rail-copy strong');
+      if(heading&&isDomainTitle(title)){
+        heading.classList.add('ad-domain-title');
+        heading.setAttribute('title',title);
+      }
       stream.appendChild(slot);
     });
 
