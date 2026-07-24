@@ -1,0 +1,19 @@
+/* Reklamní proud v pravém sloupci článku. */
+.article-ad-rail{display:none!important}
+.article-aside-tower{display:none!important}
+.article-shell>aside.sticky{position:static!important;top:auto!important;align-self:start!important}
+.article-aside-adstream{display:grid!important;grid-template-columns:minmax(0,1fr);gap:28px;width:100%;margin:22px 0 0;padding:0}
+.article-aside-adstream .article-aside-ad{width:100%;margin:0;padding:14px;background:#f5f1e8;border:1px solid #ece3d4;border-radius:18px;box-sizing:border-box}
+.article-aside-adstream .article-rail-card{display:block!important;width:100%!important;max-width:300px!important;max-height:none!important;min-height:0!important;margin:0 auto!important;overflow:hidden!important;background:#fff;border:1px solid #d8e0e4;border-radius:15px;box-shadow:0 10px 28px rgba(18,35,45,.10);color:var(--ink);text-decoration:none}
+.article-aside-adstream .article-rail-label{display:block;padding:8px 10px 7px;color:#747f85;background:#f5f7f8;border-bottom:1px solid #e1e6e8;font-size:9px;font-weight:900;letter-spacing:.12em;text-align:center;text-transform:uppercase}
+.article-aside-adstream .article-rail-tower-picture{display:block!important;width:100%!important;min-height:0!important;height:auto!important;background:#fff;overflow:hidden!important}
+.article-aside-adstream .article-rail-tower-picture img{display:block!important;width:100%!important;height:auto!important;max-width:100%!important;max-height:none!important;aspect-ratio:1/2;object-fit:contain!important;padding:0!important;margin:0!important;border:0!important}
+.article-aside-adstream .article-rail-fallback{display:none;align-items:center;justify-content:center;min-height:300px;padding:18px;background:linear-gradient(145deg,var(--red2),var(--red));color:#fff;font:800 22px/1.2 Georgia,serif;text-align:center}
+.article-aside-adstream .article-rail-card.is-image-error .article-rail-tower-picture{display:none!important}
+.article-aside-adstream .article-rail-card.is-image-error .article-rail-fallback{display:flex!important}
+.article-aside-adstream .article-rail-card:hover{transform:none!important;box-shadow:0 14px 34px rgba(18,35,45,.14)}
+
+@media(max-width:980px){
+  .article-aside-adstream{max-width:330px;margin:22px auto 0}
+  .article-aside-adstream .article-aside-ad:nth-child(n+3){display:none}
+}
