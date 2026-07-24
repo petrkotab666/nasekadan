@@ -1,0 +1,66 @@
+name: Chránit soukromé náhledy Naše Kadaň
+
+on:
+  workflow_run:
+    workflows: ["Nasadit Naše Kadaň na OVH"]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: nasekadan-private-previews
+  cancel-in-progress: true
+
+jobs:
+  protect:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Přidat ochranu adresy nahledu
+        run: |
+          set -euo pipefail
+          snippet=/etc/nginx/snippets/nasekadan-statistiky-server.conf
+          for i in $(seq 1 60); do
+            [[ -s "$snippet" ]] && break
+            sleep 2
+          done
+          [[ -s "$snippet" ]] || { echo "Chybí snippet statistik" >&2; exit 1; }
+
+          if ! sudo grep -Fq 'Naše Kadaň – soukromé náhledy' "$snippet"; then
+            sudo tee -a "$snippet" >/dev/null <<'NGINX'
+
+          # Naše Kadaň – soukromé náhledy článků pod stejným přihlášením jako statistiky.
+          location = /nahled {
+              return 301 /nahled/;
+          }
+
+          location ^~ /nahled/ {
+              auth_basic "Naše Kadaň – soukromý náhled";
+              auth_basic_user_file /etc/nginx/.nasekadan-stats.htpasswd;
+              access_log off;
+              proxy_pass http://127.0.0.1:3224/nahled/;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+              add_header Pragma "no-cache" always;
+              add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+              add_header X-Content-Type-Options "nosniff" always;
+          }
+          NGINX
+          fi
+
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+      - name: Ověřit ochranu
+        run: |
+          set -euo pipefail
+          code=$(curl --noproxy '*' -k -sS --max-time 10 \
+            --resolve nasekadan.cz:443:127.0.0.1 \
+            -o /dev/null -w '%{http_code}' \
+            https://nasekadan.cz/nahled/petice-nemocnice-kadan-a8f4c2.html 2>/dev/null || true)
+          [[ "$code" == "401" ]] || { echo "Náhled není chráněný; HTTP $code" >&2; exit 1; }
+          echo "Soukromý náhled je chráněn heslem."
