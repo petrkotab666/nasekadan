@@ -1,0 +1,108 @@
+name: Ověřit zveřejnění Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - clanky/**
+      - sitemap.xml
+      - deploy-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-publication-verification
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Stáhnout repozitář
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Počkat na veřejné nasazení
+        id: verify
+        shell: bash
+        run: |
+          set -u
+          expected_home='Kadaň zasáhl rozsáhlý výpadek internetu a televize'
+          expected_article='Policie prověřuje poškození kabelů'
+          article_url='https://nasekadan.cz/clanky/vypadek-internetu-kadan-kradez-kabelu.html'
+          status='failed'
+          http_home='000'
+          http_article='000'
+
+          for attempt in $(seq 1 48); do
+            stamp="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            home_file=$(mktemp)
+            article_file=$(mktemp)
+
+            http_home=$(curl -L -sS --max-time 20 -H 'Cache-Control: no-cache' \
+              -o "$home_file" -w '%{http_code}' "https://nasekadan.cz/?verify=${stamp}" || true)
+            http_article=$(curl -L -sS --max-time 20 -H 'Cache-Control: no-cache' \
+              -o "$article_file" -w '%{http_code}' "${article_url}?verify=${stamp}" || true)
+
+            if [[ "$http_home" =~ ^2 ]] && [[ "$http_article" =~ ^2 ]] \
+              && grep -Fq "$expected_home" "$home_file" \
+              && grep -Fq "$expected_article" "$article_file"; then
+              status='success'
+              rm -f "$home_file" "$article_file"
+              break
+            fi
+
+            rm -f "$home_file" "$article_file"
+            sleep 10
+          done
+
+          checked_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          python3 - "$status" "$checked_at" "$http_home" "$http_article" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          status, checked_at, home_code, article_code, commit = sys.argv[1:]
+          payload = {
+              "status": status,
+              "checked_at_utc": checked_at,
+              "commit": commit,
+              "homepage": {
+                  "url": "https://nasekadan.cz/",
+                  "http_code": home_code,
+                  "expected_text": "Kadaň zasáhl rozsáhlý výpadek internetu a televize"
+              },
+              "article": {
+                  "url": "https://nasekadan.cz/clanky/vypadek-internetu-kadan-kradez-kabelu.html",
+                  "http_code": article_code,
+                  "expected_text": "Policie prověřuje poškození kabelů"
+              }
+          }
+          Path("deploy-status.json").write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8"
+          )
+          PY
+
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek kontroly
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deploy-status.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Zapsat výsledek kontroly veřejného nasazení"
+          git push
+
+      - name: Označit neúspěšné nasazení
+        if: steps.verify.outputs.status != 'success'
+        run: exit 1
