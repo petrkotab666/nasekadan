@@ -4,10 +4,12 @@ import html, json, re
 
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://nasekadan.cz'
-TODAY='2026-07-23'
+TODAY='2026-07-24'
+ASSET_VERSION='20260724-mobile-4'
 SOCIAL=f'{BASE}/social-card.png'
 LEGAL='<div class="footer-legal"><a href="/o-webu/">O webu</a><a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="mailto:info@nasekadan.cz">Kontakt</a></div>'
 HEADER='''<header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav aria-label="Hlavní menu"><a href="/">Úvod</a><a href="/#clanky">Naše články</a><a href="/prehled-zdroju/">Přehled zdrojů</a><a href="/#akce">Akce</a><a href="/pruvodce/">Průvodce</a><a href="/prakticke/">Praktická Kadaň</a><a href="/doprava/">Doprava</a><a href="/organizace/">Organizace</a><a href="/zapojte-se/">Zapojte se</a></nav></div></header>'''
+
 
 def canonical_for(path:Path)->str:
  rel=path.relative_to(ROOT).as_posix()
@@ -15,9 +17,11 @@ def canonical_for(path:Path)->str:
  if rel.endswith('/index.html'):return BASE+'/'+rel[:-10]
  return BASE+'/'+rel
 
+
 def get_tag(text:str,tag:str)->str:
  match=re.search(rf'<{tag}[^>]*>(.*?)</{tag}>',text,re.I|re.S)
  return re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',match.group(1))).strip() if match else ''
+
 
 def get_description(text:str)->str:
  for match in re.finditer(r'<meta\b[^>]*>',text,re.I):
@@ -26,6 +30,34 @@ def get_description(text:str)->str:
    content=re.search(r'\bcontent=["\']([^"\']*)',tag,re.I)
    if content:return html.unescape(content.group(1)).strip()
  return ''
+
+
+def version_assets(text:str)->str:
+ # Hlavní CSS vždy načítat z kořene a s novou verzí, bez ohledu na původní relativní cestu.
+ text=re.sub(
+  r'<link\b(?=[^>]*\brel=["\']stylesheet["\'])(?=[^>]*\bhref=["\'](?:\.\./|\./|/)?style\.css(?:\?[^"\']*)?["\'])[^>]*>',
+  f'<link rel="stylesheet" href="/style.css?v={ASSET_VERSION}">',
+  text,
+  flags=re.I,
+ )
+ # Odstranit staré či opakovaně vložené mobilní styly a vložit přesně jeden aktuální.
+ text=re.sub(
+  r'<link\b(?=[^>]*\brel=["\']stylesheet["\'])(?=[^>]*\bhref=["\'](?:\.\./|\./|/)?mobile\.css(?:\?[^"\']*)?["\'])[^>]*>\s*',
+  '',
+  text,
+  flags=re.I,
+ )
+ mobile=f'<link rel="stylesheet" href="/mobile.css?v={ASSET_VERSION}">'
+ text=text.replace('</head>',mobile+'</head>',1)
+ # Totéž pro JavaScript, který doplňuje menu a obsah článku.
+ text=re.sub(
+  r'<script\b[^>]*\bsrc=["\'](?:\.\./|\./|/)?site\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',
+  f'<script src="/site.js?v={ASSET_VERSION}" defer></script>',
+  text,
+  flags=re.I,
+ )
+ return text
+
 
 def finish_html(path:Path)->None:
  text=path.read_text(encoding='utf-8')
@@ -48,7 +80,9 @@ def finish_html(path:Path)->None:
   if '</footer>' in text:text=text.replace('</footer>',LEGAL+'</footer>',1)
   else:text=text.replace('</body>',f'<footer><div class="wrap">© 2026 Naše Kadaň</div>{LEGAL}</footer></body>',1)
  if '/site.js' not in text:text=text.replace('</body>','<script src="/site.js" defer></script></body>',1)
+ text=version_assets(text)
  path.write_text(text,encoding='utf-8')
+
 
 def main()->None:
  for path in sorted(ROOT.rglob('*.html')):
@@ -64,5 +98,6 @@ def main()->None:
  urls=[canonical_for(path) for path in sorted(ROOT.rglob('*.html')) if not any(part in {'.git','.github'} for part in path.parts) and path.name!='404.html']
  sitemap='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'  <url><loc>{html.escape(url)}</loc><lastmod>{TODAY}</lastmod></url>\n' for url in sorted(set(urls)))+'</urlset>\n'
  (ROOT/'sitemap.xml').write_text(sitemap,encoding='utf-8')
+
 
 if __name__=='__main__':main()
