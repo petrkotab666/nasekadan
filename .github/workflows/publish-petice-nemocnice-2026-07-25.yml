@@ -83,7 +83,7 @@ jobs:
           if count != 1:
               raise SystemExit('Nepodařilo se nahradit hlavní článek na úvodní stránce.')
 
-          public_card = '''      <article class="article-card hospital">
+          public_card = '''      <article class="article-card hospital" data-petice-card>
         <div class="visual"><strong>Petice a nemocnice</strong></div>
         <div class="article-body">
           <span class="meta">25. 7. 2026 · 5:00 · Zdravotnictví a politika</span>
@@ -94,7 +94,7 @@ jobs:
       </article>
 
 '''
-          if '/clanky/petice-nemocnice-kadan.html' not in text:
+          if 'data-petice-card' not in text:
               marker = '    <div class="article-list">\n'
               if marker not in text:
                   raise SystemExit('Na úvodní stránce chybí seznam článků.')
@@ -103,7 +103,7 @@ jobs:
 
           archive = Path('clanky/index.html')
           text = archive.read_text(encoding='utf-8')
-          archive_item = '''    <article class="archive-item hospital">
+          archive_item = '''    <article class="archive-item hospital" data-petice-card>
       <div class="archive-visual"><strong>Petice a nemocnice</strong></div>
       <div class="archive-body">
         <span class="archive-meta">25. července 2026 v 5:00 · Zdravotnictví a komunální politika</span>
@@ -114,7 +114,7 @@ jobs:
     </article>
 
 '''
-          if '/clanky/petice-nemocnice-kadan.html' not in text:
+          if 'data-petice-card' not in text:
               marker = '  <section class="archive-list" aria-label="Chronologický přehled článků">\n'
               if marker not in text:
                   raise SystemExit('V archivu chybí seznam článků.')
