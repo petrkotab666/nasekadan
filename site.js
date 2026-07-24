@@ -166,4 +166,22 @@ document.addEventListener('DOMContentLoaded',()=>{
       sources.append(copy,candidates,registry,svj);
     }
   }
+
+  if(!document.getElementById('next-hospital-analysis')){
+    const style=document.createElement('style');
+    style.textContent='.next-article-teaser{margin:48px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px #14232d26}.next-article-teaser .tag{color:#ffd7d7;margin:0 0 8px}.next-article-teaser h2{color:#fff;margin:0 0 12px;font-size:32px}.next-article-teaser p{color:#e7eef1}.next-article-teaser a{display:inline-flex;margin-top:8px;padding:13px 17px;border-radius:10px;background:#fff;color:#8f2027;font-weight:900;text-decoration:none}.next-article-teaser .scheduled{display:inline-block;margin-top:10px;padding:9px 12px;border:1px solid #ffffff66;border-radius:999px;font-weight:900;color:#fff}';
+    document.head.appendChild(style);
+    const publicAt=Date.parse('2026-07-25T03:00:00Z');
+    const isPublic=Date.now()>=publicAt;
+    const teaser=document.createElement('section');
+    teaser.id='next-hospital-analysis';
+    teaser.className='next-article-teaser';
+    teaser.innerHTML=`
+      <p class="tag">NAVAZUJÍCÍ ČLÁNEK</p>
+      <h2>Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat</h2>
+      <p>Prověřili jsme nové výroky o 77 milionech krajských dotací, čekání na refundaci kyberprojektů, bankovním financování i tvrzení o záměru nemocnici prodat.</p>
+      ${isPublic?'<a href="/clanky/petice-nemocnice-kadan.html">Přečíst navazující článek →</a>':'<span class="scheduled">Vyjde v sobotu 25. 7. v 5:00</span>'}`;
+    const sourceBox=article.querySelector('.source-list');
+    if(sourceBox)sourceBox.before(teaser);else article.appendChild(teaser);
+  }
 });
