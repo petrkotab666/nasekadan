@@ -1,6 +1,13 @@
-// Doplnění politického propojení předkladatelky petice a datum vydání 24. 7. 2026
-// Vlasta Štaubrová je uvedena na kandidátce Dáme Kadani novou šanci.
+// Mobilní styl je načítán přímo z JavaScriptu jako pojistka proti staré HTML šabloně a cache.
 document.addEventListener('DOMContentLoaded',()=>{
+  if(!document.querySelector('link[data-mobile-css]')){
+    const mobile=document.createElement('link');
+    mobile.rel='stylesheet';
+    mobile.href='/mobile.css?v=20260724-mobile-3';
+    mobile.setAttribute('data-mobile-css','true');
+    document.head.appendChild(mobile);
+  }
+
   document.querySelectorAll('.head').forEach(head=>{
     const nav=head.querySelector('nav');
     if(!nav||head.querySelector('.menu-toggle'))return;
