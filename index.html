@@ -20,19 +20,21 @@
     .section-head{display:flex;align-items:end;justify-content:space-between;gap:24px;margin-bottom:24px}
     .section-head h2{margin:.15em 0 0}
     .section-head .btn{white-space:nowrap}
-    .article-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+    .article-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
     .article-card{display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
     .article-card .visual{height:170px;display:flex;align-items:flex-end;padding:22px;color:#fff;position:relative;overflow:hidden}
     .article-card .visual:after{content:'';position:absolute;inset:0;background:linear-gradient(transparent,rgba(0,0,0,.58))}
-    .article-card .visual strong{position:relative;z-index:1;font:900 33px/1 Georgia,serif}
+    .article-card .visual strong{position:relative;z-index:1;font:900 31px/1 Georgia,serif}
+    .article-card.accident .visual{background:linear-gradient(135deg,#152630,#355d70 58%,#b04724)}
     .article-card.outage .visual{background:linear-gradient(135deg,#13242e,#355c70 62%,#a9232b)}
     .article-card.hospital .visual{background:linear-gradient(135deg,#163143,#4f7487 62%,#7f1720)}
     .article-card .article-body{padding:23px;display:flex;flex-direction:column;flex:1}
     .article-card .meta{color:var(--red);font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
-    .article-card h3{font:800 27px/1.16 Georgia,serif;margin:8px 0 10px}
+    .article-card h3{font:800 25px/1.16 Georgia,serif;margin:8px 0 10px}
     .article-card p{color:#58666e;margin:0 0 20px}
     .article-card .read-more{margin-top:auto;color:var(--red);font-weight:900}
     .archive-note{margin-top:22px;color:var(--muted)}
+    @media(max-width:1050px){.article-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
     @media(max-width:850px){.article-list{grid-template-columns:1fr}.section-head{display:block}.section-head .btn{margin-top:18px}.current-aside .aside-button{width:100%;justify-content:center}}
   </style>
   <link rel="canonical" href="https://nasekadan.cz/">
@@ -55,30 +57,30 @@
 </header>
 
 <div class="ticker">
-  <div class="wrap"><b>AKTUALIZACE:</b> Internet a televize KTK po ranním rozsáhlém výpadku opět fungují. Policie dál prověřuje poškození páteřní optické trasy u stavby horkovodu.</div>
+  <div class="wrap"><b>AKTUÁLNĚ:</b> Krajský krizový portál eviduje v Kadani dopravní nehodu se zraněním. Přesné místo ani další podrobnosti zatím zveřejněny nebyly.</div>
 </div>
 
 <main>
   <section class="wrap hero" id="clanky">
     <article class="lead">
-      <div class="photo"><span>NEJNOVĚJŠÍ ČLÁNEK</span><strong>OBNOVENO</strong></div>
+      <div class="photo"><span>NEJNOVĚJŠÍ ČLÁNEK</span><strong>NEHODA</strong></div>
       <div class="copy">
-        <small>MIMOŘÁDNĚ · INTERNET A TELEVIZE · AKTUALIZOVÁNO 12:13</small>
-        <h1>Internet a televize v Kadani opět fungují. Policie prověřuje poškození kabelů</h1>
-        <p>Služby KTK byly během dopoledne obnoveny. Nadále zůstává nejasné, co přesně bylo v noci odcizeno, jak vysoká je škoda a kdo odpovídal za zabezpečení místa.</p>
-        <a class="btn" href="/clanky/vypadek-internetu-kadan-kradez-kabelu.html">Přečíst celý článek →</a>
+        <small>DOPRAVA · SLOŽKY IZS · 24. 7. 2026 V 14:55</small>
+        <h1>V Kadani zasahovali hasiči u dopravní nehody se zraněním</h1>
+        <p>Oficiální krajský přehled zaznamenal událost v 11:26. Přesné místo, počet zraněných a příčina nehody zatím nebyly zveřejněny.</p>
+        <a class="btn" href="/clanky/dopravni-nehoda-se-zranenim-kadan-24-cervence-2026.html">Přečíst celý článek →</a>
       </div>
     </article>
 
     <aside class="current-aside">
       <p class="aside-label">DALŠÍ AKTUÁLNÍ ČLÁNEK</p>
-      <p class="aside-date">Analýza · aktualizováno 24. 7. 2026</p>
-      <h2>Nemocnice Kadaň: ztráta 46 milionů, pomoc města a rozkol ODS</h2>
-      <p>Nemocnice dál poskytuje péči, její hotovost ale výrazně klesla. Podrobná analýza shrnuje hospodaření, další podporu města i politické souvislosti.</p>
-      <a class="aside-button" href="/clanky/nemocnice-kadan.html">Přečíst článek o nemocnici →</a>
+      <p class="aside-date">Aktualizováno 24. 7. 2026 ve 12:13</p>
+      <h2>Internet a televize v Kadani opět fungují</h2>
+      <p>Služby KTK byly během dopoledne obnoveny. Policie dál prověřuje poškození páteřní optické trasy u stavby horkovodu.</p>
+      <a class="aside-button" href="/clanky/vypadek-internetu-kadan-kradez-kabelu.html">Přečíst článek o výpadku →</a>
       <div class="aside-links">
+        <a href="/clanky/nemocnice-kadan.html">Analýza Nemocnice Kadaň</a>
         <a href="/clanky/">Všechny články podle data</a>
-        <a href="/zapojte-se/">Poslat nám tip na další téma</a>
       </div>
     </aside>
   </section>
@@ -94,6 +96,16 @@
     <p class="section-intro">Na úvodní stránce zůstává vždy několik nejnovějších článků. Nové texty se řadí od nejnovějšího a starší se přesouvají do přehledného archivu, takže žádný článek nezmizí.</p>
 
     <div class="article-list">
+      <article class="article-card accident">
+        <div class="visual"><strong>Nehoda se zraněním</strong></div>
+        <div class="article-body">
+          <span class="meta">24. 7. 2026 · 14:55 · Doprava</span>
+          <h3>V Kadani zasahovali hasiči u dopravní nehody se zraněním</h3>
+          <p>Krajský krizový portál událost eviduje od 11:26. Přesnější lokalita a další okolnosti zatím nebyly zveřejněny.</p>
+          <a class="read-more" href="/clanky/dopravni-nehoda-se-zranenim-kadan-24-cervence-2026.html">Přečíst celý článek →</a>
+        </div>
+      </article>
+
       <article class="article-card outage">
         <div class="visual"><strong>Služby obnoveny</strong></div>
         <div class="article-body">
@@ -114,7 +126,7 @@
         </div>
       </article>
     </div>
-    <p class="archive-note">Další publikované články budou automaticky řazeny pod tyto nejnovější texty v sekci <a href="/clanky/" style="color:var(--red);font-weight:850">Všechny články</a>.</p>
+    <p class="archive-note">Další publikované články jsou řazeny od nejnovějších v sekci <a href="/clanky/" style="color:var(--red);font-weight:850">Všechny články</a>.</p>
   </section>
 
   <section class="wrap promo-wrap" data-promos data-count="3"></section>
