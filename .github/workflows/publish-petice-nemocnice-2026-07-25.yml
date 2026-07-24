@@ -1,0 +1,156 @@
+name: Zveřejnit článek o petici a nemocnici
+
+on:
+  schedule:
+    - cron: '0 3 25 7 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-petice-nemocnice-2026-07-25
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Ověřit datum zveřejnění
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          set -euo pipefail
+          [[ "$(TZ=Europe/Prague date +%F)" == "2026-07-25" ]] || {
+            echo "Jednorázový termín už není aktuální, workflow končí bez změny."
+            exit 78
+          }
+
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zveřejnit článek a zařadit ho na web
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          source = Path('nahled/petice-nemocnice-kadan-a8f4c2.html')
+          target = Path('clanky/petice-nemocnice-kadan.html')
+          if not source.exists() and target.exists():
+              print('Článek už je zveřejněný; není co měnit.')
+              raise SystemExit(0)
+          if not source.exists():
+              raise SystemExit('Chybí zdrojový soubor soukromého náhledu.')
+
+          article = source.read_text(encoding='utf-8')
+          article = article.replace(
+              '<p class="updated">Naplánováno na 25. 7. 2026 v 5:00</p>',
+              '<p class="updated">Publikováno: 25. 7. 2026 v 5:00</p>'
+          )
+          target.write_text(article, encoding='utf-8')
+          source.unlink()
+
+          home = Path('index.html')
+          text = home.read_text(encoding='utf-8')
+          text = re.sub(
+              r'<div class="ticker">.*?</div>\s*\n',
+              '<div class="ticker">\n  <div class="wrap"><b>NOVÝ ČLÁNEK:</b> Prověřili jsme 100 milionů na účtech nemocnice, cenu kyberbezpečnosti, čekání na dotaci i tvrzení o údajném plánu nemocnici prodat.</div>\n</div>\n',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          new_lead = '''<article class="lead">
+      <div class="photo"><span>NEJNOVĚJŠÍ ČLÁNEK</span><strong>PETICE</strong></div>
+      <div class="copy">
+        <small>ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 25. 7. 2026 V 5:00</small>
+        <h1>Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat</h1>
+        <p>Nové dokumenty korigují jednoduché tvrzení o zmizelých úsporách. Stále však chybí veřejný doklad k refundaci 66 milionů i důkaz konkrétního plánu nemocnici prodat.</p>
+        <a class="btn" href="/clanky/petice-nemocnice-kadan.html">Přečíst celý článek →</a>
+      </div>
+    </article>'''
+          text, count = re.subn(
+              r'<article class="lead">.*?</article>',
+              new_lead,
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit('Nepodařilo se nahradit hlavní článek na úvodní stránce.')
+
+          public_card = '''      <article class="article-card hospital">
+        <div class="visual"><strong>Petice a nemocnice</strong></div>
+        <div class="article-body">
+          <span class="meta">25. 7. 2026 · 5:00 · Zdravotnictví a politika</span>
+          <h3>Petice rozjela volební spor: 100 milionů, kyberbezpečnost a údajný prodej</h3>
+          <p>Co potvrzují smlouvy a účetní výkazy, proč je kybernetická ochrana potřebná a která tvrzení účastníků sporu zatím doložena nejsou.</p>
+          <a class="read-more" href="/clanky/petice-nemocnice-kadan.html">Přečíst celý článek →</a>
+        </div>
+      </article>
+
+'''
+          if '/clanky/petice-nemocnice-kadan.html' not in text:
+              marker = '    <div class="article-list">\n'
+              if marker not in text:
+                  raise SystemExit('Na úvodní stránce chybí seznam článků.')
+              text = text.replace(marker, marker + public_card, 1)
+          home.write_text(text, encoding='utf-8')
+
+          archive = Path('clanky/index.html')
+          text = archive.read_text(encoding='utf-8')
+          archive_item = '''    <article class="archive-item hospital">
+      <div class="archive-visual"><strong>Petice a nemocnice</strong></div>
+      <div class="archive-body">
+        <span class="archive-meta">25. července 2026 v 5:00 · Zdravotnictví a komunální politika</span>
+        <h2>Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat</h2>
+        <p>Ověření nových tvrzení o dotacích, propadu hotovosti, kybernetických projektech, bankovním financování a budoucím vlastnictví nemocnice.</p>
+        <a href="/clanky/petice-nemocnice-kadan.html">Přečíst celý článek →</a>
+      </div>
+    </article>
+
+'''
+          if '/clanky/petice-nemocnice-kadan.html' not in text:
+              marker = '  <section class="archive-list" aria-label="Chronologický přehled článků">\n'
+              if marker not in text:
+                  raise SystemExit('V archivu chybí seznam článků.')
+              text = text.replace(marker, marker + archive_item, 1)
+          archive.write_text(text, encoding='utf-8')
+
+          sitemap = Path('sitemap.xml')
+          text = sitemap.read_text(encoding='utf-8')
+          text = text.replace(
+              '<url><loc>https://nasekadan.cz/</loc><lastmod>2026-07-24</lastmod></url>',
+              '<url><loc>https://nasekadan.cz/</loc><lastmod>2026-07-25</lastmod></url>',
+              1,
+          )
+          text = text.replace(
+              '<url><loc>https://nasekadan.cz/clanky/</loc><lastmod>2026-07-24</lastmod></url>',
+              '<url><loc>https://nasekadan.cz/clanky/</loc><lastmod>2026-07-25</lastmod></url>',
+              1,
+          )
+          new_url = '  <url><loc>https://nasekadan.cz/clanky/petice-nemocnice-kadan.html</loc><lastmod>2026-07-25</lastmod></url>\n'
+          if 'petice-nemocnice-kadan.html' not in text:
+              anchor = '  <url><loc>https://nasekadan.cz/clanky/</loc><lastmod>2026-07-25</lastmod></url>\n'
+              text = text.replace(anchor, anchor + new_url, 1)
+          sitemap.write_text(text, encoding='utf-8')
+
+          print('Článek byl připraven k veřejnému nasazení.')
+          PY
+
+      - name: Uložit veřejné vydání do hlavní větve
+        run: |
+          set -euo pipefail
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "Žádná změna, článek už byl zveřejněn."
+            exit 0
+          fi
+          git config user.name "Naše Kadaň Publisher"
+          git config user.email "publisher@nasekadan.cz"
+          git add clanky/petice-nemocnice-kadan.html clanky/index.html index.html sitemap.xml nahled/
+          git commit -m "Zveřejnit článek o petici a Nemocnici Kadaň"
+          git push origin HEAD:main
