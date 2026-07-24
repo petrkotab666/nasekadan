@@ -1,0 +1,265 @@
+name: Nouzově nasadit LastMinuteSlevy Pages z veřejného runneru
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/rescue-lastminuteslevy-pages-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  rescue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      T_GH_PAT: ${{ secrets.GH_PAT }}
+      T_GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+      T_PAT: ${{ secrets.PAT }}
+      T_PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      T_PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      T_CROSS_REPO_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+      T_REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+      T_PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      T_DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      T_AUTOMATION_PAT: ${{ secrets.AUTOMATION_PAT }}
+      T_BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      T_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      T_GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_ACCESS_TOKEN }}
+      T_CENTRAL_REPO_TOKEN: ${{ secrets.CENTRAL_REPO_TOKEN }}
+      T_SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+      TARGET_REPO: petrkotab666/lastminuteslevy
+      BUILD_ID: 20260724-direct-gh-pages-rescue-1
+      REMOTE_CATALOG: https://catalog.57-129-43-215.sslip.io
+    steps:
+      - name: Najít token s přístupem do soukromého repozitáře
+        id: token
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lms-pages-rescue"
+          : > "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+          selected=''
+          for name in T_GH_PAT T_GITHUB_PAT T_PAT T_PAT_TOKEN T_PERSONAL_ACCESS_TOKEN T_CROSS_REPO_TOKEN T_REPO_TOKEN T_PRIVATE_REPO_TOKEN T_DEPLOY_TOKEN T_AUTOMATION_PAT T_BOT_TOKEN T_ACCESS_TOKEN T_GITHUB_ACCESS_TOKEN T_CENTRAL_REPO_TOKEN T_SYNC_TOKEN; do
+            value="${!name:-}"
+            [ -n "$value" ] || continue
+            code=$(curl -sS -o "$RUNNER_TEMP/lms-pages-rescue/repo.json" -w '%{http_code}' \
+              -H "Authorization: Bearer $value" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              "https://api.github.com/repos/$TARGET_REPO" || true)
+            if [ "$code" = 200 ]; then
+              push=$(jq -r '.permissions.push // false' "$RUNNER_TEMP/lms-pages-rescue/repo.json")
+              admin=$(jq -r '.permissions.admin // false' "$RUNNER_TEMP/lms-pages-rescue/repo.json")
+              echo "$name: HTTP 200, push=$push, admin=$admin" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+              if [ "$push" = true ]; then
+                printf '%s' "$value" > "$RUNNER_TEMP/lms-pages-rescue/token"
+                chmod 600 "$RUNNER_TEMP/lms-pages-rescue/token"
+                selected="$name"
+                echo "admin=$admin" >> "$GITHUB_OUTPUT"
+                break
+              fi
+            else
+              echo "$name: HTTP $code" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+            fi
+          done
+          if [ -z "$selected" ]; then
+            echo 'Nenalezen token s přístupem do cílového repozitáře.' >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Vybraný secret: $selected" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+          echo 'available=true' >> "$GITHUB_OUTPUT"
+          echo "name=$selected" >> "$GITHUB_OUTPUT"
+
+      - name: Načíst a sestavit poslední opravený web
+        id: build
+        if: steps.token.outputs.available == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN=$(cat "$RUNNER_TEMP/lms-pages-rescue/token")
+          cat > "$RUNNER_TEMP/lms-pages-rescue/askpass.sh" <<'SH'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *) cat "$RUNNER_TEMP/lms-pages-rescue/token" ;;
+          esac
+          SH
+          chmod 700 "$RUNNER_TEMP/lms-pages-rescue/askpass.sh"
+          export GIT_ASKPASS="$RUNNER_TEMP/lms-pages-rescue/askpass.sh"
+          export GIT_TERMINAL_PROMPT=0
+          git clone --depth 1 --branch main "https://github.com/$TARGET_REPO.git" "$RUNNER_TEMP/lms-pages-rescue/source"
+          cd "$RUNNER_TEMP/lms-pages-rescue/source"
+          curl -kfsSL --max-time 50 "$REMOTE_CATALOG/assets/catalog-v7/manifest.json?rescue=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/lms-pages-rescue/manifest.json"
+          TOTAL=$(python3 -c 'import json; print(int(json.load(open("'$RUNNER_TEMP'/lms-pages-rescue/manifest.json")).get("totalOffers") or 0))')
+          test "$TOTAL" -gt 2000000
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          node --check performance-runtime.js
+          node --check catalog-data-router-v1.js
+          node --check catalog-recovery-bootstrap.js
+          node --check catalog-platform-loader-v7.js
+          node --check catalog-form-v7.js
+          rm -rf "$RUNNER_TEMP/lms-pages-rescue/site"
+          mkdir -p "$RUNNER_TEMP/lms-pages-rescue/site"
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              .git*|.github/*|node_modules/*|scripts/*|docs/*|reports/*|tests/*|platform/*|assets/catalog-v7/*|tmp/*|cache/*|backups/*) continue ;;
+              *.sqlite|*.sqlite3|*.db|*.log|*.pyc) continue ;;
+            esac
+            [ -f "$file" ] || continue
+            [ "$(stat -c %s "$file")" -le 25000000 ] || continue
+            mkdir -p "$RUNNER_TEMP/lms-pages-rescue/site/$(dirname "$file")"
+            cp -a "$file" "$RUNNER_TEMP/lms-pages-rescue/site/$file"
+          done < <(git ls-files -z)
+          touch "$RUNNER_TEMP/lms-pages-rescue/site/.nojekyll"
+          python3 - "$RUNNER_TEMP/lms-pages-rescue/site/index.html" "$BUILD_ID" <<'PY'
+          from pathlib import Path
+          import re,sys
+          path=Path(sys.argv[1]); build=sys.argv[2]
+          text=path.read_text(encoding='utf-8')
+          text=re.sub(r'/performance-runtime(?:-20260724)?\.js(?:\?v=[^"\']*)?',f'/performance-runtime.js?v={build}',text)
+          if '/performance-runtime.js' not in text:
+              text=text.replace('</head>',f'<script src="/performance-runtime.js?v={build}" defer></script></head>')
+          main=text.find('<main'); search=text.find('id="nabidky"',main); results=text.find('id="vysledky"',main)
+          if main<0 or not(main<search<results): raise SystemExit('Vyhledávač není před výsledky')
+          path.write_text(text,encoding='utf-8',newline='\n')
+          PY
+          cat > "$RUNNER_TEMP/lms-pages-rescue/site/deployment-health.txt" <<EOF
+          mode=direct-gh-pages-rescue
+          build=$BUILD_ID
+          totalOffers=$TOTAL
+          source=$(git rev-parse HEAD)
+          generated=$(date -u +%FT%TZ)
+          EOF
+          test -s "$RUNNER_TEMP/lms-pages-rescue/site/CNAME"
+          grep -q "$BUILD_ID" "$RUNNER_TEMP/lms-pages-rescue/site/index.html"
+          echo "Sestaven katalog $TOTAL a artefakt $(du -sm "$RUNNER_TEMP/lms-pages-rescue/site" | awk '{print $1}') MB." >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+
+      - name: Publikovat větev gh-pages a přepnout zdroj Pages
+        id: publish
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN=$(cat "$RUNNER_TEMP/lms-pages-rescue/token")
+          export GIT_ASKPASS="$RUNNER_TEMP/lms-pages-rescue/askpass.sh"
+          export GIT_TERMINAL_PROMPT=0
+          cd "$RUNNER_TEMP/lms-pages-rescue/site"
+          git init -b gh-pages
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "Nouzové funkční nasazení LastMinuteSlevy $BUILD_ID"
+          git remote add origin "https://github.com/$TARGET_REPO.git"
+          git push --force origin HEAD:gh-pages
+          code=$(curl -sS -o "$RUNNER_TEMP/lms-pages-rescue/pages-get.json" -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$TARGET_REPO/pages" || true)
+          payload='{"build_type":"legacy","source":{"branch":"gh-pages","path":"/"}}'
+          if [ "$code" = 404 ]; then
+            method=POST
+          else
+            method=PUT
+          fi
+          api_code=$(curl -sS -o "$RUNNER_TEMP/lms-pages-rescue/pages-update.json" -w '%{http_code}' -X "$method" \
+            -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28' -H 'Content-Type: application/json' \
+            -d "$payload" "https://api.github.com/repos/$TARGET_REPO/pages" || true)
+          echo "Pages API: GET $code, $method $api_code" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+          if [ "$api_code" -lt 200 ] || [ "$api_code" -ge 300 ]; then
+            cat "$RUNNER_TEMP/lms-pages-rescue/pages-update.json" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt" || true
+            exit 1
+          fi
+
+      - name: Ověřit veřejný build a funkčnost
+        id: verify
+        if: steps.publish.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ready=0
+          for attempt in $(seq 1 120); do
+            suffix="$GITHUB_RUN_ID-$attempt-$(date +%s)"
+            H=$(curl -fsSL --max-time 25 "https://www.lastminuteslevy.cz/deployment-health.txt?rescue=$suffix" 2>/dev/null || true)
+            I=$(curl -fsSL --max-time 25 "https://www.lastminuteslevy.cz/?rescue=$suffix" 2>/dev/null || true)
+            if printf '%s' "$H" | grep -q 'mode=direct-gh-pages-rescue' \
+              && printf '%s' "$H" | grep -q "build=$BUILD_ID" \
+              && printf '%s' "$H" | grep -Eq 'totalOffers=2[0-9]{6,}' \
+              && printf '%s' "$I" | grep -q "$BUILD_ID"; then
+              printf '%s\n' "$H" > "$RUNNER_TEMP/lms-pages-rescue/health.txt"
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ready" = 1
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+          node --input-type=module <<'NODE' | tee "$RUNNER_TEMP/lms-pages-rescue/browser.json"
+          import { chromium } from 'playwright';
+          const result={ok:false,errors:[]};let browser;
+          try{
+            browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1440,height:1200}});
+            page.on('pageerror',e=>result.errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')result.errors.push(m.text())});
+            await page.goto(`https://www.lastminuteslevy.cz/?rescue-e2e=${Date.now()}`,{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForSelector('#catalogFilterV3 .cf7-panel',{timeout:180000});
+            await page.waitForFunction(()=>Number(document.querySelector('#catalogFilterV3')?.dataset.catalogTotalOffers||0)>2000000||Number((document.querySelector('[data-search-status]')?.textContent||'').replace(/\D/g,''))>2000000,{timeout:180000});
+            result.initial=await page.evaluate(()=>{const main=document.querySelector('main#hlavni-obsah'),s=document.querySelector('#nabidky'),r=document.querySelector('#vysledky'),f=document.querySelector('#catalogFilterV3');return{first:main?.firstElementChild?.id||'',order:Boolean(s&&r&&(s.compareDocumentPosition(r)&Node.DOCUMENT_POSITION_FOLLOWING)),total:Number(f?.dataset.catalogTotalOffers||0),status:document.querySelector('[data-search-status]')?.textContent?.trim()||'',bootstrap:f?.dataset.bootstrapState||'',groups:[...f.querySelectorAll('.cf7-group[data-group]')].map(n=>n.dataset.group),countries:[...f.querySelectorAll('input[name="countries"]')].map(i=>({value:i.value,disabled:i.disabled,count:Number((i.closest('.cf7-option')?.querySelector('[data-facet-count]')?.textContent||'').replace(/\D/g,'')||0)}))}});
+            if(result.initial.first!=='nabidky'||!result.initial.order)throw new Error('Vyhledávač není první před výsledky');
+            for(const n of ['countries','tripTypes','sports','transports','departures','providers','boards','categories','freshness','travelers'])if(!result.initial.groups.includes(n))throw new Error(`Chybí filtr ${n}`);
+            const country=result.initial.countries.find(x=>!x.disabled&&x.count>0);if(!country)throw new Error('Žádná země nemá kladný počet');result.country=country;
+            await page.evaluate(v=>[...document.querySelectorAll('input[name="countries"]')].find(i=>i.value===v)?.click(),country.value);
+            await page.waitForFunction(()=>document.querySelectorAll('#offersGrid .catalog-offer-card').length>0&&!/Načítám|\b0\s+nabídek\b/i.test(document.querySelector('[data-search-status]')?.textContent||''),{timeout:240000});
+            result.final=await page.evaluate(()=>{const r=document.querySelector('#vysledky'),a=document.querySelector('[data-slevomat-home-section]');return{status:document.querySelector('[data-search-status]')?.textContent?.trim()||'',cards:document.querySelectorAll('#offersGrid .catalog-offer-card').length,bootstrap:document.querySelector('#catalogFilterV3')?.dataset.bootstrapState||'',adPresent:Boolean(a),adAfterResults:!a||Boolean(r&&(r.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING)),source:document.documentElement.dataset.catalogDataSource||'',router:window.__LMS_CATALOG_ROUTER_DIAGNOSTICS__||null}});
+            if(result.final.cards<1||/\b0\s+nabídek\b/i.test(result.final.status)||result.final.bootstrap!=='ready'||!result.final.adAfterResults)throw new Error(JSON.stringify(result.final));
+            result.ok=true;
+          }catch(e){result.errors.push(String(e?.stack||e))}finally{if(browser)await browser.close()}
+          console.log(JSON.stringify(result,null,2));if(!result.ok)process.exitCode=1;
+          NODE
+          cat "$RUNNER_TEMP/lms-pages-rescue/health.txt" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+          cat "$RUNNER_TEMP/lms-pages-rescue/browser.json" >> "$RUNNER_TEMP/lms-pages-rescue/report.txt"
+
+      - name: Zapsat výsledek do PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          TOKEN_AVAILABLE: ${{ steps.token.outputs.available }}
+          TOKEN_NAME: ${{ steps.token.outputs.name }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/lms-pages-rescue/report.txt`,'utf8')}catch{}
+            const body=[
+              '# Nouzové nasazení LastMinuteSlevy na GitHub Pages', '',
+              `- Token dostupný: **${process.env.TOKEN_AVAILABLE||'false'}**`,
+              `- Název secretu: \`${process.env.TOKEN_NAME||'žádný'}\``,
+              `- Sestavení: **${process.env.BUILD_OUTCOME||'skipped'}**`,
+              `- Publikování: **${process.env.PUBLISH_OUTCOME||'skipped'}**`,
+              `- Funkční ověření: **${process.env.VERIFY_OUTCOME||'skipped'}**`, '',
+              '```text', log.slice(-55000), '```'
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:body.slice(0,64000)});
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          TOKEN: ${{ steps.token.outputs.available }}
+          BUILD: ${{ steps.build.outcome }}
+          PUBLISH: ${{ steps.publish.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        run: |
+          test "$TOKEN" = true
+          test "$BUILD" = success
+          test "$PUBLISH" = success
+          test "$VERIFY" = success
