@@ -1,4 +1,12 @@
 (function(){
+  if(!document.querySelector('link[data-article-adstream-css]')){
+    const style=document.createElement('link');
+    style.rel='stylesheet';
+    style.href='/reklamy-sidebar.css?v=20260724-adstream-1';
+    style.setAttribute('data-article-adstream-css','true');
+    document.head.appendChild(style);
+  }
+
   function orderedTowerPool(context){
     if(typeof towerCreativeItems==='undefined')return [];
     const exact=towerCreativeItems.filter(item=>Array.isArray(item.contexts)&&item.contexts.includes(context));
