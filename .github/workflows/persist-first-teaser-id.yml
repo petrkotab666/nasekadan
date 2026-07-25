@@ -1,0 +1,29 @@
+name: Uložit jednotné ID spodní upoutávky
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/persist-first-teaser-id-trigger.txt
+
+permissions:
+  contents: write
+
+jobs:
+  persist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Sjednotit ID
+        shell: bash
+        run: |
+          sed -i 's/id="bottom-next-hospital-article"/id="next-hospital-analysis"/g' clanky/nemocnice-kadan.html
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nemocnice-kadan.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Zabránit dvojité spodní upoutávce'
+          git push origin main
