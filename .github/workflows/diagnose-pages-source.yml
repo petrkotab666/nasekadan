@@ -1,0 +1,30 @@
+name: Zjistit skutečný zdroj GitHub Pages
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/pages-diagnostic-trigger.txt'
+      - '.github/workflows/diagnose-pages-source.yml'
+
+permissions:
+  contents: read
+  pages: read
+  pull-requests: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Načíst konfiguraci Pages a zapsat ji do PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let body = '## Skutečná konfigurace GitHub Pages\n\n';
+            try {
+              const {data} = await github.rest.repos.getPages({owner: context.repo.owner, repo: context.repo.repo});
+              body += '```json\n' + JSON.stringify(data, null, 2) + '\n```';
+            } catch (error) {
+              body += `Chyba: ${error.status || ''} ${error.message}`;
+            }
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
