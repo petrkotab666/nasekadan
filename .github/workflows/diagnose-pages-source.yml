@@ -40,36 +40,18 @@ jobs:
           } > /tmp/network-report.txt 2>&1
           cat /tmp/network-report.txt
 
-      - name: Načíst konfiguraci Pages, větve, nasazení a zapsat report
+      - name: Přepsat první diagnostický komentář aktuálním reportem
         uses: actions/github-script@v7
         with:
           script: |
             const fs=require('fs');
             const owner=context.repo.owner, repo=context.repo.repo;
-            let body='## Diagnostika skutečného zdroje veřejného webu\n\n';
+            let body='## Aktuální síťová diagnostika veřejného webu\n\n';
             try { body+='```text\n'+fs.readFileSync('/tmp/network-report.txt','utf8')+'\n```\n\n'; } catch {}
-            try {
-              const {data}=await github.rest.repos.getPages({owner,repo});
-              body+='### Pages API\n```json\n'+JSON.stringify(data,null,2)+'\n```\n\n';
-            } catch(error) {
-              body+=`### Pages API\nChyba: ${error.status||''} ${error.message}\n\n`;
-            }
-            try {
-              const branches=await github.paginate(github.rest.repos.listBranches,{owner,repo,per_page:100});
-              body+='### Větve\n'+branches.map(b=>`- \`${b.name}\` — ${b.commit.sha}`).join('\n')+'\n\n';
-            } catch(error) {
-              body+=`### Větve\nChyba: ${error.status||''} ${error.message}\n\n`;
-            }
-            try {
-              const deployments=await github.paginate(github.rest.repos.listDeployments,{owner,repo,per_page:100});
-              body+='### Poslední deployments\n'+deployments.slice(0,20).map(d=>`- id ${d.id}, env \`${d.environment}\`, ref \`${d.ref}\`, sha ${d.sha}, created ${d.created_at}`).join('\n')+'\n\n';
-            } catch(error) {
-              body+=`### Deployments\nChyba: ${error.status||''} ${error.message}\n\n`;
-            }
             for (const type of ['A','AAAA','CNAME']) {
               try {
                 const dns=await fetch(`https://dns.google/resolve?name=nasekadan.cz&type=${type}`).then(r=>r.json());
                 body+=`### DNS ${type}\n\`\`\`json\n${JSON.stringify(dns.Answer||[],null,2)}\n\`\`\`\n\n`;
               } catch(error) { body+=`### DNS ${type}\nChyba: ${error.message}\n\n`; }
             }
-            await github.rest.issues.createComment({owner,repo,issue_number:context.issue.number,body:body.slice(0,65000)});
+            await github.rest.issues.updateComment({owner,repo,comment_id:5076783087,body:body.slice(0,65000)});
