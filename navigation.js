@@ -69,11 +69,8 @@ document.addEventListener('DOMContentLoaded',()=>{
     nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>setMenuState(false)));
   });
 
-  // Identifikační údaje zůstávají mimo hlavní obsah. Nenápadný odkaz v patičce
-  // je ale dostupný z každé veřejné stránky, aby jej návštěvník i kontrola našli.
+  // Důležité provozní odkazy se zobrazují v patičce každé veřejné stránky.
   document.querySelectorAll('footer').forEach(footer=>{
-    if(footer.querySelector('a[href="/o-webu/#provozovatel"]'))return;
-
     let legal=footer.querySelector('.footer-legal');
     if(!legal){
       legal=document.createElement('div');
@@ -81,12 +78,31 @@ document.addEventListener('DOMContentLoaded',()=>{
       footer.appendChild(legal);
     }
 
-    const link=document.createElement('a');
-    link.href='/o-webu/#provozovatel';
-    link.textContent='Provozovatel';
-    link.setAttribute('aria-label','Identifikační údaje provozovatele webu');
-    link.style.fontSize='12px';
-    link.style.opacity='.68';
-    legal.appendChild(link);
+    const footerLinks=[
+      {
+        href:'/inzerce/',
+        text:'Inzerce',
+        aria:'Ceník a podmínky inzerce na webu Naše Kadaň'
+      },
+      {
+        href:'/o-webu/#provozovatel',
+        text:'Provozovatel',
+        aria:'Identifikační údaje provozovatele webu',
+        subtle:true
+      }
+    ];
+
+    footerLinks.forEach(item=>{
+      if(legal.querySelector(`a[href="${item.href}"]`))return;
+      const link=document.createElement('a');
+      link.href=item.href;
+      link.textContent=item.text;
+      link.setAttribute('aria-label',item.aria);
+      if(item.subtle){
+        link.style.fontSize='12px';
+        link.style.opacity='.68';
+      }
+      legal.appendChild(link);
+    });
   });
 });
