@@ -1,0 +1,103 @@
+name: Opravit odkazy a nedělní upoutávku v článku o petici
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-petice-teaser-sunday.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přesunout odkaz dolů a vložit nedělní upoutávku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('clanky/petice-nemocnice-kadan.html')
+          html = path.read_text(encoding='utf-8')
+
+          # Odstranit odkaz na první analýzu z prostředku textu.
+          html = html.replace(
+              '  <p>Petice tedy konflikt nevytvořila. Stala se jeho novou a veřejně viditelnou etapou. Podrobnou finanční analýzu, časovou osu odvolání bývalého jednatele a složení obou volebních sestav jsme zveřejnili v <a href="/clanky/nemocnice-kadan.html">předchozím článku o Nemocnici Kadaň</a>.</p>\n',
+              '  <p>Petice tedy konflikt nevytvořila. Stala se jeho novou a veřejně viditelnou etapou.</p>\n'
+          )
+
+          # Odstranit odkaz na první článek ze zdrojů a z postranního panelu.
+          html = html.replace('      <li><a href="/clanky/nemocnice-kadan.html">Naše Kadaň: předchozí podrobná analýza hospodaření, provozu a politického rozkolu</a></li>\n', '')
+          html = re.sub(
+              r'\n  <div class="sidebox">\n    <h3>Základní analýza</h3>\n    <p><a href="/clanky/nemocnice-kadan\.html">Ztráta 46 milionů, pomoc města a rozkol ODS →</a></p>\n  </div>',
+              '',
+              html
+          )
+
+          teaser_css = '''
+    .sunday-teaser{margin:30px 0;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px #14232d26}
+    .sunday-teaser .eyebrow{margin:0 0 8px;color:#ffd9d9;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+    .sunday-teaser h2{margin:0 0 12px;color:#fff;font-size:32px}
+    .sunday-teaser p{margin:0 0 13px;color:#edf3f5}
+    .sunday-teaser .time{display:inline-block;padding:10px 14px;border:1px solid #ffffff66;border-radius:999px;color:#fff;font-weight:900}
+    .previous-analysis{margin:44px 0 24px;padding:24px;border:1px solid #c7d8df;border-radius:18px;background:#f4f8fa}
+    .previous-analysis strong{display:block;margin-bottom:8px;font:800 23px Georgia,serif;color:#14232d}
+'''
+          if '.sunday-teaser{' not in html:
+              html = html.replace('    .article-ad{margin:38px 0}\n', '    .article-ad{margin:38px 0}\n' + teaser_css)
+
+          teaser = '''
+  <section class="sunday-teaser" id="nedelni-clanek">
+    <p class="eyebrow">NEDĚLE V 5:00 · NAVAZUJÍCÍ ANALÝZA</p>
+    <h2>64,7 milionu za software: Nemocnice Kadaň ukázala jen část skládačky</h2>
+    <p>Rozebíráme, co se skrývá pod účetní položkou software, proč kybernetická bezpečnost nebyla dobrovolný luxus a proč zákonná povinnost sama nevysvětluje rozsah ani cenu investic.</p>
+    <span class="time">Vyjde v neděli 26. 7. v 5:00</span>
+  </section>
+'''
+          if 'id="nedelni-clanek"' not in html:
+              marker = '  <div class="hero-visual"><strong>Petice otevřela správné otázky. Některá tvrzení o prodeji nemocnice ale předběhla dostupné důkazy.</strong></div>\n'
+              html = html.replace(marker, marker + teaser)
+
+          previous = '''
+  <div class="previous-analysis">
+    <strong>První část série o Nemocnici Kadaň</strong>
+    <p>Podrobný rozbor hospodaření, provozu a politického rozkolu najdete v první analýze.</p>
+    <p><a href="/clanky/nemocnice-kadan.html">Nemocnice Kadaň: ztráta 46 milionů, pomoc města a rozkol ODS →</a></p>
+  </div>
+
+'''
+          if 'class="previous-analysis"' not in html:
+              html = html.replace('  <div class="source-list">\n', previous + '  <div class="source-list">\n')
+
+          path.write_text(html, encoding='utf-8', newline='\n')
+
+          assert 'id="nedelni-clanek"' in html
+          assert 'Vyjde v neděli 26. 7. v 5:00' in html
+          assert 'class="previous-analysis"' in html
+          assert 'Podrobnou finanční analýzu, časovou osu' not in html
+          PY
+
+      - name: Uložit opravený článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/petice-nemocnice-kadan.html
+          if git diff --cached --quiet; then
+            echo 'Článek už je ve správném stavu.'
+            exit 0
+          fi
+          git commit -m 'Opravit odkazy a přidat upoutávku na nedělní analýzu'
+          git push origin main
