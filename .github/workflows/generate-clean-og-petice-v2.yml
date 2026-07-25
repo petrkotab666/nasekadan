@@ -1,0 +1,135 @@
+name: Vytvořit čistý OG obrázek článku o petici v2
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/generate-clean-og-petice-v2-trigger.txt'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat nový obrázek bez bílého rámečku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          from pathlib import Path
+          import re
+
+          W,H=1200,630
+          navy=(5,27,50)
+          red=(178,37,49)
+          img=Image.new('RGB',(W,H),navy)
+          px=img.load()
+          for y in range(H):
+              for x in range(W):
+                  t=x/(W-1)
+                  # jemně tmavší spodní část
+                  shade=1-0.14*(y/(H-1))
+                  c=tuple(int((navy[i]*(1-t)+red[i]*t)*shade) for i in range(3))
+                  px[x,y]=c
+
+          d=ImageDraw.Draw(img,'RGBA')
+          # jemný světelný střed
+          for r,a in [(520,18),(420,14),(320,10)]:
+              d.ellipse((420-r,50-r,420+r,50+r),fill=(255,255,255,a))
+
+          # decentní silueta Kadaně vpravo
+          city=(210,78,86,80)
+          lw=3
+          # věž radnice
+          d.line((1045,165,1045,475),fill=city,width=lw)
+          d.rectangle((1008,310,1082,475),outline=city,width=lw)
+          d.polygon([(1008,310),(1045,185),(1082,310)],outline=city)
+          d.rectangle((1026,365,1064,402),outline=city,width=lw)
+          d.ellipse((1032,371,1058,397),outline=city,width=lw)
+          # menší věž a střechy
+          d.line((865,300,865,475),fill=city,width=lw)
+          d.rectangle((835,355,895,475),outline=city,width=lw)
+          d.polygon([(835,355),(865,285),(895,355)],outline=city)
+          roof=[(760,470),(805,420),(845,455),(900,405),(950,455),(995,420),(1040,470)]
+          d.line(roof,fill=city,width=lw)
+          d.line((735,475,1160,475),fill=city,width=lw)
+          for x in range(760,1140,55):
+              d.rectangle((x,445,x+24,475),outline=city,width=2)
+
+          bold='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          reg='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+          fbrand=ImageFont.truetype(bold,31)
+          fcat=ImageFont.truetype(bold,21)
+          fhead=ImageFont.truetype(bold,71)
+          fsub=ImageFont.truetype(reg,29)
+          ffoot=ImageFont.truetype(bold,21)
+
+          # značka bez rámečku, s velkým odsazením
+          d.text((58,52),'NAŠE',font=fbrand,fill=(255,255,255,255))
+          w=d.textlength('NAŠE ',font=fbrand)
+          d.text((58+w,52),'KADAŇ',font=fbrand,fill=(224,56,63,255))
+
+          d.text((58,150),'NEMOCNICE KADAŇ',font=fcat,fill=(225,229,233,255))
+          p1=58+d.textlength('NEMOCNICE KADAŇ ',font=fcat)
+          d.text((p1,150),'·',font=fcat,fill=(224,56,63,255))
+          p2=p1+d.textlength('· ',font=fcat)
+          d.text((p2,150),'PETICE',font=fcat,fill=(225,229,233,255))
+          p3=p2+d.textlength('PETICE ',font=fcat)
+          d.text((p3,150),'·',font=fcat,fill=(224,56,63,255))
+          p4=p3+d.textlength('· ',font=fcat)
+          d.text((p4,150),'KOMUNÁLNÍ POLITIKA',font=fcat,fill=(225,229,233,255))
+
+          d.text((58,205),'Petice rozjela',font=fhead,fill=(255,255,255,255))
+          d.text((58,282),'volební spor',font=fhead,fill=(255,255,255,255))
+
+          d.text((58,407),'Co víme o 100 milionech, kyberbezpečnosti',font=fsub,fill=(222,226,231,255))
+          d.text((58,451),'a údajném plánu nemocnici prodat',font=fsub,fill=(222,226,231,255))
+
+          d.line((58,545,1142,545),fill=(215,87,94,210),width=2)
+          d.text((58,566),'nasekadan.cz',font=ffoot,fill=(255,255,255,255))
+          date='25. července 2026'
+          dw=d.textlength(date,font=ffoot)
+          d.text((1142-dw,566),date,font=ffoot,fill=(255,255,255,255))
+
+          out=Path('og/petice-nemocnice-kadan-20260725-v2.png')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          img.save(out,'PNG',optimize=True)
+
+          article=Path('clanky/petice-nemocnice-kadan.html')
+          html=article.read_text(encoding='utf-8')
+          old='https://nasekadan.cz/og/petice-nemocnice-kadan-20260725.png'
+          new='https://nasekadan.cz/og/petice-nemocnice-kadan-20260725-v2.png'
+          html=html.replace(old,new)
+          html=re.sub(r'<meta property="article:modified_time" content="[^"]+">','<meta property="article:modified_time" content="2026-07-25T08:15:00+02:00">',html)
+          article.write_text(html,encoding='utf-8',newline='\n')
+
+          assert out.stat().st_size > 30000
+          assert new in html
+          PY
+
+      - name: Uložit obrázek a metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add og/petice-nemocnice-kadan-20260725-v2.png clanky/petice-nemocnice-kadan.html
+          git commit -m 'Nasadit čistý Facebook obrázek článku bez rámečku'
+          git push origin main
+
+      - name: Potvrdit dokončení
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:'Nový OG obrázek bez bílého rámečku byl vytvořen a metadata článku nyní odkazují na soubor `og/petice-nemocnice-kadan-20260725-v2.png`.'});
