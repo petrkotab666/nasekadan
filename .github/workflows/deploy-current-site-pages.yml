@@ -43,8 +43,10 @@ jobs:
           grep -F 'Nově zveřejněno: petice, 100 milionů a kyberbezpečnost' _site/clanky/nemocnice-kadan.html >/dev/null
           grep -F 'Petice rozjela volební spor' _site/clanky/petice-nemocnice-kadan.html >/dev/null
 
-      - name: Nastavit Pages
+      - name: Aktivovat a nastavit Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Nahrát web
         uses: actions/upload-pages-artifact@v3
