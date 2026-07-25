@@ -1,0 +1,102 @@
+name: Publikovat noční výluky vlaků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/train-outage-trigger.txt'
+      - '.github/workflows/publish-train-outage-20260725.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-train-outage-20260725
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Publikovat výluky vlaků na OVH
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 20
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zařadit článek na web
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_train_outage.py
+          python3 scripts/publish_train_outage.py
+          grep -F '/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' index.html >/dev/null
+          grep -F '/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' clanky/index.html >/dev/null
+          grep -F 'nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' sitemap.xml >/dev/null
+          grep -F 'nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' rss.xml >/dev/null
+          grep -F '/clanky/nemocnice-kadan.html' index.html >/dev/null
+
+      - name: Uložit redakční změny
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html sitemap.xml rss.xml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publikovat: noční výluky vlaků mezi Kadaní, Kláštercem a Chomutovem'
+            git push origin main
+          fi
+
+      - name: Aktualizovat záložní Docker kontejner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo env DOCKER_BUILDKIT=0 docker build --pull -t nasekadan-web:latest .
+          sudo docker rm -f nasekadan-web 2>/dev/null || true
+          sudo docker run -d --name nasekadan-web --restart unless-stopped -p 127.0.0.1:3224:80 nasekadan-web:latest
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3224/healthz >/dev/null
+          curl -fsS http://127.0.0.1:3224/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html | grep -F 'Noční výluky vlaků zasáhnou' >/dev/null
+
+      - name: Aktualizovat aktivní Caddy document root
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo mkdir -p /var/www/nasekadan
+          sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar --exclude='.git' --exclude='.github' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' -cf - . | sudo tar -C /var/www/nasekadan -xf -
+          sudo chmod -R a+rX /var/www/nasekadan
+          grep -F 'Noční výluky vlaků zasáhnou' /var/www/nasekadan/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html >/dev/null
+          grep -F '/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' /var/www/nasekadan/index.html >/dev/null
+          grep -F '/clanky/nemocnice-kadan.html' /var/www/nasekadan/index.html >/dev/null
+
+      - name: Veřejně ověřit nasazení bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          check_public() {
+            local url="$1" needle="$2" output="$3"
+            for i in $(seq 1 30); do
+              if curl -kfsS --max-time 20 "${url}?nocache=${RUN}-${i}" -o "$output" && grep -F "$needle" "$output" >/dev/null; then return 0; fi
+              sleep 2
+            done
+            return 1
+          }
+          check_public 'https://nasekadan.cz/' '/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' /tmp/nk-home.html
+          grep -F '/clanky/nemocnice-kadan.html' /tmp/nk-home.html >/dev/null
+          check_public 'https://nasekadan.cz/clanky/' '/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' /tmp/nk-archive.html
+          check_public 'https://nasekadan.cz/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov' /tmp/nk-trains.html
+          grep -F 'dateModified":"2026-07-25T22:41:00+02:00' /tmp/nk-trains.html >/dev/null
+          check_public 'https://nasekadan.cz/clanky/interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html' 'Interní ambulance Nemocnice Kadaň' /tmp/nk-ambulance.html
+          check_public 'https://nasekadan.cz/clanky/nemocnice-kadan.html' 'Nemocnice Kadaň' /tmp/nk-hospital.html
+          check_public 'https://nasekadan.cz/sitemap.xml' 'nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' /tmp/nk-sitemap.xml
+          check_public 'https://nasekadan.cz/rss.xml' 'nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html' /tmp/nk-rss.xml
+          echo 'Zpráva o nočních výlukách je veřejně publikovaná a starší články zůstaly zachované.'
