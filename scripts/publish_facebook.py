@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict
 
 SITE_ROOT = "https://nasekadan.cz"
+DEFAULT_PAGE_KEY = "nasekadan"
 
 
 class MetaParser(HTMLParser):
@@ -71,7 +72,7 @@ def live_page_ready(article: dict[str, str], timeout: int = 900) -> None:
         try:
             request = urllib.request.Request(
                 article["url"],
-                headers={"User-Agent": "NaseKadanFacebookPublisher/1.0"},
+                headers={"User-Agent": "NaseKadanFacebookPublisher/2.0"},
             )
             with urllib.request.urlopen(request, timeout=20) as response:
                 body = response.read().decode("utf-8", errors="replace")
@@ -79,7 +80,7 @@ def live_page_ready(article: dict[str, str], timeout: int = 900) -> None:
                     if article["image"]:
                         image_request = urllib.request.Request(
                             article["image"],
-                            headers={"User-Agent": "NaseKadanFacebookPublisher/1.0"},
+                            headers={"User-Agent": "NaseKadanFacebookPublisher/2.0"},
                         )
                         with urllib.request.urlopen(image_request, timeout=20) as image_response:
                             if image_response.status != 200:
@@ -99,13 +100,50 @@ def build_message(article: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def publish(article: dict[str, str]) -> str:
+def normalize_key(value: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "-" for ch in value).strip("-")
+
+
+def resolve_page_credentials() -> tuple[str, str, str]:
+    registry_raw = os.environ.get("FACEBOOK_PAGES_JSON", "").strip()
+    requested_key = normalize_key(os.environ.get("FACEBOOK_PAGE_KEY", DEFAULT_PAGE_KEY))
+
+    if registry_raw:
+        try:
+            registry = json.loads(registry_raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("FACEBOOK_PAGES_JSON není platný JSON") from exc
+
+        pages = registry.get("pages") if isinstance(registry, dict) else None
+        if not isinstance(pages, dict):
+            raise RuntimeError("FACEBOOK_PAGES_JSON musí obsahovat objekt pages")
+
+        page = pages.get(requested_key)
+        if not isinstance(page, dict):
+            available = ", ".join(sorted(pages)) or "žádné"
+            raise RuntimeError(
+                f"V registru není Facebook stránka s klíčem '{requested_key}'. Dostupné klíče: {available}"
+            )
+
+        page_id = str(page.get("id", "")).strip()
+        token = str(page.get("access_token", "")).strip()
+        page_name = str(page.get("name", requested_key)).strip() or requested_key
+        if not page_id or not token:
+            raise RuntimeError(f"Stránka '{requested_key}' nemá id nebo access_token")
+        return page_id, token, page_name
+
     page_id = os.environ.get("FACEBOOK_PAGE_ID", "").strip()
     token = os.environ.get("FACEBOOK_PAGE_ACCESS_TOKEN", "").strip()
-    graph_version = os.environ.get("FACEBOOK_GRAPH_VERSION", "").strip().strip("/")
     if not page_id or not token:
-        raise RuntimeError("Chybí FACEBOOK_PAGE_ID nebo FACEBOOK_PAGE_ACCESS_TOKEN")
+        raise RuntimeError(
+            "Chybí FACEBOOK_PAGES_JSON nebo starší dvojice FACEBOOK_PAGE_ID/FACEBOOK_PAGE_ACCESS_TOKEN"
+        )
+    return page_id, token, requested_key
 
+
+def publish(article: dict[str, str]) -> dict[str, str]:
+    page_id, token, page_name = resolve_page_credentials()
+    graph_version = os.environ.get("FACEBOOK_GRAPH_VERSION", "").strip().strip("/")
     prefix = f"/{graph_version}" if graph_version else ""
     endpoint = f"https://graph.facebook.com{prefix}/{urllib.parse.quote(page_id)}/feed"
     payload = urllib.parse.urlencode(
@@ -125,7 +163,7 @@ def publish(article: dict[str, str]) -> str:
     post_id = str(result.get("id", ""))
     if not post_id:
         raise RuntimeError(f"Facebook nevrátil ID příspěvku: {result}")
-    return post_id
+    return {"post_id": post_id, "page_id": page_id, "page_name": page_name}
 
 
 def main() -> int:
@@ -143,8 +181,18 @@ def main() -> int:
             raise RuntimeError(f"Článek nemá platný title nebo canonical URL: {path}")
         if not args.skip_wait:
             live_page_ready(article)
-        post_id = publish(article)
-        print(json.dumps({"article": article["url"], "facebook_post_id": post_id}, ensure_ascii=False))
+        published = publish(article)
+        print(
+            json.dumps(
+                {
+                    "article": article["url"],
+                    "facebook_post_id": published["post_id"],
+                    "facebook_page_id": published["page_id"],
+                    "facebook_page_name": published["page_name"],
+                },
+                ensure_ascii=False,
+            )
+        )
     return 0
 
 
