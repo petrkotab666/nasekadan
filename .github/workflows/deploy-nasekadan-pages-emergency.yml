@@ -3,12 +3,17 @@ name: Nouzově nasadit Naše Kadaň přes GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/pages-emergency-trigger.txt'
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  pull-requests: write
 
 concurrency:
   group: nasekadan-pages-production
@@ -147,3 +152,24 @@ jobs:
           done
           test "$ok" = 1
           echo 'Stránka /inzerce/ i úplná patička jsou veřejně dostupné.'
+
+      - name: Zapsat výsledek do technického PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '## Nouzové nasazení Naše Kadaň',
+              '',
+              `- Výsledek běhu: **${{ job.status }}**`,
+              `- Pages URL: ${{ steps.deployment.outputs.page_url }}`,
+              `- Zdrojová větev: main`,
+              '',
+              'Nasazení ověřuje stránku `/inzerce/` a text úplné patičky na veřejné doméně.'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
