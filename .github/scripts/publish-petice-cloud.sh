@@ -26,8 +26,8 @@ article_path.write_text(article, encoding='utf-8', newline='\n')
 home_path = Path('index.html')
 home = home_path.read_text(encoding='utf-8')
 home = re.sub(
-    r'<div class="ticker">.*?</div>\s*\n',
-    '<div class="ticker">\n  <div class="wrap"><b>NOVÝ ČLÁNEK:</b> Prověřili jsme 100 milionů na účtech nemocnice, cenu kyberbezpečnosti, čekání na dotaci i tvrzení o údajném plánu nemocnici prodat.</div>\n</div>\n',
+    r'<div class="ticker">.*?<main>',
+    '<div class="ticker">\n  <div class="wrap"><b>NOVÝ ČLÁNEK:</b> Prověřili jsme 100 milionů na účtech nemocnice, cenu kyberbezpečnosti, čekání na dotaci i tvrzení o údajném plánu nemocnici prodat.</div>\n</div>\n\n<main>',
     home,
     count=1,
     flags=re.S,
@@ -120,5 +120,9 @@ grep -Fq 'id="navazujici-clanek"' clanky/nemocnice-kadan.html
 git config user.name 'Naše Kadaň Publisher'
 git config user.email 'publisher@nasekadan.cz'
 git add clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan.html clanky/index.html index.html sitemap.xml
-git commit -m 'Zveřejnit článek o petici a Nemocnici Kadaň'
+if git diff --cached --quiet; then
+  echo 'V hlavní větvi už nejsou žádné další změny.'
+  exit 0
+fi
+git commit -m 'Opravit titulní stránku po zveřejnění článku o petici'
 git push origin HEAD:main
