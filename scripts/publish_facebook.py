@@ -72,7 +72,7 @@ def live_page_ready(article: dict[str, str], timeout: int = 900) -> None:
         try:
             request = urllib.request.Request(
                 article["url"],
-                headers={"User-Agent": "NaseKadanFacebookPublisher/2.0"},
+                headers={"User-Agent": "NaseKadanFacebookPublisher/2.1"},
             )
             with urllib.request.urlopen(request, timeout=20) as response:
                 body = response.read().decode("utf-8", errors="replace")
@@ -80,7 +80,7 @@ def live_page_ready(article: dict[str, str], timeout: int = 900) -> None:
                     if article["image"]:
                         image_request = urllib.request.Request(
                             article["image"],
-                            headers={"User-Agent": "NaseKadanFacebookPublisher/2.0"},
+                            headers={"User-Agent": "NaseKadanFacebookPublisher/2.1"},
                         )
                         with urllib.request.urlopen(image_request, timeout=20) as image_response:
                             if image_response.status != 200:
@@ -105,7 +105,7 @@ def normalize_key(value: str) -> str:
 
 
 def resolve_page_credentials() -> tuple[str, str, str]:
-    registry_raw = os.environ.get("FACEBOOK_PAGES_JSON", "").strip()
+    registry_raw = os.environ.get("FACEBOOK_PAGES_JSON", "").strip().lstrip("\ufeff")
     requested_key = normalize_key(os.environ.get("FACEBOOK_PAGE_KEY", DEFAULT_PAGE_KEY))
 
     if registry_raw:
