@@ -55,19 +55,26 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Ověřit přístup k Facebook stránce
+      - name: Ověřit konfiguraci Facebook stránek
         if: steps.articles.outputs.paths != ''
         env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
         run: |
           set -euo pipefail
-          [[ -n "$FACEBOOK_PAGE_ID" ]] || { echo "Chybí GitHub secret FACEBOOK_PAGE_ID" >&2; exit 1; }
-          [[ -n "$FACEBOOK_PAGE_ACCESS_TOKEN" ]] || { echo "Chybí GitHub secret FACEBOOK_PAGE_ACCESS_TOKEN" >&2; exit 1; }
+          if [[ -z "$FACEBOOK_PAGES_JSON" ]]; then
+            [[ -n "$FACEBOOK_PAGE_ID" ]] || { echo "Chybí secret FACEBOOK_PAGES_JSON nebo FACEBOOK_PAGE_ID" >&2; exit 1; }
+            [[ -n "$FACEBOOK_PAGE_ACCESS_TOKEN" ]] || { echo "Chybí secret FACEBOOK_PAGES_JSON nebo FACEBOOK_PAGE_ACCESS_TOKEN" >&2; exit 1; }
+          fi
+          echo "Cílový klíč stránky: ${FACEBOOK_PAGE_KEY:-nasekadan}"
 
       - name: Počkat na nasazení a zveřejnit příspěvek
         if: steps.articles.outputs.paths != ''
         env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
           FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
