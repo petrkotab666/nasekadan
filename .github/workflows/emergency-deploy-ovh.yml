@@ -5,14 +5,19 @@ on:
     branches: [main]
     paths:
       - emergency-deploy-trigger.txt
+      - Dockerfile
       - index.html
       - clanky/**
       - nahled/**
       - zpravy/**
+      - o-webu/**
+      - ochrana-osobnich-udaju/**
       - sitemap.xml
       - rss.xml
       - robots.txt
+      - style.css
       - site.js
+      - navigation.js
       - .github/workflows/emergency-deploy-ovh.yml
   pull_request:
     branches: [main]
@@ -103,7 +108,7 @@ jobs:
           sudo nginx -t
           sudo systemctl reload nginx
 
-      - name: Ověřit web, RSS a chráněný náhled
+      - name: Ověřit web, RSS, údaje provozovatele a chráněný náhled
         shell: bash
         run: |
           set -euo pipefail
@@ -115,6 +120,9 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3224/healthz >/dev/null
           curl -fsS http://127.0.0.1:3224/rss.xml | grep -F '<geo:lat>50.429725</geo:lat>' >/dev/null
+          curl -fsS http://127.0.0.1:3224/o-webu/ | grep -F 'IČO: 08780200' >/dev/null
+          curl -fsS http://127.0.0.1:3224/o-webu/ | grep -F 'Chomutovská 1284, 432 01 Kadaň' >/dev/null
+          curl -fsS http://127.0.0.1:3224/navigation.js | grep -F 'Provozovatel' >/dev/null
           curl -fsS http://127.0.0.1:3224/nahled/petice-nemocnice-kadan-a8f4c2.html | grep -F 'Petice rozjela volební spor' >/dev/null
 
           code=$(curl --noproxy '*' -k -sS --max-time 10 \
@@ -122,7 +130,7 @@ jobs:
             -o /dev/null -w '%{http_code}' \
             https://nasekadan.cz/nahled/petice-nemocnice-kadan-a8f4c2.html 2>/dev/null || true)
           [[ "$code" == "401" ]] || { echo "Náhled není chráněný; HTTP $code" >&2; exit 1; }
-          echo 'Aktuální web, RSS i soukromý náhled jsou nasazené; náhled je chráněn heslem.'
+          echo 'Aktuální web, RSS a údaje provozovatele jsou nasazené; soukromý náhled je chráněn heslem.'
 
       - name: Zapsat výsledek nouzového nasazení
         if: ${{ always() }}
@@ -130,7 +138,7 @@ jobs:
         run: |
           if [[ "${{ job.status }}" == "success" ]]; then
             state=success
-            description='Web a RSS jsou nasazené; náhled je chráněný'
+            description='Web, RSS a údaje provozovatele jsou nasazené'
           else
             state=failure
             description='Nouzové nasazení nebo ověření selhalo'
