@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/patch-petice-teaser-sunday.yml'
+      - '.github/patch-petice-teaser-trigger.txt'
   workflow_dispatch:
 
 permissions:
@@ -31,13 +32,11 @@ jobs:
           path = Path('clanky/petice-nemocnice-kadan.html')
           html = path.read_text(encoding='utf-8')
 
-          # Odstranit odkaz na první analýzu z prostředku textu.
           html = html.replace(
               '  <p>Petice tedy konflikt nevytvořila. Stala se jeho novou a veřejně viditelnou etapou. Podrobnou finanční analýzu, časovou osu odvolání bývalého jednatele a složení obou volebních sestav jsme zveřejnili v <a href="/clanky/nemocnice-kadan.html">předchozím článku o Nemocnici Kadaň</a>.</p>\n',
               '  <p>Petice tedy konflikt nevytvořila. Stala se jeho novou a veřejně viditelnou etapou.</p>\n'
           )
 
-          # Odstranit odkaz na první článek ze zdrojů a z postranního panelu.
           html = html.replace('      <li><a href="/clanky/nemocnice-kadan.html">Naše Kadaň: předchozí podrobná analýza hospodaření, provozu a politického rozkolu</a></li>\n', '')
           html = re.sub(
               r'\n  <div class="sidebox">\n    <h3>Základní analýza</h3>\n    <p><a href="/clanky/nemocnice-kadan\.html">Ztráta 46 milionů, pomoc města a rozkol ODS →</a></p>\n  </div>',
