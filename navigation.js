@@ -68,4 +68,25 @@ document.addEventListener('DOMContentLoaded',()=>{
     button.addEventListener('click',()=>setMenuState(!nav.classList.contains('is-open')));
     nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>setMenuState(false)));
   });
+
+  // Identifikační údaje zůstávají mimo hlavní obsah. Nenápadný odkaz v patičce
+  // je ale dostupný z každé veřejné stránky, aby jej návštěvník i kontrola našli.
+  document.querySelectorAll('footer').forEach(footer=>{
+    if(footer.querySelector('a[href="/o-webu/#provozovatel"]'))return;
+
+    let legal=footer.querySelector('.footer-legal');
+    if(!legal){
+      legal=document.createElement('div');
+      legal.className='footer-legal';
+      footer.appendChild(legal);
+    }
+
+    const link=document.createElement('a');
+    link.href='/o-webu/#provozovatel';
+    link.textContent='Provozovatel';
+    link.setAttribute('aria-label','Identifikační údaje provozovatele webu');
+    link.style.fontSize='12px';
+    link.style.opacity='.68';
+    legal.appendChild(link);
+  });
 });
