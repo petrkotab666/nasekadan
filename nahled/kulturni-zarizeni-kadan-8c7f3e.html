@@ -10,7 +10,18 @@
 <body>
 <main id="stav"><b>Načítám návrh článku KZK…</b><span>Chvíli strpení.</span></main>
 <script>
-(async()=>{try{const r=await fetch('https://raw.githubusercontent.com/petrkotab666/nasekadan/main/.github/drafts/kulturni-zarizeni-kadan.html',{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const html=await r.text();document.open();document.write(html);document.close()}catch(e){document.getElementById('stav').innerHTML='<b class="error">Náhled se nepodařilo načíst</b><span>'+String(e)+'</span>'}})();
+(async()=>{try{
+  const r=await fetch('https://raw.githubusercontent.com/petrkotab666/nasekadan/main/.github/drafts/kulturni-zarizeni-kadan.html',{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  let html=await r.text();
+  html=html
+    .replaceAll('href="/style.css"','href="https://nasekadan.cz/style.css"')
+    .replaceAll('href="/favicon.svg"','href="https://nasekadan.cz/favicon.svg"')
+    .replaceAll('href="/"','href="https://nasekadan.cz/"')
+    .replaceAll('href="/#akce"','href="https://nasekadan.cz/#akce"')
+    .replaceAll('href="/pruvodce/"','href="https://nasekadan.cz/pruvodce/"');
+  document.open();document.write(html);document.close();
+}catch(e){document.getElementById('stav').innerHTML='<b class="error">Náhled se nepodařilo načíst</b><span>'+String(e)+'</span>'}})();
 </script>
 </body>
 </html>
