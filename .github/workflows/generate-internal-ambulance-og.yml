@@ -1,0 +1,82 @@
+name: Vygenerovat OG obrázek interní ambulance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/generate_internal_ambulance_og.py'
+      - '.github/internal-ambulance-og-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: nasekadan-generate-internal-ambulance-og
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat obrázek 1200 × 630 px
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/generate_internal_ambulance_og.py
+          test -s og/interni-ambulance-nemocnice-kadan-20260725-v1.png
+          python3 - <<'PY'
+          from pathlib import Path
+          import struct
+
+          path = Path('og/interni-ambulance-nemocnice-kadan-20260725-v1.png')
+          data = path.read_bytes()
+          if not data.startswith(b'\x89PNG\r\n\x1a\n'):
+              raise SystemExit('Výstup není PNG')
+          width, height = struct.unpack('>II', data[16:24])
+          if (width, height) != (1200, 630):
+              raise SystemExit(f'Chybné rozměry: {width} × {height}')
+          if len(data) < 10_000:
+              raise SystemExit(f'Obrázek je podezřele malý: {len(data)} B')
+          print(f'OG obrázek je platný: {width} × {height}, {len(data)} B')
+          PY
+
+      - name: Uložit PNG do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- og/interni-ambulance-nemocnice-kadan-20260725-v1.png; then
+            echo 'OG obrázek je beze změny.'
+          else
+            git config user.name 'Naše Kadaň automat'
+            git config user.email 'info@nasekadan.cz'
+            git add og/interni-ambulance-nemocnice-kadan-20260725-v1.png
+            git commit -m 'Přidat OG obrázek k uzavření interní ambulance'
+            git pull --rebase origin main
+            git push origin main
+          fi
+
+      - name: Vynutit nasazení aktuální hlavní větve
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for workflow in deploy-ovh.yml deploy-nasekadan-pages-emergency.yml; do
+            echo "Spouštím $workflow"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              -H 'X-GitHub-Api-Version: 2022-11-28' \
+              -H 'Content-Type: application/json' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/dispatches" \
+              -d '{"ref":"main"}'
+          done
