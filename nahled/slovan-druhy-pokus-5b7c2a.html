@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>Načítám návrh článku Slovan | Naše Kadaň</title>
+  <style>body{margin:0;display:grid;place-items:center;min-height:100vh;background:#f4f1eb;color:#14232d;font:18px/1.5 system-ui,sans-serif}main{max-width:680px;padding:32px;text-align:center}b{display:block;font:800 32px Georgia,serif;margin-bottom:10px}.error{color:#9f2626}</style>
+</head>
+<body>
+<main id="stav"><b>Načítám návrh článku Slovan…</b><span>Náhled není zařazený mezi zveřejněné články.</span></main>
+<script>
+(async()=>{try{
+  const r=await fetch('https://raw.githubusercontent.com/petrkotab666/nasekadan/main/.github/drafts/slovan-druhy-pokus.html',{cache:'no-store'});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  let html=await r.text();
+  html=html
+    .replaceAll('href="../../style.css"','href="https://nasekadan.cz/style.css"')
+    .replaceAll('href="../../favicon.svg"','href="https://nasekadan.cz/favicon.svg"')
+    .replaceAll('href="../../index.html#akce"','href="https://nasekadan.cz/#akce"')
+    .replaceAll('href="../../index.html"','href="https://nasekadan.cz/"')
+    .replaceAll('href="../../pruvodce/"','href="https://nasekadan.cz/pruvodce/"')
+    .replaceAll('src="../../assets/','src="https://nasekadan.cz/assets/')
+    .replaceAll('src="../../site.js"','src="https://nasekadan.cz/site.js"');
+  document.open();document.write(html);document.close();
+}catch(e){document.getElementById('stav').innerHTML='<b class="error">Náhled se nepodařilo načíst</b><span>'+String(e)+'</span>'}})();
+</script>
+</body>
+</html>
