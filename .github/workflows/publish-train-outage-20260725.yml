@@ -6,10 +6,16 @@ on:
     paths:
       - '.github/train-outage-trigger.txt'
       - '.github/workflows/publish-train-outage-20260725.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/train-outage-pr-trigger.txt'
+      - '.github/workflows/publish-train-outage-20260725.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   group: nasekadan-train-outage-20260725
