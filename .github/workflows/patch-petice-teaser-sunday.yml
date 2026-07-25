@@ -6,10 +6,15 @@ on:
     paths:
       - '.github/workflows/patch-petice-teaser-sunday.yml'
       - '.github/patch-petice-teaser-trigger.txt'
+  pull_request_target:
+    branches: [main]
+    paths:
+      - '.github/patch-petice-teaser-pr-trigger.txt'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   patch:
