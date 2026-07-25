@@ -1,6 +1,18 @@
+FROM python:3.12-alpine AS discovery
+WORKDIR /site
+COPY . .
+
+# Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
+# vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
+# obrázky a metadata jednotlivých článků.
+RUN python scripts/prepare_discovery.py
+
+
 FROM nginx:1.27-alpine
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY . /usr/share/nginx/html
+COPY --from=discovery /site /usr/share/nginx/html
+COPY docker-entrypoint.d/40-indexnow.sh /docker-entrypoint.d/40-indexnow.sh
+RUN chmod +x /docker-entrypoint.d/40-indexnow.sh
 
 
 # Mobilní pravidla přidat přímo do hlavního CSS. Tím nejsou závislá na načtení dalšího souboru.
@@ -15,20 +27,20 @@ RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
   -e 's#reklamy\.js[^\"]*"#reklamy.js?v=20260725-travel-ads-1"#g' \
   -e 's#</body>#<script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script><script src="/reklamy-oprava-obrazku.js?v=20260725-travel-image-fallback-6" defer></script></body>#g' {} +
 
-# Připravit nemocniční článek k prvnímu vydání 24. 7. 2026.
-RUN sed -i \
-  -e 's#ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · AKTUALIZOVÁNO 23. ČERVENCE 2026#ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 24. ČERVENCE 2026#g' \
-  -e 's#<p class="updated">Aktualizováno: 23. 7. 2026</p>#<p class="updated">Publikováno: 24. 7. 2026</p>#g' \
-  -e 's#"datePublished":"2026-07-23"#"datePublished":"2026-07-24"#g' \
-  -e 's#"dateModified":"2026-07-23"#"dateModified":"2026-07-24"#g' \
-  -e 's#Stav informací k 23. červenci 2026.#Stav informací k 24. červenci 2026.#g' \
-  /usr/share/nginx/html/clanky/nemocnice-kadan.html
-
 # Zkopírovat neveřejný redakční návrh KZK do heslem chráněné sekce /nahled/.
 RUN mkdir -p /usr/share/nginx/html/nahled \
  && cp /usr/share/nginx/html/.github/drafts/kulturni-zarizeni-kadan.html \
        /usr/share/nginx/html/nahled/kulturni-zarizeni-kadan-8c7f3e.html
 
-RUN rm -rf /usr/share/nginx/html/.git /usr/share/nginx/html/.github /usr/share/nginx/html/.image-parts /usr/share/nginx/html/nginx /usr/share/nginx/html/scripts /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/docker-compose.yml
+RUN rm -rf /usr/share/nginx/html/.git \
+           /usr/share/nginx/html/.github \
+           /usr/share/nginx/html/.image-parts \
+           /usr/share/nginx/html/docker-entrypoint.d \
+           /usr/share/nginx/html/nginx \
+           /usr/share/nginx/html/scripts \
+           /usr/share/nginx/html/tools \
+           /usr/share/nginx/html/Dockerfile \
+           /usr/share/nginx/html/docker-compose.yml
+
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1/healthz || exit 1
