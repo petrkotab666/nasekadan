@@ -1,15 +1,13 @@
-// Jednotná hlavní navigace pro všechny stránky webu Naše Kadaň.
-// Menu se skládá na jednom místě, aby se mezi stránkami nikdy nerozcházelo.
+// Jednotná hlavní navigace a patička pro všechny stránky webu Naše Kadaň.
+// Skládají se na jednom místě, aby se mezi stránkami nikdy nerozcházely.
 document.addEventListener('DOMContentLoaded',()=>{
   const items=[
     {href:'/',label:'Úvod',section:'home'},
     {href:'/clanky/',label:'Naše články',section:'articles'},
-    {href:'/prehled-zdroju/',label:'Přehled zdrojů',section:'sources'},
     {href:'/#akce',label:'Akce',section:'events'},
     {href:'/pruvodce/',label:'Průvodce',section:'guide'},
     {href:'/prakticke/',label:'Praktická Kadaň',section:'practical'},
-    {href:'/doprava/',label:'Doprava',section:'transport'},
-    {href:'/organizace/',label:'Organizace',section:'organizations'},
+    {href:'/inzerce/',label:'Inzerce',section:'advertising'},
     {href:'/zapojte-se/',label:'Zapojte se',section:'tips'}
   ];
 
@@ -17,11 +15,9 @@ document.addEventListener('DOMContentLoaded',()=>{
   const hash=window.location.hash;
   const activeSection=(()=>{
     if(path.startsWith('/clanky')||path.startsWith('/zpravy'))return 'articles';
-    if(path.startsWith('/prehled-zdroju'))return 'sources';
     if(path.startsWith('/pruvodce'))return 'guide';
     if(path.startsWith('/prakticke'))return 'practical';
-    if(path.startsWith('/doprava'))return 'transport';
-    if(path.startsWith('/organizace'))return 'organizations';
+    if(path.startsWith('/inzerce'))return 'advertising';
     if(path.startsWith('/zapojte-se'))return 'tips';
     if(path==='/'&&hash==='#akce')return 'events';
     if(path==='/')return 'home';
@@ -38,8 +34,8 @@ document.addEventListener('DOMContentLoaded',()=>{
       return `<a href="${item.href}"${current}>${item.label}</a>`;
     }).join('');
 
-    // Starší site.js mohl již tlačítku přidat vlastní posluchač. Klon odstraní
-    // původní posluchače a zabrání dvojímu otevření/zavření mobilního menu.
+    // Starší site.js mohl tlačítku přidat vlastní posluchač. Klon odstraní
+    // původní posluchače a zabrání dvojímu otevření mobilního menu.
     const oldButton=head.querySelector('.menu-toggle');
     let button;
     if(oldButton){
@@ -69,40 +65,43 @@ document.addEventListener('DOMContentLoaded',()=>{
     nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>setMenuState(false)));
   });
 
-  // Důležité provozní odkazy se zobrazují v patičce každé veřejné stránky.
-  document.querySelectorAll('footer').forEach(footer=>{
-    let legal=footer.querySelector('.footer-legal');
-    if(!legal){
-      legal=document.createElement('div');
-      legal.className='footer-legal';
-      footer.appendChild(legal);
-    }
+  // Patička se vždy vytvoří znovu v úplné podobě. Tím se opraví i stránky,
+  // na kterých byla stará nebo neúplná patička.
+  let footer=document.querySelector('footer');
+  if(!footer){
+    footer=document.createElement('footer');
+    document.body.appendChild(footer);
+  }
 
-    const footerLinks=[
-      {
-        href:'/inzerce/',
-        text:'Inzerce',
-        aria:'Ceník a podmínky inzerce na webu Naše Kadaň'
-      },
-      {
-        href:'/o-webu/#provozovatel',
-        text:'Provozovatel',
-        aria:'Identifikační údaje provozovatele webu',
-        subtle:true
-      }
-    ];
-
-    footerLinks.forEach(item=>{
-      if(legal.querySelector(`a[href="${item.href}"]`))return;
-      const link=document.createElement('a');
-      link.href=item.href;
-      link.textContent=item.text;
-      link.setAttribute('aria-label',item.aria);
-      if(item.subtle){
-        link.style.fontSize='12px';
-        link.style.opacity='.68';
-      }
-      legal.appendChild(link);
-    });
-  });
+  footer.innerHTML=`
+    <div class="wrap footer-grid">
+      <div>
+        <a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a>
+        <p>Nezávislé informace, události a příběhy města.</p>
+      </div>
+      <div>
+        <strong>Obsah webu</strong>
+        <a href="/">Úvod</a>
+        <a href="/clanky/">Naše články</a>
+        <a href="/#akce">Akce</a>
+        <a href="/pruvodce/">Průvodce</a>
+        <a href="/prehled-zdroju/">Přehled zdrojů</a>
+      </div>
+      <div>
+        <strong>Praktické a kontakt</strong>
+        <a href="/prakticke/">Praktická Kadaň</a>
+        <a href="/doprava/">Doprava</a>
+        <a href="/organizace/">Organizace</a>
+        <a href="/zapojte-se/">Zapojte se</a>
+        <a href="/inzerce/"><b>Inzerce a ceník</b></a>
+        <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>
+      </div>
+    </div>
+    <div class="footer-legal">
+      <a href="/o-webu/">O webu</a>
+      <a href="/inzerce/">Inzerce</a>
+      <a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a>
+      <a href="/o-webu/#provozovatel" aria-label="Identifikační údaje provozovatele webu" style="font-size:12px;opacity:.68">Provozovatel</a>
+      <a href="mailto:info@nasekadan.cz">Kontakt</a>
+    </div>`;
 });
