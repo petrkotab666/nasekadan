@@ -29,6 +29,7 @@ PUBLIC_SKIP_PARTS = {
     ".image-parts",
     "docker-entrypoint.d",
     "nginx",
+    "nahled",
     "scripts",
     "tools",
 }
@@ -162,7 +163,7 @@ def common_discovery_schema() -> dict[str, Any]:
                 "areaServed": {
                     "@type": "City",
                     "name": "Kadaň",
-                    "sameAs": "https://www.wikidata.org/wiki/Q158252",
+                    "sameAs": "https://www.wikidata.org/wiki/Q158274",
                 },
                 "publishingPrinciples": f"{BASE}/o-webu/",
             },
@@ -343,7 +344,7 @@ def collect_article_schemas() -> list[tuple[Path, dict[str, Any]]]:
 
 def write_news_sitemap() -> None:
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(days=2, hours=6)
+    cutoff = now - timedelta(days=2)
     entries: list[tuple[datetime, str, str]] = []
 
     for path, article in collect_article_schemas():
