@@ -16,12 +16,38 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Načíst konfiguraci Pages, větve a nasazení
+      - name: Ověřit DNS a veřejný obsah přes IPv4 a IPv6
+        shell: bash
+        run: |
+          set +e
+          {
+            echo '### DNS ze systémového resolveru'
+            echo 'A:'; dig +short A nasekadan.cz
+            echo 'AAAA:'; dig +short AAAA nasekadan.cz
+            echo 'CNAME:'; dig +short CNAME nasekadan.cz
+            echo
+            echo '### Curl přes IPv4'
+            curl -4 -sSIL --max-time 20 https://nasekadan.cz/clanky/nemocnice-kadan.html | sed -n '1,25p'
+            body4=$(curl -4 -fsSL --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan.html?diag=$GITHUB_RUN_ID-4" 2>/dev/null)
+            echo "IPv4 teaser: $(printf '%s' "$body4" | grep -Fq 'Nově zveřejněno: petice, 100 milionů a kyberbezpečnost' && echo ANO || echo NE)"
+            echo "IPv4 velikost: ${#body4}"
+            echo
+            echo '### Curl přes IPv6'
+            curl -6 -sSIL --max-time 20 https://nasekadan.cz/clanky/nemocnice-kadan.html | sed -n '1,25p'
+            body6=$(curl -6 -fsSL --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan.html?diag=$GITHUB_RUN_ID-6" 2>/dev/null)
+            echo "IPv6 teaser: $(printf '%s' "$body6" | grep -Fq 'Nově zveřejněno: petice, 100 milionů a kyberbezpečnost' && echo ANO || echo NE)"
+            echo "IPv6 velikost: ${#body6}"
+          } > /tmp/network-report.txt 2>&1
+          cat /tmp/network-report.txt
+
+      - name: Načíst konfiguraci Pages, větve, nasazení a zapsat report
         uses: actions/github-script@v7
         with:
           script: |
+            const fs=require('fs');
             const owner=context.repo.owner, repo=context.repo.repo;
             let body='## Diagnostika skutečného zdroje veřejného webu\n\n';
+            try { body+='```text\n'+fs.readFileSync('/tmp/network-report.txt','utf8')+'\n```\n\n'; } catch {}
             try {
               const {data}=await github.rest.repos.getPages({owner,repo});
               body+='### Pages API\n```json\n'+JSON.stringify(data,null,2)+'\n```\n\n';
@@ -40,10 +66,10 @@ jobs:
             } catch(error) {
               body+=`### Deployments\nChyba: ${error.status||''} ${error.message}\n\n`;
             }
-            try {
-              const dns=await fetch('https://dns.google/resolve?name=nasekadan.cz&type=A').then(r=>r.json());
-              body+='### DNS A\n```json\n'+JSON.stringify(dns.Answer||[],null,2)+'\n```\n\n';
-            } catch(error) {
-              body+=`### DNS\nChyba: ${error.message}\n\n`;
+            for (const type of ['A','AAAA','CNAME']) {
+              try {
+                const dns=await fetch(`https://dns.google/resolve?name=nasekadan.cz&type=${type}`).then(r=>r.json());
+                body+=`### DNS ${type}\n\`\`\`json\n${JSON.stringify(dns.Answer||[],null,2)}\n\`\`\`\n\n`;
+              } catch(error) { body+=`### DNS ${type}\nChyba: ${error.message}\n\n`; }
             }
-            await github.rest.issues.createComment({owner,repo,issue_number:context.issue.number,body});
+            await github.rest.issues.createComment({owner,repo,issue_number:context.issue.number,body:body.slice(0,65000)});
