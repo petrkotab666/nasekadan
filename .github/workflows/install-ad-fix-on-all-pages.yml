@@ -31,11 +31,12 @@ jobs:
           from pathlib import Path
           import re
 
-          core_version = '20260725-ad-core-2'
-          fix_version = '20260725-ad-copy-image-2'
+          core_version = '20260725-ad-core-3'
+          fix_version = '20260725-ad-copy-image-3'
+          prefix = r'(?:\.\./)*/?'
           pattern = re.compile(
-              r'<script\s+src=["\']/reklamy\.js(?:\?[^"\']*)?["\']\s*></script>'
-              r'(?:\s*<script\s+src=["\']/reklamy-oprava-obrazku\.js(?:\?[^"\']*)?["\']\s*></script>)?',
+              rf'<script\s+src=["\']{prefix}reklamy\.js(?:\?[^"\']*)?["\']\s*></script>'
+              rf'(?:\s*<script\s+src=["\']{prefix}reklamy-oprava-obrazku\.js(?:\?[^"\']*)?["\']\s*></script>)?',
               re.I,
           )
           replacement = (
