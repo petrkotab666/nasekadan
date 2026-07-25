@@ -8,6 +8,7 @@
     'atis-cz':'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
     'excursia-cz':'Výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.'
   };
+  const SUMMER_TRAVEL_IDS=new Set(Object.keys(TRAVEL_COPY));
   let summerTravelInserted=false;
 
   function localHash(value){
@@ -39,7 +40,8 @@
       if(typeof tagFromContexts==='function'){
         const originalTagFromContexts=tagFromContexts;
         tagFromContexts=function(contexts,categories){
-          if(Array.isArray(contexts)&&contexts.includes('travel'))return 'Dovolená a cestování';
+          const categoryText=(categories||[]).map(value=>String(value||'').toLocaleLowerCase('cs')).join(' ');
+          if(/dovolen|zájezd|zajezd|last[- ]?minute|pobyt|hotel|wellness|výlet|vylet|exkurz/.test(categoryText))return 'Dovolená a cestování';
           return originalTagFromContexts(contexts,categories);
         };
       }
@@ -76,7 +78,7 @@
           if(!isSummerSeason()||!count||!SUMMER_TRAVEL_CONTEXTS.has(context))return selected;
           if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return selected;
 
-          const alreadyTravel=selected.some(item=>item?.contexts?.includes('travel'));
+          const alreadyTravel=selected.some(item=>SUMMER_TRAVEL_IDS.has(item?.id));
           if(alreadyTravel){
             summerTravelInserted=true;
             return selected;
@@ -87,7 +89,7 @@
           const shouldInsert=context==='travel'||!summerTravelInserted||seed%3===0;
           if(!shouldInsert)return selected;
 
-          const pool=promoItems.filter(item=>item?.contexts?.includes('travel')&&!selected.some(entry=>entry.id===item.id));
+          const pool=promoItems.filter(item=>SUMMER_TRAVEL_IDS.has(item?.id)&&!selected.some(entry=>entry.id===item.id));
           if(!pool.length)return selected;
           const travel=pool[seed%pool.length];
 
