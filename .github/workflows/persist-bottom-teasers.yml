@@ -1,0 +1,90 @@
+name: Uložit upoutávky článků vždy dolů
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/persist-bottom-teasers-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  persist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přesunout upoutávky dolů ve zdroji
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          first = Path('clanky/nemocnice-kadan.html')
+          second = Path('clanky/petice-nemocnice-kadan.html')
+          sitejs = Path('site.js')
+
+          a = first.read_text(encoding='utf-8')
+          a = re.sub(r'\s*<section id="(?:top|bottom)-next-hospital-article".*?</section>\s*', '\n', a, flags=re.S)
+          box_a = '''
+          <section id="bottom-next-hospital-article" style="margin:44px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px rgba(20,35,45,.20)">
+            <p style="margin:0 0 8px;color:#ffd7d7;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">NAVAZUJÍCÍ ČLÁNEK</p>
+            <h2 style="margin:0 0 12px;color:#fff;font:800 32px/1.15 Georgia,serif">Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat</h2>
+            <p style="margin:0 0 16px;color:#e7eef1;font-size:18px">Prověřili jsme původ 77 milionů korun, cenu kybernetických projektů, čekání na refundaci, bankovní financování i tvrzení o záměru nemocnici prodat.</p>
+            <a href="/clanky/petice-nemocnice-kadan.html" style="display:inline-flex;padding:13px 18px;border-radius:10px;background:#fff;color:#8f2027;font-weight:900;text-decoration:none">Přečíst navazující článek →</a>
+          </section>
+          '''
+          p = a.find('<div class="source-list">')
+          if p < 0:
+              raise SystemExit('První článek nemá source-list')
+          a = a[:p] + box_a + a[p:]
+          first.write_text(a, encoding='utf-8', newline='\n')
+
+          b = second.read_text(encoding='utf-8')
+          b = re.sub(r'\s*<section[^>]+id="nedelni-clanek".*?</section>\s*', '\n', b, flags=re.S)
+          box_b = '''
+          <section id="nedelni-clanek" style="margin:44px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px rgba(20,35,45,.20)">
+            <p style="margin:0 0 8px;color:#ffd9d9;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">NEDĚLE V 5:00 · NAVAZUJÍCÍ ANALÝZA</p>
+            <h2 style="margin:0 0 12px;color:#fff;font:800 32px/1.15 Georgia,serif">64,7 milionu za software: Nemocnice Kadaň ukázala jen část skládačky</h2>
+            <p style="margin:0 0 16px;color:#edf3f5;font-size:18px">Rozebíráme, co se skrývá pod účetní položkou software, proč kybernetická bezpečnost nebyla dobrovolný luxus a proč zákonná povinnost sama nevysvětluje rozsah ani cenu investic.</p>
+            <span style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.4);border-radius:999px;color:#fff;font-weight:900">Vyjde v neděli 26. 7. v 5:00</span>
+          </section>
+          '''
+          p = b.find('<div class="source-list">')
+          if p < 0:
+              raise SystemExit('Druhý článek nemá source-list')
+          b = b[:p] + box_b + b[p:]
+          second.write_text(b, encoding='utf-8', newline='\n')
+
+          js = sitejs.read_text(encoding='utf-8')
+          js = js.replace(
+              "      const hero=article.querySelector('.hero-visual');\n      if(hero)hero.after(teaser);else article.prepend(teaser);",
+              "      const sourceBox=article.querySelector('.source-list');\n      if(sourceBox)sourceBox.before(teaser);else article.appendChild(teaser);"
+          )
+          marker = "    }\n    return;\n  }\n\n  if(path!='/clanky/nemocnice-kadan.html')return;"
+          replacement = "    }\n\n    const sourceBox=article.querySelector('.source-list');\n    const previous=article.querySelector('.previous-analysis');\n    const teaser=document.getElementById('nedelni-clanek');\n    if(sourceBox){\n      if(previous)sourceBox.before(previous);\n      if(teaser)sourceBox.before(teaser);\n    }\n    return;\n  }\n\n  if(path!='/clanky/nemocnice-kadan.html')return;"
+          if marker in js:
+              js = js.replace(marker, replacement, 1)
+          sitejs.write_text(js, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Uložit trvalou opravu
+        shell: bash
+        run: |
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html site.js
+          if git diff --cached --quiet; then
+            echo 'Zdroj už je správně.'
+            exit 0
+          fi
+          git commit -m 'Přesunout upoutávky článků trvale dolů'
+          git push origin main
