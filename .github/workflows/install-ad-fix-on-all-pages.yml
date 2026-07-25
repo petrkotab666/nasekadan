@@ -1,0 +1,76 @@
+name: Načíst opravu reklam na všech stránkách
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'reklamy-oprava-obrazku.js'
+      - '.github/workflows/install-ad-fix-on-all-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: install-ad-fix-all-pages
+  cancel-in-progress: true
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout web
+        uses: actions/checkout@v4
+
+      - name: Doplnit verzované reklamní skripty
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          core_version = '20260725-ad-core-2'
+          fix_version = '20260725-ad-copy-image-2'
+          pattern = re.compile(
+              r'<script\s+src=["\']/reklamy\.js(?:\?[^"\']*)?["\']\s*></script>'
+              r'(?:\s*<script\s+src=["\']/reklamy-oprava-obrazku\.js(?:\?[^"\']*)?["\']\s*></script>)?',
+              re.I,
+          )
+          replacement = (
+              f'<script src="/reklamy.js?v={core_version}"></script>\n'
+              f'<script src="/reklamy-oprava-obrazku.js?v={fix_version}"></script>'
+          )
+
+          changed = 0
+          scanned = 0
+          for path in sorted(Path('.').rglob('*.html')):
+              if '.git' in path.parts:
+                  continue
+              scanned += 1
+              text = path.read_text(encoding='utf-8')
+              updated, count = pattern.subn(replacement, text)
+              if count and updated != text:
+                  path.write_text(updated, encoding='utf-8')
+                  changed += 1
+                  print(f'Upraveno: {path}')
+
+          print(f'Zkontrolováno {scanned} HTML souborů, změněno {changed}.')
+          if changed == 0:
+              print('Všechny stránky již používají aktuální reklamní skripty.')
+          PY
+
+      - name: Uložit změny
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add '*.html' '**/*.html' || true
+          if git diff --cached --quiet; then
+            echo "Není co ukládat."
+            exit 0
+          fi
+          git commit -m "Načíst opravu reklam na všech stránkách"
+          git push
