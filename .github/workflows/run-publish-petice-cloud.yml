@@ -1,0 +1,49 @@
+name: Spustit cloudové zveřejnění článku o petici
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/publish-petice-20260725-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Načíst publikační skript z větve požadavku
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${HEAD_SHA}/.github/scripts/publish-petice-cloud.sh" -o /tmp/publish-petice.sh
+          chmod 700 /tmp/publish-petice.sh
+
+      - name: Zveřejnit článek
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: /tmp/publish-petice.sh
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## Zveřejnění článku\n\nVýsledek cloudového publikačního běhu: **${{ job.status }}**.\n\nPo úspěšném zápisu do hlavní větve se produkční nasazení spouští standardním workflow.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
