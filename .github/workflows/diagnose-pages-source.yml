@@ -16,15 +16,34 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Načíst konfiguraci Pages a zapsat ji do PR
+      - name: Načíst konfiguraci Pages, větve a nasazení
         uses: actions/github-script@v7
         with:
           script: |
-            let body = '## Skutečná konfigurace GitHub Pages\n\n';
+            const owner=context.repo.owner, repo=context.repo.repo;
+            let body='## Diagnostika skutečného zdroje veřejného webu\n\n';
             try {
-              const {data} = await github.rest.repos.getPages({owner: context.repo.owner, repo: context.repo.repo});
-              body += '```json\n' + JSON.stringify(data, null, 2) + '\n```';
-            } catch (error) {
-              body += `Chyba: ${error.status || ''} ${error.message}`;
+              const {data}=await github.rest.repos.getPages({owner,repo});
+              body+='### Pages API\n```json\n'+JSON.stringify(data,null,2)+'\n```\n\n';
+            } catch(error) {
+              body+=`### Pages API\nChyba: ${error.status||''} ${error.message}\n\n`;
             }
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            try {
+              const branches=await github.paginate(github.rest.repos.listBranches,{owner,repo,per_page:100});
+              body+='### Větve\n'+branches.map(b=>`- \`${b.name}\` — ${b.commit.sha}`).join('\n')+'\n\n';
+            } catch(error) {
+              body+=`### Větve\nChyba: ${error.status||''} ${error.message}\n\n`;
+            }
+            try {
+              const deployments=await github.paginate(github.rest.repos.listDeployments,{owner,repo,per_page:100});
+              body+='### Poslední deployments\n'+deployments.slice(0,20).map(d=>`- id ${d.id}, env \`${d.environment}\`, ref \`${d.ref}\`, sha ${d.sha}, created ${d.created_at}`).join('\n')+'\n\n';
+            } catch(error) {
+              body+=`### Deployments\nChyba: ${error.status||''} ${error.message}\n\n`;
+            }
+            try {
+              const dns=await fetch('https://dns.google/resolve?name=nasekadan.cz&type=A').then(r=>r.json());
+              body+='### DNS A\n```json\n'+JSON.stringify(dns.Answer||[],null,2)+'\n```\n\n';
+            } catch(error) {
+              body+=`### DNS\nChyba: ${error.message}\n\n`;
+            }
+            await github.rest.issues.createComment({owner,repo,issue_number:context.issue.number,body});
