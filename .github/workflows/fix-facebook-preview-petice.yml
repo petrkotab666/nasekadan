@@ -1,0 +1,99 @@
+name: Opravit Facebook náhled článku o petici
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/fix-facebook-preview-petice-trigger.txt'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit vlastní OG obrázek a metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          from pathlib import Path
+          import os,re
+
+          W,H=1200,630
+          img=Image.new('RGB',(W,H),(20,35,45))
+          d=ImageDraw.Draw(img)
+          for x in range(W):
+              t=x/(W-1)
+              c1=(20,35,45); c2=(159,38,38)
+              c=tuple(int(c1[i]*(1-t)+c2[i]*t) for i in range(3))
+              d.line([(x,0),(x,H)],fill=c)
+          overlay=Image.new('RGBA',(W,H),(0,0,0,0))
+          od=ImageDraw.Draw(overlay)
+          od.rounded_rectangle((55,55,1145,575),radius=32,fill=(255,255,255,22),outline=(255,255,255,110),width=2)
+          img=Image.alpha_composite(img.convert('RGBA'),overlay).convert('RGB')
+          d=ImageDraw.Draw(img)
+          bold='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          reg='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+          fb=ImageFont.truetype(bold,34); fk=ImageFont.truetype(bold,27)
+          ft=ImageFont.truetype(bold,64); fs=ImageFont.truetype(reg,31); ff=ImageFont.truetype(bold,24)
+          d.rounded_rectangle((85,82,315,137),radius=14,fill=(255,255,255))
+          d.text((105,92),'NAŠE KADAŇ',font=fb,fill=(142,30,38))
+          d.text((85,175),'NEMOCNICE KADAŇ · PETICE · KOMUNÁLNÍ POLITIKA',font=fk,fill=(255,220,220))
+          d.text((85,225),'Petice rozjela',font=ft,fill='white')
+          d.text((85,303),'volební spor',font=ft,fill='white')
+          d.text((85,396),'Co víme o 100 milionech, kyberbezpečnosti a údajném plánu',font=fs,fill=(235,242,245))
+          d.text((85,439),'nemocnici prodat',font=fs,fill=(235,242,245))
+          d.line((85,535,1115,535),fill='white',width=2)
+          d.text((85,555),'nasekadan.cz',font=ff,fill='white')
+          d.text((870,555),'25. července 2026',font=ff,fill=(255,220,220))
+          out=Path('og/petice-nemocnice-kadan-20260725.png')
+          out.parent.mkdir(parents=True,exist_ok=True)
+          img.save(out,'PNG',optimize=True)
+
+          path=Path('clanky/petice-nemocnice-kadan.html')
+          html=path.read_text(encoding='utf-8')
+          title='Petice rozjela volební spor: 100 milionů, kyberbezpečnost a údajný prodej nemocnice | Naše Kadaň'
+          ogtitle='Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat'
+          desc='Prověřili jsme propad hotovosti Nemocnice Kadaň, 77 milionů krajských dotací, cenu kyberbezpečnosti, čekání na refundaci a tvrzení o údajném plánu nemocnici prodat.'
+          url='https://nasekadan.cz/clanky/petice-nemocnice-kadan.html'
+          image='https://nasekadan.cz/og/petice-nemocnice-kadan-20260725.png'
+
+          html=re.sub(r'<title>.*?</title>',f'<title>{title}</title>',html,flags=re.S)
+          html=re.sub(r'\s*<meta\s+(?:property|name)="(?:og:[^"]+|twitter:[^"]+|description)"[^>]*>','',html,flags=re.I)
+          html=re.sub(r'\s*<link\s+rel="canonical"[^>]*>','',html,flags=re.I)
+          block=f'''\n  <meta name="description" content="{desc}">\n  <link rel="canonical" href="{url}">\n  <meta property="og:locale" content="cs_CZ">\n  <meta property="og:type" content="article">\n  <meta property="og:site_name" content="Naše Kadaň">\n  <meta property="og:title" content="{ogtitle}">\n  <meta property="og:description" content="{desc}">\n  <meta property="og:url" content="{url}">\n  <meta property="og:image" content="{image}">\n  <meta property="og:image:secure_url" content="{image}">\n  <meta property="og:image:type" content="image/png">\n  <meta property="og:image:width" content="1200">\n  <meta property="og:image:height" content="630">\n  <meta property="og:image:alt" content="Petice rozjela volební spor – Naše Kadaň">\n  <meta property="article:published_time" content="2026-07-25T05:00:00+02:00">\n  <meta property="article:modified_time" content="2026-07-25T07:30:00+02:00">\n  <meta name="twitter:card" content="summary_large_image">\n  <meta name="twitter:title" content="{ogtitle}">\n  <meta name="twitter:description" content="{desc}">\n  <meta name="twitter:image" content="{image}">\n'''
+          html=html.replace('</title>','</title>'+block,1)
+          path.write_text(html,encoding='utf-8',newline='\n')
+
+          assert html.count('property="og:title"')==1
+          assert html.count('property="og:image"')==1
+          assert image in html
+          assert out.stat().st_size>10000
+          PY
+
+      - name: Uložit opravu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/petice-nemocnice-kadan.html og/petice-nemocnice-kadan-20260725.png
+          git commit -m 'Opravit Facebook náhled článku o petici'
+          git push origin main
+
+      - name: Potvrdit výsledek
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:'Facebook metadata byla sjednocena a článek dostal vlastní obrázek 1200×630. Změny byly uloženy do hlavní větve.'});
