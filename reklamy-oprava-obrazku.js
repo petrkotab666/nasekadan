@@ -2,12 +2,13 @@
   'use strict';
 
   const IMAGE_SELECTOR='.promo-card img,.article-rail-card img';
-  const SUMMER_TRAVEL_CONTEXTS=new Set(['general','local','sidebar','family','travel']);
+  const SUMMER_TRAVEL_CONTEXTS=new Set(['general','local','sidebar','family','travel','finance','home','health','internet','auto','energy','pets','sport']);
   const TRAVEL_COPY={
     'invia-cz':'Last minute i běžné zájezdy k moři, do hor i za poznáním na jednom místě.',
     'atis-cz':'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
     'excursia-cz':'Výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.'
   };
+  let summerTravelInserted=false;
 
   function localHash(value){
     return [...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,0);
@@ -52,6 +53,22 @@
         };
       }
 
+      if(typeof loadAffiliateSnapshot==='function'&&typeof mergeSnapshotPartners==='function'){
+        const originalLoadAffiliateSnapshot=loadAffiliateSnapshot;
+        loadAffiliateSnapshot=async function(...args){
+          await originalLoadAffiliateSnapshot.apply(this,args);
+          try{
+            const url=new URL('/assets/affiliate-site-travel-overlay.json',location.origin);
+            url.searchParams.set('v',new Date().toISOString().slice(0,13));
+            const response=await fetch(url,{cache:'no-store',headers:{'Accept':'application/json'}});
+            if(!response.ok)return;
+            mergeSnapshotPartners(await response.json());
+          }catch(error){
+            console.warn('Cestovní affiliate overlay se nepodařilo načíst.',error);
+          }
+        };
+      }
+
       if(typeof pickPromos==='function'){
         const originalPickPromos=pickPromos;
         pickPromos=function(context,count,offset){
@@ -59,10 +76,16 @@
           if(!isSummerSeason()||!count||!SUMMER_TRAVEL_CONTEXTS.has(context))return selected;
           if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return selected;
 
+          const alreadyTravel=selected.some(item=>item?.contexts?.includes('travel'));
+          if(alreadyTravel){
+            summerTravelInserted=true;
+            return selected;
+          }
+
           const day=new Date().toISOString().slice(0,10);
           const seed=localHash(`${location.pathname}|${day}|${context}|${offset}|summer-travel`);
-          if(context!=='travel'&&seed%3!==0)return selected;
-          if(selected.some(item=>item?.contexts?.includes('travel')))return selected;
+          const shouldInsert=context==='travel'||!summerTravelInserted||seed%3===0;
+          if(!shouldInsert)return selected;
 
           const pool=promoItems.filter(item=>item?.contexts?.includes('travel')&&!selected.some(entry=>entry.id===item.id));
           if(!pool.length)return selected;
@@ -70,6 +93,7 @@
 
           if(selected.length<count)selected.push(travel);
           else selected[Math.max(0,selected.length-1)]=travel;
+          summerTravelInserted=true;
           try{
             if(typeof usedPromoIds!=='undefined'&&usedPromoIds?.add)usedPromoIds.add(travel.id);
           }catch{}
