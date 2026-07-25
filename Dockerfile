@@ -7,6 +7,10 @@ COPY . .
 # obrázky a metadata jednotlivých článků.
 RUN python scripts/prepare_discovery.py
 
+# Ověření vlastnictví služby https://nasekadan.cz/ v Google Search Console.
+# Značka musí zůstat v produkčním <head>, jinak se vlastnictví časem ztratí.
+RUN sed -i 's#<head>#<head>\n  <meta name="google-site-verification" content="bFnU5Qjvk0Y52HY6N4d-b9_yy_IZ8DkY5LkoQsLAk8M">#' /site/index.html
+
 
 FROM nginx:1.27-alpine
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
