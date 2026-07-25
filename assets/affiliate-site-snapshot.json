@@ -1,14 +1,21 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "site": "nasekadan.cz",
   "mode": "filtered",
   "centralSource": "https://pojistime.to/assets/affiliate-database.json",
-  "centralUpdatedAt": "2026-07-23",
-  "generatedAt": "2026-07-24T13:50:00+00:00",
-  "partnerCount": 17,
+  "centralTravelSource": "https://pojistime.to/assets/affiliate-database-travel.json",
+  "centralUpdatedAt": "2026-07-25",
+  "generatedAt": "2026-07-25T20:45:00+02:00",
+  "partnerCount": 20,
   "feedCount": 0,
-  "bannerCount": 17,
+  "bannerCount": 18,
   "autoPublish": false,
+  "promotionPolicy": {
+    "travelSeason": "summer-2026",
+    "travelPartners": ["invia-cz", "atis-cz", "excursia-cz"],
+    "plannedPrimaryTravelSite": "https://lastminuteslevy.cz",
+    "replaceExternalTravelPartnersAfterLaunch": true
+  },
   "partners": [
     {
       "id": "csob",
@@ -134,6 +141,31 @@
       "name": "Zonky půjčka",
       "categories": ["finance", "domacnost"],
       "baseClickUrl": "https://www.zonky.cz/pujcka-od-zonky/?a_box=s8m27mmy"
+    },
+    {
+      "id": "invia-cz",
+      "name": "Invia.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/affiliate-database-travel.json",
+      "categories": ["cestovani", "dovolena", "last-minute", "zajezdy", "rodina"],
+      "baseClickUrl": "https://www.invia.cz/dovolena/last-minute/?b_https=1&aid=9256106"
+    },
+    {
+      "id": "atis-cz",
+      "name": "Atis.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/ehub-partner-assets/atis.json",
+      "categories": ["cestovani", "zajezdy", "last-minute", "pobytove-zajezdy", "poznavaci-zajezdy", "wellness"],
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=49886ce2"
+    },
+    {
+      "id": "excursia-cz",
+      "name": "Excursia.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/ehub-partner-assets/excursia.json",
+      "categories": ["cestovani", "vylety", "zazitky", "exkurze", "volny-cas"],
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=76c9b39c",
+      "sampleBanner": "https://doc.ehub.cz/b/2e6a0944/368140a3.jpg"
     }
   ]
 }
