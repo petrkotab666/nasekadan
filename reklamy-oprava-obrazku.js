@@ -2,14 +2,59 @@
   'use strict';
 
   const IMAGE_SELECTOR='.promo-card img,.article-rail-card img';
+  const GENERIC_COPY=/vybran[aá]\s+partnersk[aá]\s+nab[ií]dka|centr[aá]ln[ií]\s+datab[aá]z|propojen[yý]ch\s+web|partnersk[aá]\s+nab[ií]dka/i;
   const SUMMER_TRAVEL_CONTEXTS=new Set(['general','local','sidebar','family','travel','finance','home','health','internet','auto','energy','pets','sport']);
-  const TRAVEL_COPY={
-    'invia-cz':'Last minute i běžné zájezdy k moři, do hor i za poznáním na jednom místě.',
-    'atis-cz':'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
-    'excursia-cz':'Výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.'
+  const TRAVEL_IDS=new Set(['invia','invia-cz','atis','atis-cz','excursia','excursia-cz']);
+  const NO_IMAGE_IDS=new Set(['invia','invia-cz','atis','atis-cz']);
+  const COPY={
+    pojistime:'Srovnání pojištění auta, domácnosti, cestování a dalších rizik na jednom místě.',
+    csob:'Pojištění auta, majetku, odpovědnosti, cestování i podnikatelských rizik.',
+    mutumutu:'Životní pojištění a ochrana příjmu sjednávané online.',
+    petexpert:'Pojištění psů a koček pro nečekané veterinární výdaje.',
+    eon:'Elektřina, plyn a energetická řešení pro domácnosti.',
+    vodafone:'Mobilní tarify, pevný internet a televizní služby pro domácnosti.',
+    poda:'Internetové připojení a televizní služby podle dostupnosti na adrese.',
+    telly:'Internetová televize se sportovními, filmovými a dalšími programy.',
+    nejpripojeni:'Porovnání možností internetu a IPTV podle konkrétní adresy.',
+    uvtnet:'Internetové připojení a související služby podle dostupnosti v lokalitě.',
+    klik:'Online srovnání pojištění auta, majetku a cestování.',
+    kalkulator:'Srovnání pojištění, energií a dalších pravidelných výdajů domácnosti.',
+    rixo:'Online srovnání pojištění vozidel, majetku, cestování a dalších rizik.',
+    vyklidime:'Vyklízení bytů, domů, sklepů a pozůstalostí v Kadani a širokém okolí.',
+    uklizecka:'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',
+    'vase-uklizecka':'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',
+    haffit:'Krmivo pro psy připravené na míru podle potřeb konkrétního psa.',
+    zonky:'Online půjčka s přehledným vyřízením a možností předčasného splacení.',
+    'dobre-knihy':'Knihy, audioknihy a další čtení pro volný čas i celou rodinu.',
+    biano:'Nábytek, dekorace a vybavení domácnosti z nabídky mnoha internetových obchodů.',
+    nanospace:'České produkty pro zdravější domácnost, alergiky a kvalitnější spánek.',
+    concept:'Domácí spotřebiče a praktické vybavení pro každodenní provoz domácnosti.',
+    proalergiky:'Specializované produkty pro alergiky a zdravější prostředí v domácnosti.',
+    invia:'Invia.cz nabízí srovnání last minute i běžných zájezdů k moři, do hor a za poznáním.',
+    'invia-cz':'Invia.cz nabízí srovnání last minute i běžných zájezdů k moři, do hor a za poznáním.',
+    atis:'Atis.cz nabízí pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
+    'atis-cz':'Atis.cz nabízí pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
+    excursia:'Excursia.cz nabízí výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.',
+    'excursia-cz':'Excursia.cz nabízí výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.',
+    brainmarket:'Sportovní výživa, zdravé potraviny, vitaminy a další produkty pro aktivní životní styl.',
+    brainmax:'Vitaminy, minerály, zdravé potraviny a sportovní výživa značky BrainMax.',
+    glami:'Vyhledávání módy, obuvi a doplňků z nabídky internetových obchodů.',
+    aranys:'Šperky, hodinky a módní doplňky pro ženy i muže.',
+    marre:'Aromaterapie, přírodní oleje a vybavení pro domácí wellness.',
+    'diskont-zahradkar':'Zahradnické potřeby, osiva, hnojiva a vybavení pro zahradu.',
+    'ceska-zahrada':'Rostliny, zahradnické potřeby a další vybavení pro pěstování.',
+    barman:'Vybavení pro přípravu nápojů, domácí bar a gastronomii.'
   };
-  const SUMMER_TRAVEL_IDS=new Set(Object.keys(TRAVEL_COPY));
   let summerTravelInserted=false;
+
+  function normalizeToken(value){
+    return String(value||'')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g,'-')
+      .replace(/^-+|-+$/g,'');
+  }
 
   function localHash(value){
     return [...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,0);
@@ -20,133 +65,140 @@
     return month>=5&&month<=9;
   }
 
+  function copyFromTag(title,tag){
+    const value=normalizeToken(tag);
+    if(/dovolen|cestov|zajezd|pobyt|vylet|zazit/.test(value))return `${title} nabízí dovolené, zájezdy, pobyty nebo další služby pro cestování a volný čas.`;
+    if(/internet|televize|mobil/.test(value))return `${title} nabízí internetové, televizní nebo mobilní služby podle aktuálních podmínek.`;
+    if(/pojist|finance|srovnavac/.test(value))return `${title} nabízí finanční nebo pojistné služby s možností ověřit aktuální podmínky online.`;
+    if(/energie/.test(value))return `${title} nabízí energie nebo související služby pro domácnosti.`;
+    if(/zdravi|sport/.test(value))return `${title} nabízí produkty zaměřené na zdraví, péči o tělo nebo aktivní životní styl.`;
+    if(/domacnost|bydleni|spotrebice/.test(value))return `${title} nabízí vybavení, produkty nebo služby pro domácnost a bydlení.`;
+    if(/mazlicci|chovatel/.test(value))return `${title} nabízí produkty nebo služby pro domácí mazlíčky.`;
+    if(/knihy|volny-cas|rodina/.test(value))return `${title} nabízí produkty a služby pro rodinu a volný čas.`;
+    return `Nabídka produktů nebo služeb od ${title}.`;
+  }
+
+  function itemCopy(item){
+    const id=normalizeToken(item?.id||item?.title);
+    return COPY[id]||copyFromTag(String(item?.title||'Inzerent'),String(item?.tag||''));
+  }
+
+  function normalizePromoItems(){
+    if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return;
+    for(const item of promoItems){
+      if(!item||typeof item!=='object')continue;
+      const id=normalizeToken(item.id||item.title);
+      if(!String(item.text||'').trim()||GENERIC_COPY.test(String(item.text)))item.text=itemCopy(item);
+      if(NO_IMAGE_IDS.has(id))item.banner='';
+      if(TRAVEL_IDS.has(id)){
+        item.tag=id.startsWith('excursia')?'Výlety a zážitky':id.startsWith('atis')?'Dovolená a pobyty':'Dovolená a zájezdy';
+        item.contexts=[...new Set([...(item.contexts||[]),'travel','family','general'])];
+      }
+    }
+  }
+
   function patchPromoEngine(){
     try{
-      if(typeof partnerCopy==='object'&&partnerCopy){
-        Object.assign(partnerCopy,TRAVEL_COPY);
-      }
+      if(typeof partnerCopy==='object'&&partnerCopy)Object.assign(partnerCopy,COPY);
 
       if(typeof contextsFromCategories==='function'){
-        const originalContextsFromCategories=contextsFromCategories;
+        const original=contextsFromCategories;
         contextsFromCategories=function(categories){
-          const contexts=new Set(originalContextsFromCategories(categories));
-          const text=(categories||[]).map(value=>String(value||'').toLocaleLowerCase('cs')).join(' ');
-          if(/cestov|dovolen|zájezd|zajezd|last[- ]?minute|pobyt|hotel|wellness|eurovíkend|eurovikend|plavb|výlet|vylet|exkurz/.test(text))contexts.add('travel');
-          if(/rodin/.test(text))contexts.add('family');
+          const contexts=new Set(original(categories));
+          const text=(categories||[]).map(normalizeToken).join(' ');
+          if(/cestov|dovolen|zajezd|last-minute|pobyt|hotel|wellness|eurovikend|plavb|vylet|exkurz|zazitk/.test(text))contexts.add('travel');
+          if(/rodina/.test(text))contexts.add('family');
           return [...contexts];
         };
       }
 
       if(typeof tagFromContexts==='function'){
-        const originalTagFromContexts=tagFromContexts;
+        const original=tagFromContexts;
         tagFromContexts=function(contexts,categories){
-          const categoryText=(categories||[]).map(value=>String(value||'').toLocaleLowerCase('cs')).join(' ');
-          if(/dovolen|zájezd|zajezd|last[- ]?minute|pobyt|hotel|wellness|výlet|vylet|exkurz/.test(categoryText))return 'Dovolená a cestování';
-          return originalTagFromContexts(contexts,categories);
-        };
-      }
-
-      if(typeof inferPromoContext==='function'){
-        const originalInferPromoContext=inferPromoContext;
-        inferPromoContext=function(text){
-          const value=String(text||'').toLocaleLowerCase('cs');
-          if(/dovolen|zájezd|zajezd|last[- ]?minute|hotel|letišt|letist|cestov|moře|more|pláž|plaz|wellness|výlet|vylet/.test(value))return 'travel';
-          return originalInferPromoContext(text);
+          const text=(categories||[]).map(normalizeToken).join(' ');
+          if(/cestov|dovolen|zajezd|last-minute|pobyt|hotel|wellness|vylet|exkurz|zazitk/.test(text))return 'Dovolená a cestování';
+          return original(contexts,categories);
         };
       }
 
       if(typeof loadAffiliateSnapshot==='function'&&typeof mergeSnapshotPartners==='function'){
-        const originalLoadAffiliateSnapshot=loadAffiliateSnapshot;
+        const originalLoad=loadAffiliateSnapshot;
         loadAffiliateSnapshot=async function(...args){
-          await originalLoadAffiliateSnapshot.apply(this,args);
+          await originalLoad.apply(this,args);
+          normalizePromoItems();
           try{
             const url=new URL('/assets/affiliate-site-travel-overlay.json',location.origin);
             url.searchParams.set('v',new Date().toISOString().slice(0,13));
-            const response=await fetch(url,{cache:'no-store',headers:{'Accept':'application/json'}});
-            if(!response.ok)return;
-            mergeSnapshotPartners(await response.json());
+            const response=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'}});
+            if(response.ok)mergeSnapshotPartners(await response.json());
           }catch(error){
-            console.warn('Cestovní affiliate overlay se nepodařilo načíst.',error);
+            console.warn('Cestovní reklamní data se nepodařilo načíst.',error);
           }
+          normalizePromoItems();
         };
       }
 
       if(typeof pickPromos==='function'){
-        const originalPickPromos=pickPromos;
+        const originalPick=pickPromos;
         pickPromos=function(context,count,offset){
-          const selected=originalPickPromos(context,count,offset);
+          normalizePromoItems();
+          const selected=originalPick(context,count,offset);
           if(!isSummerSeason()||!count||!SUMMER_TRAVEL_CONTEXTS.has(context))return selected;
           if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return selected;
-
-          const alreadyTravel=selected.some(item=>SUMMER_TRAVEL_IDS.has(item?.id));
-          if(alreadyTravel){
-            summerTravelInserted=true;
-            return selected;
-          }
-
+          const alreadyTravel=selected.some(item=>TRAVEL_IDS.has(normalizeToken(item?.id||item?.title)));
+          if(alreadyTravel){summerTravelInserted=true;return selected;}
           const day=new Date().toISOString().slice(0,10);
           const seed=localHash(`${location.pathname}|${day}|${context}|${offset}|summer-travel`);
-          const shouldInsert=context==='travel'||!summerTravelInserted||seed%3===0;
-          if(!shouldInsert)return selected;
-
-          const pool=promoItems.filter(item=>SUMMER_TRAVEL_IDS.has(item?.id)&&!selected.some(entry=>entry.id===item.id));
+          if(context!=='travel'&&summerTravelInserted&&seed%3!==0)return selected;
+          const pool=promoItems.filter(item=>TRAVEL_IDS.has(normalizeToken(item?.id||item?.title))&&!selected.some(entry=>entry.id===item.id));
           if(!pool.length)return selected;
           const travel=pool[seed%pool.length];
-
           if(selected.length<count)selected.push(travel);
           else selected[Math.max(0,selected.length-1)]=travel;
           summerTravelInserted=true;
-          try{
-            if(typeof usedPromoIds!=='undefined'&&usedPromoIds?.add)usedPromoIds.add(travel.id);
-          }catch{}
+          try{if(typeof usedPromoIds!=='undefined'&&usedPromoIds?.add)usedPromoIds.add(travel.id);}catch{}
           return selected;
         };
       }
-
-      if(typeof renderPromos==='function'){
-        const originalRenderPromos=renderPromos;
-        renderPromos=function(...args){
-          const result=originalRenderPromos.apply(this,args);
-          queueMicrotask(()=>watch());
-          setTimeout(()=>watch(),250);
-          return result;
-        };
-      }
-
-      if(typeof renderArticleSideRails==='function'){
-        const originalRenderArticleSideRails=renderArticleSideRails;
-        renderArticleSideRails=function(...args){
-          const result=originalRenderArticleSideRails.apply(this,args);
-          queueMicrotask(()=>watch());
-          setTimeout(()=>watch(),250);
-          return result;
-        };
-      }
     }catch(error){
-      console.warn('Doplňková oprava reklam se nepodařila inicializovat.',error);
+      console.warn('Oprava reklam se nepodařila inicializovat.',error);
     }
+  }
+
+  function normalizeCard(card){
+    if(!(card instanceof Element))return;
+    const title=card.querySelector('strong')?.textContent?.trim();
+    if(!title)return;
+    const id=normalizeToken(title);
+    const tag=card.querySelector('small')?.textContent?.trim()||'';
+    const description=card.querySelector('.promo-description,.article-rail-copy strong + span,strong + span');
+    if(description&&(!description.textContent.trim()||GENERIC_COPY.test(description.textContent))){
+      description.textContent=COPY[id]||copyFromTag(title,tag);
+    }
+    if(NO_IMAGE_IDS.has(id))card.querySelector('.promo-banner,.article-rail-visual')?.remove();
+  }
+
+  function normalizeCards(root=document){
+    if(root.matches?.('.promo-card,.article-rail-card-custom'))normalizeCard(root);
+    root.querySelectorAll?.('.promo-card,.article-rail-card-custom').forEach(normalizeCard);
   }
 
   function repairImage(image){
     if(!(image instanceof HTMLImageElement)||image.dataset.promoImageRepaired==='1')return;
     image.dataset.promoImageRepaired='1';
-
+    const card=image.closest('.promo-card');
     const rail=image.closest('.article-rail-card');
     if(rail){
-      rail.classList.add('is-image-error');
-      image.removeAttribute('src');
+      const visual=image.closest('.article-rail-visual');
+      if(visual)visual.remove();
+      else rail.classList.add('is-image-error');
       return;
     }
-
     const banner=image.closest('.promo-banner');
     if(!banner)return;
-
-    const card=image.closest('.promo-card');
     if(card?.classList.contains('promo-card-wide')){
-      const title=card.querySelector('.promo-wide-copy strong, strong')?.textContent?.trim()||image.alt||'Partnerská nabídka';
-      banner.classList.add('promo-banner-fallback');
-      banner.setAttribute('role','img');
-      banner.setAttribute('aria-label',title);
+      const title=card.querySelector('strong')?.textContent?.trim()||image.alt||'Reklama';
+      banner.className='promo-banner promo-banner-fallback';
       banner.textContent=title;
     }else{
       banner.remove();
@@ -155,27 +207,30 @@
 
   function watchImage(image){
     if(!(image instanceof HTMLImageElement))return;
-
+    image.style.visibility='hidden';
     if(image.dataset.promoImageWatched!=='1'){
       image.dataset.promoImageWatched='1';
+      image.addEventListener('load',()=>{if(image.isConnected)image.style.visibility='visible';},{once:true});
       image.addEventListener('error',()=>repairImage(image),{once:true});
-      setTimeout(()=>{
-        if(!image.isConnected||image.dataset.promoImageRepaired==='1')return;
-        if(!image.complete||image.naturalWidth===0)repairImage(image);
-      },5000);
     }
-
-    if(!image.getAttribute('src')||(image.complete&&image.naturalWidth===0))repairImage(image);
+    if(image.complete){
+      if(image.naturalWidth>0)image.style.visibility='visible';
+      else repairImage(image);
+    }
+    setTimeout(()=>{
+      if(image.isConnected&&image.style.visibility==='hidden')repairImage(image);
+    },3000);
   }
 
   function watch(root=document){
+    normalizePromoItems();
+    normalizeCards(root);
     if(root instanceof HTMLImageElement)watchImage(root);
     root.querySelectorAll?.(IMAGE_SELECTOR).forEach(watchImage);
   }
 
   function start(){
     watch();
-
     const observer=new MutationObserver(records=>{
       for(const record of records){
         for(const node of record.addedNodes){
@@ -184,12 +239,10 @@
       }
     });
     observer.observe(document.body,{childList:true,subtree:true});
-
-    [50,250,750,1500,4000,6500].forEach(delay=>setTimeout(()=>watch(),delay));
+    [50,200,600,1500,3500].forEach(delay=>setTimeout(()=>watch(),delay));
   }
 
   patchPromoEngine();
-
   document.addEventListener('error',event=>{
     if(event.target instanceof HTMLImageElement)repairImage(event.target);
   },true);
