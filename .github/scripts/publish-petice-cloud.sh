@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${GH_TOKEN:?Chybí GH_TOKEN}"
+ARTICLE_BLOB='c87beefc5dfde98b557902f272d47b7c879a8d63'
+mkdir -p clanky
+curl -fsSL \
+  -H "Authorization: Bearer $GH_TOKEN" \
+  -H 'Accept: application/vnd.github+json' \
+  -H 'X-GitHub-Api-Version: 2022-11-28' \
+  "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/blobs/${ARTICLE_BLOB}" \
+  | jq -r '.content' | tr -d '\n' | base64 -d > clanky/petice-nemocnice-kadan.html
+
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+article_path = Path('clanky/petice-nemocnice-kadan.html')
+article = article_path.read_text(encoding='utf-8')
+article = article.replace(
+    '<p class="updated">Naplánováno na 25. 7. 2026 v 5:00</p>',
+    '<p class="updated">Publikováno: 25. 7. 2026 v 5:00</p>'
+)
+article_path.write_text(article, encoding='utf-8', newline='\n')
+
+home_path = Path('index.html')
+home = home_path.read_text(encoding='utf-8')
+home = re.sub(
+    r'<div class="ticker">.*?</div>\s*\n',
+    '<div class="ticker">\n  <div class="wrap"><b>NOVÝ ČLÁNEK:</b> Prověřili jsme 100 milionů na účtech nemocnice, cenu kyberbezpečnosti, čekání na dotaci i tvrzení o údajném plánu nemocnici prodat.</div>\n</div>\n',
+    home,
+    count=1,
+    flags=re.S,
+)
+lead = '''<article class="lead">
+      <div class="photo"><span>NEJNOVĚJŠÍ ČLÁNEK</span><strong>PETICE</strong></div>
+      <div class="copy">
+        <small>ZDRAVOTNICTVÍ · KOMUNÁLNÍ POLITIKA · 25. 7. 2026 V 5:00</small>
+        <h1>Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat</h1>
+        <p>Nové dokumenty korigují jednoduché tvrzení o zmizelých úsporách. Stále však chybí veřejný doklad k refundaci 66 milionů i důkaz konkrétního plánu nemocnici prodat.</p>
+        <a class="btn" href="/clanky/petice-nemocnice-kadan.html">Přečíst celý článek →</a>
+      </div>
+    </article>'''
+home, count = re.subn(r'<article class="lead">.*?</article>', lead, home, count=1, flags=re.S)
+if count != 1:
+    raise SystemExit('Nepodařilo se nahradit hlavní článek na úvodní stránce.')
+card = '''      <article class="article-card hospital" data-petice-card>
+        <div class="visual"><strong>Petice a nemocnice</strong></div>
+        <div class="article-body">
+          <span class="meta">25. 7. 2026 · 5:00 · Zdravotnictví a politika</span>
+          <h3>Petice rozjela volební spor: 100 milionů, kyberbezpečnost a údajný prodej</h3>
+          <p>Co potvrzují smlouvy a účetní výkazy, proč je kybernetická ochrana potřebná a která tvrzení účastníků sporu zatím doložena nejsou.</p>
+          <a class="read-more" href="/clanky/petice-nemocnice-kadan.html">Přečíst celý článek →</a>
+        </div>
+      </article>
+
+'''
+if 'data-petice-card' not in home:
+    marker = '    <div class="article-list">\n'
+    if marker not in home:
+        raise SystemExit('Na úvodní stránce chybí seznam článků.')
+    home = home.replace(marker, marker + card, 1)
+home_path.write_text(home, encoding='utf-8', newline='\n')
+
+archive_path = Path('clanky/index.html')
+archive = archive_path.read_text(encoding='utf-8')
+item = '''    <article class="archive-item hospital" data-petice-card>
+      <div class="archive-visual"><strong>Petice a nemocnice</strong></div>
+      <div class="archive-body">
+        <span class="archive-meta">25. července 2026 v 5:00 · Zdravotnictví a komunální politika</span>
+        <h2>Petice rozjela volební spor. Co víme o 100 milionech, kyberbezpečnosti a údajném plánu nemocnici prodat</h2>
+        <p>Ověření nových tvrzení o dotacích, propadu hotovosti, kybernetických projektech, bankovním financování a budoucím vlastnictví nemocnice.</p>
+        <a href="/clanky/petice-nemocnice-kadan.html">Přečíst celý článek →</a>
+      </div>
+    </article>
+
+'''
+if 'data-petice-card' not in archive:
+    marker = '  <section class="archive-list" aria-label="Chronologický přehled článků">\n'
+    if marker not in archive:
+        raise SystemExit('V archivu chybí seznam článků.')
+    archive = archive.replace(marker, marker + item, 1)
+archive_path.write_text(archive, encoding='utf-8', newline='\n')
+
+sitemap_path = Path('sitemap.xml')
+sitemap = sitemap_path.read_text(encoding='utf-8')
+sitemap = re.sub(r'(<loc>https://nasekadan\.cz/</loc><lastmod>)\d{4}-\d{2}-\d{2}', r'\g<1>2026-07-25', sitemap, count=1)
+sitemap = re.sub(r'(<loc>https://nasekadan\.cz/clanky/</loc><lastmod>)\d{4}-\d{2}-\d{2}', r'\g<1>2026-07-25', sitemap, count=1)
+if 'petice-nemocnice-kadan.html' not in sitemap:
+    anchor = re.search(r'\s*<url><loc>https://nasekadan\.cz/clanky/</loc><lastmod>2026-07-25</lastmod></url>\n', sitemap)
+    if not anchor:
+        raise SystemExit('V sitemapě chybí kotva článků.')
+    insertion = '  <url><loc>https://nasekadan.cz/clanky/petice-nemocnice-kadan.html</loc><lastmod>2026-07-25</lastmod></url>\n'
+    sitemap = sitemap[:anchor.end()] + insertion + sitemap[anchor.end():]
+sitemap_path.write_text(sitemap, encoding='utf-8', newline='\n')
+
+previous_path = Path('clanky/nemocnice-kadan.html')
+previous = previous_path.read_text(encoding='utf-8')
+teaser = '''  <div class="callout" id="navazujici-clanek">
+    <strong>Nově zveřejněno: petice, 100 milionů a kyberbezpečnost</strong>
+    <p>Navazující článek prověřuje první sběr podpisů, politické pozadí petice, původ 77 milionů korun, cenu kybernetických projektů, čekání na refundaci i tvrzení o údajném plánu nemocnici prodat.</p>
+    <p><a href="/clanky/petice-nemocnice-kadan.html">Přečíst navazující článek →</a></p>
+  </div>
+
+'''
+if 'id="navazujici-clanek"' not in previous:
+    marker = '  <div class="source-list">\n'
+    if marker not in previous:
+        raise SystemExit('V původním článku chybí sekce zdrojů.')
+    previous = previous.replace(marker, teaser + marker, 1)
+previous_path.write_text(previous, encoding='utf-8', newline='\n')
+PY
+
+grep -Fq 'Petice rozjela volební spor' clanky/petice-nemocnice-kadan.html
+grep -Fq 'data-petice-card' index.html
+grep -Fq 'data-petice-card' clanky/index.html
+grep -Fq 'petice-nemocnice-kadan.html' sitemap.xml
+grep -Fq 'id="navazujici-clanek"' clanky/nemocnice-kadan.html
+
+git config user.name 'Naše Kadaň Publisher'
+git config user.email 'publisher@nasekadan.cz'
+git add clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan.html clanky/index.html index.html sitemap.xml
+git commit -m 'Zveřejnit článek o petici a Nemocnici Kadaň'
+git push origin HEAD:main
