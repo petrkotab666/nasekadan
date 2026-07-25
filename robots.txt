@@ -3,4 +3,13 @@ Allow: /
 Disallow: /api/
 Disallow: /data/
 Disallow: /statistiky/
+
+# Veřejný redakční obsah je dostupný také vyhledávání ChatGPT.
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /data/
+Disallow: /statistiky/
+
 Sitemap: https://nasekadan.cz/sitemap.xml
+Sitemap: https://nasekadan.cz/news-sitemap.xml
