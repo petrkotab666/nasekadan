@@ -24,6 +24,11 @@ RUN sed -i \
   -e 's#Stav informací k 23. červenci 2026.#Stav informací k 24. červenci 2026.#g' \
   /usr/share/nginx/html/clanky/nemocnice-kadan.html
 
+# Zkopírovat neveřejný redakční návrh KZK do heslem chráněné sekce /nahled/.
+RUN mkdir -p /usr/share/nginx/html/nahled \
+ && cp /usr/share/nginx/html/.github/drafts/kulturni-zarizeni-kadan.html \
+       /usr/share/nginx/html/nahled/kulturni-zarizeni-kadan-8c7f3e.html
+
 RUN rm -rf /usr/share/nginx/html/.git /usr/share/nginx/html/.github /usr/share/nginx/html/.image-parts /usr/share/nginx/html/nginx /usr/share/nginx/html/scripts /usr/share/nginx/html/Dockerfile /usr/share/nginx/html/docker-compose.yml
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -qO- http://127.0.0.1/healthz || exit 1
