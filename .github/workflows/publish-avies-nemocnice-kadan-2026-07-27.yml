@@ -1,0 +1,96 @@
+name: Publikovat článek o AVIES a Nemocnici Kadaň
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Publikovat ihned bez kontroly termínu
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-avies-nemocnice-kadan-2026-07-27
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit termín a připravit článek
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          target='2026-07-27T03:00:00Z'
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          force='${{ inputs.force || false }}'
+
+          if [[ -f clanky/avies-nemocnice-kadan.html ]]; then
+            echo 'Článek už je publikovaný.'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$force" != 'true' && "$now" < "$target" ]]; then
+            echo "Na publikaci je ještě brzy: $now"
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          test -s .github/drafts/avies-nemocnice-kadan.html
+          cp .github/drafts/avies-nemocnice-kadan.html clanky/avies-nemocnice-kadan.html
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('clanky/avies-nemocnice-kadan.html')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('noindex,nofollow', 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          text = text.replace('../../', '../')
+          text = text.replace('PŘIPRAVOVANÝ ČLÁNEK', '27. ČERVENCE 2026')
+          text = re.sub(r'<div class="sidebox preview-note">.*?</div>', '', text, count=1, flags=re.S)
+
+          schema = '''<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů","description":"Nemocnice Kadaň zaplatila AVIES v letech 2019 až 2025 téměř 170 milionů korun. Rekonstruujeme historii vztahu a hledáme chybějící dokument pro rok 2024.","datePublished":"2026-07-27T05:00:00+02:00","dateModified":"2026-07-27T05:00:00+02:00","author":{"@type":"Organization","name":"Naše Kadaň"},"publisher":{"@type":"Organization","name":"Naše Kadaň"}}</script>'''
+          if '"datePublished":"2026-07-27T05:00:00+02:00"' not in text:
+              text = text.replace('</head>', schema + '\n</head>', 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          previous = Path('clanky/nemocnice-kadan-software-kyberbezpecnost.html')
+          if previous.exists():
+              old = previous.read_text(encoding='utf-8')
+              scheduled = '<span data-avies-teaser-state="scheduled" style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.4);border-radius:999px;color:#fff;font-weight:900">Vyjde v pondělí 27. 7. v 5:00</span>'
+              published = '<a href="/clanky/avies-nemocnice-kadan.html" data-avies-teaser-state="published" style="display:inline-flex;padding:13px 18px;border-radius:10px;background:#fff;color:#8f2027;font-weight:900;text-decoration:none">Přečíst navazující článek →</a>'
+              if scheduled in old:
+                  previous.write_text(old.replace(scheduled, published, 1), encoding='utf-8', newline='\n')
+          PY
+
+          python3 scripts/finalize_launch.py
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit veřejnou verzi
+        if: steps.prepare.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/avies-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html sitemap.xml robots.txt analytics.js 404.html o-webu navstevnost ochrana-osobnich-udaju style.css
+          git commit -m 'Publikovat: vztah AVIES a Nemocnice Kadaň'
+          git push origin main
+
+      - name: Potvrdit výsledek
+        if: steps.prepare.outputs.changed == 'true'
+        run: echo 'Článek o AVIES byl zveřejněn 27. 7. 2026 od 5:00 SELČ a upoutávka v předchozím článku byla změněna na odkaz.'
