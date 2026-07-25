@@ -68,8 +68,8 @@ document.addEventListener('DOMContentLoaded',()=>{
         <h2>64,7 milionu za software: Nemocnice Kadaň ukázala jen část skládačky</h2>
         <p>Rozebíráme, co se skrývá pod účetní položkou software, proč kybernetická bezpečnost nebyla dobrovolný luxus a proč zákonná povinnost sama nevysvětluje rozsah ani cenu investic.</p>
         <span class="time">Vyjde v neděli 26. 7. v 5:00</span>`;
-      const hero=article.querySelector('.hero-visual');
-      if(hero)hero.after(teaser);else article.prepend(teaser);
+      const sourceBox=article.querySelector('.source-list');
+      if(sourceBox)sourceBox.before(teaser);else article.appendChild(teaser);
     }
 
     if(!article.querySelector('.previous-analysis')){
@@ -81,6 +81,14 @@ document.addEventListener('DOMContentLoaded',()=>{
         <p><a href="/clanky/nemocnice-kadan.html">Nemocnice Kadaň: ztráta 46 milionů, pomoc města a rozkol ODS →</a></p>`;
       const sourceBox=article.querySelector('.source-list');
       if(sourceBox)sourceBox.before(previous);else article.appendChild(previous);
+    }
+
+    const sourceBox=article.querySelector('.source-list');
+    const previous=article.querySelector('.previous-analysis');
+    const teaser=document.getElementById('nedelni-clanek');
+    if(sourceBox){
+      if(previous)sourceBox.before(previous);
+      if(teaser)sourceBox.before(teaser);
     }
     return;
   }
