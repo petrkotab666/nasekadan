@@ -1,0 +1,128 @@
+name: Záložně nasadit chráněný náhled Naše Kadaň
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/generic-deploy-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: nasekadan-generic-preview-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor == 'petrkotab666') }}
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Označit nasazení jako spuštěné
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            -d '{"state":"pending","context":"nasekadan/generic-preview-deploy","description":"Záložní nasazení náhledu probíhá"}' >/dev/null
+
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Sestavit a spustit aktuální web
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v docker-compose >/dev/null 2>&1; then
+            COMPOSE='docker-compose'
+          elif docker compose version >/dev/null 2>&1; then
+            COMPOSE='docker compose'
+          else
+            echo 'Na serveru není dostupný docker-compose ani docker compose.' >&2
+            exit 1
+          fi
+          $COMPOSE build web
+          docker rm -f nasekadan-web 2>/dev/null || true
+          $COMPOSE up -d --no-build --remove-orphans
+
+      - name: Nainstalovat statistiky a přístupové heslo
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo bash .github/scripts/nasekadan-stats/install-stats.sh
+
+      - name: Ochránit adresu náhledů
+        shell: bash
+        run: |
+          set -euo pipefail
+          snippet=/etc/nginx/snippets/nasekadan-statistiky-server.conf
+          [[ -s "$snippet" ]] || { echo 'Chybí snippet statistik.' >&2; exit 1; }
+          if ! sudo grep -Fq 'Naše Kadaň – soukromé náhledy' "$snippet"; then
+            sudo tee -a "$snippet" >/dev/null <<'NGINX'
+
+          # Naše Kadaň – soukromé náhledy článků pod stejným přihlášením jako statistiky.
+          location = /nahled {
+              return 301 /nahled/;
+          }
+
+          location ^~ /nahled/ {
+              auth_basic "Naše Kadaň – soukromý náhled";
+              auth_basic_user_file /etc/nginx/.nasekadan-stats.htpasswd;
+              access_log off;
+              proxy_pass http://127.0.0.1:3224/nahled/;
+              proxy_http_version 1.1;
+              proxy_set_header Host $host;
+              proxy_set_header X-Real-IP $remote_addr;
+              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+              add_header Pragma "no-cache" always;
+              add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+              add_header X-Content-Type-Options "nosniff" always;
+          }
+          NGINX
+          fi
+          sudo nginx -t
+          sudo systemctl reload nginx
+
+      - name: Ověřit KZK náhled místně i přes doménu
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3224/nahled/kulturni-zarizeni-kadan-8c7f3e.html | grep -F 'Co všechno pro Kadaň zajišťuje KZK' >/dev/null
+          code=$(curl --noproxy '*' -k -sS --max-time 10 \
+            --resolve nasekadan.cz:443:127.0.0.1 \
+            -o /dev/null -w '%{http_code}' \
+            https://nasekadan.cz/nahled/kulturni-zarizeni-kadan-8c7f3e.html 2>/dev/null || true)
+          [[ "$code" == "401" ]] || { echo "KZK náhled není chráněný; HTTP $code" >&2; exit 1; }
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == 'success' ]]; then
+            state=success
+            description='KZK náhled je nasazený a chráněný heslem'
+          else
+            state=failure
+            description='Záložní nasazení KZK náhledu selhalo'
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            -d "{\"state\":\"$state\",\"context\":\"nasekadan/generic-preview-deploy\",\"description\":\"$description\"}" >/dev/null
