@@ -1,0 +1,78 @@
+name: Obnovit obrázek interní ambulance bez staré cache
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/generate_internal_ambulance_og_v2.py'
+      - '.github/workflows/refresh-internal-ambulance-og-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: refresh-internal-ambulance-og-v2
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat nový obrázek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check pillow
+          python3 scripts/generate_internal_ambulance_og_v2.py
+          test -s og/interni-ambulance-nemocnice-kadan-20260725-v2.png
+
+      - name: Přepnout článek na novou adresu obrázku
+        shell: bash
+        run: |
+          set -euo pipefail
+          article='clanky/interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html'
+          sed -i 's/interni-ambulance-nemocnice-kadan-20260725-v1\.png/interni-ambulance-nemocnice-kadan-20260725-v2.png/g' "$article"
+          grep -Fq 'interni-ambulance-nemocnice-kadan-20260725-v2.png' "$article"
+          if grep -Fq 'interni-ambulance-nemocnice-kadan-20260725-v1.png' "$article"; then
+            echo 'V článku zůstala stará adresa obrázku.' >&2
+            exit 1
+          fi
+
+      - name: Uložit PNG a aktualizovaný článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add -f og/interni-ambulance-nemocnice-kadan-20260725-v2.png
+          git add clanky/interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html
+          if git diff --cached --quiet; then
+            echo 'Obrázek a metadata jsou již aktuální.'
+          else
+            git commit -m 'Použít nový obrázek k uzavření interní ambulance'
+            git pull --rebase origin main
+            git push origin main
+          fi
+
+      - name: Spustit produkční nasazení
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            -H 'Content-Type: application/json' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/deploy-ovh.yml/dispatches" \
+            -d '{"ref":"main"}'
