@@ -1,0 +1,65 @@
+name: Ověřit živé SEO podklady
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/verify-live-discovery.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Zkontrolovat živý web a zapsat výsledek
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          ok=0
+          detail=""
+
+          for attempt in $(seq 1 30); do
+            key=$(curl -fsSL --max-time 15 https://nasekadan.cz/4779abb8964b2f9f65ae960f08f74e6a.txt 2>/dev/null)
+            llms=$(curl -fsSL --max-time 15 https://nasekadan.cz/llms.txt 2>/dev/null)
+            news=$(curl -fsSL --max-time 15 https://nasekadan.cz/news-sitemap.xml 2>/dev/null)
+            robots=$(curl -fsSL --max-time 15 https://nasekadan.cz/robots.txt 2>/dev/null)
+            home=$(curl -fsSL --max-time 15 https://nasekadan.cz/ 2>/dev/null)
+            article=$(curl -fsSL --max-time 15 https://nasekadan.cz/clanky/petice-nemocnice-kadan.html 2>/dev/null)
+
+            if [ "$key" = "4779abb8964b2f9f65ae960f08f74e6a" ] \
+              && printf '%s' "$llms" | grep -q '^# Naše Kadaň' \
+              && printf '%s' "$news" | grep -q '<news:news>' \
+              && printf '%s' "$robots" | grep -q 'news-sitemap.xml' \
+              && printf '%s' "$home" | grep -q 'data-nasekadan-discovery="1"' \
+              && printf '%s' "$home" | grep -q 'NewsMediaOrganization' \
+              && printf '%s' "$article" | grep -q 'https://nasekadan.cz/#organization'; then
+              ok=1
+              break
+            fi
+
+            sleep 10
+          done
+
+          if [ "$ok" -eq 1 ]; then
+            body='✅ **Živá kontrola SEO/AI nasazení prošla.**
+
+Ověřeno přímo na `nasekadan.cz`:
+- klíč IndexNow je veřejně dostupný,
+- `llms.txt` je dostupný a obsahuje přehled webu,
+- Google News sitemap obsahuje čerstvé články,
+- `robots.txt` na news sitemap odkazuje,
+- produkční HTML obsahuje identitu `NewsMediaOrganization`, RSS autodiscovery a rozšířené vazby vydavatele u článků.'
+          else
+            body='❌ **Živá kontrola SEO/AI nasazení v časovém limitu neprošla.**
+
+Některý z nových souborů nebo metadat zatím nebyl na produkci dostupný. Je potřeba zkontrolovat produkční sestavení a nasazení posledního commitu.'
+          fi
+
+          gh pr comment 35 --repo petrkotab666/nasekadan --body "$body"
+          test "$ok" -eq 1
