@@ -35,6 +35,56 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   const path=window.location.pathname.replace(/\/+$/,'');
+
+  if(path==='/clanky/petice-nemocnice-kadan.html'){
+    const article=document.querySelector('.article');
+    if(!article)return;
+
+    article.querySelectorAll('p').forEach(paragraph=>{
+      const text=(paragraph.textContent||'').trim();
+      if(text.startsWith('Petice tedy konflikt nevytvořila.')&&text.includes('Podrobnou finanční analýzu')){
+        paragraph.textContent='Petice tedy konflikt nevytvořila. Stala se jeho novou a veřejně viditelnou etapou.';
+      }
+    });
+
+    document.querySelectorAll('.source-list a[href="/clanky/nemocnice-kadan.html"]').forEach(link=>link.closest('li')?.remove());
+    document.querySelectorAll('.sidebox').forEach(box=>{
+      if((box.querySelector('h3')?.textContent||'').trim()==='Základní analýza')box.remove();
+    });
+
+    if(!document.getElementById('hospital-series-style')){
+      const style=document.createElement('style');
+      style.id='hospital-series-style';
+      style.textContent='.sunday-teaser{margin:30px 0;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px #14232d26}.sunday-teaser .eyebrow{margin:0 0 8px;color:#ffd9d9;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}.sunday-teaser h2{margin:0 0 12px;color:#fff;font-size:32px}.sunday-teaser p{margin:0 0 13px;color:#edf3f5}.sunday-teaser .time{display:inline-block;padding:10px 14px;border:1px solid #ffffff66;border-radius:999px;color:#fff;font-weight:900}.previous-analysis{margin:44px 0 24px;padding:24px;border:1px solid #c7d8df;border-radius:18px;background:#f4f8fa}.previous-analysis strong{display:block;margin-bottom:8px;font:800 23px Georgia,serif;color:#14232d}';
+      document.head.appendChild(style);
+    }
+
+    if(!document.getElementById('nedelni-clanek')){
+      const teaser=document.createElement('section');
+      teaser.id='nedelni-clanek';
+      teaser.className='sunday-teaser';
+      teaser.innerHTML=`
+        <p class="eyebrow">NEDĚLE V 5:00 · NAVAZUJÍCÍ ANALÝZA</p>
+        <h2>64,7 milionu za software: Nemocnice Kadaň ukázala jen část skládačky</h2>
+        <p>Rozebíráme, co se skrývá pod účetní položkou software, proč kybernetická bezpečnost nebyla dobrovolný luxus a proč zákonná povinnost sama nevysvětluje rozsah ani cenu investic.</p>
+        <span class="time">Vyjde v neděli 26. 7. v 5:00</span>`;
+      const hero=article.querySelector('.hero-visual');
+      if(hero)hero.after(teaser);else article.prepend(teaser);
+    }
+
+    if(!article.querySelector('.previous-analysis')){
+      const previous=document.createElement('div');
+      previous.className='previous-analysis';
+      previous.innerHTML=`
+        <strong>První část série o Nemocnici Kadaň</strong>
+        <p>Podrobný rozbor hospodaření, provozu a politického rozkolu najdete v první analýze.</p>
+        <p><a href="/clanky/nemocnice-kadan.html">Nemocnice Kadaň: ztráta 46 milionů, pomoc města a rozkol ODS →</a></p>`;
+      const sourceBox=article.querySelector('.source-list');
+      if(sourceBox)sourceBox.before(previous);else article.appendChild(previous);
+    }
+    return;
+  }
+
   if(path!='/clanky/nemocnice-kadan.html')return;
 
   const tag=document.querySelector('.article .tag');
