@@ -1,0 +1,49 @@
+name: Zařadit zprávu o interní ambulanci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/publish-internal-ambulance-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-internal-ambulance-20260725
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zařadit zprávu na web
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_internal_ambulance.py
+          python3 scripts/publish_internal_ambulance.py
+          grep -F '/clanky/interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html' index.html >/dev/null
+          grep -F '/clanky/interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html' clanky/index.html >/dev/null
+          grep -F 'interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html' sitemap.xml >/dev/null
+          grep -F 'interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html' rss.xml >/dev/null
+
+      - name: Uložit změny
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Žádné další změny.'
+            exit 0
+          fi
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html sitemap.xml rss.xml
+          git commit -m 'Publikovat praktické omezení interní ambulance'
+          git push origin main
