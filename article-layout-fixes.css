@@ -1,0 +1,23 @@
+/* Opravy kolizí mezi kartami titulní stránky a prvky uvnitř článků. */
+.article-shell .article > section.event{
+  display:block!important;
+  grid-template-columns:none!important;
+  gap:0!important;
+  min-height:0!important;
+  width:100%!important;
+}
+.article-shell .article > section.event > time,
+.article-shell .article > section.event > h3,
+.article-shell .article > section.event > p{
+  grid-column:auto!important;
+  width:auto!important;
+  max-width:none!important;
+}
+.article-shell .article > section.event > h3{
+  display:block!important;
+}
+.article-shell .article > section.event > p{
+  display:block!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+}
