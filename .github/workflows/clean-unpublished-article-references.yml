@@ -1,0 +1,54 @@
+name: Odstranit odkazy na neveřejné články
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/clean-unpublished-article-references.yml'
+      - '.github/clean-unpublished-article-references-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-clean-unpublished-references
+  cancel-in-progress: false
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Odstranit neveřejné články ze všech veřejných přehledů
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/remove_unpublished_articles.py
+          test ! -e clanky/pozemky-koupaliste-kadan.html
+          ! grep -Fq 'pozemky-koupaliste-kadan.html' index.html
+          ! grep -Fq 'pozemky-koupaliste-kadan.html' clanky/index.html
+          ! grep -Fq 'pozemky-koupaliste-kadan.html' sitemap.xml
+          ! grep -Fq 'pozemky-koupaliste-kadan.html' rss.xml
+          python3 scripts/validate_publication_integrity.py
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – ochrana publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html sitemap.xml rss.xml
+          if git diff --cached --quiet; then
+            echo 'Veřejné přehledy už neobsahují neveřejné články.'
+            exit 0
+          fi
+          git commit -m 'Odstranit neplatný odkaz na neveřejný článek'
+          git pull --rebase origin main
+          git push origin main
