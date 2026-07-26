@@ -2,6 +2,11 @@ FROM python:3.12-alpine AS discovery
 WORKDIR /site
 COPY . .
 
+# Každý článek musí před sestavením projít jedinou společnou konstrukcí.
+# Normalizátor sjednotí article-shell, přímý pravý panel, reklamní slot i skripty
+# a následná kontrola zastaví build, pokud by některý článek pravidlo porušil.
+RUN python scripts/normalize_articles.py --write --check
+
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
 # obrázky a metadata jednotlivých článků.
@@ -23,18 +28,14 @@ RUN chmod +x /docker-entrypoint.d/40-indexnow.sh
 RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n' >> /usr/share/nginx/html/style.css \
  && cat /usr/share/nginx/html/mobile.css >> /usr/share/nginx/html/style.css
 
-# Na všech stránkách načíst původní plný reklamní systém: bannery v článku,
-# reklamy v bočním panelu a bezpečnou opravu nedostupných obrázků a popisů.
-# Neutrálně pojmenovaný skript obsah-doplnky.js slouží pouze jako záloha,
-# pokud prohlížeč nebo rozšíření zablokuje původní reklamní soubory.
+# Reklamní balík už vložil jediný normalizátor článků. Zde se upravují pouze
+# obecné soubory webu a jednou se doplní navigace a upoutávky.
 RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
   -e 's#style.css"#style.css?v=20260724-mobile-2"#g' \
   -e 's#site.js"#site.js?v=20260724-nemocnice-7"#g' \
-  -e 's#reklamy\.js[^\"]*"#reklamy.js?v=20260726-ad-restore-7"#g' \
-  -e 's#reklamy-oprava-obrazku\.js[^\"]*"#reklamy-oprava-obrazku.js?v=20260726-ad-restore-7"#g' \
-  -e 's#<script src="[^"]*reklamy-popisy\.js[^"]*"></script>##g' \
-  -e 's#<script src="[^"]*obsah-doplnky\.js[^"]*"></script>##g' \
-  -e 's#</body>#<script src="/obsah-doplnky.js?v=20260726-partner-fallback-1"></script><script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
+  -e 's#<script src="[^"]*navigation\.js[^"]*"[^>]*></script>##g' \
+  -e 's#<script src="[^"]*upoutavky\.js[^"]*"[^>]*></script>##g' \
+  -e 's#</body>#<script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
 
 # Zkopírovat neveřejný redakční návrh KZK do heslem chráněné sekce /nahled/.
 RUN mkdir -p /usr/share/nginx/html/nahled \
