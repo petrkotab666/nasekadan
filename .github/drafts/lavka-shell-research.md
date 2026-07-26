@@ -8,6 +8,25 @@ Lávka není samostatným přemostěním za přesně 26 milionů korun, ale prvn
 
 Po osazení konstrukce pokračovala smluvní a majetkoprávní stopa: rada 11. června 2026 schválila dodatek č. 2 ke stavební smlouvě, registr 19. června zveřejnil smlouvu o vypořádání závazků a položku 51 908 Kč bez DPH a rada 25. června schválila dodatek k nájmu pozemků pro dobu stavby přístupové cesty a pilíře. Dne 21. července byly zveřejněny další smlouvy na technický dozor a BOZP. Přesný konečný účet, obsah dodatků, důvod vypořádání, datum převzetí, povolení k užívání a soupis vad zatím veřejně doloženy nejsou.
 
+## Předvolební souvislost
+
+Uskupení **Dáme Kadani novou šanci** zveřejnilo 24. července 2026 příspěvek, který staví lávku u Shellu do přímého kontrastu s nedokončeným Slovanem a používá slogan: **„Pojďme nejdříve vyřešit jámy a poté stavět mosty.“** Lávku zároveň ve svých programových prioritách používá jako příklad projektu, který politicky hodnotí jako nepraktický a neefektivní.
+
+Tento materiál nepřináší nový technický posudek, konečné vyúčtování, změnový list ani dosud neznámou smlouvu. Jde o předvolební hodnocení, nikoli o samostatný důkaz finanční škody, porušení zákona nebo zbytečnosti stavby. Přesto je pro článek relevantní, protože dokládá, že se lávka spolu se Slovanem stává jedním ze symbolů komunální kampaně a debaty o investičních prioritách města.
+
+Redakční pravidlo pro finální text:
+
+- politickou souvislost zařadit až po faktickém rozboru ceny, smluv, účelu a harmonogramu;
+- přesně uvést, že jde o tvrzení kandidujícího uskupení;
+- nepřebírat označení „neefektivní“ nebo „zbytečná“ jako redakční závěr;
+- vysvětlit, že peníze mezi různými projekty nelze vždy jednoduše přesouvat a lávka není účetní ani funkční náhradou za bytový dům;
+- současně nebagatelizovat oprávněnou otázku, podle jakých kritérií město projekty řadí a jak měří jejich očekávaný přínos;
+- sledovat, zda se k lávce a Slovanu vyjádří také další kadaňská uskupení nebo současné vedení města.
+
+Doporučená formulace do článku:
+
+> Lávka u čerpací stanice už není pouze dopravní stavbou a předmětem otázek kolem smluv, nákladů a následného vypořádání závazků. V předvolební komunikaci uskupení Dáme Kadani novou šanci se objevuje také jako symbol údajně špatně nastavených investičních priorit. Jde o politické hodnocení, nikoli o doložený závěr účetní nebo technické kontroly. Uskupení zatím nepředložilo vlastní úplný ekonomický rozbor stavby. Její přímé spojení s nedokončeným Slovanem ale potvrzuje, že obě investice budou patřit mezi témata komunální kampaně.
+
 ## Pevně doložené částky
 
 | Položka | Částka bez DPH | Poznámka |
@@ -199,6 +218,7 @@ Tyto body dokazují neúplnou nebo nepřehlednou veřejnou stopu. Samy o sobě n
 - Český rozhlas Sever – účel, financování a očekávaný termín otevření.
 - Chomutovský deník – osazení konstrukce a technické parametry.
 - Oficiální informace Ústeckého kraje o přírodní památce Svatý kopeček.
+- Veřejný příspěvek uskupení Dáme Kadani novou šanci na Facebooku, zachycený redakcí 24. 7. 2026.
 - Vlastní fotografie Naše Kadaň z 24. 7. 2026.
 
 ## Předběžné titulky
@@ -212,3 +232,5 @@ Alternativa:
 Alternativa:
 
 **Lávka měla otevřít v červnu. Ještě v červenci přibývaly smlouvy a dohled nad stavbou**
+
+Předvolební souvislost zatím nepoužívat jako hlavní titulek. Hodnotu článku mají nést především doložené smlouvy, částky a nevysvětlené dokumenty; politickou rovinu uvést jako samostatný kontext.
