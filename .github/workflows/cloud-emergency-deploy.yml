@@ -1,0 +1,107 @@
+name: Cloudové nouzové nasazení Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cloud-emergency-deploy.yml'
+      - '.github/cloud-emergency-deploy-trigger.txt'
+      - 'reklamy.js'
+      - 'reklamy-oprava-obrazku.js'
+      - 'reklamy-popisy.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  statuses: write
+
+concurrency:
+  group: nasekadan-cloud-emergency
+  cancel-in-progress: true
+
+env:
+  CUSTOM_DOMAIN: nasekadan.cz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Označit cloudové nasazení jako spuštěné
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -d '{"state":"pending","context":"nasekadan/cloud-emergency","description":"Cloudové nouzové nasazení probíhá"}' >/dev/null
+
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Připravit veřejný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          rsync -a ./ _site/ \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '_site/' \
+            --exclude 'scripts/' \
+            --exclude 'nginx/' \
+            --exclude 'docker-entrypoint.d/' \
+            --exclude 'Dockerfile' \
+            --exclude 'docker-compose.yml' \
+            --exclude 'deploy/'
+          printf '%s\n' "$CUSTOM_DOMAIN" > _site/CNAME
+          touch _site/.nojekyll
+          test -s _site/index.html
+          test -s _site/reklamy.js
+          grep -Fq 'Excursia.cz' _site/reklamy.js
+          grep -Fq 'Poznávací zájezdy, výlety, exkurze' _site/reklamy.js
+
+      - name: Zapnout a nastavit GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Nahrát web
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Zveřejnit web
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Označit cloudové nasazení jako dokončené
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == success ]]; then
+            state=success
+            description='Cloudové nouzové nasazení dokončeno'
+          else
+            state=failure
+            description='Cloudové nouzové nasazení selhalo'
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -d "{\"state\":\"$state\",\"context\":\"nasekadan/cloud-emergency\",\"description\":\"$description\"}" >/dev/null
