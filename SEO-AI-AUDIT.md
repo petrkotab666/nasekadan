@@ -2,7 +2,7 @@
 
 - Zkontrolované HTML stránky: **39**
 - Indexovatelné stránky: **38**
-- Chyby: **2**
+- Chyby: **0**
 - Varování: **17**
 - Informace: **0**
 
@@ -10,10 +10,7 @@ Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, intern�
 
 ## Kritické chyby
 
-### `sitemap.xml`
-
-- **sitemap-missing-url:** V sitemapě chybí https://nasekadan.cz/clanky/pozemky-koupaliste-kadan.html.
-- **sitemap-missing-url:** V sitemapě chybí https://nasekadan.cz/prehled-zdroju/.
+Bez nálezů.
 
 ## Varování
 
