@@ -12,12 +12,17 @@ on:
       - 'scripts/validate_publication_integrity.py'
       - '.github/publication-integrity-trigger.txt'
       - '.github/workflows/protect-published-articles.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/run-publication-integrity-pr.txt'
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: nasekadan-publication-integrity
