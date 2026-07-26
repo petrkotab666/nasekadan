@@ -2,6 +2,9 @@ FROM python:3.12-alpine AS discovery
 WORKDIR /site
 COPY . .
 
+# Texty bez výslovného souhlasu editora nesmějí vstoupit do veřejného sestavení.
+RUN python scripts/remove_unpublished_articles.py
+
 # Pillow je potřeba pro jedinečné 1200×630 sociální obrázky jednotlivých článků.
 # Instalace přes pip zaručí, že se knihovna nahraje do stejného Pythonu 3.12,
 # ve kterém následně běží generátor obrázků.
