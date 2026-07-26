@@ -52,10 +52,7 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – ochrana článků'
           git config user.email 'info@nasekadan.cz'
-          git add index.html clanky/index.html sitemap.xml rss.xml \
-            .github/workflows/deploy-ovh.yml \
-            .github/workflows/emergency-deploy-ovh.yml \
-            .github/workflows/deploy-nasekadan-pages-emergency.yml
+          git add index.html clanky/index.html sitemap.xml rss.xml
 
           if git diff --cached --quiet; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
@@ -63,7 +60,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m 'Obnovit a ochránit trvalou dostupnost publikovaných článků'
+          git commit -m 'Obnovit trvalou dostupnost publikovaných článků'
           git pull --rebase origin main
           git push origin main
           echo 'changed=true' >> "$GITHUB_OUTPUT"
