@@ -60,12 +60,19 @@ jobs:
           cat /tmp/changed-html.txt || true
 
       - name: Zastavit chybnou novou nebo změněnou stránku
+        shell: bash
         run: |
+          set -euo pipefail
+          if [[ ! -s /tmp/changed-html.txt ]]; then
+            echo 'V této změně není žádná HTML stránka k přísné kontrole.'
+            exit 0
+          fi
           python3 scripts/seo_ai_audit.py \
             --strict \
             --paths-file /tmp/changed-html.txt
 
       - name: Uložit audit jako artefakt
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: seo-ai-audit
@@ -74,10 +81,12 @@ jobs:
             seo-ai-audit.json
 
       - name: Uložit první úplný audit do auditní větve
-        if: github.event_name == 'push' && github.ref == 'refs/heads/seo-ai-audit-20260726'
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/seo-ai-audit-20260726'
         shell: bash
         run: |
           set -euo pipefail
+          test -s SEO-AI-AUDIT.md
+          test -s seo-ai-audit.json
           git config user.name 'Naše Kadaň SEO audit'
           git config user.email 'info@nasekadan.cz'
           git add SEO-AI-AUDIT.md seo-ai-audit.json
