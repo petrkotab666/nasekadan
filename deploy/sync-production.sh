@@ -85,11 +85,12 @@ verify_endpoint() {
 # Caddy document root. Nginx proxy i Caddy tak vždy podávají stejnou verzi.
 STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
 PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
-sudo rm -rf "$STAGE" "$PREVIOUS"
+BUILT="/tmp/nasekadan-built-$SHORT_SHA"
+sudo rm -rf "$STAGE" "$PREVIOUS" "$BUILT"
 sudo mkdir -p "$STAGE"
-docker cp nasekadan-web:/usr/share/nginx/html/. /tmp/nasekadan-built-$SHORT_SHA
-sudo cp -a /tmp/nasekadan-built-$SHORT_SHA/. "$STAGE"/
-rm -rf /tmp/nasekadan-built-$SHORT_SHA
+docker cp nasekadan-web:/usr/share/nginx/html/. "$BUILT"
+sudo cp -a "$BUILT"/. "$STAGE"/
+sudo rm -rf "$BUILT"
 printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=canonical-ovh\n' \
   "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
 sudo chmod -R a+rX "$STAGE"
