@@ -139,4 +139,12 @@ verify_public '/sitemap.xml' "$TRAIN"
 verify_public '/rss.xml' "$TRAIN"
 verify_public '/deployment-health.txt' "source=$SOURCE_SHA"
 
+# Po úspěšném ověření obnovit i lokální desetiminutovou pojistku. Ta zajistí,
+# že se server sám srovná na aktuální main i při dočasně nedostupném runneru.
+if [[ -d /opt/nasekadan/.git ]]; then
+  sudo bash deploy/install-automation.sh
+else
+  echo 'Upozornění: /opt/nasekadan není git checkout; lokální timer nebyl přeinstalován.' >&2
+fi
+
 echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA a všechny článkové přehledy jsou kompletní."
