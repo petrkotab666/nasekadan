@@ -36,6 +36,18 @@ SMTP_TLS=ssl
 EOF
  sudo chmod 600 "$ENV_FILE"
 fi
+sudo tee /etc/caddy/sites-enabled/nasekadan.caddy >/dev/null <<'EOF'
+nasekadan.cz, www.nasekadan.cz {
+    handle_path /api/newsletter/* {
+        reverse_proxy 127.0.0.1:8765
+    }
+    handle {
+        root * /var/www/nasekadan
+        file_server
+        encode gzip zstd
+    }
+}
+EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now nasekadan-newsletter.service
 sudo caddy validate --config /etc/caddy/Caddyfile
