@@ -15,7 +15,7 @@ permissions:
 # stejnou kontrolu a stejný zámek jako každé ostatní produkční nasazení.
 concurrency:
   group: nasekadan-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
