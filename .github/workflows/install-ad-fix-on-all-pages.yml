@@ -1,4 +1,4 @@
-name: Načíst obnovený reklamní systém na všech stránkách
+name: Načíst reklamní systém na všech stránkách
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'reklamy.js'
       - 'reklamy-oprava-obrazku.js'
+      - 'obsah-doplnky.js'
       - '.github/workflows/install-ad-fix-on-all-pages.yml'
   workflow_dispatch:
 
@@ -23,8 +24,11 @@ jobs:
     steps:
       - name: Stáhnout web
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
 
-      - name: Doplnit původní plné reklamní skripty
+      - name: Doplnit reklamní skripty i na stránky, kde chybějí
         shell: bash
         run: |
           set -euo pipefail
@@ -32,36 +36,40 @@ jobs:
           from pathlib import Path
           import re
 
-          core_version = '20260726-ad-restore-7'
-          fix_version = '20260726-ad-restore-7'
-          prefix = r'(?:\.\./)*/?'
-          pattern = re.compile(
-              rf'<script\s+src=["\']{prefix}reklamy\.js(?:\?[^"\']*)?["\']\s*></script>'
-              rf'(?:\s*<script\s+src=["\']{prefix}reklamy-oprava-obrazku\.js(?:\?[^"\']*)?["\']\s*></script>)?'
-              rf'(?:\s*<script\s+src=["\']{prefix}reklamy-popisy\.js(?:\?[^"\']*)?["\']\s*></script>)?',
-              re.I,
+          block = (
+              '<script src="/reklamy.js?v=20260726-ad-restore-8"></script>\n'
+              '<script src="/reklamy-oprava-obrazku.js?v=20260726-ad-restore-8"></script>\n'
+              '<script src="/obsah-doplnky.js?v=20260726-partner-fallback-2"></script>'
           )
-          replacement = (
-              f'<script src="/reklamy.js?v={core_version}"></script>\n'
-              f'<script src="/reklamy-oprava-obrazku.js?v={fix_version}"></script>'
+
+          script_pattern = re.compile(
+              r'\s*<script\s+src=["\'][^"\']*(?:reklamy\.js|reklamy-oprava-obrazku\.js|reklamy-popisy\.js|obsah-doplnky\.js)(?:\?[^"\']*)?["\']\s*(?:defer)?\s*></script>',
+              re.I,
           )
 
           changed = 0
           scanned = 0
           for path in sorted(Path('.').rglob('*.html')):
-              if '.git' in path.parts:
+              if any(part in {'.git', '.github', '_site'} for part in path.parts):
                   continue
               scanned += 1
               text = path.read_text(encoding='utf-8')
-              updated, count = pattern.subn(replacement, text)
-              if count and updated != text:
+              updated = script_pattern.sub('', text)
+
+              if '</body>' not in updated.lower():
+                  continue
+              match = list(re.finditer(r'</body>', updated, re.I))
+              if not match:
+                  continue
+              pos = match[-1].start()
+              updated = updated[:pos].rstrip() + '\n' + block + '\n' + updated[pos:]
+
+              if updated != text:
                   path.write_text(updated, encoding='utf-8')
                   changed += 1
                   print(f'Upraveno: {path}')
 
           print(f'Zkontrolováno {scanned} HTML souborů, změněno {changed}.')
-          if changed == 0:
-              print('Všechny stránky již používají obnovený reklamní systém.')
           PY
 
       - name: Uložit změny
@@ -70,11 +78,11 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add '*.html' '**/*.html' || true
+          git add -- '*.html' '**/*.html' || true
           if git diff --cached --quiet; then
             echo "Není co ukládat."
             exit 0
           fi
-          git commit -m "Načíst obnovené bannery na všech stránkách"
+          git commit -m "Doplnit reklamní systém na všechny stránky"
           git pull --rebase origin main
-          git push
+          git push origin main
