@@ -19,6 +19,7 @@ echo "Nasazuji main @ $SOURCE_SHA"
 
 python3 scripts/ensure_publication_integrity.py
 python3 scripts/ensure_newest_article_indexes.py
+python3 scripts/ensure_petition_document_details.py
 python3 scripts/normalize_footers.py --write --check
 python3 scripts/validate_publication_integrity.py
 
@@ -49,7 +50,9 @@ curl -fsS http://127.0.0.1:3224/healthz >/dev/null
 TRAIN='nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html'
 WEEKLY='kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
 EPETICE='epetice-nemocnice-kadan.html'
+PETICE='petice-nemocnice-kadan.html'
 POOL='pozemky-koupaliste-kadan.html'
+PETITION_DETAILS='Petice obsahuje osm požadavků. Rozpracovaná ePetice narazila na limit'
 
 verify_endpoint() {
   local base="$1"
@@ -71,6 +74,11 @@ verify_endpoint() {
 
   curl -kfsS --max-time 25 "${base}/clanky/${TRAIN}?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov' "$tmp"
+
+  curl -kfsS --max-time 25 "${base}/clanky/${PETICE}?deploy=${SOURCE_SHA}" -o "$tmp"
+  grep -Fq "$PETITION_DETAILS" "$tmp"
+  grep -Fq 'Přijetí personálních změn' "$tmp"
+  grep -Fq 'Osobní údaje na web nevkládáme' "$tmp"
 
   curl -kfsS --max-time 25 "${base}/sitemap.xml?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
@@ -148,6 +156,9 @@ verify_public '/clanky/' "$TRAIN"
 verify_public '/clanky/' "$EPETICE"
 verify_public '/clanky/' "$POOL"
 verify_public "/clanky/$TRAIN" 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov'
+verify_public "/clanky/$PETICE" "$PETITION_DETAILS"
+verify_public "/clanky/$PETICE" 'Přijetí personálních změn'
+verify_public "/clanky/$PETICE" 'Osobní údaje na web nevkládáme'
 verify_public '/sitemap.xml' "$TRAIN"
 verify_public '/sitemap.xml' "$EPETICE"
 verify_public '/sitemap.xml' "$POOL"
@@ -164,4 +175,4 @@ else
   echo 'Upozornění: /opt/nasekadan není git checkout; lokální timer nebyl přeinstalován.' >&2
 fi
 
-echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA a všechny článkové přehledy jsou kompletní."
+echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA, hlavní článek obsahuje osm požadavků a všechny přehledy jsou kompletní."
