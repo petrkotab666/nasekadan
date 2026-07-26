@@ -1,7 +1,7 @@
 # SEO a AI audit – Naše Kadaň
 
-- Zkontrolované HTML stránky: **39**
-- Indexovatelné stránky: **38**
+- Zkontrolované HTML stránky: **40**
+- Indexovatelné stránky: **39**
 - Chyby: **0**
 - Varování: **0**
 - Informace: **0**
