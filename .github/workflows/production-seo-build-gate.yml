@@ -1,5 +1,5 @@
 name: Produkční SEO a AI build gate
-# Ověřuje aktuální hlavní větev včetně nejnovějšího článku o ePetici.
+# Opakovaně ověřuje aktuální main po opravě titulku ePetice a sitemap.xml.
 
 on:
   pull_request:
@@ -60,6 +60,7 @@ jobs:
           grep -Fq 'google-site-verification' <<<"$home"
           grep -Fq '<title>Nemocnice Kadaň: ztráta 46 milionů a pomoc města | Naše Kadaň</title>' <<<"$article"
           grep -Fq 'property="article:published_time"' <<<"$article"
+          grep -Fq '<title>ePetice za Nemocnici Kadaň: pravidla obou verzí | Naše Kadaň</title>' <<<"$epetice"
           grep -Fq 'Papírová a elektronická verze ale musí být stejná' <<<"$epetice"
           grep -Fq 'application/ld+json' <<<"$epetice"
           grep -Fq 'property="article:published_time"' <<<"$epetice"
