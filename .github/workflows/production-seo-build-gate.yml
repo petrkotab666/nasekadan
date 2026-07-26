@@ -1,5 +1,5 @@
 name: Produkční SEO a AI build gate
-# Ověřuje aktuální hlavní větev včetně instalace Pillow do Pythonu 3.12.
+# Ověřuje aktuální hlavní větev včetně nejnovějšího článku o ePetici.
 
 on:
   pull_request:
@@ -53,13 +53,18 @@ jobs:
           done
           home=$(curl -fsS http://127.0.0.1:38080/)
           article=$(curl -fsS http://127.0.0.1:38080/clanky/nemocnice-kadan.html)
+          epetice=$(curl -fsS http://127.0.0.1:38080/clanky/epetice-nemocnice-kadan.html)
           robots=$(curl -fsS http://127.0.0.1:38080/robots.txt)
           sitemap=$(curl -fsS http://127.0.0.1:38080/sitemap.xml)
           audit=$(curl -fsS http://127.0.0.1:38080/SEO-AI-AUDIT.md)
           grep -Fq 'google-site-verification' <<<"$home"
           grep -Fq '<title>Nemocnice Kadaň: ztráta 46 milionů a pomoc města | Naše Kadaň</title>' <<<"$article"
           grep -Fq 'property="article:published_time"' <<<"$article"
+          grep -Fq 'Papírová a elektronická verze ale musí být stejná' <<<"$epetice"
+          grep -Fq 'application/ld+json' <<<"$epetice"
+          grep -Fq 'property="article:published_time"' <<<"$epetice"
           grep -Fq 'User-agent: OAI-SearchBot' <<<"$robots"
           grep -Fq 'clanky/pozemky-koupaliste-kadan.html' <<<"$sitemap"
+          grep -Fq 'clanky/epetice-nemocnice-kadan.html' <<<"$sitemap"
           grep -Fq 'Chyby: **0**' <<<"$audit"
           grep -Fq 'Varování: **0**' <<<"$audit"
