@@ -23,7 +23,34 @@ def run(*parts: str) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
+def repair_newsletter_smtp() -> None:
+    """Na produkčním VPS srovná SMTP a restartuje newsletterovou službu.
+
+    Lokální počítače a GitHub-hostované kontroly tento krok bezpečně přeskočí.
+    Heslo se nikdy nečte do Pythonu ani nevypisuje; opravný shellový skript je
+    pouze zachová v chráněném serverovém souboru.
+    """
+
+    repair_script = ROOT / "deploy" / "repair-newsletter-smtp.sh"
+    env_file = Path("/etc/nasekadan-newsletter.env")
+    if ROOT != Path("/opt/nasekadan") or not env_file.exists() or not repair_script.exists():
+        print("Newsletter SMTP: nejde o produkční VPS, oprava se přeskakuje.")
+        return
+
+    command = ["sudo", "-n", "bash", str(repair_script)]
+    print("Spouštím bezpečnou opravu SMTP newsletteru na produkčním VPS.")
+    try:
+        subprocess.run(command, cwd=ROOT, check=True, timeout=60)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        # Dočasná chyba newsletteru nesmí zablokovat zveřejnění již hotového webu.
+        print(f"Upozornění: oprava SMTP newsletteru nebyla dokončena: {exc}", file=sys.stderr)
+
+
 def main() -> int:
+    # Serverová desetiminutová pojistka tento soubor spouští po každém git pullu.
+    # Díky tomu se servisní oprava dostane na VPS i při nedostupném GitHub runneru.
+    repair_newsletter_smtp()
+
     # Obnovit známé vazby článku o nočních výlukách.
     run("scripts/ensure_publication_integrity.py")
 
