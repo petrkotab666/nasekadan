@@ -52,6 +52,12 @@ jobs:
             sleep 2
           done
 
+          unpublished_status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:38080/clanky/pozemky-koupaliste-kadan.html)
+          [[ "$unpublished_status" == "404" ]] || {
+            echo "Připravovaný článek o koupališti je veřejně dostupný; HTTP $unpublished_status" >&2
+            exit 1
+          }
+
           mkdir -p /tmp/nasekadan-build-check
           curl -fsS http://127.0.0.1:38080/ > /tmp/nasekadan-build-check/home.html
           curl -fsS http://127.0.0.1:38080/clanky/nemocnice-kadan.html > /tmp/nasekadan-build-check/article.html
@@ -125,12 +131,12 @@ jobs:
 
           tree = ET.parse(root / 'sitemap.xml')
           urls = {node.text for node in tree.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')}
-          assert 'https://nasekadan.cz/clanky/pozemky-koupaliste-kadan.html' in urls
+          assert 'https://nasekadan.cz/clanky/pozemky-koupaliste-kadan.html' not in urls
 
           audit = (root / 'audit.md').read_text(encoding='utf-8')
           errors = re.search(r'Chyby:\s*\*\*(\d+)\*\*', audit)
           warnings = re.search(r'Varování:\s*\*\*(\d+)\*\*', audit)
           assert errors and errors.group(1) == '0', audit
           assert warnings and warnings.group(1) == '0', audit
-          print('Produkční HTML, sitemap, robots a audit prošly strukturální kontrolou.')
+          print('Produkční HTML, neveřejné články, sitemap, robots a audit prošly kontrolou.')
           PY
