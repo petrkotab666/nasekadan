@@ -10,8 +10,36 @@
   <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../../style.css">
   <style>
-    .article-shell{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:56px 0}.article h1{font:800 clamp(38px,6vw,64px)/1.02 Georgia,serif;letter-spacing:-.035em;margin:.25em 0}.article h2{font:800 34px/1.15 Georgia,serif;margin:52px 0 14px}.article h3{font:800 23px/1.25 Georgia,serif;margin:32px 0 10px}.article p,.article li{font-size:18px}.article .leadtext{font-size:23px;color:#465862;line-height:1.55}.article a{color:#9f2626;text-decoration:underline;text-underline-offset:3px}.hero-photo{margin:30px 0}.hero-photo img{display:block;width:100%;height:auto;max-height:540px;object-fit:cover;border-radius:24px;box-shadow:var(--shadow)}.hero-photo figcaption,.photo-card figcaption{font-size:14px;color:var(--muted);margin-top:8px}.photo-card{margin:34px 0}.photo-card img{display:block;width:100%;height:auto;border-radius:20px;box-shadow:var(--shadow)}
-    .numbers{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:30px 0}.numbers div{background:var(--cream);border:1px solid var(--line);padding:22px;border-radius:16px}.numbers b{display:block;color:var(--red);font-size:29px;line-height:1.1;margin-bottom:5px}.numbers span{font-size:14px;color:var(--muted)}.toc{background:#f6f8f9;border:1px solid var(--line);padding:24px;border-radius:18px;margin:28px 0}.toc strong{font:800 22px Georgia,serif}.toc ol{columns:2;gap:30px}.toc li{font-size:15px;margin:7px 0}.data-table{width:100%;border-collapse:collapse;margin:24px 0;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 28px #16242d0d}.data-table th,.data-table td{padding:14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.data-table th{background:#14232d;color:#fff}.data-table td:nth-child(2),.data-table th:nth-child(2){text-align:right;white-space:nowrap}.data-table tr:last-child td{border-bottom:0}.callout{border-left:6px solid var(--red);background:var(--cream);margin:34px 0;padding:22px 26px;border-radius:0 16px 16px 0}.callout strong{font:800 24px Georgia,serif;display:block;margin-bottom:5px}.factcheck{border:1px solid #c7d8df;background:#f4f8fa;margin:34px 0;padding:24px;border-radius:18px}.factcheck h3{margin:0 0 12px}.factcheck li{margin-bottom:9px}blockquote{border-left:6px solid var(--red);margin:42px 0;padding:22px 28px;background:#f8f4ec;border-radius:0 18px 18px 0;font:700 28px/1.4 Georgia,serif}.timeline{margin:30px 0;border-left:4px solid #d7dde0;padding-left:24px}.timeline-item{position:relative;padding:0 0 28px}.timeline-item:before{content:'';position:absolute;left:-33px;top:7px;width:14px;height:14px;border-radius:50%;background:var(--red);border:4px solid #f7f8f8}.timeline-item b{font:850 21px Georgia,serif;display:block}.timeline-item p{margin:4px 0}.timeline-item:last-child{padding-bottom:0}.split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:28px 0}.split>div{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px}.split h3{margin:0 0 10px}.split.proven>div:first-child{border-top:5px solid #2f6e4f}.split.proven>div:last-child{border-top:5px solid var(--red)}.source-list{background:#eef3f5;padding:24px;border-radius:18px;margin-top:44px}.source-list li{font-size:15px;margin-bottom:8px}.source-list small{color:var(--muted)}.sticky{position:sticky;top:100px}.sidebox{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 10px 30px #16242d0d}.sidebox h3{font:800 23px Georgia,serif;margin:0 0 12px}.sidebox p,.sidebox li{font-size:14px}.preview-note{background:#fff1c9;border-color:#e0c36f}.preview-note strong{color:#7b5511}@media(max-width:980px){.article-shell{grid-template-columns:1fr}.sticky{position:static}.toc ol{columns:1}}@media(max-width:700px){.numbers,.split{grid-template-columns:1fr}.article h1{font-size:42px}.article .leadtext{font-size:20px}.data-table th,.data-table td{padding:11px 9px;font-size:14px}}
+    .article-shell{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:56px 0}
+    .article h1{font:800 clamp(38px,6vw,64px)/1.02 Georgia,serif;letter-spacing:-.035em;margin:.25em 0}
+    .article h2{font:800 34px/1.15 Georgia,serif;margin:52px 0 14px}
+    .article h3{font:800 23px/1.25 Georgia,serif;margin:32px 0 10px}
+    .article p,.article li{font-size:18px}
+    .article .leadtext{font-size:23px;color:#465862;line-height:1.55}
+    .article a{color:#9f2626;text-decoration:underline;text-underline-offset:3px}
+    .hero-photo,.photo-card{margin:30px 0}
+    .hero-photo img,.photo-card img{display:block;width:100%;height:auto;border-radius:24px;box-shadow:var(--shadow)}
+    .hero-photo img{max-height:540px;object-fit:cover}
+    .hero-photo figcaption,.photo-card figcaption{font-size:14px;color:var(--muted);margin-top:8px}
+    .numbers{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:30px 0}
+    .numbers div{background:var(--cream);border:1px solid var(--line);padding:22px;border-radius:16px}
+    .numbers b{display:block;color:var(--red);font-size:29px;line-height:1.1;margin-bottom:5px}
+    .numbers span{font-size:14px;color:var(--muted)}
+    .toc{background:#f6f8f9;border:1px solid var(--line);padding:24px;border-radius:18px;margin:28px 0}
+    .toc strong{font:800 22px Georgia,serif}.toc ol{columns:2;gap:30px}.toc li{font-size:15px;margin:7px 0}
+    .data-table{width:100%;border-collapse:collapse;margin:24px 0;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 28px #16242d0d}
+    .data-table th,.data-table td{padding:14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+    .data-table th{background:#14232d;color:#fff}.data-table td:nth-child(2),.data-table th:nth-child(2){text-align:right;white-space:nowrap}.data-table tr:last-child td{border-bottom:0}
+    .callout{border-left:6px solid var(--red);background:var(--cream);margin:34px 0;padding:22px 26px;border-radius:0 16px 16px 0}
+    .callout strong{font:800 24px Georgia,serif;display:block;margin-bottom:5px}
+    .factcheck{border:1px solid #c7d8df;background:#f4f8fa;margin:34px 0;padding:24px;border-radius:18px}.factcheck h3{margin:0 0 12px}.factcheck li{margin-bottom:9px}
+    blockquote{border-left:6px solid var(--red);margin:42px 0;padding:22px 28px;background:#f8f4ec;border-radius:0 18px 18px 0;font:700 28px/1.4 Georgia,serif}
+    .timeline{margin:30px 0;border-left:4px solid #d7dde0;padding-left:24px}.timeline-item{position:relative;padding:0 0 28px}.timeline-item:before{content:'';position:absolute;left:-33px;top:7px;width:14px;height:14px;border-radius:50%;background:var(--red);border:4px solid #f7f8f8}.timeline-item b{font:850 21px Georgia,serif;display:block}.timeline-item p{margin:4px 0}.timeline-item:last-child{padding-bottom:0}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:28px 0}.split>div{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px}.split h3{margin:0 0 10px}.split.proven>div:first-child{border-top:5px solid #2f6e4f}.split.proven>div:last-child{border-top:5px solid var(--red)}
+    .source-list{background:#eef3f5;padding:24px;border-radius:18px;margin-top:44px}.source-list li{font-size:15px;margin-bottom:8px}.source-list small{color:var(--muted)}
+    .sticky{position:sticky;top:100px}.sidebox{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 10px 30px #16242d0d}.sidebox h3{font:800 23px Georgia,serif;margin:0 0 12px}.sidebox p,.sidebox li{font-size:14px}.preview-note{background:#fff1c9;border-color:#e0c36f}.preview-note strong{color:#7b5511}
+    @media(max-width:980px){.article-shell{grid-template-columns:1fr}.sticky{position:static}.toc ol{columns:1}}
+    @media(max-width:700px){.numbers,.split{grid-template-columns:1fr}.article h1{font-size:42px}.article .leadtext{font-size:20px}.data-table th,.data-table td{padding:11px 9px;font-size:14px}}
   </style>
 </head>
 <body>
@@ -34,7 +62,7 @@
     <div><b>Účet chybí</b><span>konečné vypořádání první stavby není veřejné</span></div>
   </div>
 
-  <div class="toc"><strong>Co v článku najdete</strong><ol><li><a href="#predstaveni">Co měl projekt přinést</a></li><li><a href="#demolice">Proč skončil demolicí</a></li><li><a href="#obrat">Obrat mezi březnem a červencem 2025</a></li><li><a href="#dohoda">Nezveřejněné vypořádání</a></li><li><a href="#dotace">Nejasnosti kolem podpory SFPI</a></li><li><a href="#naklady">Kolik už Slovan stál</a></li><li><a href="#druhy-pokus">Nový dům a Design &amp; Build</a></li><li><a href="#zaver">Co stále potřebujeme znát</a></li></ol></div>
+  <div class="toc"><strong>Co v článku najdete</strong><ol><li><a href="#predstaveni">Co měl projekt přinést</a></li><li><a href="#demolice">Proč skončil demolicí</a></li><li><a href="#obrat">Obrat mezi březnem a červencem 2025</a></li><li><a href="#dohoda">Nezveřejněné vypořádání</a></li><li><a href="#dotace">Nejasnosti kolem podpory SFPI</a></li><li><a href="#naklady">Kolik už Slovan stál</a></li><li><a href="#druhy-pokus">Nový dům a Design &amp; Build</a></li><li><a href="#kampan">Slovan jako předvolební téma</a></li><li><a href="#zaver">Co stále potřebujeme znát</a></li></ol></div>
 
   <h2 id="predstaveni">Z opuštěného Slovanu mělo vzniknout městské bydlení</h2>
   <p>Budova Slovanu v Chomutovské ulici patřila dlouhá léta k výrazným, ale nevyužívaným objektům v Kadani. Město ji v roce 2020 koupilo za osm milionů korun. Podle pozdějšího vysvětlení radnice chtělo zabránit tomu, aby se z objektu stala ubytovna, a současně získat prostor pro městské bydlení určené mladým rodinám a profesím, které se město snaží v Kadani udržet nebo přilákat – především zdravotníkům.</p>
@@ -96,6 +124,12 @@
   <p>Předpokládaná hodnota nové stavební zakázky činí <strong>195 milionů korun bez DPH</strong>. Při Design &amp; Build nese vybraný dodavatel odpovědnost nejen za samotnou realizaci, ale také za dopracování části projektového řešení.</p>
   <p>Nový tendr je už vyhlášený. Druhý pokus tak pokračuje ještě před tím, než je veřejnosti dostupné úplné finanční vypořádání prvního.</p>
 
+  <h2 id="kampan">Slovan a lávka u Shellu vstupují do předvolební kampaně</h2>
+  <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo 24. července 2026 příspěvek, který staví nedokončený Slovan do přímého kontrastu s lávkou u čerpací stanice Shell. Používá slogan: „Pojďme nejdříve vyřešit jámy a poté stavět mosty.“</p>
+  <p>Příspěvek nepřináší nový technický posudek, konečné vyúčtování ani dosud neznámou smlouvu. Jde o politické hodnocení a silný předvolební obraz. Přesně ale ukazuje, že se Slovan a lávka stávají společným symbolem debaty o prioritách, přípravě investic a hospodaření města.</p>
+  <p>Srovnání má své limity. Peníze na různé investice nelze vždy libovolně přesouvat, lávka není náhradou za bytový dům a Slovan není definitivně opuštěný projekt. Pro posouzení odpovědnosti proto zůstávají rozhodující průzkumy, změnové listy, faktury, dohoda o vypořádání, rozhodnutí SFPI a dokumentace nové zakázky. Volební slogan tyto podklady nenahrazuje.</p>
+  <div class="factcheck"><h3>Co politický příspěvek dokládá – a co ne</h3><ul><li><strong>Dokládá:</strong> Slovan a lávka se staly předvolebním tématem a jedním ze způsobů, jak opozice hodnotí investiční priority města.</li><li><strong>Nedokládá:</strong> přesnou škodu, porušení zákona, konečnou cenu první stavby ani to, že by bylo možné peníze určené na lávku jednoduše použít na Slovan.</li></ul></div>
+
   <figure class="photo-card">
     <img src="../../assets/slovan-vstup-20260724.jpg" width="1600" height="1200" alt="Oplocený vstup do staveniště Slovanu v Kadani" loading="lazy">
     <figcaption>Oplocený vstup do areálu Slovanu. Foto: Naše Kadaň, 24. 7. 2026.</figcaption>
@@ -123,7 +157,8 @@
     <li><a href="https://ted.europa.eu/en/notice/-/detail/511941-2026" target="_blank" rel="noopener noreferrer">TED: nové zadávací řízení na bytový dům Slovan</a></li>
     <li><a href="https://www.mesto-kadan.cz/filemanager/files/4800620.pdf" target="_blank" rel="noopener noreferrer">Rada města: příprava dohody o ukončení a vypořádání</a></li>
     <li><a href="https://www.mesto-kadan.cz/filemanager/files/4871082.pdf" target="_blank" rel="noopener noreferrer">Rada města: schválení dohody o ukončení</a></li>
-  </ul><small>Článek rozlišuje mezi smluvní cenou a skutečně proplacenými částkami, stanoviskem města a nezávisle doloženým stavem a mezi přípravou žádosti o změnu podpory a jejím schválením. Nenalezení dokumentu ve veřejné evidenci není vydáváno za důkaz, že dokument neexistuje.</small></div>
+    <li>Veřejný příspěvek uskupení Dáme Kadani novou šanci na Facebooku, zachycený redakcí 24. 7. 2026.</li>
+  </ul><small>Článek rozlišuje mezi smluvní cenou a skutečně proplacenými částkami, stanoviskem města a nezávisle doloženým stavem, mezi přípravou žádosti o změnu podpory a jejím schválením a mezi politickým hodnocením a doloženým skutkovým stavem. Nenalezení dokumentu ve veřejné evidenci není vydáváno za důkaz, že dokument neexistuje.</small></div>
 </article>
 <aside><div class="sticky"><div class="sidebox preview-note"><h3>Náhled článku</h3><p><strong>Tato stránka zatím není zveřejněná.</strong></p><p>Datum vydání, konečnou URL, zařazení na titulní stránku a sdílecí grafiku doplníme až při publikaci.</p></div><div class="sidebox"><h3>Rychlé shrnutí</h3><p><strong>38 bytů</strong> měl původní projekt.</p><p><strong>48 bytů</strong> má mít novostavba.</p><p><strong>195 milionů bez DPH</strong> je hodnota nového tendru.</p><p>Konečné vypořádání prvního pokusu veřejně dostupné není.</p></div><div class="sidebox"><h3>Máte podklad?</h3><p>Dokument, opravu nebo vyjádření můžete poslat na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>.</p></div></div></aside>
 </main>
