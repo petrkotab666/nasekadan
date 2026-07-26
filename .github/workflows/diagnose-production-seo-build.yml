@@ -1,0 +1,61 @@
+name: Diagnostikovat produkcni SEO build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-production-seo-build.yml'
+      - '.github/diagnose-production-seo-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-diagnose-production-seo
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Pripravit stejny stav jako Docker build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          python scripts/normalize_footers.py --write --check
+          python scripts/normalize_articles.py --write --check
+          python scripts/generate_social_cards.py --write --check
+          python scripts/publish_weekly_events.py
+          python scripts/prepare_discovery.py
+          python scripts/normalize_search_snippets.py
+
+      - name: Ulozit uplny audit bez zastaveni behu
+        shell: bash
+        run: |
+          set +e
+          python scripts/seo_ai_audit.py --strict --report PRODUCTION-SEO-BUILD-AUDIT.md --json PRODUCTION-SEO-BUILD-AUDIT.json
+          code=$?
+          echo "$code" > PRODUCTION-SEO-BUILD-AUDIT.exitcode
+          exit 0
+
+      - name: Zapsat diagnostiku do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add PRODUCTION-SEO-BUILD-AUDIT.md PRODUCTION-SEO-BUILD-AUDIT.json PRODUCTION-SEO-BUILD-AUDIT.exitcode
+          if git diff --cached --quiet; then
+            echo 'Diagnostika beze zmeny.'
+            exit 0
+          fi
+          git commit -m 'Zapsat uplnou diagnostiku produkcniho SEO buildu'
+          git push origin HEAD:main
