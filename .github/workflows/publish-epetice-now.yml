@@ -1,0 +1,214 @@
+name: Zařadit a nasadit mimořádný článek o ePetici
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-epetice-now.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-epetice-nemocnice-kadan
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zařadit článek do titulní strany, archivu, RSS a sitemap
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s clanky/epetice-nemocnice-kadan.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          url = 'https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html'
+          title = 'Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná'
+
+          # Titulní stránka
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          hero = '''<article class="lead">
+        <div class="photo" style="background:radial-gradient(circle at 80% 15%,rgba(255,255,255,.16),transparent 25%),linear-gradient(135deg,#14232d,#355d70 58%,#9f2626)"><span>MIMOŘÁDNĚ</span><strong>ePETICE</strong></div>
+        <div class="copy">
+          <small>NEMOCNICE KADAŇ · PETICE · 26. 7. 2026 V 10:15</small>
+          <h1>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</h1>
+          <p>Vysvětlujeme limit 3500 znaků, totožnost obou verzí, ověřené elektronické podpisy i skutečné právní účinky petice.</p>
+          <a class="btn" href="/clanky/epetice-nemocnice-kadan.html">Přečíst mimořádný článek →</a>
+        </div>
+      </article>'''
+          text, count = re.subn(r'<article class="lead">.*?</article>', hero, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('Nepodařilo se nahradit hlavní článek na titulní straně.')
+
+          if 'data-epetice-card' not in text:
+              card = '''
+      <article class="article-card hospital" data-epetice-card>
+        <div class="visual"><strong>ePetice za nemocnici</strong></div>
+        <div class="article-body">
+          <span class="meta">26. 7. 2026 · 10:15 · Mimořádně</span>
+          <h3>Papírová a elektronická verze musí být stejná</h3>
+          <p>Co znamená limit 3500 znaků, zda se ePetice schvaluje a kdy lze elektronické a listinné podpisy vykazovat společně.</p>
+          <a class="read-more" href="/clanky/epetice-nemocnice-kadan.html">Přečíst vysvětlení →</a>
+        </div>
+      </article>
+'''
+              marker = '<div class="article-list">'
+              if marker not in text:
+                  raise SystemExit('Na titulní straně chybí seznam článků.')
+              text = text.replace(marker, marker + card, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          # Archiv článků a jeho strukturovaná data
+          path = Path('clanky/index.html')
+          text = path.read_text(encoding='utf-8')
+          match = re.search(r'<script type="application/ld\+json">\s*(\{.*?\})\s*</script>', text, re.S)
+          if not match:
+              raise SystemExit('V archivu chybí JSON-LD.')
+          data = json.loads(match.group(1))
+          graph = data.get('@graph', [])
+          itemlist = next((item for item in graph if item.get('@type') == 'ItemList'), None)
+          if itemlist is None:
+              raise SystemExit('V JSON-LD chybí ItemList.')
+          existing = [item for item in itemlist.get('itemListElement', []) if item.get('url') != url]
+          elements = [{'@type':'ListItem','position':1,'url':url,'name':title}]
+          for position, item in enumerate(existing, start=2):
+              item['position'] = position
+              elements.append(item)
+          itemlist['itemListElement'] = elements
+          itemlist['numberOfItems'] = len(elements)
+          replacement = '<script type="application/ld+json">\n' + json.dumps(data, ensure_ascii=False, indent=2) + '\n  </script>'
+          text = text[:match.start()] + replacement + text[match.end():]
+
+          if 'data-epetice-card' not in text:
+              item = '''
+    <article class="archive-item hospital" data-epetice-card>
+      <div class="archive-visual"><strong>ePetice za nemocnici</strong></div>
+      <div class="archive-body">
+        <span class="archive-meta">26. července 2026 v 10:15 · Mimořádně · Petice a nemocnice</span>
+        <h2>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</h2>
+        <p>Vysvětlení limitu 3500 znaků, podmínky totožného znění, ověřování podpisů a právních účinků oficiální ePetice.</p>
+        <a href="/clanky/epetice-nemocnice-kadan.html">Přečíst mimořádný článek →</a>
+      </div>
+    </article>
+'''
+              marker = '<section class="archive-list" aria-label="Chronologický přehled článků">'
+              if marker not in text:
+                  raise SystemExit('V archivu chybí seznam článků.')
+              text = text.replace(marker, marker + item, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          # RSS
+          path = Path('rss.xml')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(r'<lastBuildDate>.*?</lastBuildDate>', '<lastBuildDate>Sun, 26 Jul 2026 10:15:00 +0200</lastBuildDate>', text, count=1)
+          if url not in text:
+              item = '''    <item>
+      <title>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</title>
+      <description><![CDATA[Vysvětlujeme limit 3500 znaků, podmínku totožného listinného a elektronického textu, ověřování podpisů i právní účinky oficiální ePetice.]]></description>
+      <link>https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html</link>
+      <guid isPermaLink="true">https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html</guid>
+      <pubDate>Sun, 26 Jul 2026 10:15:00 +0200</pubDate>
+      <category>Nemocnice Kadaň</category>
+      <category>Petice</category>
+      <category>Komunální politika</category>
+      <category>eGovernment</category>
+      <szn:image><szn:url>https://nasekadan.cz/social-card.png</szn:url></szn:image>
+      <geo:lat>50.375984</geo:lat>
+      <geo:long>13.271307</geo:long>
+    </item>
+
+'''
+              marker = '    <item>'
+              if marker not in text:
+                  raise SystemExit('RSS neobsahuje žádnou položku.')
+              text = text.replace(marker, item + marker, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          # Sitemap
+          path = Path('sitemap.xml')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(r'(<loc>https://nasekadan\.cz/</loc><lastmod>)[^<]+', r'\g<1>2026-07-26', text, count=1)
+          text = re.sub(r'(<loc>https://nasekadan\.cz/clanky/</loc><lastmod>)[^<]+', r'\g<1>2026-07-26', text, count=1)
+          if url not in text:
+              marker = '  <url><loc>https://nasekadan.cz/clanky/</loc><lastmod>2026-07-26</lastmod></url>\n'
+              addition = '  <url><loc>https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html</loc><lastmod>2026-07-26</lastmod></url>\n'
+              if marker not in text:
+                  raise SystemExit('V sitemap chybí archiv článků.')
+              text = text.replace(marker, marker + addition, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Uložit zařazení článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html rss.xml sitemap.xml
+          if git diff --cached --quiet; then
+            echo 'Článek už je všude správně zařazený.'
+          else
+            git commit -m 'Zařadit mimořádný článek o ePetici'
+            git push origin main
+          fi
+
+  deploy:
+    needs: publish
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout aktualizovanou hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit a spustit aktualizovaný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          docker compose up -d --build --remove-orphans
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3224/healthz >/dev/null
+
+      - name: Veřejně ověřit článek a zařazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          article="https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html?v=$stamp"
+          home="https://nasekadan.cz/?v=$stamp"
+          archive="https://nasekadan.cz/clanky/?v=$stamp"
+          rss="https://nasekadan.cz/rss.xml?v=$stamp"
+
+          for i in $(seq 1 30); do
+            if curl -fsS "$article" | grep -Fq 'Papírová a elektronická verze ale musí být stejná'; then
+              break
+            fi
+            sleep 3
+          done
+
+          curl -fsS "$article" | grep -Fq 'Papírová a elektronická verze ale musí být stejná'
+          curl -fsS "$home" | grep -Fq '/clanky/epetice-nemocnice-kadan.html'
+          curl -fsS "$archive" | grep -Fq '/clanky/epetice-nemocnice-kadan.html'
+          curl -fsS "$rss" | grep -Fq 'https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html'
+          echo 'Mimořádný článek je veřejný a zařazený na titulní straně, v archivu i RSS.'
