@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import html
+import re
+import ssl
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parents[1]
+ARTICLE_DIR = ROOT / "clanky"
+HOST = "nasekadan.cz"
+HOME_LIMIT = 6
+RSS_DAYS = 120
+TRAIN_PATH = "/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html"
+TRAIN_TITLE = "Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov"
+STAMP = f"{int(time.time())}-{time.time_ns()}"
+SSL_CONTEXT = ssl._create_unverified_context()
+
+
+@dataclass(frozen=True)
+class Article:
+    path: Path
+    canonical: str
+    relative_url: str
+    published: datetime | None
+    title: str
+
+
+def clean_text(value: str) -> str:
+    value = re.sub(r"<[^>]+>", " ", value)
+    return re.sub(r"\s+", " ", html.unescape(value)).strip()
+
+
+def parse_datetime(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def extract(html_text: str, patterns: tuple[str, ...]) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, html_text, flags=re.I | re.S)
+        if match:
+            return match.group(1).strip()
+    return None
+
+
+def collect_articles() -> list[Article]:
+    now = datetime.now(timezone.utc)
+    articles: list[Article] = []
+    for path in sorted(ARTICLE_DIR.glob("*.html")):
+        if path.name == "index.html":
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        robots = extract(
+            text,
+            (
+                r'<meta\s+[^>]*name=["\']robots["\'][^>]*content=["\']([^"\']+)',
+                r'<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*name=["\']robots["\']',
+            ),
+        ) or ""
+        if "noindex" in robots.lower():
+            continue
+        canonical = extract(
+            text,
+            (
+                r'<link\s+[^>]*rel=["\']canonical["\'][^>]*href=["\']([^"\']+)',
+                r'<link\s+[^>]*href=["\']([^"\']+)["\'][^>]*rel=["\']canonical["\']',
+            ),
+        )
+        if not canonical:
+            continue
+        parsed_url = urlsplit(canonical)
+        if parsed_url.scheme != "https" or parsed_url.netloc not in {HOST, f"www.{HOST}"}:
+            continue
+        published_raw = extract(
+            text,
+            (
+                r'<meta\s+[^>]*property=["\']article:published_time["\'][^>]*content=["\']([^"\']+)',
+                r'<meta\s+[^>]*content=["\']([^"\']+)["\'][^>]*property=["\']article:published_time["\']',
+                r'["\']datePublished["\']\s*:\s*["\']([^"\']+)',
+            ),
+        )
+        published = parse_datetime(published_raw) if published_raw else None
+        if published and published > now + timedelta(minutes=10):
+            continue
+        title_raw = extract(text, (r"<h1\b[^>]*>(.*?)</h1>", r"<title\b[^>]*>(.*?)</title>")) or path.stem
+        canonical = canonical.replace(f"https://www.{HOST}", f"https://{HOST}")
+        articles.append(Article(path, canonical, parsed_url.path, published, clean_text(title_raw)))
+    return articles
+
+
+def cache_bust(url: str) -> str:
+    parsed = urlsplit(url)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    query.append(("integrity", STAMP))
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
+
+
+def fetch(url: str, attempts: int = 3) -> tuple[int, str, str]:
+    last = ""
+    for attempt in range(1, attempts + 1):
+        request = Request(
+            cache_bust(url),
+            headers={
+                "User-Agent": "NaseKadanPublicationCheck/1.0",
+                "Cache-Control": "no-cache, no-store, max-age=0",
+                "Pragma": "no-cache",
+                "Accept": "text/html,application/xml;q=0.9,*/*;q=0.8",
+            },
+        )
+        try:
+            with urlopen(request, timeout=30, context=SSL_CONTEXT) as response:
+                body = response.read().decode(response.headers.get_content_charset() or "utf-8", errors="replace")
+                return response.status, body, response.geturl()
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            return exc.code, body, exc.geturl()
+        except (URLError, TimeoutError, OSError) as exc:
+            last = f"{type(exc).__name__}: {exc}"
+            if attempt < attempts:
+                time.sleep(attempt * 2)
+    raise RuntimeError(f"URL se nepodařilo načíst: {url}: {last}")
+
+
+def present(text: str, article: Article) -> bool:
+    return article.relative_url in text or article.canonical in text
+
+
+def main() -> int:
+    errors: list[str] = []
+    articles = collect_articles()
+    if not articles:
+        errors.append("Ve zdrojích nebyl nalezen žádný veřejný článek.")
+
+    endpoints = {
+        "titulní stránka": "https://nasekadan.cz/",
+        "archiv": "https://nasekadan.cz/clanky/",
+        "sitemap": "https://nasekadan.cz/sitemap.xml",
+        "RSS": "https://nasekadan.cz/rss.xml",
+    }
+    live: dict[str, str] = {}
+    for label, url in endpoints.items():
+        try:
+            code, body, final_url = fetch(url)
+        except Exception as exc:
+            errors.append(f"{label}: načtení selhalo: {exc}")
+            continue
+        if code != 200:
+            errors.append(f"{label}: HTTP {code} ({final_url})")
+        live[label] = body
+
+    for article in articles:
+        try:
+            code, body, final_url = fetch(article.canonical)
+        except Exception as exc:
+            errors.append(f"{article.path.relative_to(ROOT)}: přímá URL se nenačetla: {exc}")
+            continue
+        if code != 200:
+            errors.append(f"{article.path.relative_to(ROOT)}: přímá URL vrací HTTP {code} ({final_url})")
+            continue
+        if article.canonical not in body and article.relative_url not in body:
+            if article.title and article.title not in clean_text(body):
+                errors.append(f"{article.path.relative_to(ROOT)}: URL vrací jiný nebo neúplný obsah.")
+
+    archive = live.get("archiv", "")
+    sitemap = live.get("sitemap", "")
+    rss = live.get("RSS", "")
+    home = live.get("titulní stránka", "")
+    now = datetime.now(timezone.utc)
+
+    for article in articles:
+        label = article.path.relative_to(ROOT)
+        if archive and not present(archive, article):
+            errors.append(f"{label}: článek chybí v živém archivu.")
+        if sitemap and article.canonical not in sitemap:
+            errors.append(f"{label}: článek chybí v živé sitemapě.")
+        if article.published and article.published >= now - timedelta(days=RSS_DAYS):
+            if rss and article.canonical not in rss:
+                errors.append(f"{label}: čerstvý článek chybí v živém RSS.")
+
+    dated = sorted(
+        (article for article in articles if article.published and article.published <= now),
+        key=lambda article: article.published or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    for article in dated[:HOME_LIMIT]:
+        if home and not present(home, article):
+            errors.append(
+                f"{article.path.relative_to(ROOT)}: jeden z {HOME_LIMIT} nejnovějších článků chybí na živé titulní stránce."
+            )
+
+    train = next((article for article in articles if article.relative_url == TRAIN_PATH), None)
+    if train is None:
+        errors.append("Zdrojový článek o nočních výlukách chybí nebo není veřejný.")
+    else:
+        for label, text in live.items():
+            if not present(text, train):
+                errors.append(f"Článek o nočních výlukách chybí v: {label}.")
+        try:
+            code, body, _ = fetch(train.canonical)
+            if code != 200:
+                errors.append(f"Článek o nočních výlukách vrací HTTP {code}.")
+            elif TRAIN_TITLE not in clean_text(body):
+                errors.append("Přímá URL nočních výluk neobsahuje očekávaný nadpis.")
+        except Exception as exc:
+            errors.append(f"Přímá URL nočních výluk se nepodařila ověřit: {exc}")
+
+    if errors:
+        print("KONTROLA ŽIVÉHO WEBU SELHALA", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+
+    print(
+        f"Živý web je v pořádku: {len(articles)} veřejných článků je dostupných, "
+        f"v archivu a sitemapě; čerstvé články jsou v RSS a {min(HOME_LIMIT, len(dated))} "
+        "nejnovějších je na titulní stránce. Noční výluky jsou ověřené ve všech přehledech."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
