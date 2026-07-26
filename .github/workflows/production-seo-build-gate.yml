@@ -1,5 +1,5 @@
 name: Produkční SEO a AI build gate
-# Ověřuje aktuální hlavní větev včetně instalace Pillow do Pythonu 3.12.
+# Sestaví a spustí přesný produkční obraz a ověří trvalé technické podmínky.
 
 on:
   pull_request:
@@ -57,8 +57,10 @@ jobs:
           sitemap=$(curl -fsS http://127.0.0.1:38080/sitemap.xml)
           audit=$(curl -fsS http://127.0.0.1:38080/SEO-AI-AUDIT.md)
           grep -Fq 'google-site-verification' <<<"$home"
-          grep -Fq '<title>Nemocnice Kadaň: ztráta 46 milionů a pomoc města | Naše Kadaň</title>' <<<"$article"
+          grep -Eq '<title>[^<]+Naše Kadaň</title>' <<<"$article"
+          grep -Fq '<link rel="canonical" href="https://nasekadan.cz/clanky/nemocnice-kadan.html">' <<<"$article"
           grep -Fq 'property="article:published_time"' <<<"$article"
+          grep -Fq 'application/ld+json' <<<"$article"
           grep -Fq 'User-agent: OAI-SearchBot' <<<"$robots"
           grep -Fq 'clanky/pozemky-koupaliste-kadan.html' <<<"$sitemap"
           grep -Fq 'Chyby: **0**' <<<"$audit"
