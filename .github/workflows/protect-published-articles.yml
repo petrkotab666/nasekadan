@@ -9,6 +9,7 @@ on:
       - 'sitemap.xml'
       - 'rss.xml'
       - 'scripts/ensure_publication_integrity.py'
+      - 'scripts/ensure_newest_article_indexes.py'
       - 'scripts/validate_publication_integrity.py'
       - '.github/publication-integrity-trigger.txt'
       - '.github/workflows/protect-published-articles.yml'
@@ -39,8 +40,11 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Obnovit chybějící vazby publikovaných článků
-        run: python3 scripts/ensure_publication_integrity.py
+      - name: Obnovit všechny chybějící vazby publikovaných článků
+        run: |
+          set -euo pipefail
+          python3 scripts/ensure_publication_integrity.py
+          python3 scripts/ensure_newest_article_indexes.py
 
       - name: Ověřit titulní stránku, archiv, sitemapu a RSS
         run: python3 scripts/validate_publication_integrity.py
@@ -60,7 +64,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m 'Obnovit trvalou dostupnost publikovaných článků'
+          git commit -m 'Obnovit trvalou dostupnost všech publikovaných článků'
           git pull --rebase origin main
           git push origin main
           echo 'changed=true' >> "$GITHUB_OUTPUT"
