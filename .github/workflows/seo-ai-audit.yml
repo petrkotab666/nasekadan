@@ -9,6 +9,7 @@ on:
       - 'news-sitemap.xml'
       - 'rss.xml'
       - 'llms.txt'
+      - 'Dockerfile'
       - 'scripts/**'
       - '.github/workflows/seo-ai-audit.yml'
   pull_request:
@@ -19,6 +20,7 @@ on:
       - 'news-sitemap.xml'
       - 'rss.xml'
       - 'llms.txt'
+      - 'Dockerfile'
       - 'scripts/**'
       - '.github/workflows/seo-ai-audit.yml'
   workflow_dispatch:
@@ -62,6 +64,7 @@ jobs:
           rm -rf clanky/parts
           rm -f google*.html
           python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
 
       - name: Vytvořit úplný audit
         run: |
