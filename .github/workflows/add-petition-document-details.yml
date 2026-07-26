@@ -6,10 +6,15 @@ on:
     paths:
       - '.github/workflows/add-petition-document-details.yml'
       - '.github/add-petition-document-details-trigger.txt'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/add-petition-document-details-pr-trigger.txt'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: nasekadan-add-petition-details
@@ -31,7 +36,6 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
           path = Path('clanky/petice-nemocnice-kadan.html')
           text = path.read_text(encoding='utf-8')
