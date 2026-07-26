@@ -1,0 +1,107 @@
+name: Ověřit živé SEO a AI podklady
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.html'
+      - 'Dockerfile'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - 'news-sitemap.xml'
+      - 'rss.xml'
+      - 'llms.txt'
+      - 'scripts/prepare_discovery.py'
+      - 'scripts/normalize_search_snippets.py'
+      - 'scripts/seo_ai_audit.py'
+      - '.github/workflows/verify-live-seo-ai.yml'
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: nasekadan-live-seo-ai
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Označit kontrolu jako spuštěnou
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -d '{"state":"pending","context":"nasekadan/live-seo-ai","description":"Čeká se na produkční nasazení a kontrolu"}' >/dev/null
+
+      - name: Počkat na novou produkci a zkontrolovat ji zvenčí
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          expected_title='Nemocnice Kadaň: ztráta 46 milionů a pomoc města | Naše Kadaň'
+
+          verify_live() {
+            home=$(curl -fsS --max-time 20 "$base/") || return 1
+            robots=$(curl -fsS --max-time 20 "$base/robots.txt") || return 1
+            sitemap=$(curl -fsS --max-time 20 "$base/sitemap.xml") || return 1
+            llms=$(curl -fsS --max-time 20 "$base/llms.txt") || return 1
+            audit=$(curl -fsS --max-time 20 "$base/SEO-AI-AUDIT.md") || return 1
+            article=$(curl -fsS --max-time 20 "$base/clanky/nemocnice-kadan.html") || return 1
+            guide=$(curl -fsS --max-time 20 "$base/pruvodce/co-videt-v-kadani.html") || return 1
+            google=$(curl -fsS --max-time 20 "$base/googlec6d0b89322c33fa6.html") || return 1
+            indexnow=$(curl -fsS --max-time 20 "$base/4779abb8964b2f9f65ae960f08f74e6a.txt") || return 1
+
+            grep -Fq 'google-site-verification' <<<"$home" || return 1
+            grep -Fq 'User-agent: OAI-SearchBot' <<<"$robots" || return 1
+            grep -Fq 'Sitemap: https://nasekadan.cz/news-sitemap.xml' <<<"$robots" || return 1
+            grep -Fq 'clanky/pozemky-koupaliste-kadan.html' <<<"$sitemap" || return 1
+            grep -Fq 'https://nasekadan.cz/prehled-zdroju/' <<<"$sitemap" || return 1
+            grep -Fq '# Naše Kadaň' <<<"$llms" || return 1
+            grep -Fq 'Chyby: **0**' <<<"$audit" || return 1
+            grep -Fq 'Varování: **0**' <<<"$audit" || return 1
+            grep -Fq "<title>$expected_title</title>" <<<"$article" || return 1
+            grep -Fq 'property="article:published_time"' <<<"$article" || return 1
+            grep -Fq 'property="article:modified_time"' <<<"$article" || return 1
+            if grep -Fq 'href="minoritska-basta.html"' <<<"$guide"; then return 1; fi
+            grep -Fq 'google-site-verification: googlec6d0b89322c33fa6.html' <<<"$google" || return 1
+            [[ "$(tr -d '\r\n ' <<<"$indexnow")" == '4779abb8964b2f9f65ae960f08f74e6a' ]] || return 1
+          }
+
+          for attempt in $(seq 1 40); do
+            if verify_live; then
+              echo "Živý web prošel kontrolou při pokusu $attempt."
+              exit 0
+            fi
+            echo "Pokus $attempt/40: nová produkce ještě není kompletní."
+            sleep 15
+          done
+
+          echo 'Živý web ani po čekání nesplnil SEO/AI kontrolu.' >&2
+          exit 1
+
+      - name: Zapsat výsledek kontroly
+        if: always() && github.event_name == 'push'
+        shell: bash
+        run: |
+          if [[ "${{ steps.live.outcome }}" == 'success' ]]; then
+            state=success
+            description='Živé SEO a AI podklady jsou v pořádku'
+          else
+            state=failure
+            description='Živá SEO nebo AI kontrola selhala'
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -d "{\"state\":\"$state\",\"context\":\"nasekadan/live-seo-ai\",\"description\":\"$description\"}" >/dev/null
