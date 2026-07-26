@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nasekadan-cloud-emergency-production
@@ -34,6 +34,7 @@ jobs:
     steps:
       - name: Vybrat dostupný SSH klíč
         id: key
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -55,6 +56,9 @@ jobs:
           echo "Použit SSH secret: $selected"
 
       - name: Nasadit nejnovější main přímo na OVH
+        id: deploy_server
+        if: steps.key.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -83,6 +87,9 @@ jobs:
           REMOTE
 
       - name: Ověřit veřejný web z GitHub cloudu
+        id: verify
+        if: steps.deploy_server.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -104,3 +111,56 @@ jobs:
 
           echo 'Veřejný web ani po čekání nepodává požadovanou verzi.' >&2
           exit 30
+
+      - name: Zapsat výsledek cloudového nasazení
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          KEY_OUTCOME: ${{ steps.key.outcome }}
+          KEY_NAME: ${{ steps.key.outputs.selected }}
+          DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'cloud-deploy-status.json';
+            const status = {
+              status: process.env.KEY_OUTCOME === 'success' && process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              run_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              ssh_key_available: process.env.KEY_OUTCOME === 'success',
+              ssh_key_secret_name: process.env.KEY_NAME || null,
+              server_deploy: process.env.DEPLOY_OUTCOME || 'skipped',
+              public_verification: process.env.VERIFY_OUTCOME || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat výsledek cloudového nasazení: ${status.status}`,
+              content,
+              ...(sha ? { sha } : {})
+            });
+
+      - name: Vyhodnotit nasazení
+        if: always()
+        shell: bash
+        env:
+          KEY_OUTCOME: ${{ steps.key.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        run: |
+          set -euo pipefail
+          test "$KEY_OUTCOME" = success
+          test "$DEPLOY_OUTCOME" = success
+          test "$VERIFY_OUTCOME" = success
