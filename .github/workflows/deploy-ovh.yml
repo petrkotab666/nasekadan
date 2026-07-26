@@ -1,5 +1,5 @@
 name: Nasadit Naše Kadaň na OVH
-run-name: Nasazení Naše Kadaň – ${{ github.sha }}
+run-name: Produkční nasazení aktuální větve main
 
 on:
   push:
@@ -13,6 +13,8 @@ on:
 permissions:
   contents: read
 
+# Všechny cesty do produkce používají stejný zámek. Starší čekající běh se
+# zruší a každý spuštěný běh si před nasazením znovu stáhne aktuální main.
 concurrency:
   group: nasekadan-production
   cancel-in-progress: true
@@ -20,247 +22,22 @@ concurrency:
 jobs:
   deploy:
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - name: Stáhnout zdrojový kód
+      - name: Stáhnout repozitář
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Sestavit a spustit web
-        run: |
-          set -euo pipefail
-          docker compose up -d --build --remove-orphans
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs --tail=100
-          exit 1
-
-      - name: Ověřit jednotnou patičku živého kontejneru
+      - name: Nasadit jedinou kanonickou verzi webu
         shell: bash
         run: |
           set -euo pipefail
-          pages=(
-            '/'
-            '/clanky/nemocnice-kadan-software-kyberbezpecnost.html'
-            '/inzerce/'
-          )
-          for page in "${pages[@]}"; do
-            html="$(curl -fsS "http://127.0.0.1:3224${page}")"
-            grep -Fq '<footer class="site-footer" data-site-footer="v1">' <<<"$html"
-            grep -Fq '/footer.css?v=20260726-unified-footer-1' <<<"$html"
-            grep -Fq 'Nezávislé informace, události a příběhy města.' <<<"$html"
-            grep -Fq 'Inzerce a ceník' <<<"$html"
-            echo "Jednotná patička ověřena: $page"
-          done
+          chmod +x deploy/sync-production.sh
+          bash deploy/sync-production.sh
 
-      - name: Nainstalovat soukromé statistiky
-        run: |
-          set -euo pipefail
-          sudo bash .github/scripts/nasekadan-stats/install-stats.sh
-
-      - name: Nastavit reverzní proxy pro doménu
-        run: |
-          set -euo pipefail
-          sudo tee /etc/nginx/sites-available/nasekadan.cz >/dev/null <<'EOF'
-          server {
-            listen 80;
-            listen [::]:80;
-            server_name nasekadan.cz www.nasekadan.cz;
-
-            include /etc/nginx/snippets/nasekadan-statistiky-server.conf;
-
-            location / {
-              proxy_pass http://127.0.0.1:3224;
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-            }
-          }
-          EOF
-          sudo ln -sfn /etc/nginx/sites-available/nasekadan.cz /etc/nginx/sites-enabled/nasekadan.cz
-          sudo nginx -t
-          sudo systemctl reload nginx
-
-      - name: Aktivovat HTTPS po nasměrování DNS
+      - name: Obnovit soukromé statistiky
         continue-on-error: true
-        run: |
-          if command -v certbot >/dev/null 2>&1; then
-            sudo certbot --nginx --non-interactive --agree-tos --redirect \
-              -m admin@nasekadan.cz \
-              -d nasekadan.cz -d www.nasekadan.cz
-          fi
-
-      - name: Zapojit statistiky také do aktivního HTTPS vhostu
-        run: |
-          set -euo pipefail
-          sudo python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          marker = "include /etc/nginx/snippets/nasekadan-statistiky-server.conf;"
-          roots = [Path("/etc/nginx/sites-enabled"), Path("/etc/nginx/conf.d")]
-          files = []
-          seen = set()
-          for root in roots:
-              if not root.exists():
-                  continue
-              for path in sorted(root.glob("*")):
-                  if not path.is_file() and not path.is_symlink():
-                      continue
-                  try:
-                      real = path.resolve()
-                  except OSError:
-                      continue
-                  if real in seen:
-                      continue
-                  seen.add(real)
-                  files.append(real)
-
-          def server_blocks(text):
-              for match in re.finditer(r"\bserver\s*\{", text):
-                  start = match.start()
-                  brace = text.find("{", match.start())
-                  depth = 0
-                  for index in range(brace, len(text)):
-                      char = text[index]
-                      if char == "{":
-                          depth += 1
-                      elif char == "}":
-                          depth -= 1
-                          if depth == 0:
-                              yield start, index + 1, text[start:index + 1]
-                              break
-
-          matched = 0
-          https_found = False
-          for path in files:
-              try:
-                  text = path.read_text(encoding="utf-8")
-              except (OSError, UnicodeDecodeError):
-                  continue
-              replacements = []
-              for start, end, block in server_blocks(text):
-                  if not re.search(r"server_name\s+[^;]*\bnasekadan\.cz\b[^;]*;", block):
-                      continue
-                  matched += 1
-                  if re.search(r"listen\s+(?:\[::\]:)?443\b", block):
-                      https_found = True
-                  if marker in block or "location ^~ /statistiky/" in block:
-                      continue
-                  name_line = re.search(r"(^[ \t]*server_name\s+[^;]+;)", block, re.M)
-                  if not name_line:
-                      continue
-                  insert_at = start + name_line.end()
-                  indent = re.match(r"[ \t]*", name_line.group(1)).group(0)
-                  replacements.append((insert_at, f"\n\n{indent}{marker}"))
-              if replacements:
-                  for offset, addition in reversed(replacements):
-                      text = text[:offset] + addition + text[offset:]
-                  path.write_text(text, encoding="utf-8")
-                  print(f"Doplněny statistiky do {path}")
-
-          cert = Path("/etc/letsencrypt/live/nasekadan.cz/fullchain.pem")
-          key = Path("/etc/letsencrypt/live/nasekadan.cz/privkey.pem")
-          if not https_found and cert.exists() and key.exists():
-              target = Path("/etc/nginx/sites-available/nasekadan.cz")
-              options = Path("/etc/letsencrypt/options-ssl-nginx.conf")
-              dhparam = Path("/etc/letsencrypt/ssl-dhparams.pem")
-              extra = ""
-              if options.exists():
-                  extra += f"\n  include {options};"
-              if dhparam.exists():
-                  extra += f"\n  ssl_dhparam {dhparam};"
-              https_block = f'''\n\nserver {{
-                listen 443 ssl;
-                listen [::]:443 ssl;
-                server_name nasekadan.cz www.nasekadan.cz;
-
-                ssl_certificate {cert};
-                ssl_certificate_key {key};{extra}
-
-                {marker}
-
-                location / {{
-                  proxy_pass http://127.0.0.1:3224;
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-                }}
-              }}
-              '''
-              target.write_text(target.read_text(encoding="utf-8") + https_block, encoding="utf-8")
-              print("Vytvořen chybějící HTTPS vhost se statistikami")
-
-          if matched == 0:
-              raise SystemExit("Nebyl nalezen žádný Nginx vhost pro nasekadan.cz")
-          PY
-          sudo nginx -t
-          sudo systemctl reload nginx
-
-      - name: Ověřit zápis návštěvy a ochranu statistik
-        run: |
-          set -euo pipefail
-          curl -fsS --max-time 3 http://127.0.0.1:3225/healthz >/dev/null
-
-          token="NaseKadanStatsSelfTest/3.1-${GITHUB_RUN_ID}-${RANDOM}"
-          if code=$(curl --noproxy '*' -k -sS --max-time 10 \
-              --resolve nasekadan.cz:443:127.0.0.1 \
-              -A "$token" -o /dev/null -w '%{http_code}' \
-              https://nasekadan.cz/ 2>/dev/null) && [[ "$code" =~ ^2 ]]; then
-            scheme=https
-          else
-            code=$(curl --noproxy '*' -sS --max-time 10 \
-              --resolve nasekadan.cz:80:127.0.0.1 \
-              -A "$token" -o /dev/null -w '%{http_code}' \
-              http://nasekadan.cz/ 2>/dev/null || true)
-            [[ "$code" =~ ^2 ]] || {
-              echo "Hlavní stránka nevrátila úspěšný kód: ${code:-žádný}" >&2
-              exit 1
-            }
-            scheme=http
-          fi
-
-          sleep 1
-          sudo grep -Fq "$token" /var/log/nginx/nasekadan.access.log || {
-            echo "Kontrolní návštěva se nezapsala do statistického logu." >&2
-            sudo tail -n 20 /var/log/nginx/nasekadan.access.log >&2 || true
-            exit 1
-          }
-
-          if [[ "$scheme" == "https" ]]; then
-            redirect_code=$(curl --noproxy '*' -k -sS --max-time 10 \
-              --resolve nasekadan.cz:443:127.0.0.1 \
-              -o /dev/null -w '%{http_code}' \
-              https://nasekadan.cz/statistiky 2>/dev/null || true)
-            stats_code=$(curl --noproxy '*' -k -sS --max-time 10 \
-              --resolve nasekadan.cz:443:127.0.0.1 \
-              -o /dev/null -w '%{http_code}' \
-              https://nasekadan.cz/statistiky/ 2>/dev/null || true)
-          else
-            redirect_code=$(curl --noproxy '*' -sS --max-time 10 \
-              --resolve nasekadan.cz:80:127.0.0.1 \
-              -o /dev/null -w '%{http_code}' \
-              http://nasekadan.cz/statistiky 2>/dev/null || true)
-            stats_code=$(curl --noproxy '*' -sS --max-time 10 \
-              --resolve nasekadan.cz:80:127.0.0.1 \
-              -o /dev/null -w '%{http_code}' \
-              http://nasekadan.cz/statistiky/ 2>/dev/null || true)
-          fi
-          [[ "$redirect_code" == "301" || "$redirect_code" == "302" ]] || {
-            echo "Adresa bez lomítka se nepřesměrovává; HTTP kód: $redirect_code" >&2
-            exit 1
-          }
-          [[ "$stats_code" == "401" ]] || {
-            echo "Statistiky nejsou správně chráněné; HTTP kód: $stats_code" >&2
-            exit 1
-          }
-
-          echo "Statistiky jsou aktivní na HTTP i HTTPS, návštěvy se zapisují a stránka je chráněná heslem."
+        shell: bash
+        run: sudo bash .github/scripts/nasekadan-stats/install-stats.sh
