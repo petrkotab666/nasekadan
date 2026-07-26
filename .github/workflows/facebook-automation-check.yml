@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/facebook-publisher-config.json"
+      - "scripts/remove_unpublished_articles.py"
       - "scripts/publish_facebook.py"
       - "scripts/process_facebook_queue.py"
       - "tools/nastavit-facebook.ps1"
@@ -24,14 +25,27 @@ jobs:
 
       - name: Ověřit syntaxi Pythonu
         run: |
-          python3 -m py_compile scripts/publish_facebook.py scripts/process_facebook_queue.py
+          python3 -m py_compile \
+            scripts/remove_unpublished_articles.py \
+            scripts/publish_facebook.py \
+            scripts/process_facebook_queue.py
 
-      - name: Ověřit automatické dohledání nového článku
+      - name: Ověřit, že neschválený článek nemůže vstoupit do fronty
         shell: bash
         run: |
           set -euo pipefail
+          cat > clanky/pozemky-koupaliste-kadan.html <<'HTML'
+          <!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","datePublished":"2026-07-26T12:00:00+02:00"}</script></head><body></body></html>
+          HTML
+          test -s clanky/pozemky-koupaliste-kadan.html
+          python3 scripts/remove_unpublished_articles.py
+          test ! -e clanky/pozemky-koupaliste-kadan.html
           python3 scripts/process_facebook_queue.py --discover-only | tee /tmp/facebook-discovered.txt
           grep -Fxq 'clanky/epetice-nemocnice-kadan.html' /tmp/facebook-discovered.txt
+          if grep -Fq 'pozemky-koupaliste-kadan.html' /tmp/facebook-discovered.txt; then
+            echo 'Neschválený článek pronikl do Facebook fronty.' >&2
+            exit 1
+          fi
 
       - name: Ověřit přednost obnoveného tokenu a stabilní chybovou zprávu
         shell: bash
