@@ -40,7 +40,7 @@ jobs:
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-            -d '{"state":"pending","context":"nasekadan/live-seo-ai","description":"Čeká se na produkční nasazení a kontrolu"}' >/dev/null
+            -d '{"state":"pending","context":"nasekadan/live-seo-ai","description":"Čeká se na produkční nasazení","target_url":"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' >/dev/null
 
       - name: Počkat na novou produkci a zkontrolovat ji zvenčí
         id: live
@@ -49,44 +49,59 @@ jobs:
           set -euo pipefail
           base='https://nasekadan.cz'
           expected_title='Nemocnice Kadaň: ztráta 46 milionů a pomoc města | Naše Kadaň'
+          reason='Kontrola ještě nezačala'
+
+          post_pending() {
+            [[ "${{ github.event_name }}" == 'push' ]] || return 0
+            local description="Čeká se: ${reason:0:125}"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Accept: application/vnd.github+json" \
+              https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+              -d "{\"state\":\"pending\",\"context\":\"nasekadan/live-seo-ai\",\"description\":\"$description\",\"target_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" >/dev/null
+          }
 
           verify_live() {
-            home=$(curl -fsS --max-time 20 "$base/") || return 1
-            robots=$(curl -fsS --max-time 20 "$base/robots.txt") || return 1
-            sitemap=$(curl -fsS --max-time 20 "$base/sitemap.xml") || return 1
-            llms=$(curl -fsS --max-time 20 "$base/llms.txt") || return 1
-            audit=$(curl -fsS --max-time 20 "$base/SEO-AI-AUDIT.md") || return 1
-            article=$(curl -fsS --max-time 20 "$base/clanky/nemocnice-kadan.html") || return 1
-            guide=$(curl -fsS --max-time 20 "$base/pruvodce/co-videt-v-kadani.html") || return 1
-            google=$(curl -fsS --max-time 20 "$base/googlec6d0b89322c33fa6.html") || return 1
-            indexnow=$(curl -fsS --max-time 20 "$base/4779abb8964b2f9f65ae960f08f74e6a.txt") || return 1
+            if ! home=$(curl -fsS --max-time 20 "$base/"); then reason='nelze načíst hlavní stránku'; return 1; fi
+            if ! robots=$(curl -fsS --max-time 20 "$base/robots.txt"); then reason='nelze načíst robots.txt'; return 1; fi
+            if ! sitemap=$(curl -fsS --max-time 20 "$base/sitemap.xml"); then reason='nelze načíst sitemap.xml'; return 1; fi
+            if ! llms=$(curl -fsS --max-time 20 "$base/llms.txt"); then reason='nelze načíst llms.txt'; return 1; fi
+            if ! audit=$(curl -fsS --max-time 20 "$base/SEO-AI-AUDIT.md"); then reason='nelze načíst uložený audit'; return 1; fi
+            if ! article=$(curl -fsS --max-time 20 "$base/clanky/nemocnice-kadan.html"); then reason='nelze načíst kontrolní článek'; return 1; fi
+            if ! guide=$(curl -fsS --max-time 20 "$base/pruvodce/co-videt-v-kadani.html"); then reason='nelze načíst velký průvodce'; return 1; fi
+            if ! google=$(curl -fsS --max-time 20 "$base/googlec6d0b89322c33fa6.html"); then reason='nelze načíst Google ověřovací soubor'; return 1; fi
+            if ! indexnow=$(curl -fsS --max-time 20 "$base/4779abb8964b2f9f65ae960f08f74e6a.txt"); then reason='nelze načíst IndexNow klíč'; return 1; fi
 
-            grep -Fq 'google-site-verification' <<<"$home" || return 1
-            grep -Fq 'User-agent: OAI-SearchBot' <<<"$robots" || return 1
-            grep -Fq 'Sitemap: https://nasekadan.cz/news-sitemap.xml' <<<"$robots" || return 1
-            grep -Fq 'clanky/pozemky-koupaliste-kadan.html' <<<"$sitemap" || return 1
-            grep -Fq 'https://nasekadan.cz/prehled-zdroju/' <<<"$sitemap" || return 1
-            grep -Fq '# Naše Kadaň' <<<"$llms" || return 1
-            grep -Fq 'Chyby: **0**' <<<"$audit" || return 1
-            grep -Fq 'Varování: **0**' <<<"$audit" || return 1
-            grep -Fq "<title>$expected_title</title>" <<<"$article" || return 1
-            grep -Fq 'property="article:published_time"' <<<"$article" || return 1
-            grep -Fq 'property="article:modified_time"' <<<"$article" || return 1
-            if grep -Fq 'href="minoritska-basta.html"' <<<"$guide"; then return 1; fi
-            grep -Fq 'google-site-verification: googlec6d0b89322c33fa6.html' <<<"$google" || return 1
-            [[ "$(tr -d '\r\n ' <<<"$indexnow")" == '4779abb8964b2f9f65ae960f08f74e6a' ]] || return 1
+            if ! grep -Fq 'google-site-verification' <<<"$home"; then reason='na hlavní stránce chybí Google značka'; return 1; fi
+            if ! grep -Fq 'User-agent: OAI-SearchBot' <<<"$robots"; then reason='robots.txt nemá OAI-SearchBot'; return 1; fi
+            if ! grep -Fq 'Sitemap: https://nasekadan.cz/news-sitemap.xml' <<<"$robots"; then reason='robots.txt nemá news sitemap'; return 1; fi
+            if ! grep -Fq 'clanky/pozemky-koupaliste-kadan.html' <<<"$sitemap"; then reason='sitemap nemá článek o koupališti'; return 1; fi
+            if ! grep -Fq 'https://nasekadan.cz/prehled-zdroju/' <<<"$sitemap"; then reason='sitemap nemá přehled zdrojů'; return 1; fi
+            if ! grep -Fq '# Naše Kadaň' <<<"$llms"; then reason='llms.txt nemá identitu webu'; return 1; fi
+            if ! grep -Fq 'Chyby: **0**' <<<"$audit"; then reason='uložený audit nemá nula chyb'; return 1; fi
+            if ! grep -Fq 'Varování: **0**' <<<"$audit"; then reason='uložený audit nemá nula varování'; return 1; fi
+            if ! grep -Fq "<title>$expected_title</title>" <<<"$article"; then reason='článek má ještě starý title'; return 1; fi
+            if ! grep -Fq 'property="article:published_time"' <<<"$article"; then reason='článku chybí published_time'; return 1; fi
+            if ! grep -Fq 'property="article:modified_time"' <<<"$article"; then reason='článku chybí modified_time'; return 1; fi
+            if grep -Fq 'href="minoritska-basta.html"' <<<"$guide"; then reason='průvodce stále obsahuje nefunkční odkaz'; return 1; fi
+            if ! grep -Fq 'google-site-verification: googlec6d0b89322c33fa6.html' <<<"$google"; then reason='Google ověřovací soubor má jiný obsah'; return 1; fi
+            if [[ "$(tr -d '\r\n ' <<<"$indexnow")" != '4779abb8964b2f9f65ae960f08f74e6a' ]]; then reason='IndexNow klíč má jiný obsah'; return 1; fi
+            reason='živý web prošel všemi kontrolami'
           }
 
           for attempt in $(seq 1 40); do
             if verify_live; then
+              echo "reason=$reason" >> "$GITHUB_OUTPUT"
               echo "Živý web prošel kontrolou při pokusu $attempt."
               exit 0
             fi
-            echo "Pokus $attempt/40: nová produkce ještě není kompletní."
+            echo "Pokus $attempt/40: $reason"
+            post_pending
             sleep 15
           done
 
-          echo 'Živý web ani po čekání nesplnil SEO/AI kontrolu.' >&2
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Živý web ani po čekání nesplnil kontrolu: $reason" >&2
           exit 1
 
       - name: Zapsat výsledek kontroly
@@ -98,10 +113,11 @@ jobs:
             description='Živé SEO a AI podklady jsou v pořádku'
           else
             state=failure
-            description='Živá SEO nebo AI kontrola selhala'
+            description='Selhalo: ${{ steps.live.outputs.reason }}'
           fi
+          description="${description:0:140}"
           curl -fsS -X POST \
             -H "Authorization: Bearer ${{ github.token }}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-            -d "{\"state\":\"$state\",\"context\":\"nasekadan/live-seo-ai\",\"description\":\"$description\"}" >/dev/null
+            -d "{\"state\":\"$state\",\"context\":\"nasekadan/live-seo-ai\",\"description\":\"$description\",\"target_url\":\"https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" >/dev/null
