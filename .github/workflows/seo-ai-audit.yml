@@ -1,0 +1,109 @@
+name: SEO a AI audit
+
+on:
+  push:
+    paths:
+      - '**/*.html'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - 'news-sitemap.xml'
+      - 'rss.xml'
+      - 'llms.txt'
+      - 'scripts/**'
+      - '.github/workflows/seo-ai-audit.yml'
+  pull_request:
+    paths:
+      - '**/*.html'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - 'news-sitemap.xml'
+      - 'rss.xml'
+      - 'llms.txt'
+      - 'scripts/**'
+      - '.github/workflows/seo-ai-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout web
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Najít změněné HTML stránky
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > /tmp/changed-files.txt
+          else
+            : > /tmp/changed-files.txt
+          fi
+          grep -E '\.html$' /tmp/changed-files.txt \
+            | grep -v '^clanky/parts/' \
+            | grep -v '^google[^/]*\.html$' \
+            > /tmp/changed-html.txt || true
+          echo 'Změněné veřejné HTML:'
+          cat /tmp/changed-html.txt || true
+
+      - name: Připravit stejná metadata jako produkční sestavení
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf clanky/parts
+          rm -f google*.html
+          python3 scripts/prepare_discovery.py
+
+      - name: Vytvořit úplný audit
+        run: |
+          python3 scripts/seo_ai_audit.py \
+            --report SEO-AI-AUDIT.md \
+            --json seo-ai-audit.json
+          cat SEO-AI-AUDIT.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Zastavit chybnou novou nebo změněnou stránku
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -s /tmp/changed-html.txt ]]; then
+            echo 'V této změně není žádná veřejná HTML stránka k přísné kontrole.'
+            exit 0
+          fi
+          python3 scripts/seo_ai_audit.py \
+            --strict \
+            --paths-file /tmp/changed-html.txt
+
+      - name: Uložit audit jako artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-ai-audit
+          path: |
+            SEO-AI-AUDIT.md
+            seo-ai-audit.json
+
+      - name: Uložit první úplný audit do auditní větve
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/seo-ai-audit-20260726'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s SEO-AI-AUDIT.md
+          test -s seo-ai-audit.json
+          git restore clanky/parts google*.html 2>/dev/null || true
+          git config user.name 'Naše Kadaň SEO audit'
+          git config user.email 'info@nasekadan.cz'
+          git add SEO-AI-AUDIT.md seo-ai-audit.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Aktualizovat úplný SEO a AI audit'
+          git push origin HEAD:seo-ai-audit-20260726
