@@ -1,5 +1,5 @@
 name: Nasadit Naše Kadaň na OVH
-run-name: Produkční nasazení aktuální větve main
+run-name: Produkční nasazení nejnovější větve main
 
 on:
   push:
@@ -13,12 +13,12 @@ on:
 permissions:
   contents: read
 
-# Běžné push deploye se řadí za sebe. Kontrolovaný PR deploy má vlastní
-# frontu, takže jej časté automatické commity nemohou před spuštěním zrušit.
-# Samotný skript navíc používá serverový flock a vždy stáhne aktuální main.
+# Na produkci má smysl pouze nejnovější stav větve main. Nový push zruší
+# starší čekající nebo rozběhnuté nasazení a zabrání několikadenní frontě.
+# Serverový skript používá vlastní flock a po startu znovu stáhne origin/main.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && 'nasekadan-force-production' || 'nasekadan-production' }}
-  cancel-in-progress: false
+  group: nasekadan-production
+  cancel-in-progress: true
 
 jobs:
   deploy:
