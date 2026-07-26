@@ -1,0 +1,64 @@
+name: Sjednotit patičku celého webu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.html'
+      - 'style.css'
+      - 'navigation.js'
+      - 'Dockerfile'
+      - 'scripts/normalize_footers.py'
+      - '.github/footer-normalization-trigger.txt'
+      - '.github/workflows/normalize-site-footer.yml'
+  schedule:
+    - cron: '53 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-unified-footer
+  cancel-in-progress: false
+
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sjednotit všechny statické patičky
+        run: python3 scripts/normalize_footers.py --write --check
+
+      - name: Uložit opravené stránky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – jednotná patička'
+          git config user.email 'info@nasekadan.cz'
+
+          while IFS= read -r -d '' file; do
+            git add -- "$file"
+          done < <(find . -type f -name '*.html' \
+            -not -path './.git/*' \
+            -not -path './.image-parts/*' \
+            -not -path './lms-rescue/*' \
+            -not -path './node_modules/*' -print0)
+
+          if git diff --cached --quiet; then
+            echo 'Patička je již na všech stránkách jednotná.'
+            exit 0
+          fi
+
+          git commit -m 'Sjednotit patičku na všech stránkách webu'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Závěrečná kontrola
+        run: python3 scripts/normalize_footers.py --check
