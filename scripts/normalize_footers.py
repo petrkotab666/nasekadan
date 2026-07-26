@@ -67,9 +67,6 @@ def public_html_files() -> list[Path]:
 
 
 def normalized_html(text: str) -> str:
-    if not HTML_OPEN_RE.search(text):
-        raise ValueError("soubor není úplný HTML dokument")
-
     # Jediný samostatný stylesheet má přednost před historickými lokálními
     # pravidly jednotlivých stránek, takže patička vypadá všude stejně.
     result = FOOTER_CSS_RE.sub("", text)
@@ -104,10 +101,19 @@ def main() -> int:
     args = parser.parse_args()
 
     changed: list[Path] = []
+    skipped: list[Path] = []
     errors: list[str] = []
 
     for path in public_html_files():
         text = path.read_text(encoding="utf-8")
+
+        # V repozitáři jsou také HTML fragmenty používané skládacími skripty a
+        # ověřovací soubor Googlu. Nejsou to samostatné webové stránky a patička
+        # do nich nepatří.
+        if not HTML_OPEN_RE.search(text):
+            skipped.append(path)
+            continue
+
         try:
             normalized = normalized_html(text)
         except ValueError as exc:
@@ -139,6 +145,11 @@ def main() -> int:
             print(f"- {path.relative_to(ROOT)}")
     else:
         print("Všechny kontrolované stránky mají jednotnou patičku.")
+
+    if skipped:
+        print("Přeskočené HTML fragmenty a ověřovací soubory:")
+        for path in skipped:
+            print(f"- {path.relative_to(ROOT)}")
 
     if errors:
         print("Chyby:")
