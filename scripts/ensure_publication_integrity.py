@@ -198,43 +198,13 @@ def ensure_rss() -> bool:
     return write_if_changed(RSS, xml)
 
 
-def patch_workflow(path: Path, before_step: str) -> bool:
-    text = read(path)
-    marker = "      - name: Ověřit trvalou dostupnost publikovaných článků"
-    if marker in text:
-        return False
-    target = f"      - name: {before_step}"
-    if target not in text:
-        raise RuntimeError(f"V {path.relative_to(ROOT)} chybí krok '{before_step}'.")
-    guard = (
-        "      - name: Ověřit trvalou dostupnost publikovaných článků\n"
-        "        run: python3 scripts/validate_publication_integrity.py\n\n"
-    )
-    text = text.replace(target, guard + target, 1)
-    return write_if_changed(path, text)
-
-
 def main() -> int:
     train_file = ROOT / "clanky" / TRAIN_PATH.rsplit("/", 1)[-1]
     if not train_file.is_file():
         raise RuntimeError("Zdrojový článek o nočních výlukách chybí; automatická oprava byla zastavena.")
 
-    changed = [
-        ensure_home(),
-        ensure_archive(),
-        ensure_sitemap(),
-        ensure_rss(),
-        patch_workflow(ROOT / ".github/workflows/deploy-ovh.yml", "Sestavit a spustit web"),
-        patch_workflow(
-            ROOT / ".github/workflows/emergency-deploy-ovh.yml",
-            "Sestavit a okamžitě přepnout web",
-        ),
-        patch_workflow(
-            ROOT / ".github/workflows/deploy-nasekadan-pages-emergency.yml",
-            "Připravit veřejný web",
-        ),
-    ]
-    print("Obnova a ochrana publikace dokončena.", "Změny:" if any(changed) else "Beze změn.", sum(changed))
+    changed = [ensure_home(), ensure_archive(), ensure_sitemap(), ensure_rss()]
+    print("Obnova publikace dokončena.", "Změny:" if any(changed) else "Beze změn.", sum(changed))
     return 0
 
 
