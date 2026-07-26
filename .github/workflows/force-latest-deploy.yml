@@ -1,0 +1,140 @@
+name: Vynutit nejnovější produkční nasazení
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/force-latest-deploy-trigger.txt'
+      - '.github/workflows/force-latest-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  force-latest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Zrušit pouze zastaralá nasazení Naše Kadaň
+        id: clean
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflows = ['deploy-ovh.yml', 'emergency-deploy-ovh.yml'];
+            const cancelled = [];
+            for (const workflow_id of workflows) {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id,
+                per_page: 100
+              });
+              for (const run of runs) {
+                if (!['queued', 'in_progress', 'waiting', 'pending', 'requested'].includes(run.status)) continue;
+                try {
+                  await github.rest.actions.cancelWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: run.id
+                  });
+                  cancelled.push(`${workflow_id} #${run.run_number} (${run.id})`);
+                } catch (error) {
+                  core.warning(`Běh ${run.id} nešel zrušit: ${error.message}`);
+                }
+              }
+            }
+            core.setOutput('cancelled', cancelled.join(', ') || 'žádný');
+            core.info(`Zrušené běhy: ${cancelled.join(', ') || 'žádné'}`);
+
+      - name: Počkat na uvolnění fronty
+        run: sleep 12
+
+      - name: Spustit jediný aktuální deploy z main
+        id: dispatch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const started = new Date();
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy-ovh.yml',
+              ref: 'main'
+            });
+            core.setOutput('started', started.toISOString());
+            core.info(`Deploy odeslán v ${started.toISOString()}`);
+
+      - name: Najít spuštěný deploy a počkat na výsledek
+        id: wait
+        uses: actions/github-script@v7
+        env:
+          STARTED_AT: ${{ steps.dispatch.outputs.started }}
+        with:
+          script: |
+            const started = new Date(process.env.STARTED_AT).getTime() - 5000;
+            let selected = null;
+            for (let attempt = 1; attempt <= 24; attempt++) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'deploy-ovh.yml',
+                branch: 'main',
+                event: 'workflow_dispatch',
+                per_page: 20
+              });
+              selected = response.data.workflow_runs.find(run => new Date(run.created_at).getTime() >= started);
+              if (selected) break;
+              core.info(`Čekám na vytvoření deploy runu (${attempt}/24).`);
+              await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+            if (!selected) core.setFailed('Nepodařilo se najít nově spuštěný deploy run.');
+            core.setOutput('run_id', selected.id);
+            core.setOutput('run_url', selected.html_url);
+            core.info(`Sleduji deploy ${selected.id}: ${selected.html_url}`);
+
+            for (let attempt = 1; attempt <= 120; attempt++) {
+              const response = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: selected.id
+              });
+              const run = response.data;
+              core.info(`Deploy ${run.status}, závěr ${run.conclusion || 'zatím žádný'} (${attempt}/120).`);
+              if (run.status === 'completed') {
+                core.setOutput('conclusion', run.conclusion || 'unknown');
+                if (run.conclusion !== 'success') {
+                  core.setFailed(`Produkční deploy skončil: ${run.conclusion}`);
+                }
+                return;
+              }
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+            core.setFailed('Produkční deploy se nedokončil v časovém limitu.');
+
+      - name: Zapsat výsledek do PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          CANCELLED: ${{ steps.clean.outputs.cancelled }}
+          DEPLOY_URL: ${{ steps.wait.outputs.run_url }}
+          CONCLUSION: ${{ steps.wait.outputs.conclusion }}
+          JOB_STATUS: ${{ job.status }}
+        with:
+          script: |
+            const body = [
+              '## Vynucené nejnovější produkční nasazení',
+              '',
+              `- Zrušené zastaralé běhy: **${process.env.CANCELLED || 'žádné'}**`,
+              `- Výsledek řídicího běhu: **${process.env.JOB_STATUS}**`,
+              `- Výsledek produkčního deploye: **${process.env.CONCLUSION || 'nedokončen'}**`,
+              process.env.DEPLOY_URL ? `- [Otevřít produkční deploy](${process.env.DEPLOY_URL})` : '- Produkční deploy URL není k dispozici.'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
