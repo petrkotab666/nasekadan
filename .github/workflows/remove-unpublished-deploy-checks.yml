@@ -1,0 +1,55 @@
+name: Opravit produkční kontrolu neveřejných článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-unpublished-deploy-checks.yml'
+      - '.github/remove-unpublished-deploy-checks-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nevyžadovat neveřejný článek při produkční kontrole
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/sync-production.sh')
+          text = path.read_text(encoding='utf-8')
+          lines = []
+          for line in text.splitlines():
+              if line.startswith("POOL='pozemky-koupaliste-kadan.html'"):
+                  continue
+              if 'grep -Fq "$POOL"' in line:
+                  continue
+              if 'verify_public' in line and '"$POOL"' in line:
+                  continue
+              lines.append(line)
+          text = '\n'.join(lines) + '\n'
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+          ! grep -Fq 'pozemky-koupaliste-kadan.html' deploy/sync-production.sh
+          bash -n deploy/sync-production.sh
+      - name: Uložit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – ochrana produkce'
+          git config user.email 'info@nasekadan.cz'
+          git add deploy/sync-production.sh
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Nevyžadovat neveřejný článek při nasazení'
+          git pull --rebase origin main
+          git push origin main
