@@ -75,6 +75,32 @@ footer.site-footer .footer-legal a{
   color:#dce7eb;
   font-size:13px;
 }
+
+/* Kritická izolace prvků uvnitř článku od stejnojmenných karet na titulní stránce. */
+main.article-shell article.article > section.event{
+  display:block!important;
+  grid-template-columns:none!important;
+  gap:0!important;
+  min-height:0!important;
+  width:100%!important;
+}
+main.article-shell article.article > section.event > time,
+main.article-shell article.article > section.event > h3,
+main.article-shell article.article > section.event > p{
+  display:block!important;
+  grid-column:auto!important;
+  width:100%!important;
+  max-width:none!important;
+  min-width:0!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  white-space:normal!important;
+}
+main.article-shell article.article > section.event > time{
+  display:inline-block!important;
+  width:auto!important;
+}
+
 @media(max-width:850px){
   footer.site-footer{padding-top:34px}
   footer.site-footer .footer-grid{
