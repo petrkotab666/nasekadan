@@ -25,14 +25,16 @@ RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n
 
 # Na všech stránkách načíst původní plný reklamní systém: bannery v článku,
 # reklamy v bočním panelu a bezpečnou opravu nedostupných obrázků a popisů.
-# Starý samostatný skript reklamy-popisy.js se odstraní, aby se vrstvy nekřížily.
+# Neutrálně pojmenovaný skript obsah-doplnky.js slouží pouze jako záloha,
+# pokud prohlížeč nebo rozšíření zablokuje původní reklamní soubory.
 RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
   -e 's#style.css"#style.css?v=20260724-mobile-2"#g' \
   -e 's#site.js"#site.js?v=20260724-nemocnice-7"#g' \
   -e 's#reklamy\.js[^\"]*"#reklamy.js?v=20260726-ad-restore-7"#g' \
   -e 's#reklamy-oprava-obrazku\.js[^\"]*"#reklamy-oprava-obrazku.js?v=20260726-ad-restore-7"#g' \
   -e 's#<script src="[^"]*reklamy-popisy\.js[^"]*"></script>##g' \
-  -e 's#</body>#<script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
+  -e 's#<script src="[^"]*obsah-doplnky\.js[^"]*"></script>##g' \
+  -e 's#</body>#<script src="/obsah-doplnky.js?v=20260726-partner-fallback-1"></script><script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
 
 # Zkopírovat neveřejný redakční návrh KZK do heslem chráněné sekce /nahled/.
 RUN mkdir -p /usr/share/nginx/html/nahled \
