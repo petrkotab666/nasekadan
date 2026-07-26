@@ -1,0 +1,100 @@
+name: Odstranit technické popisy z jádra reklam
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-ad-core-descriptions-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nahradit technické texty skutečnými popisy inzerentů
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('reklamy.js')
+          text = path.read_text(encoding='utf-8')
+
+          # Nezobrazovat anonymní kreativitu bez jasného názvu inzerenta.
+          text = re.sub(
+              r",?\s*\{\s*id:'network-tower'.*?contexts:\[[^\]]*\]\s*\}",
+              '',
+              text,
+              flags=re.S,
+          )
+
+          old_tail = "  zonky:'Online půjčka s přehledným vyřízením a možností předčasného splacení.'\n};"
+          new_tail = """  zonky:'Online půjčka s přehledným vyřízením a možností předčasného splacení.',
+  invia:'Last minute i běžné zájezdy k moři, do hor a za poznáním s možností porovnání nabídek.',
+  'invia-cz':'Last minute i běžné zájezdy k moři, do hor a za poznáním s možností porovnání nabídek.',
+  atis:'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
+  'atis-cz':'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
+  excursia:'Poznávací zájezdy, výlety, exkurze a další zážitky v Česku i zahraničí.',
+  'excursia-cz':'Poznávací zájezdy, výlety, exkurze a další zážitky v Česku i zahraničí.'
+};"""
+          if old_tail not in text:
+              raise SystemExit('Nenalezen konec mapy partnerCopy')
+          text = text.replace(old_tail, new_tail, 1)
+
+          marker = "function firstPartnerLink(row){"
+          helper = """function partnerDescription(id,title,categories){
+  if(partnerCopy[id])return partnerCopy[id];
+  const value=(categories||[]).map(normalizeToken).join(' ');
+  if(/cestov|dovolen|zajezd|last-minute|pobyt|hotel|wellness|vylet|exkurz|zazit/.test(value))return `${title} nabízí dovolené, zájezdy, pobyty nebo služby pro cestování a volný čas.`;
+  if(/internet|televize|iptv|telekomunikace|mobil/.test(value))return `${title} nabízí internetové, televizní nebo mobilní služby.`;
+  if(/pojist|finance|pujcka|odpovednost/.test(value))return `${title} nabízí finanční nebo pojistné služby s online sjednáním či porovnáním.`;
+  if(/energie|elektrina|plyn/.test(value))return `${title} nabízí energie nebo související služby pro domácnosti.`;
+  if(/zdravi|sport|alergie/.test(value))return `${title} nabízí produkty zaměřené na zdraví, péči o tělo nebo aktivní životní styl.`;
+  if(/domacnost|bydleni|nabytek|spotrebice/.test(value))return `${title} nabízí vybavení, produkty nebo služby pro domácnost a bydlení.`;
+  if(/mazlicci|pes|kocka/.test(value))return `${title} nabízí produkty nebo služby pro domácí mazlíčky.`;
+  return `Produkty a služby od ${title}.`;
+}
+
+"""
+          if marker not in text:
+              raise SystemExit('Nenalezen bod pro vložení partnerDescription')
+          text = text.replace(marker, helper + marker, 1)
+
+          old = "      title:String(row.name||row.id||'Partnerská nabídka'),\n      text:partnerCopy[id]||'Vybraná partnerská nabídka z centrální databáze propojených webů.',"
+          new = "      title:String(row.name||row.id||'Inzerent'),\n      text:partnerDescription(id,String(row.name||row.id||'Inzerent'),categories),"
+          if old not in text:
+              raise SystemExit('Nenalezen technický popis v mergeSnapshotPartners')
+          text = text.replace(old, new, 1)
+          text = text.replace("title:String(row.name||'Partnerská nabídka')", "title:String(row.name||'Inzerent')")
+
+          if 'Vybraná partnerská nabídka z centrální databáze propojených webů.' in text:
+              raise SystemExit('Technický text v souboru stále zůstal')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Uložit opravené jádro
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reklamy.js
+          if git diff --cached --quiet; then
+            echo 'Jádro reklam již bylo opravené.'
+            exit 0
+          fi
+          git commit -m 'Odstranit technické texty z reklam a popsat inzerenty'
+          git pull --rebase origin main
+          git push
