@@ -1,0 +1,62 @@
+name: Propojit sérii Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/nemocnice-kadan.html'
+      - 'clanky/petice-nemocnice-kadan.html'
+      - 'clanky/nemocnice-kadan-software-kyberbezpecnost.html'
+      - '.github/drafts/nemocnice-kadan-software-kyberbezpecnost.html'
+      - 'style.css'
+      - 'scripts/link_hospital_series.py'
+      - '.github/hospital-series-trigger.txt'
+      - '.github/workflows/link-hospital-series.yml'
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-hospital-series
+  cancel-in-progress: false
+
+jobs:
+  link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit navigaci celé série
+        run: python3 scripts/link_hospital_series.py
+
+      - name: Uložit propojení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – propojení série'
+          git config user.email 'info@nasekadan.cz'
+          git add style.css \
+            clanky/nemocnice-kadan.html \
+            clanky/petice-nemocnice-kadan.html \
+            clanky/nemocnice-kadan-software-kyberbezpecnost.html \
+            .github/drafts/nemocnice-kadan-software-kyberbezpecnost.html
+
+          if git diff --cached --quiet; then
+            echo 'Série je již správně propojena.'
+            exit 0
+          fi
+
+          git commit -m 'Propojit celou sérii článků o Nemocnici Kadaň'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Závěrečná kontrola
+        run: python3 scripts/link_hospital_series.py
