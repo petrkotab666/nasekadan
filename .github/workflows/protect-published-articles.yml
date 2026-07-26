@@ -1,0 +1,67 @@
+name: Chránit publikované články před zmizením
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/**'
+      - 'index.html'
+      - 'sitemap.xml'
+      - 'rss.xml'
+      - 'scripts/ensure_publication_integrity.py'
+      - 'scripts/validate_publication_integrity.py'
+      - '.github/publication-integrity-trigger.txt'
+      - '.github/workflows/protect-published-articles.yml'
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-publication-integrity
+  cancel-in-progress: false
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Obnovit chybějící vazby publikovaných článků
+        run: python3 scripts/ensure_publication_integrity.py
+
+      - name: Ověřit titulní stránku, archiv, sitemapu a RSS
+        run: python3 scripts/validate_publication_integrity.py
+
+      - name: Trvale uložit automatickou opravu
+        id: save
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – ochrana článků'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html sitemap.xml rss.xml \
+            .github/workflows/deploy-ovh.yml \
+            .github/workflows/emergency-deploy-ovh.yml \
+            .github/workflows/deploy-nasekadan-pages-emergency.yml
+
+          if git diff --cached --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'Publikované články jsou kompletní; není co opravovat.'
+            exit 0
+          fi
+
+          git commit -m 'Obnovit a ochránit trvalou dostupnost publikovaných článků'
+          git pull --rebase origin main
+          git push origin main
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Závěrečná kontrola po opravě
+        run: python3 scripts/validate_publication_integrity.py
