@@ -18,6 +18,10 @@ SMTP_TIMEOUT=int(os.environ.get('SMTP_TIMEOUT','12'))
 ANALYTICS_SECRET=os.environ.get('ANALYTICS_SECRET','nasekadan-change-me')
 
 
+class SMTPConfigurationError(RuntimeError):
+ pass
+
+
 def log_error(label,exc):
  print(f'[{datetime.now(timezone.utc).isoformat()}] {label}: {type(exc).__name__}: {exc}',file=sys.stderr,flush=True)
  traceback.print_exc(file=sys.stderr)
@@ -33,13 +37,19 @@ def db():
  return c
 
 
+def smtp_configured():
+ return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
+
+
 def send_mail(to,subject,text):
- if not SMTP_HOST: raise RuntimeError('SMTP není nastaveno')
+ if not SMTP_HOST: raise SMTPConfigurationError('SMTP server není nastavený')
+ if not SMTP_USER: raise SMTPConfigurationError('SMTP uživatel není nastavený')
+ if not SMTP_PASSWORD: raise SMTPConfigurationError('SMTP heslo není nastavené')
  m=EmailMessage();m['From']=FROM;m['To']=to;m['Subject']=subject;m.set_content(text)
  connection=smtplib.SMTP_SSL(SMTP_HOST,SMTP_PORT,timeout=SMTP_TIMEOUT) if SMTP_MODE in {'ssl','smtps','465'} else smtplib.SMTP(SMTP_HOST,SMTP_PORT,timeout=SMTP_TIMEOUT)
  with connection as s:
   if SMTP_MODE in {'1','true','yes','starttls','tls'}:s.starttls()
-  if SMTP_USER:s.login(SMTP_USER,SMTP_PASSWORD)
+  s.login(SMTP_USER,SMTP_PASSWORD)
   s.send_message(m)
 
 
@@ -103,7 +113,16 @@ def analytics_summary(start):
 
 def app(env,start):
  path=env.get('PATH_INFO','');method=env.get('REQUEST_METHOD','GET')
- if path=='/health':return response(start,'200 OK',json.dumps({'ok':True}))
+ if path=='/health':
+  return response(start,'200 OK',json.dumps({
+   'ok':True,
+   'smtpConfigured':smtp_configured(),
+   'smtpHost':SMTP_HOST or None,
+   'smtpPort':SMTP_PORT,
+   'smtpMode':SMTP_MODE,
+   'smtpUserSet':bool(SMTP_USER),
+   'smtpPasswordSet':bool(SMTP_PASSWORD),
+  }))
  if path=='/analytics/pageview' and method=='POST':return analytics_pageview(env,start)
  if path=='/analytics/summary' and method=='GET':return analytics_summary(start)
 
@@ -119,8 +138,10 @@ def app(env,start):
    link=f'{BASE}/api/newsletter/confirm?token={token}'
    send_mail(email,'Potvrďte odběr Naše Kadaň',f'Kliknutím potvrďte odběr týdenního přehledu Naše Kadaň:\n\n{link}\n\nPokud jste se nepřihlašovali, zprávu ignorujte.')
    return response(start,'200 OK',json.dumps({'ok':True,'message':'Na e-mail jsme poslali potvrzovací odkaz.'},ensure_ascii=False))
+  except SMTPConfigurationError as exc:
+   log_error('SMTP_CONFIG',exc);return response(start,'503 Service Unavailable',json.dumps({'ok':False,'message':'Newsletter zatím nemá na serveru nastavené heslo odesílací schránky.'},ensure_ascii=False))
   except smtplib.SMTPAuthenticationError as exc:
-   log_error('SMTP_AUTH',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Odeslání selhalo: poštovní server odmítl přihlášení.'},ensure_ascii=False))
+   log_error('SMTP_AUTH',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Odeslání selhalo: uložené heslo odesílací schránky Seznam není platné.'},ensure_ascii=False))
   except (TimeoutError,OSError,smtplib.SMTPException) as exc:
    log_error('SMTP_CONNECTION',exc);return response(start,'502 Bad Gateway',json.dumps({'ok':False,'message':'Poštovní server nyní neodpovídá. Zkuste to znovu za chvíli.'},ensure_ascii=False))
   except Exception as exc:
