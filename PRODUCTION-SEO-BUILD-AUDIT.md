@@ -2,7 +2,7 @@
 
 - Zkontrolované HTML stránky: **40**
 - Indexovatelné stránky: **39**
-- Chyby: **2**
+- Chyby: **0**
 - Varování: **1**
 - Informace: **0**
 
@@ -10,12 +10,7 @@ Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, intern�
 
 ## Kritické chyby
 
-### `clanky/index.html`
-
-- **broken-internal-link:** Interní odkaz '/clanky/pozemky-koupaliste-kadan.html' nevede na existující soubor.
-### `sitemap.xml`
-
-- **sitemap-extra-url:** Sitemap obsahuje neexistující nebo neindexovatelnou URL https://nasekadan.cz/clanky/pozemky-koupaliste-kadan.html.
+Bez nálezů.
 
 ## Varování
 
