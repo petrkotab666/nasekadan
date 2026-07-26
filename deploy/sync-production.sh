@@ -18,8 +18,9 @@ SHORT_SHA="${SOURCE_SHA:0:12}"
 echo "Nasazuji main @ $SOURCE_SHA"
 
 python3 scripts/ensure_publication_integrity.py
-python3 scripts/validate_publication_integrity.py
+python3 scripts/ensure_newest_article_indexes.py
 python3 scripts/normalize_footers.py --write --check
+python3 scripts/validate_publication_integrity.py
 
 cat > deployment-health.txt <<EOF
 site=nasekadan.cz
@@ -47,6 +48,8 @@ curl -fsS http://127.0.0.1:3224/healthz >/dev/null
 
 TRAIN='nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html'
 WEEKLY='kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
+EPETICE='epetice-nemocnice-kadan.html'
+POOL='pozemky-koupaliste-kadan.html'
 
 verify_endpoint() {
   local base="$1"
@@ -57,11 +60,14 @@ verify_endpoint() {
   curl -kfsS --max-time 25 "${base}/?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
+  grep -Fq "$EPETICE" "$tmp"
   grep -Fq 'data-site-footer="v1"' "$tmp"
 
   curl -kfsS --max-time 25 "${base}/clanky/?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
+  grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$POOL" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/clanky/${TRAIN}?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov' "$tmp"
@@ -69,10 +75,14 @@ verify_endpoint() {
   curl -kfsS --max-time 25 "${base}/sitemap.xml?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
+  grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$POOL" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/rss.xml?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
+  grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$POOL" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/deployment-health.txt?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "source=$SOURCE_SHA" "$tmp"
@@ -133,10 +143,17 @@ verify_public() {
 
 verify_public '/' "$WEEKLY"
 verify_public '/' "$TRAIN"
+verify_public '/' "$EPETICE"
 verify_public '/clanky/' "$TRAIN"
+verify_public '/clanky/' "$EPETICE"
+verify_public '/clanky/' "$POOL"
 verify_public "/clanky/$TRAIN" 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov'
 verify_public '/sitemap.xml' "$TRAIN"
+verify_public '/sitemap.xml' "$EPETICE"
+verify_public '/sitemap.xml' "$POOL"
 verify_public '/rss.xml' "$TRAIN"
+verify_public '/rss.xml' "$EPETICE"
+verify_public '/rss.xml' "$POOL"
 verify_public '/deployment-health.txt' "source=$SOURCE_SHA"
 
 # Po úspěšném ověření obnovit i lokální desetiminutovou pojistku. Ta zajistí,
