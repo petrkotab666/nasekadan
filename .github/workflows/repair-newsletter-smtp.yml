@@ -39,5 +39,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS --max-time 10 http://127.0.0.1:8765/health | grep -Fq '"ok": true\|"ok":true'
+          curl -fsS --max-time 10 http://127.0.0.1:8765/health \
+            | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'
           echo 'Newsletter API odpovídá.'
