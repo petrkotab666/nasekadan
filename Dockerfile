@@ -3,7 +3,9 @@ WORKDIR /site
 COPY . .
 
 # Pillow je potřeba pro jedinečné 1200×630 sociální obrázky jednotlivých článků.
-RUN apk add --no-cache py3-pillow
+# Instalace přes pip zaručí, že se knihovna nahraje do stejného Pythonu 3.12,
+# ve kterém následně běží generátor obrázků.
+RUN pip install --no-cache-dir Pillow
 
 # Každá veřejná stránka musí mít už ve statickém HTML stejnou patičku a stejný
 # footer.css. JavaScript je pouze druhá pojistka, ne podmínka správného vzhledu.
