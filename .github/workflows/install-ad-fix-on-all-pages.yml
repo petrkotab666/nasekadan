@@ -1,4 +1,4 @@
-name: Načíst stabilní reklamy na všech stránkách
+name: Načíst obnovený reklamní systém na všech stránkách
 
 on:
   push:
@@ -6,7 +6,6 @@ on:
     paths:
       - 'reklamy.js'
       - 'reklamy-oprava-obrazku.js'
-      - 'reklamy-popisy.js'
       - '.github/workflows/install-ad-fix-on-all-pages.yml'
   workflow_dispatch:
 
@@ -25,7 +24,7 @@ jobs:
       - name: Stáhnout web
         uses: actions/checkout@v4
 
-      - name: Doplnit verzované reklamní skripty
+      - name: Doplnit původní plné reklamní skripty
         shell: bash
         run: |
           set -euo pipefail
@@ -33,8 +32,8 @@ jobs:
           from pathlib import Path
           import re
 
-          core_version = '20260726-ad-core-6'
-          noop_version = '20260726-noop-1'
+          core_version = '20260726-ad-restore-7'
+          fix_version = '20260726-ad-restore-7'
           prefix = r'(?:\.\./)*/?'
           pattern = re.compile(
               rf'<script\s+src=["\']{prefix}reklamy\.js(?:\?[^"\']*)?["\']\s*></script>'
@@ -44,8 +43,7 @@ jobs:
           )
           replacement = (
               f'<script src="/reklamy.js?v={core_version}"></script>\n'
-              f'<script src="/reklamy-oprava-obrazku.js?v={noop_version}"></script>\n'
-              f'<script src="/reklamy-popisy.js?v={noop_version}"></script>'
+              f'<script src="/reklamy-oprava-obrazku.js?v={fix_version}"></script>'
           )
 
           changed = 0
@@ -63,7 +61,7 @@ jobs:
 
           print(f'Zkontrolováno {scanned} HTML souborů, změněno {changed}.')
           if changed == 0:
-              print('Všechny stránky již používají aktuální reklamní skripty.')
+              print('Všechny stránky již používají obnovený reklamní systém.')
           PY
 
       - name: Uložit změny
@@ -77,6 +75,6 @@ jobs:
             echo "Není co ukládat."
             exit 0
           fi
-          git commit -m "Načíst stabilní reklamy na všech stránkách"
+          git commit -m "Načíst obnovené bannery na všech stránkách"
           git pull --rebase origin main
           git push
