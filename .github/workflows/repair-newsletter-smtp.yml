@@ -1,0 +1,43 @@
+name: Opravit SMTP newsletteru
+run-name: Nastavit Seznam Email Profi a restartovat newsletter
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'newsletter/**'
+      - 'deploy/install-newsletter.sh'
+      - 'deploy/repair-newsletter-smtp.sh'
+      - '.github/workflows/repair-newsletter-smtp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-newsletter-smtp
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout repozitář
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Srovnat SMTP na Seznam Email Profi
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/repair-newsletter-smtp.sh
+          bash deploy/repair-newsletter-smtp.sh
+
+      - name: Ověřit lokální API newsletteru
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 10 http://127.0.0.1:8765/health | grep -Fq '"ok": true\|"ok":true'
+          echo 'Newsletter API odpovídá.'
