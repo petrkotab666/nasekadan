@@ -7,6 +7,8 @@ on:
       - emergency-deploy-trigger.txt
       - .github/workflows/emergency-deploy-ovh.yml
       - deploy/sync-production.sh
+      - footer.css
+      - scripts/normalize_footers.py
   workflow_dispatch:
   pull_request:
     branches: [main]
