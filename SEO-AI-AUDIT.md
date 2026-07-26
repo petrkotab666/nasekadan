@@ -2,7 +2,7 @@
 
 - Zkontrolované HTML stránky: **39**
 - Indexovatelné stránky: **38**
-- Chyby: **17**
+- Chyby: **2**
 - Varování: **17**
 - Informace: **0**
 
@@ -10,23 +10,6 @@ Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, intern�
 
 ## Kritické chyby
 
-### `pruvodce/co-videt-v-kadani.html`
-
-- **broken-internal-link:** Interní odkaz 'minoritska-basta.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'barbakan-zatecke-brany.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'kostel-povyseni-svateho-krize.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'sloup-nejsvetejsi-trojice.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'alzbetinsky-klaster.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'kostel-svateho-vavrince-zelina.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'nabrezi-maxipsa-fika.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'mestske-muzeum-pet-objektu.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'galerie-josefa-lieslera.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'galerie-pod-sirym-nebem.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'muzeum-carodejnic.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'kadan-na-kole.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'kadan-v-zime.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'nejlepsi-vylety-do-okoli.html' nevede na existující soubor.
-- **broken-internal-link:** Interní odkaz 'kadanske-povesti-a-osobnosti.html' nevede na existující soubor.
 ### `sitemap.xml`
 
 - **sitemap-missing-url:** V sitemapě chybí https://nasekadan.cz/clanky/pozemky-koupaliste-kadan.html.
