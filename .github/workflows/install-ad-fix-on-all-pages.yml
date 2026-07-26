@@ -1,12 +1,14 @@
-name: Načíst reklamní systém na všech stránkách
+name: Sjednotit konstrukci všech článků
 
 on:
   push:
     branches: [main]
     paths:
+      - 'clanky/*.html'
       - 'reklamy.js'
       - 'reklamy-oprava-obrazku.js'
       - 'obsah-doplnky.js'
+      - 'scripts/normalize_articles.py'
       - '.github/workflows/install-ad-fix-on-all-pages.yml'
   workflow_dispatch:
 
@@ -14,75 +16,37 @@ permissions:
   contents: write
 
 concurrency:
-  group: install-ad-fix-all-pages
+  group: normalize-all-articles
   cancel-in-progress: true
 
 jobs:
-  install:
+  normalize:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Stáhnout web
+      - name: Stáhnout aktuální web
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 2
 
-      - name: Doplnit reklamní skripty i na stránky, kde chybějí
+      - name: Sjednotit a ověřit všechny články
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          python3 scripts/normalize_articles.py --write --check
 
-          block = (
-              '<script src="/reklamy.js?v=20260726-ad-restore-8"></script>\n'
-              '<script src="/reklamy-oprava-obrazku.js?v=20260726-ad-restore-8"></script>\n'
-              '<script src="/obsah-doplnky.js?v=20260726-partner-fallback-2"></script>'
-          )
-
-          script_pattern = re.compile(
-              r'\s*<script\s+src=["\'][^"\']*(?:reklamy\.js|reklamy-oprava-obrazku\.js|reklamy-popisy\.js|obsah-doplnky\.js)(?:\?[^"\']*)?["\']\s*(?:defer)?\s*></script>',
-              re.I,
-          )
-
-          changed = 0
-          scanned = 0
-          for path in sorted(Path('.').rglob('*.html')):
-              if any(part in {'.git', '.github', '_site'} for part in path.parts):
-                  continue
-              scanned += 1
-              text = path.read_text(encoding='utf-8')
-              updated = script_pattern.sub('', text)
-
-              if '</body>' not in updated.lower():
-                  continue
-              match = list(re.finditer(r'</body>', updated, re.I))
-              if not match:
-                  continue
-              pos = match[-1].start()
-              updated = updated[:pos].rstrip() + '\n' + block + '\n' + updated[pos:]
-
-              if updated != text:
-                  path.write_text(updated, encoding='utf-8')
-                  changed += 1
-                  print(f'Upraveno: {path}')
-
-          print(f'Zkontrolováno {scanned} HTML souborů, změněno {changed}.')
-          PY
-
-      - name: Uložit změny
+      - name: Uložit sjednocené články
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- '*.html' '**/*.html' || true
+          git add -- 'clanky/*.html'
           if git diff --cached --quiet; then
-            echo "Není co ukládat."
+            echo "Všechny články už mají jednotnou konstrukci."
             exit 0
           fi
-          git commit -m "Doplnit reklamní systém na všechny stránky"
+          git commit -m "Sjednotit konstrukci všech článků"
           git pull --rebase origin main
           git push origin main
