@@ -65,21 +65,23 @@ document.addEventListener('DOMContentLoaded',()=>{
     nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',()=>setMenuState(false)));
   });
 
-  // Patička se vždy vytvoří znovu v úplné podobě. Tím se opraví i stránky,
-  // na kterých byla stará nebo neúplná patička.
+  // Stejná patička je zároveň napevno zapsaná ve všech HTML souborech.
+  // Toto přepsání je druhá pojistka proti staré cache nebo historickým šablonám.
   let footer=document.querySelector('footer');
   if(!footer){
     footer=document.createElement('footer');
     document.body.appendChild(footer);
   }
 
+  footer.className='site-footer';
+  footer.dataset.siteFooter='v1';
   footer.innerHTML=`
     <div class="wrap footer-grid">
-      <div>
-        <a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a>
+      <div class="footer-brand">
+        <a class="logo" href="/" aria-label="Naše Kadaň – úvodní stránka"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a>
         <p>Nezávislé informace, události a příběhy města.</p>
       </div>
-      <div>
+      <div class="footer-column">
         <strong>Obsah webu</strong>
         <a href="/">Úvod</a>
         <a href="/clanky/">Naše články</a>
@@ -87,7 +89,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         <a href="/pruvodce/">Průvodce</a>
         <a href="/prehled-zdroju/">Přehled zdrojů</a>
       </div>
-      <div>
+      <div class="footer-column">
         <strong>Praktické a kontakt</strong>
         <a href="/prakticke/">Praktická Kadaň</a>
         <a href="/doprava/">Doprava</a>
@@ -98,10 +100,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       </div>
     </div>
     <div class="footer-legal">
+      <span>© 2026 Naše Kadaň</span>
       <a href="/o-webu/">O webu</a>
       <a href="/inzerce/">Inzerce</a>
       <a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a>
-      <a href="/o-webu/#provozovatel" aria-label="Identifikační údaje provozovatele webu" style="font-size:12px;opacity:.68">Provozovatel</a>
+      <a href="/o-webu/#provozovatel">Provozovatel</a>
       <a href="mailto:info@nasekadan.cz">Kontakt</a>
     </div>`;
 });
