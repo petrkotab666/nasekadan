@@ -19,6 +19,8 @@ SKIP_DIRS = {
 TITLE_OVERRIDES = {
     "clanky/dopravni-nehoda-se-zranenim-kadan-24-cervence-2026.html":
         "Nehoda v Prunéřově se zraněním | Naše Kadaň",
+    "clanky/epetice-nemocnice-kadan.html":
+        "ePetice za Nemocnici Kadaň: pravidla obou verzí | Naše Kadaň",
     "clanky/nemocnice-kadan-software-kyberbezpecnost.html":
         "Nemocnice Kadaň: 64,7 milionu za software | Naše Kadaň",
     "clanky/nemocnice-kadan.html":
