@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded',()=>{
           <span class="meta">26. 7. 2026 · 10:15 · Zdravotnictví a veřejná správa</span>
           <h3>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</h3>
           <p>Co znamená limit 3500 znaků, zda se ePetice schvaluje a kdy lze sčítat elektronické a listinné podpisy.</p>
-          <a class="read-more" href="${epeticeHref}">Přečíst mimořádný článek →</a>
+          <a class="read-more" href="${epeticeHref}">Přečíst článek →</a>
         </div>`;
       const weekly=list.querySelector('[data-weekly-events-card]');
       if(weekly)weekly.after(card);else list.prepend(card);
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         <p class="aside-date">26. 7. 2026 v 10:15</p>
         <h2>Petice za nemocnici míří online. Obě verze ale musí být stejné</h2>
         <p>Vysvětlujeme limit 3500 znaků, pravidla kombinovaného sběru podpisů a skutečný postup zveřejnění ePetice.</p>
-        <a class="aside-button" href="${epeticeHref}">Přečíst mimořádný článek →</a>
+        <a class="aside-button" href="${epeticeHref}">Přečíst článek →</a>
         <div class="aside-links">
           <a href="/clanky/nemocnice-kadan-software-kyberbezpecnost.html">64,7 milionu za software</a>
           <a href="/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html">Noční výluky vlaků</a>
@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded',()=>{
           <span class="archive-meta">26. července 2026 v 10:15 · Zdravotnictví a veřejná správa</span>
           <h2>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</h2>
           <p>Co znamená limit 3500 znaků, zda se ePetice schvaluje a kdy lze spojit elektronické a listinné podpisy.</p>
-          <a href="${epeticeHref}">Přečíst mimořádný článek →</a>
+          <a href="${epeticeHref}">Přečíst článek →</a>
         </div>`;
       const weekly=archive.querySelector('[data-weekly-events-card]');
       if(weekly)weekly.after(item);else archive.prepend(item);
