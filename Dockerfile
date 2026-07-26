@@ -20,6 +20,10 @@ RUN python scripts/normalize_articles.py --write --check
 # z názvu a metadat. Generický social-card.png se u článků nepoužívá.
 RUN python scripts/generate_social_cards.py --write --check
 
+# Nejnovější týdenní přehled akcí se automaticky stane hlavním článkem,
+# zapíše se do archivu, RSS a sitemap. Skript používá metadata přímo z článku.
+RUN python scripts/publish_weekly_events.py
+
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
 # obrázky a metadata jednotlivých článků.
