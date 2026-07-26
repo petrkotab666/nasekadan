@@ -2,17 +2,14 @@
 
 - Zkontrolované HTML stránky: **39**
 - Indexovatelné stránky: **38**
-- Chyby: **18**
-- Varování: **23**
+- Chyby: **17**
+- Varování: **17**
 - Informace: **0**
 
 Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, interní odkazy, sitemapu, robots.txt, strukturovaná data a základní připravenost článků pro vyhledávače a odpovědi AI.
 
 ## Kritické chyby
 
-### `prehled-zdroju/index.html`
-
-- **canonical-missing:** Chybí canonical URL.
 ### `pruvodce/co-videt-v-kadani.html`
 
 - **broken-internal-link:** Interní odkaz 'minoritska-basta.html' nevede na existující soubor.
@@ -69,14 +66,6 @@ Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, intern�
 ### `o-webu/index.html`
 
 - **title-short:** Title je velmi krátký (17 znaků).
-### `prehled-zdroju/index.html`
-
-- **og:description-missing:** Chybí og:description.
-- **og:image-missing:** Chybí og:image.
-- **og:title-missing:** Chybí og:title.
-- **og:url-missing:** Chybí og:url.
-- **robots-index-implicit:** Indexace je povolená pouze implicitně; doporučen je explicitní robots=index,follow.
-- **twitter-card-missing:** Chybí twitter:card.
 ### `pruvodce/hradebni-okruh.html`
 
 - **description-short:** Meta description je krátký (57 znaků).
