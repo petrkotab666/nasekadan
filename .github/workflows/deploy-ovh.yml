@@ -4,7 +4,14 @@ run-name: Nasazení Naše Kadaň – ${{ github.sha }}
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/deploy-production-pr-trigger.txt'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: nasekadan-production
@@ -17,6 +24,9 @@ jobs:
     steps:
       - name: Stáhnout zdrojový kód
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Sestavit a spustit web
         run: |
@@ -30,6 +40,24 @@ jobs:
           done
           docker compose logs --tail=100
           exit 1
+
+      - name: Ověřit jednotnou patičku živého kontejneru
+        shell: bash
+        run: |
+          set -euo pipefail
+          pages=(
+            '/'
+            '/clanky/nemocnice-kadan-software-kyberbezpecnost.html'
+            '/inzerce/'
+          )
+          for page in "${pages[@]}"; do
+            html="$(curl -fsS "http://127.0.0.1:3224${page}")"
+            grep -Fq '<footer class="site-footer" data-site-footer="v1">' <<<"$html"
+            grep -Fq '/footer.css?v=20260726-unified-footer-1' <<<"$html"
+            grep -Fq 'Nezávislé informace, události a příběhy města.' <<<"$html"
+            grep -Fq 'Inzerce a ceník' <<<"$html"
+            echo "Jednotná patička ověřena: $page"
+          done
 
       - name: Nainstalovat soukromé statistiky
         run: |
