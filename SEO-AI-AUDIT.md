@@ -2,19 +2,14 @@
 
 - Zkontrolované HTML stránky: **39**
 - Indexovatelné stránky: **38**
-- Chyby: **21**
-- Varování: **32**
+- Chyby: **18**
+- Varování: **23**
 - Informace: **0**
 
 Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, interní odkazy, sitemapu, robots.txt, strukturovaná data a základní připravenost článků pro vyhledávače a odpovědi AI.
 
 ## Kritické chyby
 
-### `clanky/pozemky-koupaliste-kadan.html`
-
-- **article-schema-missing:** Veřejný článek nemá NewsArticle/Article schema.
-- **canonical-missing:** Chybí canonical URL.
-- **og-type-article:** Veřejný článek musí mít og:type=article.
 ### `prehled-zdroju/index.html`
 
 - **canonical-missing:** Chybí canonical URL.
@@ -65,16 +60,7 @@ Audit kontroluje technickou indexovatelnost, metadata, canonical adresy, intern�
 - **title-long:** Title je dlouhý (96 znaků).
 ### `clanky/pozemky-koupaliste-kadan.html`
 
-- **article-internal-links:** Článek neodkazuje na žádný další vlastní článek.
-- **modified-meta-missing:** Chybí article:modified_time.
-- **og:description-missing:** Chybí og:description.
-- **og:image-missing:** Chybí og:image.
-- **og:title-missing:** Chybí og:title.
-- **og:url-missing:** Chybí og:url.
-- **published-meta-missing:** Chybí article:published_time.
-- **robots-index-implicit:** Indexace je povolená pouze implicitně; doporučen je explicitní robots=index,follow.
 - **title-long:** Title je dlouhý (85 znaků).
-- **twitter-card-missing:** Chybí twitter:card.
 ### `clanky/vypadek-internetu-kadan-kradez-kabelu.html`
 
 - **modified-meta-missing:** Chybí article:modified_time.
