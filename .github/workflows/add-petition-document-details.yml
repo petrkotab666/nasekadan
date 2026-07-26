@@ -1,0 +1,113 @@
+name: Doplnit hlavní článek o úplné znění petice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-petition-document-details.yml'
+      - '.github/add-petition-document-details-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-add-petition-details
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit celý obsah listinné petice a stav ePetice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('clanky/petice-nemocnice-kadan.html')
+          text = path.read_text(encoding='utf-8')
+
+          toc_marker = '<li><a href="#prvni-sber">První sběr podpisů</a></li>'
+          toc_link = '<li><a href="#plne-zneni-petice">Osm požadavků a rozpracovaná ePetice</a></li>'
+          if toc_link not in text:
+              if toc_marker not in text:
+                  raise SystemExit('V obsahu nebyl nalezen první podpisový den.')
+              text = text.replace(toc_marker, toc_marker + '\n      ' + toc_link, 1)
+
+          section = '''
+  <h2 id="plne-zneni-petice">Petice obsahuje osm požadavků. Rozpracovaná ePetice narazila na limit</h2>
+  <p>Nově zveřejněné snímky zachycují celé znění listinné petice. Dokument není omezen pouze na požadavek, aby Nemocnice Kadaň zůstala ve vlastnictví města. Obsahuje osm konkrétních bodů adresovaných zastupitelstvu, starostovi a radě města.</p>
+  <ol>
+    <li><strong>Veřejný závazek města</strong>, že nemocnice nebude prodána ani jinak převedena do soukromého vlastnictví.</li>
+    <li><strong>Okamžité přijetí konkrétních opatření</strong> ke stabilizaci ekonomické situace nemocnice.</li>
+    <li><strong>Zachování všech potřebných zdravotnických oborů a odborných ambulancí</strong> pro obyvatele regionu.</li>
+    <li><strong>Pravidelné zveřejňování ekonomických výsledků</strong>, přijatých opatření a strategie dalšího rozvoje.</li>
+    <li><strong>Nezávislé odborné posouzení současného řízení</strong> s předložením výsledků zastupitelům i veřejnosti.</li>
+    <li><strong>Přijetí personálních změn</strong>, pokud se ukáže, že současné řízení nevede ke stabilizaci nebo nedokáže zastavit zhoršování stavu.</li>
+    <li><strong>Obnovení otevřené komunikace</strong> mezi vedením nemocnice, zaměstnanci, městem a občany.</li>
+    <li><strong>Zajištění dostatečných finančních prostředků na kvalitní zdravotní péči</strong>, aby pacienti ani zaměstnanci nenesli důsledky manažerských selhání.</li>
+  </ol>
+  <p>Listinný dokument tedy obsahuje majetkové, ekonomické, personální, provozní i informační požadavky. Pro posouzení elektronické varianty bude rozhodující, zda všechny tyto body zůstanou zachovány ve stejném znění.</p>
+
+  <div class="factcheck"><h3>Co dokládají nové snímky</h3><ul>
+    <li>Ve formuláři Portálu občana se zobrazilo upozornění na překročení limitu 3 500 znaků už ve chvíli, kdy byly ve viditelné části vloženy pouze první tři požadavky.</li>
+    <li>Snímek části „Moje petice“ dokládá založený nebo rozpracovaný záznam. Sám o sobě ještě neprokazuje, že byla ePetice veřejně zveřejněna a otevřena k podpisu.</li>
+    <li>Při souběžném listinném a elektronickém sběru musí být text obou verzí totožný. Odlišnou elektronickou verzi by bylo nutné vykazovat jako samostatný dokument.</li>
+  </ul></div>
+
+  <div class="callout"><strong>Osobní údaje na web nevkládáme</strong>Snímky listinné petice obsahují bydliště, e-mail a telefon předkladatelky. Slouží pouze jako redakční podklad. Na webu zveřejňujeme obsah požadavků, nikoli nezakryté kontaktní údaje.</div>
+
+  <p>Podrobný rozbor pravidel elektronické a listinné varianty je v navazujícím článku <a href="/clanky/epetice-nemocnice-kadan.html">Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</a>.</p>
+'''
+
+          anchor = '  <h2 id="apoliticka">„Apolitická“ petice předkládaná kandidátkou</h2>'
+          if 'id="plne-zneni-petice"' not in text:
+              if anchor not in text:
+                  raise SystemExit('Nebyla nalezena kapitola o apolitičnosti.')
+              text = text.replace(anchor, section + '\n' + anchor, 1)
+
+          text = text.replace(
+              '"dateModified":"2026-07-25T05:00:00+02:00"',
+              '"dateModified":"2026-07-26T19:15:00+02:00"',
+              1,
+          )
+
+          source = '<li>Fotografie úplného znění listinné petice a snímky rozpracovaného formuláře ePetice zveřejněné předkladatelkou; kontaktní údaje redakce dále nezveřejňuje.</li>'
+          if source not in text:
+              start = text.find('<div class="source-list">')
+              if start >= 0:
+                  end = text.find('</ul>', start)
+                  if end >= 0:
+                      text = text[:end] + source + text[end:]
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+          print('Hlavní článek o petici byl doplněn o osm požadavků a stav rozpracované ePetice.')
+          PY
+
+          grep -Fq 'Petice obsahuje osm požadavků. Rozpracovaná ePetice narazila na limit' clanky/petice-nemocnice-kadan.html
+          grep -Fq 'Přijetí personálních změn' clanky/petice-nemocnice-kadan.html
+          grep -Fq 'Osobní údaje na web nevkládáme' clanky/petice-nemocnice-kadan.html
+
+      - name: Uložit změnu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – redakční doplnění'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/petice-nemocnice-kadan.html
+          if git diff --cached --quiet; then
+            echo 'Článek už doplnění obsahuje.'
+            exit 0
+          fi
+          git commit -m 'Doplnit osm požadavků listinné petice'
+          git pull --rebase origin main
+          git push origin main
