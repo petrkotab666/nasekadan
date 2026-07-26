@@ -2,10 +2,17 @@ FROM python:3.12-alpine AS discovery
 WORKDIR /site
 COPY . .
 
+# Pillow je potřeba pro jedinečné 1200×630 sociální obrázky jednotlivých článků.
+RUN apk add --no-cache py3-pillow
+
 # Každý článek musí před sestavením projít jedinou společnou konstrukcí.
 # Normalizátor sjednotí article-shell, přímý pravý panel, reklamní slot i skripty
 # a následná kontrola zastaví build, pokud by některý článek pravidlo porušil.
 RUN python scripts/normalize_articles.py --write --check
+
+# Každý článek dostane vlastní Facebook/OG obrázek s novou URL odvozenou
+# z názvu a metadat. Generický social-card.png se u článků nepoužívá.
+RUN python scripts/generate_social_cards.py --write --check
 
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
