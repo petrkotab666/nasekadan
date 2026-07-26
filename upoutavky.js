@@ -19,15 +19,4 @@ document.addEventListener('DOMContentLoaded',()=>{
       if(sources)sources.before(teaser);else article.appendChild(teaser);
     }
   }
-
-  if(path==='/'&&isPublished&&!document.getElementById('home-cyber-analysis')){
-    const target=document.querySelector('main .cards, main .article-grid, main section');
-    if(target){
-      const card=document.createElement('article');
-      card.id='home-cyber-analysis';
-      card.className='card';
-      card.innerHTML=`<p class="tag">ZDRAVOTNICTVÍ · ANALÝZA</p><h2><a href="${articleUrl}">${title}</a></h2><p>Co nemocnice skutečně pořizovala, proč kybernetická ochrana není dobrovolný luxus a které části konečného účtu veřejné dokumenty stále nevysvětlují.</p><a class="btn" href="${articleUrl}">Přečíst analýzu</a>`;
-      target.prepend(card);
-    }
-  }
 });
