@@ -1,88 +1,36 @@
-name: Nasadit článek o ePetici do aktivního webu
+name: Ruční úplné nasazení Naše Kadaň
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/deploy-epetice-caddy-now.yml'
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
       - '.github/epetice-deploy-trigger.txt'
-  workflow_dispatch:
 
 permissions:
   contents: read
 
+# Původní jednorázový workflow kopíroval zdrojové soubory přímo do Caddy a
+# mohl tak vytvořit jinou verzi než Docker/Nginx. Nyní používá stejný build,
+# stejnou kontrolu a stejný zámek jako každé ostatní produkční nasazení.
 concurrency:
-  group: deploy-epetice-caddy-now
+  group: nasekadan-production
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Nasadit ePetici na OVH
     runs-on: [self-hosted, ovh, lastminuteslevy]
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Stáhnout hlavní větev
+      - name: Stáhnout aktuální hlavní větev
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Ověřit připravený obsah
+      - name: Nasadit celý aktuální web
         shell: bash
         run: |
           set -euo pipefail
-          test -s clanky/epetice-nemocnice-kadan.html
-          grep -F 'Papírová a elektronická verze ale musí být stejná' clanky/epetice-nemocnice-kadan.html >/dev/null
-          grep -F '/clanky/epetice-nemocnice-kadan.html' index.html >/dev/null
-          grep -F '/clanky/epetice-nemocnice-kadan.html' clanky/index.html >/dev/null
-          grep -F 'epetice-nemocnice-kadan.html' sitemap.xml >/dev/null
-          grep -F 'epetice-nemocnice-kadan.html' rss.xml >/dev/null
-
-      - name: Aktualizovat záložní Docker kontejner
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo env DOCKER_BUILDKIT=0 docker build --pull -t nasekadan-web:latest .
-          sudo docker rm -f nasekadan-web 2>/dev/null || true
-          sudo docker run -d --name nasekadan-web --restart unless-stopped -p 127.0.0.1:3224:80 nasekadan-web:latest
-          for i in $(seq 1 45); do
-            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then break; fi
-            sleep 2
-          done
-          curl -fsS http://127.0.0.1:3224/healthz >/dev/null
-          curl -fsS http://127.0.0.1:3224/clanky/epetice-nemocnice-kadan.html | grep -F 'Papírová a elektronická verze ale musí být stejná' >/dev/null
-
-      - name: Aktualizovat aktivní Caddy document root
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo mkdir -p /var/www/nasekadan
-          sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-          tar --exclude='.git' --exclude='.github' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' -cf - . | sudo tar -C /var/www/nasekadan -xf -
-          sudo chmod -R a+rX /var/www/nasekadan
-          grep -F 'Papírová a elektronická verze ale musí být stejná' /var/www/nasekadan/clanky/epetice-nemocnice-kadan.html >/dev/null
-          grep -F '/clanky/epetice-nemocnice-kadan.html' /var/www/nasekadan/index.html >/dev/null
-          grep -F '/clanky/epetice-nemocnice-kadan.html' /var/www/nasekadan/clanky/index.html >/dev/null
-
-      - name: Veřejně ověřit nasazení bez cache
-        shell: bash
-        run: |
-          set -euo pipefail
-          RUN="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          check_public() {
-            local url="$1" needle="$2" output="$3"
-            for i in $(seq 1 40); do
-              if curl -kfsS --max-time 20 "${url}?nocache=${RUN}-${i}" -o "$output" && grep -F "$needle" "$output" >/dev/null; then return 0; fi
-              sleep 2
-            done
-            return 1
-          }
-          check_public 'https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html' 'Papírová a elektronická verze ale musí být stejná' /tmp/nk-epetice.html
-          check_public 'https://nasekadan.cz/' '/clanky/epetice-nemocnice-kadan.html' /tmp/nk-home.html
-          check_public 'https://nasekadan.cz/clanky/' '/clanky/epetice-nemocnice-kadan.html' /tmp/nk-archive.html
-          check_public 'https://nasekadan.cz/sitemap.xml' 'epetice-nemocnice-kadan.html' /tmp/nk-sitemap.xml
-          check_public 'https://nasekadan.cz/rss.xml' 'epetice-nemocnice-kadan.html' /tmp/nk-rss.xml
-          echo 'Mimořádný článek o ePetici je veřejně nasazený v aktivním webu.'
+          chmod +x deploy/sync-production.sh
+          bash deploy/sync-production.sh
