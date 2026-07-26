@@ -6,6 +6,11 @@ on:
     paths:
       - "clanky/*.html"
       - ".github/facebook-publish-trigger.txt"
+      - ".github/facebook-publisher-config.json"
+      - "scripts/remove_unpublished_articles.py"
+      - "scripts/publish_facebook.py"
+      - "scripts/process_facebook_queue.py"
+      - ".github/workflows/publish-facebook.yml"
   workflow_dispatch:
     inputs:
       article_path:
@@ -17,6 +22,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: nasekadan-facebook
@@ -25,7 +31,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 35
     steps:
       - name: Stáhnout zdrojový kód
         uses: actions/checkout@v4
@@ -68,7 +74,18 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Počkat na správný OG obrázek a zveřejnit frontu
+      - name: Vyřadit neschválené texty a připravit produkční metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/remove_unpublished_articles.py
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+
+      - name: Ověřit přihlášení, počkat na živý web a zveřejnit frontu
         id: facebook
         continue-on-error: true
         env:
@@ -76,8 +93,10 @@ jobs:
           FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
           FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
           FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
           FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
-          FACEBOOK_WAIT_TIMEOUT: "3600"
+          FACEBOOK_WAIT_TIMEOUT: "1200"
           ARTICLE_PATHS: ${{ steps.articles.outputs.paths }}
         shell: bash
         run: |
@@ -109,9 +128,58 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
+      - name: Spravovat upozornění na neplatný token
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const title = 'Facebook automat vyžaduje obnovení přihlášení';
+            let status = {};
+            try {
+              status = JSON.parse(fs.readFileSync('.github/facebook-last-status.json', 'utf8'));
+            } catch {}
+            const results = Array.isArray(status.results) ? status.results : [];
+            const authFailure = results.some(item =>
+              item.state === 'action_required' ||
+              String(item.error || '').toLowerCase().includes('access token')
+            );
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+            const existing = openIssues.find(issue => !issue.pull_request && issue.title === title);
+            if (authFailure && !existing) {
+              const waiting = results.map(item => `- \`${item.article_path || 'neuvedený článek'}\``).join('\n');
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: [
+                  'Facebook odmítl uložený Page Access Token.',
+                  '',
+                  'Na počítači spusťte `tools/nastavit-facebook.ps1`. Skript vytvoří dlouhodobý Page Access Token, uloží ho do GitHub Secrets a nabídne okamžité zpracování fronty.',
+                  '',
+                  'Čekající články:',
+                  waiting || '- žádné'
+                ].join('\n')
+              });
+            }
+            if (!authFailure && existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }
+
       - name: Potvrdit úspěšné dokončení
         if: steps.facebook.outcome != 'success'
         shell: bash
         run: |
-          echo 'Publikování na Facebook se nezdařilo. Článek zůstává ve frontě pro hodinový automatický opakovaný pokus.' >&2
+          echo 'Publikování na Facebook se nezdařilo. Články zůstávají ve frontě a automat je zkusí znovu po obnovení tokenu nebo při dalším hodinovém běhu.' >&2
           exit 1

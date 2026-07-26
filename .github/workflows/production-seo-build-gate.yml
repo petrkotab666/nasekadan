@@ -1,5 +1,5 @@
 name: Produkční SEO a AI build gate
-# Ověřuje aktuální hlavní větev včetně instalace Pillow do Pythonu 3.12.
+# Sestaví a spustí přesný produkční obraz a ověří trvalé technické podmínky.
 
 on:
   pull_request:
@@ -51,15 +51,92 @@ jobs:
             curl -fsS http://127.0.0.1:38080/healthz >/dev/null && break
             sleep 2
           done
-          home=$(curl -fsS http://127.0.0.1:38080/)
-          article=$(curl -fsS http://127.0.0.1:38080/clanky/nemocnice-kadan.html)
-          robots=$(curl -fsS http://127.0.0.1:38080/robots.txt)
-          sitemap=$(curl -fsS http://127.0.0.1:38080/sitemap.xml)
-          audit=$(curl -fsS http://127.0.0.1:38080/SEO-AI-AUDIT.md)
-          grep -Fq 'google-site-verification' <<<"$home"
-          grep -Fq '<title>Nemocnice Kadaň: ztráta 46 milionů a pomoc města | Naše Kadaň</title>' <<<"$article"
-          grep -Fq 'property="article:published_time"' <<<"$article"
-          grep -Fq 'User-agent: OAI-SearchBot' <<<"$robots"
-          grep -Fq 'clanky/pozemky-koupaliste-kadan.html' <<<"$sitemap"
-          grep -Fq 'Chyby: **0**' <<<"$audit"
-          grep -Fq 'Varování: **0**' <<<"$audit"
+
+          unpublished_status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:38080/clanky/pozemky-koupaliste-kadan.html)
+          [[ "$unpublished_status" == "404" ]] || {
+            echo "Připravovaný článek o koupališti je veřejně dostupný; HTTP $unpublished_status" >&2
+            exit 1
+          }
+
+          mkdir -p /tmp/nasekadan-build-check
+          curl -fsS http://127.0.0.1:38080/ > /tmp/nasekadan-build-check/home.html
+          curl -fsS http://127.0.0.1:38080/clanky/nemocnice-kadan.html > /tmp/nasekadan-build-check/article.html
+          curl -fsS http://127.0.0.1:38080/robots.txt > /tmp/nasekadan-build-check/robots.txt
+          curl -fsS http://127.0.0.1:38080/sitemap.xml > /tmp/nasekadan-build-check/sitemap.xml
+          curl -fsS http://127.0.0.1:38080/SEO-AI-AUDIT.md > /tmp/nasekadan-build-check/audit.md
+
+          python3 - <<'PY'
+          import json
+          import re
+          import xml.etree.ElementTree as ET
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          root = Path('/tmp/nasekadan-build-check')
+
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.title = []
+                  self.in_title = False
+                  self.meta = {}
+                  self.canonicals = []
+                  self.jsonld = []
+                  self.in_jsonld = False
+                  self.json_parts = []
+
+              def handle_starttag(self, tag, attrs):
+                  values = {str(k).lower(): str(v) for k, v in attrs if k and v is not None}
+                  if tag.lower() == 'title':
+                      self.in_title = True
+                  elif tag.lower() == 'meta':
+                      key = values.get('property') or values.get('name')
+                      if key and values.get('content'):
+                          self.meta[key.lower()] = values['content']
+                  elif tag.lower() == 'link' and 'canonical' in values.get('rel', '').lower().split():
+                      self.canonicals.append(values.get('href', ''))
+                  elif tag.lower() == 'script' and values.get('type', '').lower() == 'application/ld+json':
+                      self.in_jsonld = True
+                      self.json_parts = []
+
+              def handle_endtag(self, tag):
+                  if tag.lower() == 'title':
+                      self.in_title = False
+                  elif tag.lower() == 'script' and self.in_jsonld:
+                      raw = ''.join(self.json_parts).strip()
+                      if raw:
+                          self.jsonld.append(json.loads(raw))
+                      self.in_jsonld = False
+                      self.json_parts = []
+
+              def handle_data(self, data):
+                  if self.in_title:
+                      self.title.append(data)
+                  if self.in_jsonld:
+                      self.json_parts.append(data)
+
+          home = (root / 'home.html').read_text(encoding='utf-8')
+          assert 'google-site-verification' in home, 'Na titulní stránce chybí Google verification.'
+
+          article_parser = Parser()
+          article_parser.feed((root / 'article.html').read_text(encoding='utf-8'))
+          title = ' '.join(''.join(article_parser.title).split())
+          assert title and 'Naše Kadaň' in title, f'Neplatný title článku: {title!r}'
+          assert article_parser.canonicals == ['https://nasekadan.cz/clanky/nemocnice-kadan.html'], article_parser.canonicals
+          assert article_parser.meta.get('article:published_time'), 'Chybí article:published_time.'
+          assert article_parser.jsonld, 'Chybí JSON-LD.'
+
+          robots = (root / 'robots.txt').read_text(encoding='utf-8')
+          assert 'User-agent: OAI-SearchBot' in robots, 'robots.txt nepovoluje OAI-SearchBot.'
+
+          tree = ET.parse(root / 'sitemap.xml')
+          urls = {node.text for node in tree.findall('.//{http://www.sitemaps.org/schemas/sitemap/0.9}loc')}
+          assert 'https://nasekadan.cz/clanky/pozemky-koupaliste-kadan.html' not in urls
+
+          audit = (root / 'audit.md').read_text(encoding='utf-8')
+          errors = re.search(r'Chyby:\s*\*\*(\d+)\*\*', audit)
+          warnings = re.search(r'Varování:\s*\*\*(\d+)\*\*', audit)
+          assert errors and errors.group(1) == '0', audit
+          assert warnings and warnings.group(1) == '0', audit
+          print('Produkční HTML, neveřejné články, sitemap, robots a audit prošly kontrolou.')
+          PY

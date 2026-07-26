@@ -1,0 +1,109 @@
+name: Ověřit Facebook automat
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/facebook-publisher-config.json"
+      - "scripts/remove_unpublished_articles.py"
+      - "scripts/publish_facebook.py"
+      - "scripts/process_facebook_queue.py"
+      - "tools/nastavit-facebook.ps1"
+      - ".github/workflows/publish-facebook.yml"
+      - ".github/workflows/facebook-automation-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ověřit syntaxi Pythonu
+        run: |
+          python3 -m py_compile \
+            scripts/remove_unpublished_articles.py \
+            scripts/publish_facebook.py \
+            scripts/process_facebook_queue.py
+
+      - name: Ověřit, že neschválený článek nemůže vstoupit do fronty
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > clanky/pozemky-koupaliste-kadan.html <<'HTML'
+          <!doctype html><html><head><script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","datePublished":"2026-07-26T12:00:00+02:00"}</script></head><body></body></html>
+          HTML
+          test -s clanky/pozemky-koupaliste-kadan.html
+          python3 scripts/remove_unpublished_articles.py
+          test ! -e clanky/pozemky-koupaliste-kadan.html
+          python3 scripts/process_facebook_queue.py --discover-only | tee /tmp/facebook-discovered.txt
+          grep -Fxq 'clanky/epetice-nemocnice-kadan.html' /tmp/facebook-discovered.txt
+          if grep -Fq 'pozemky-koupaliste-kadan.html' /tmp/facebook-discovered.txt; then
+            echo 'Neschválený článek pronikl do Facebook fronty.' >&2
+            exit 1
+          fi
+
+      - name: Ověřit přednost obnoveného tokenu a stabilní chybovou zprávu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          sys.path.insert(0, 'scripts')
+          import publish_facebook
+
+          os.environ['FACEBOOK_PAGES_JSON'] = json.dumps({
+              'pages': {'nasekadan': {'id': 'stare-id', 'access_token': 'stary-token'}}
+          })
+          os.environ['FACEBOOK_PAGE_ID'] = 'nove-id'
+          os.environ['FACEBOOK_PAGE_ACCESS_TOKEN'] = 'novy-token'
+          page_id, token, _ = publish_facebook.resolve_page_credentials()
+          assert page_id == 'nove-id'
+          assert token == 'novy-token'
+
+          detail = json.dumps({'error': {
+              'message': 'Error validating access token: Session has expired',
+              'code': 190,
+              'error_subcode': 463,
+          }})
+          message = publish_facebook.stable_graph_error(detail, 400)
+          assert 'vypršel' in message
+          assert 'fbtrace' not in message.lower()
+          print('Statické testy Facebook automatu prošly.')
+          PY
+
+  credential-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bezpečně ověřit aktuální GitHub Secrets bez publikování
+        id: auth
+        continue-on-error: true
+        env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+        run: python3 scripts/publish_facebook.py --check-only
+
+      - name: Zapsat výsledek bez vyzrazení tokenu
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.auth.outcome }}" == "success" ]]; then
+            echo '### Facebook přihlášení je platné' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '### Facebook přihlášení je neplatné nebo vypršelo' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Je nutné jednou spustit tools/nastavit-facebook.ps1.' >> "$GITHUB_STEP_SUMMARY"
+          fi
