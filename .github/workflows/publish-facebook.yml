@@ -125,6 +125,13 @@ jobs:
           fi
 
           git commit -m 'Aktualizovat stav publikování na Facebook'
+
+          # Příprava sociálních obrázků a metadat mění pracovní kopii, ale tyto
+          # produkční změny se v tomto workflow neukládají. Po vytvoření commitu
+          # s evidencí zveřejnění je bezpečně zahodíme, aby mohl proběhnout rebase.
+          git reset --hard HEAD
+          git clean -fd
+
           git pull --rebase origin main
           git push origin main
 
