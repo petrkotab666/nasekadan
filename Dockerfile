@@ -62,7 +62,7 @@ RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
   -e 's#site.js"#site.js?v=20260724-nemocnice-7"#g' \
   -e 's#<script src="[^"]*navigation\.js[^"]*"[^>]*></script>##g' \
   -e 's#<script src="[^"]*upoutavky\.js[^"]*"[^>]*></script>##g' \
-  -e 's#</body>#<script src="/navigation.js?v=20260726-unified-footer-1" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
+  -e 's#</body>#<script src="/navigation.js?v=20260726-unified-footer-1" defer></script><script src="/upoutavky.js?v=20260726-home-fix-1" defer></script></body>#g' {} +
 
 # Zkopírovat neveřejný redakční návrh KZK do heslem chráněné sekce /nahled/.
 RUN mkdir -p /usr/share/nginx/html/nahled \
