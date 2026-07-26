@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python scripts/remove_unpublished_articles.py
           python -m pip install --quiet Pillow
           python scripts/normalize_footers.py --write --check
           python scripts/normalize_articles.py --write --check
