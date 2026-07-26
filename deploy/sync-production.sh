@@ -41,6 +41,16 @@ generated=$(date -u +%FT%TZ)
 mode=canonical-ovh
 EOF
 
+# Docker Buildx si standardně ukládá zámky do ~/.docker. Tento adresář mohl
+# dříve vytvořit root a ruční nasazení uživatele ubuntu pak končilo chybou
+# "permission denied". Každý uživatel proto používá samostatný zapisovatelný
+# dočasný konfigurační adresář. Přístup k Docker socketu tím není ovlivněn.
+DOCKER_CONFIG="/tmp/nasekadan-docker-config-$(id -u)"
+export DOCKER_CONFIG
+mkdir -p "$DOCKER_CONFIG/buildx"
+chmod -R u+rwX "$DOCKER_CONFIG"
+rm -f "$DOCKER_CONFIG/buildx/lock"
+
 IMAGE="nasekadan-web:$SOURCE_SHA"
 docker build --pull -t "$IMAGE" .
 docker rm -f nasekadan-web 2>/dev/null || true
