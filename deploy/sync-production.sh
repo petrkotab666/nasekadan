@@ -28,6 +28,13 @@ SHORT_SHA="${SOURCE_SHA:0:12}"
 
 echo "Nasazuji main @ $SOURCE_SHA"
 
+# Oprava SMTP musí proběhnout i při nasazení spuštěném lokálním serverovým
+# timerem, protože self-hosted GitHub runner může být dočasně nedostupný.
+if [[ -f deploy/repair-newsletter-smtp.sh ]]; then
+  chmod +x deploy/repair-newsletter-smtp.sh
+  bash deploy/repair-newsletter-smtp.sh
+fi
+
 python3 scripts/ensure_publication_integrity.py
 python3 scripts/ensure_newest_article_indexes.py
 python3 scripts/ensure_petition_document_details.py
