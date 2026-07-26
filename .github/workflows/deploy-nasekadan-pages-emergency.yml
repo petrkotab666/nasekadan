@@ -1,26 +1,18 @@
-name: Nouzově nasadit Naše Kadaň přes GitHub Pages
+name: Ruční záložní náhled Naše Kadaň přes GitHub Pages
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/pages-emergency-trigger.txt'
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
-  pull-requests: write
 
+# GitHub Pages je pouze ruční záložní náhled pod adresou GitHubu. Nikdy
+# nenastavuje vlastní doménu nasekadan.cz a nemůže soutěžit s produkcí na OVH.
 concurrency:
-  group: nasekadan-pages-production
+  group: nasekadan-pages-backup
   cancel-in-progress: true
-
-env:
-  CUSTOM_DOMAIN: nasekadan.cz
 
 jobs:
   build:
@@ -33,7 +25,7 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Připravit veřejný web
+      - name: Připravit záložní web
         shell: bash
         run: |
           set -euo pipefail
@@ -45,60 +37,18 @@ jobs:
             --exclude '_site/' \
             --exclude 'scripts/' \
             --exclude 'nginx/' \
+            --exclude 'docker-entrypoint.d/' \
             --exclude 'Dockerfile' \
             --exclude 'docker-compose.yml' \
-            --exclude 'deploy/' \
-            --exclude 'emergency-deploy-trigger.txt'
-
-          printf '%s\n' "$CUSTOM_DOMAIN" > _site/CNAME
+            --exclude 'deploy/'
+          rm -f _site/CNAME
           touch _site/.nojekyll
-          cat > _site/deployment-health.txt <<EOF
-          site=nasekadan.cz
-          source=$GITHUB_SHA
-          generated=$(date -u +%FT%TZ)
-          mode=github-pages-emergency
-          EOF
-
           test -s _site/index.html
-          test -s _site/inzerce/index.html
-          grep -Fq 'Inzerce' _site/navigation.js
-          grep -Fq 'Inzerce a ceník' _site/navigation.js
-          grep -Fq 'Politická inzerce pro komunální volby' _site/inzerce/index.html
-
-      - name: Pokusit se přepnout GitHub Pages na workflow
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -u
-          code=$(curl -sS -o /tmp/pages-current.json -w '%{http_code}' \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" || true)
-
-          if [ "$code" = 404 ]; then
-            method=POST
-          else
-            method=PUT
-          fi
-
-          api=$(curl -sS -o /tmp/pages-enable.json -w '%{http_code}' -X "$method" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            -H 'Content-Type: application/json' \
-            -d '{"build_type":"workflow"}' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" || true)
-
-          echo "Pages API: GET=$code, $method=$api"
-          cat /tmp/pages-enable.json || true
 
       - name: Nastavit GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Nahrát aktuální web
+      - name: Nahrát záložní web
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -111,66 +61,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Zveřejnit web
+      - name: Zveřejnit záložní náhled
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Pokusit se nastavit vlastní doménu
-        continue-on-error: true
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -u
-          code=$(curl -sS -o /tmp/pages-domain.json -w '%{http_code}' -X PUT \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2022-11-28' \
-            -H 'Content-Type: application/json' \
-            -d "{\"cname\":\"$CUSTOM_DOMAIN\",\"build_type\":\"workflow\"}" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages" || true)
-          echo "Nastavení domény: HTTP $code"
-          cat /tmp/pages-domain.json || true
-
-      - name: Ověřit novou stránku a patičku
-        id: public_check
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -u
-          ok=0
-          for attempt in $(seq 1 60); do
-            suffix="$GITHUB_RUN_ID-$attempt-$(date +%s)"
-            page=$(curl -fsSL --max-time 20 "https://$CUSTOM_DOMAIN/inzerce/?deploy=$suffix" 2>/dev/null || true)
-            nav=$(curl -fsSL --max-time 20 "https://$CUSTOM_DOMAIN/navigation.js?deploy=$suffix" 2>/dev/null || true)
-            if printf '%s' "$page" | grep -Fq 'Politická inzerce pro komunální volby' \
-              && printf '%s' "$nav" | grep -Fq 'Inzerce a ceník'; then
-              ok=1
-              break
-            fi
-            sleep 5
-          done
-          echo "ready=$ok" >> "$GITHUB_OUTPUT"
-          test "$ok" = 1
-
-      - name: Zapsat výsledek do technického PR
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = [
-              '## Nouzové nasazení Naše Kadaň',
-              '',
-              `- Výsledek deploy jobu: **${{ job.status }}**`,
-              `- Pages URL: ${{ steps.deployment.outputs.page_url }}`,
-              `- Veřejná kontrola domény: **${{ steps.public_check.outcome }}**`,
-              `- Zdrojová větev: main`,
-              '',
-              'Nasazení publikuje aktuální `/inzerce/` a úplnou patičku přes GitHub-hosted runner.'
-            ].join('\n');
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
