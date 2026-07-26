@@ -40,9 +40,45 @@ jobs:
           fetch-depth: 0
 
       - name: Sjednotit všechny statické patičky
-        run: python3 scripts/normalize_footers.py --write --check
+        id: normalize
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/normalize_footers.py --write --check 2>&1 | tee "$RUNNER_TEMP/footer-normalization-report.txt"
+
+      - name: Zapsat diagnostiku do pull requestu
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          NORMALIZE_OUTCOME: ${{ steps.normalize.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let report = '';
+            try {
+              report = fs.readFileSync(`${process.env.RUNNER_TEMP}/footer-normalization-report.txt`, 'utf8');
+            } catch (error) {
+              report = `Diagnostický soubor se nepodařilo načíst: ${error.message}`;
+            }
+            const body = [
+              '## Sjednocení patičky webu',
+              '',
+              `Výsledek normalizátoru: **${process.env.NORMALIZE_OUTCOME || 'neznámý'}**`,
+              '',
+              '```text',
+              report.slice(-30000),
+              '```'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
 
       - name: Uložit opravené stránky
+        if: steps.normalize.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -53,6 +89,7 @@ jobs:
             git add -- "$file"
           done < <(find . -type f -name '*.html' \
             -not -path './.git/*' \
+            -not -path './.github/*' \
             -not -path './.image-parts/*' \
             -not -path './lms-rescue/*' \
             -not -path './node_modules/*' -print0)
@@ -67,4 +104,12 @@ jobs:
           git push origin main
 
       - name: Závěrečná kontrola
+        if: steps.normalize.outcome == 'success'
         run: python3 scripts/normalize_footers.py --check
+
+      - name: Potvrdit úspěch normalizátoru
+        if: steps.normalize.outcome != 'success'
+        shell: bash
+        run: |
+          echo 'Sjednocení patičky selhalo; podrobnosti jsou v komentáři pull requestu.' >&2
+          exit 1
