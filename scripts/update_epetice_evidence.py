@@ -5,11 +5,14 @@ import re
 path = Path('clanky/epetice-nemocnice-kadan.html')
 text = path.read_text(encoding='utf-8')
 
-text = text.replace(
-    '<li><a href="#limit">Jak funguje limit 3500 znaků</a></li>',
-    '<li><a href="#plne-zneni">Co obsahuje celé znění petice</a></li><li><a href="#limit">Jak funguje limit 3500 znaků</a></li>',
-    1,
-)
+toc_item = '<li><a href="#plne-zneni">Co obsahuje celé znění petice</a></li>'
+text = re.sub(r'(?:' + re.escape(toc_item) + r')+', toc_item, text)
+if toc_item not in text:
+    text = text.replace(
+        '<li><a href="#limit">Jak funguje limit 3500 znaků</a></li>',
+        toc_item + '<li><a href="#limit">Jak funguje limit 3500 znaků</a></li>',
+        1,
+    )
 
 section = '''
   <h2 id="plne-zneni">Celé znění listinné petice obsahuje osm konkrétních požadavků</h2>
@@ -39,16 +42,18 @@ if 'id="plne-zneni"' not in text:
         raise SystemExit('Nenalezeno místo pro vložení nové části.')
     text = text.replace(anchor, section + '\n' + anchor, 1)
 
-text = text.replace(
-    '"dateModified":"2026-07-26T10:15:00+02:00"',
-    '"dateModified":"2026-07-26T14:15:00+02:00"',
-    1,
+text = re.sub(
+    r'"dateModified":"[^"]+"',
+    '"dateModified":"2026-07-26T14:20:00+02:00"',
+    text,
+    count=1,
 )
 
 source_marker = '<li>Veřejný facebookový příspěvek předkladatelky petice Vlasty Štaubrové o přípravě ePetice, zachycený redakcí 26. 7. 2026.</li>'
-source_addition = source_marker + '<li>Fotografie úplného znění listinné petice a snímky rozpracovaného formuláře ePetice zveřejněné předkladatelkou; osobní kontaktní údaje redakce dále nezveřejňuje.</li>'
-if 'Fotografie úplného znění listinné petice' not in text and source_marker in text:
-    text = text.replace(source_marker, source_addition, 1)
+source_item = '<li>Fotografie úplného znění listinné petice a snímky rozpracovaného formuláře ePetice zveřejněné předkladatelkou; osobní kontaktní údaje redakce dále nezveřejňuje.</li>'
+text = re.sub(r'(?:' + re.escape(source_item) + r')+', source_item, text)
+if source_item not in text and source_marker in text:
+    text = text.replace(source_marker, source_marker + source_item, 1)
 
 path.write_text(text, encoding='utf-8', newline='\n')
-print('Článek o ePetici byl doplněn o celé znění požadavků a vyhodnocení nových snímků.')
+print('Článek o ePetici byl doplněn a zkontrolován bez duplicit.')
