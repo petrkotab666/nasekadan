@@ -5,6 +5,17 @@ ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
 cd "$ROOT"
 
 LOCK_FILE=/tmp/nasekadan-production-deploy.lock
+# Zámek sdílí ruční nasazení, self-hosted runner i rootovská serverová pojistka.
+# Soubor mohl dříve vytvořit root s režimem 0644, takže běžný uživatel jej
+# nedokázal otevřít. Oprávnění upravujeme bez mazání souboru, aby se zachovalo
+# korektní flock chování i při souběžném běhu.
+if command -v sudo >/dev/null 2>&1; then
+  sudo touch "$LOCK_FILE"
+  sudo chmod a+rw "$LOCK_FILE"
+else
+  touch "$LOCK_FILE"
+  chmod a+rw "$LOCK_FILE"
+fi
 exec 9>"$LOCK_FILE"
 flock -w 900 9
 
