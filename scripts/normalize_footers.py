@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-EXCLUDED_PARTS = {".git", ".image-parts", "lms-rescue", "node_modules"}
+EXCLUDED_PARTS = {".git", ".github", ".image-parts", "lms-rescue", "node_modules"}
 FOOTER_STYLESHEET = '<link rel="stylesheet" href="/footer.css?v=20260726-unified-footer-1">'
 
 FOOTER = '''<footer class="site-footer" data-site-footer="v1">
@@ -50,6 +50,7 @@ FOOTER_CSS_RE = re.compile(
     r"\s*<link\b[^>]*href=[\"'][^\"']*footer\.css[^\"']*[\"'][^>]*>",
     re.IGNORECASE,
 )
+HTML_OPEN_RE = re.compile(r"<html\b", re.IGNORECASE)
 HEAD_CLOSE_RE = re.compile(r"</head\s*>", re.IGNORECASE)
 BODY_CLOSE_RE = re.compile(r"</body\s*>", re.IGNORECASE)
 
@@ -58,13 +59,17 @@ def public_html_files() -> list[Path]:
     paths: list[Path] = []
     for path in ROOT.rglob("*.html"):
         relative = path.relative_to(ROOT)
-        if any(part in EXCLUDED_PARTS for part in relative.parts):
+        directory_parts = relative.parts[:-1]
+        if any(part in EXCLUDED_PARTS or part.startswith(".") for part in directory_parts):
             continue
         paths.append(path)
     return sorted(paths)
 
 
 def normalized_html(text: str) -> str:
+    if not HTML_OPEN_RE.search(text):
+        raise ValueError("soubor není úplný HTML dokument")
+
     # Jediný samostatný stylesheet má přednost před historickými lokálními
     # pravidly jednotlivých stránek, takže patička vypadá všude stejně.
     result = FOOTER_CSS_RE.sub("", text)
