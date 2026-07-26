@@ -1,6 +1,12 @@
 name: Nouzově nasadit Naše Kadaň na OVH
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - emergency-deploy-trigger.txt
+      - .github/workflows/emergency-deploy-ovh.yml
+      - deploy/sync-production.sh
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -11,8 +17,8 @@ permissions:
   contents: read
 
 # Nouzové i běžné nasazení používá stejný produkční zámek a stejný skript.
-# Tento workflow už neběží automaticky po každé změně článku, takže nemůže
-# později přepsat aktuální web jinou verzí.
+# Každá změna emergency-deploy-trigger.txt proto ihned spustí kanonické nasazení
+# aktuálního mainu do Dockeru i aktivního document rootu /var/www/nasekadan.
 concurrency:
   group: nasekadan-production
   cancel-in-progress: true
