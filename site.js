@@ -35,6 +35,80 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
 
   const path=window.location.pathname.replace(/\/+$/,'');
+  const epeticeHref='/clanky/epetice-nemocnice-kadan.html';
+
+  if(path===''||path==='/index.html'){
+    const list=document.querySelector('.article-list');
+    if(list&&!list.querySelector(`a[href="${epeticeHref}"]`)){
+      const card=document.createElement('article');
+      card.className='article-card hospital';
+      card.setAttribute('data-epetice-card','');
+      card.innerHTML=`
+        <div class="visual"><strong>ePetice a nemocnice</strong></div>
+        <div class="article-body">
+          <span class="meta">26. 7. 2026 · 10:15 · Zdravotnictví a veřejná správa</span>
+          <h3>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</h3>
+          <p>Co znamená limit 3500 znaků, zda se ePetice schvaluje a kdy lze sčítat elektronické a listinné podpisy.</p>
+          <a class="read-more" href="${epeticeHref}">Přečíst mimořádný článek →</a>
+        </div>`;
+      const weekly=list.querySelector('[data-weekly-events-card]');
+      if(weekly)weekly.after(card);else list.prepend(card);
+    }
+
+    const aside=document.querySelector('.current-aside');
+    if(aside&&!aside.querySelector(`a[href="${epeticeHref}"]`)){
+      aside.innerHTML=`
+        <p class="aside-label">DALŠÍ AKTUÁLNÍ ČLÁNEK</p>
+        <p class="aside-date">26. 7. 2026 v 10:15</p>
+        <h2>Petice za nemocnici míří online. Obě verze ale musí být stejné</h2>
+        <p>Vysvětlujeme limit 3500 znaků, pravidla kombinovaného sběru podpisů a skutečný postup zveřejnění ePetice.</p>
+        <a class="aside-button" href="${epeticeHref}">Přečíst mimořádný článek →</a>
+        <div class="aside-links">
+          <a href="/clanky/nemocnice-kadan-software-kyberbezpecnost.html">64,7 milionu za software</a>
+          <a href="/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html">Noční výluky vlaků</a>
+          <a href="/clanky/">Všechny články podle data</a>
+        </div>`;
+    }
+  }
+
+  if(path==='/clanky'){
+    const archive=document.querySelector('.archive-list');
+    if(archive&&!archive.querySelector(`a[href="${epeticeHref}"]`)){
+      const item=document.createElement('article');
+      item.className='archive-item hospital';
+      item.setAttribute('data-epetice-card','');
+      item.innerHTML=`
+        <div class="archive-visual"><strong>ePetice a nemocnice</strong></div>
+        <div class="archive-body">
+          <span class="archive-meta">26. července 2026 v 10:15 · Zdravotnictví a veřejná správa</span>
+          <h2>Petice za nemocnici míří online. Papírová a elektronická verze ale musí být stejná</h2>
+          <p>Co znamená limit 3500 znaků, zda se ePetice schvaluje a kdy lze spojit elektronické a listinné podpisy.</p>
+          <a href="${epeticeHref}">Přečíst mimořádný článek →</a>
+        </div>`;
+      const weekly=archive.querySelector('[data-weekly-events-card]');
+      if(weekly)weekly.after(item);else archive.prepend(item);
+    }
+  }
+
+  if(path===epeticeHref.replace(/\.html$/,'' )||path===epeticeHref){
+    const status=document.querySelector('.status-box');
+    if(status){
+      status.innerHTML='<b>Stav při poslední kontrole:</b> K 26. červenci 2026 ve 13:27 nebyla petice za Nemocnici Kadaň ve veřejně dostupném seznamu oficiálních ePetic dohledatelná. Jakmile se objeví, porovnáme její úplné znění s listinnou verzí a článek aktualizujeme.';
+    }
+    const structured=document.querySelector('script[type="application/ld+json"]');
+    if(structured){
+      try{
+        const data=JSON.parse(structured.textContent);
+        if(data&&data['@type']==='NewsArticle'){
+          data.dateModified='2026-07-26T13:27:00+02:00';
+          structured.textContent=JSON.stringify(data);
+        }
+      }catch(error){
+        console.warn('Nepodařilo se upravit čas kontroly ePetice.',error);
+      }
+    }
+    return;
+  }
 
   if(path==='/clanky/petice-nemocnice-kadan.html'){
     const article=document.querySelector('.article');
