@@ -1,150 +1,36 @@
 name: Nouzově nasadit Naše Kadaň na OVH
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - emergency-deploy-trigger.txt
-      - Dockerfile
-      - index.html
-      - clanky/**
-      - nahled/**
-      - zpravy/**
-      - o-webu/**
-      - ochrana-osobnich-udaju/**
-      - sitemap.xml
-      - rss.xml
-      - robots.txt
-      - style.css
-      - site.js
-      - navigation.js
-      - .github/workflows/emergency-deploy-ovh.yml
+  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
       - emergency-deploy-trigger.txt
-  workflow_dispatch:
 
 permissions:
   contents: read
-  statuses: write
 
+# Nouzové i běžné nasazení používá stejný produkční zámek a stejný skript.
+# Tento workflow už neběží automaticky po každé změně článku, takže nemůže
+# později přepsat aktuální web jinou verzí.
 concurrency:
-  group: nasekadan-emergency-production
+  group: nasekadan-production
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: [self-hosted, ovh, lastminuteslevy]
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
-      - name: Označit nouzové nasazení jako spuštěné
-        shell: bash
-        run: |
-          curl -fsS -X POST \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-            -d '{"state":"pending","context":"nasekadan/emergency-deploy","description":"Nouzové nasazení právě probíhá"}' >/dev/null
-
-      - name: Stáhnout aktuální web
+      - name: Stáhnout aktuální hlavní větev
         uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
-      - name: Sestavit a okamžitě přepnout web
+      - name: Nasadit kanonickou verzi webu
         shell: bash
         run: |
           set -euo pipefail
-          if command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE='docker-compose'
-          elif docker compose version >/dev/null 2>&1; then
-            COMPOSE='docker compose'
-          else
-            echo 'Na serveru není dostupný docker-compose ani docker compose.' >&2
-            exit 1
-          fi
-          $COMPOSE build web
-          docker rm -f nasekadan-web 2>/dev/null || true
-          $COMPOSE up -d --no-build --remove-orphans
-
-      - name: Ochránit soukromé náhledy heslem
-        shell: bash
-        run: |
-          set -euo pipefail
-          snippet=/etc/nginx/snippets/nasekadan-statistiky-server.conf
-          for i in $(seq 1 60); do
-            [[ -s "$snippet" ]] && break
-            sleep 1
-          done
-          [[ -s "$snippet" ]] || { echo 'Chybí snippet statistik.' >&2; exit 1; }
-
-          if ! sudo grep -Fq 'Naše Kadaň – soukromé náhledy' "$snippet"; then
-            sudo tee -a "$snippet" >/dev/null <<'NGINX'
-
-          # Naše Kadaň – soukromé náhledy článků pod stejným přihlášením jako statistiky.
-          location = /nahled {
-              return 301 /nahled/;
-          }
-
-          location ^~ /nahled/ {
-              auth_basic "Naše Kadaň – soukromý náhled";
-              auth_basic_user_file /etc/nginx/.nasekadan-stats.htpasswd;
-              access_log off;
-              proxy_pass http://127.0.0.1:3224/nahled/;
-              proxy_http_version 1.1;
-              proxy_set_header Host $host;
-              proxy_set_header X-Real-IP $remote_addr;
-              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-              proxy_set_header X-Forwarded-Proto $scheme;
-              add_header Cache-Control "no-store, no-cache, must-revalidate" always;
-              add_header Pragma "no-cache" always;
-              add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
-              add_header X-Content-Type-Options "nosniff" always;
-          }
-          NGINX
-          fi
-
-          sudo nginx -t
-          sudo systemctl reload nginx
-
-      - name: Ověřit web, RSS, údaje provozovatele a chráněný náhled
-        shell: bash
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 45); do
-            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
-              break
-            fi
-            sleep 2
-          done
-          curl -fsS http://127.0.0.1:3224/healthz >/dev/null
-          curl -fsS http://127.0.0.1:3224/rss.xml | grep -F '<geo:lat>50.429725</geo:lat>' >/dev/null
-          curl -fsS http://127.0.0.1:3224/o-webu/ | grep -F 'IČO: 08780200' >/dev/null
-          curl -fsS http://127.0.0.1:3224/o-webu/ | grep -F 'Chomutovská 1284, 432 01 Kadaň' >/dev/null
-          curl -fsS http://127.0.0.1:3224/navigation.js | grep -F 'Provozovatel' >/dev/null
-          curl -fsS http://127.0.0.1:3224/nahled/petice-nemocnice-kadan-a8f4c2.html | grep -F 'Petice rozjela volební spor' >/dev/null
-
-          code=$(curl --noproxy '*' -k -sS --max-time 10 \
-            --resolve nasekadan.cz:443:127.0.0.1 \
-            -o /dev/null -w '%{http_code}' \
-            https://nasekadan.cz/nahled/petice-nemocnice-kadan-a8f4c2.html 2>/dev/null || true)
-          [[ "$code" == "401" ]] || { echo "Náhled není chráněný; HTTP $code" >&2; exit 1; }
-          echo 'Aktuální web, RSS a údaje provozovatele jsou nasazené; soukromý náhled je chráněn heslem.'
-
-      - name: Zapsat výsledek nouzového nasazení
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          if [[ "${{ job.status }}" == "success" ]]; then
-            state=success
-            description='Web, RSS a údaje provozovatele jsou nasazené'
-          else
-            state=failure
-            description='Nouzové nasazení nebo ověření selhalo'
-          fi
-          curl -fsS -X POST \
-            -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
-            -d "{\"state\":\"$state\",\"context\":\"nasekadan/emergency-deploy\",\"description\":\"$description\"}" >/dev/null
+          chmod +x deploy/sync-production.sh
+          bash deploy/sync-production.sh
