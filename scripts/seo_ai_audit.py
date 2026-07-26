@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://nasekadan.cz"
 SKIP_DIRS = {
     ".git", ".github", ".image-parts", "deploy", "docker-entrypoint.d",
-    "newsletter", "nginx", "scripts", "tools", "nahled", "sdilet", "lms-rescue",
+    "newsletter", "nginx", "scripts", "tools", "nahled", "sdilet",
+    "lms-rescue", "parts",
 }
 ARTICLE_DIR = ROOT / "clanky"
 HTML_TAG_RE = re.compile(r"<[^>]+>", re.S)
@@ -58,10 +59,13 @@ def expected_url(path: Path) -> str:
 
 
 def public_html_files() -> list[Path]:
-    result = []
+    result: list[Path] = []
     for path in ROOT.rglob("*.html"):
         parts = path.relative_to(ROOT).parts
-        if any(part in SKIP_DIRS for part in parts):
+        if any(part in SKIP_DIRS or part.startswith(".") for part in parts[:-1]):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if not re.search(r"<html\b", text, re.I):
             continue
         result.append(path)
     return sorted(result)
