@@ -31,6 +31,10 @@ def main() -> int:
     # ochraně publikace, zejména ePetici a článek o pozemcích koupaliště.
     run("scripts/ensure_newest_article_indexes.py")
 
+    # Ověřené znění osmi požadavků musí být přímo v hlavním článku o petici,
+    # nikoli pouze v samostatném vysvětlení pravidel ePetice.
+    run("scripts/ensure_petition_document_details.py")
+
     # Série o nemocnici se udržuje z jednoho zdroje a nesmí se rozpadnout při
     # serverové aktualizaci.
     run("scripts/link_hospital_series.py")
