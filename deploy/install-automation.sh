@@ -18,9 +18,12 @@ set -euo pipefail
 
 APP_DIR="/opt/nasekadan"
 WEB_DIR="/var/www/nasekadan"
-LOCK="/run/lock/nasekadan-refresh.lock"
-exec 9>"$LOCK"
+REFRESH_LOCK="/run/lock/nasekadan-refresh.lock"
+PRODUCTION_LOCK="/tmp/nasekadan-production-deploy.lock"
+exec 9>"$REFRESH_LOCK"
 flock -n 9 || exit 0
+exec 8>"$PRODUCTION_LOCK"
+flock -w 900 8
 
 chown -R ubuntu:ubuntu "$APP_DIR"
 su - ubuntu -c "git -C '$APP_DIR' fetch --prune origin main"
