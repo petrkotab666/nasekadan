@@ -24,13 +24,14 @@ RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n
  && cat /usr/share/nginx/html/mobile.css >> /usr/share/nginx/html/style.css
 
 # Na všech stránkách vynutit stažení aktuální verze hlavních stylů a skriptů.
-# Reklamní oprava je už vložena přímo ve zdrojových HTML, proto se při sestavení nesmí přidat podruhé.
+# Pevné popisy inzerentů se načítají nakonec a nahrazují všechny technické či obecné texty.
 RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
   -e 's#style.css"#style.css?v=20260724-mobile-2"#g' \
   -e 's#site.js"#site.js?v=20260724-nemocnice-7"#g' \
-  -e 's#reklamy\.js[^\"]*"#reklamy.js?v=20260725-ad-core-3"#g' \
-  -e 's#reklamy-oprava-obrazku\.js[^\"]*"#reklamy-oprava-obrazku.js?v=20260725-ad-copy-image-3"#g' \
-  -e 's#</body>#<script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
+  -e 's#reklamy\.js[^\"]*"#reklamy.js?v=20260726-ad-core-4"#g' \
+  -e 's#reklamy-oprava-obrazku\.js[^\"]*"#reklamy-oprava-obrazku.js?v=20260726-ad-image-4"#g' \
+  -e 's#<script src="[^"]*reklamy-popisy\.js[^"]*"></script>##g' \
+  -e 's#</body>#<script src="/reklamy-popisy.js?v=20260726-ad-descriptions-1"></script><script src="/navigation.js?v=20260725-inzerce-footer-2" defer></script><script src="/upoutavky.js?v=20260724-nemocnice-cyber-1" defer></script></body>#g' {} +
 
 # Zkopírovat neveřejný redakční návrh KZK do heslem chráněné sekce /nahled/.
 RUN mkdir -p /usr/share/nginx/html/nahled \
