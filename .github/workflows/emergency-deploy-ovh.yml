@@ -17,11 +17,11 @@ permissions:
   contents: read
 
 # Nouzové i běžné nasazení používá stejný produkční zámek a stejný skript.
-# Každá změna emergency-deploy-trigger.txt proto ihned spustí kanonické nasazení
-# aktuálního mainu do Dockeru i aktivního document rootu /var/www/nasekadan.
+# Probíhající nasazení se nezruší kvůli dalšímu commitu; další běh znovu
+# načte nejnovější main a ověří stejnou verzi v Dockeru i Caddy.
 concurrency:
   group: nasekadan-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
