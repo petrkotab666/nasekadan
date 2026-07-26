@@ -27,7 +27,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Sestavit přesný produkční obraz
-        run: docker build --progress=plain -t nasekadan-seo-test .
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build --progress=plain -t nasekadan-seo-test . 2>&1 | tee production-build.log
+
+      - name: Uložit úplný Docker log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-build-log
+          path: production-build.log
+          if-no-files-found: warn
 
       - name: Spustit obraz a zkontrolovat výstup
         shell: bash
