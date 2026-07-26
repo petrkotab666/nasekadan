@@ -31,6 +31,13 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Opravit SMTP newsletteru
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/repair-newsletter-smtp.sh
+          bash deploy/repair-newsletter-smtp.sh
+
       - name: Nasadit jedinou kanonickou verzi webu
         shell: bash
         run: |
