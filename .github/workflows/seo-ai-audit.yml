@@ -36,13 +36,6 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Vytvořit úplný audit
-        run: |
-          python3 scripts/seo_ai_audit.py \
-            --report SEO-AI-AUDIT.md \
-            --json seo-ai-audit.json
-          cat SEO-AI-AUDIT.md >> "$GITHUB_STEP_SUMMARY"
-
       - name: Najít změněné HTML stránky
         shell: bash
         run: |
@@ -55,16 +48,34 @@ jobs:
           else
             : > /tmp/changed-files.txt
           fi
-          grep -E '\.html$' /tmp/changed-files.txt > /tmp/changed-html.txt || true
-          echo 'Změněné HTML:'
+          grep -E '\.html$' /tmp/changed-files.txt \
+            | grep -v '^clanky/parts/' \
+            | grep -v '^google[^/]*\.html$' \
+            > /tmp/changed-html.txt || true
+          echo 'Změněné veřejné HTML:'
           cat /tmp/changed-html.txt || true
+
+      - name: Připravit stejná metadata jako produkční sestavení
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf clanky/parts
+          rm -f google*.html
+          python3 scripts/prepare_discovery.py
+
+      - name: Vytvořit úplný audit
+        run: |
+          python3 scripts/seo_ai_audit.py \
+            --report SEO-AI-AUDIT.md \
+            --json seo-ai-audit.json
+          cat SEO-AI-AUDIT.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Zastavit chybnou novou nebo změněnou stránku
         shell: bash
         run: |
           set -euo pipefail
           if [[ ! -s /tmp/changed-html.txt ]]; then
-            echo 'V této změně není žádná HTML stránka k přísné kontrole.'
+            echo 'V této změně není žádná veřejná HTML stránka k přísné kontrole.'
             exit 0
           fi
           python3 scripts/seo_ai_audit.py \
@@ -87,6 +98,7 @@ jobs:
           set -euo pipefail
           test -s SEO-AI-AUDIT.md
           test -s seo-ai-audit.json
+          git restore clanky/parts google*.html 2>/dev/null || true
           git config user.name 'Naše Kadaň SEO audit'
           git config user.email 'info@nasekadan.cz'
           git add SEO-AI-AUDIT.md seo-ai-audit.json
