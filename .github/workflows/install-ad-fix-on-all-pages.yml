@@ -4,7 +4,9 @@ on:
   push:
     branches: [main]
     paths:
+      - 'reklamy.js'
       - 'reklamy-oprava-obrazku.js'
+      - 'reklamy-popisy.js'
       - '.github/workflows/install-ad-fix-on-all-pages.yml'
   workflow_dispatch:
 
@@ -31,17 +33,20 @@ jobs:
           from pathlib import Path
           import re
 
-          core_version = '20260725-ad-core-3'
-          fix_version = '20260725-ad-copy-image-3'
+          core_version = '20260726-ad-core-4'
+          fix_version = '20260726-ad-image-4'
+          descriptions_version = '20260726-ad-descriptions-1'
           prefix = r'(?:\.\./)*/?'
           pattern = re.compile(
               rf'<script\s+src=["\']{prefix}reklamy\.js(?:\?[^"\']*)?["\']\s*></script>'
-              rf'(?:\s*<script\s+src=["\']{prefix}reklamy-oprava-obrazku\.js(?:\?[^"\']*)?["\']\s*></script>)?',
+              rf'(?:\s*<script\s+src=["\']{prefix}reklamy-oprava-obrazku\.js(?:\?[^"\']*)?["\']\s*></script>)?'
+              rf'(?:\s*<script\s+src=["\']{prefix}reklamy-popisy\.js(?:\?[^"\']*)?["\']\s*></script>)?',
               re.I,
           )
           replacement = (
               f'<script src="/reklamy.js?v={core_version}"></script>\n'
-              f'<script src="/reklamy-oprava-obrazku.js?v={fix_version}"></script>'
+              f'<script src="/reklamy-oprava-obrazku.js?v={fix_version}"></script>\n'
+              f'<script src="/reklamy-popisy.js?v={descriptions_version}"></script>'
           )
 
           changed = 0
@@ -73,5 +78,6 @@ jobs:
             echo "Není co ukládat."
             exit 0
           fi
-          git commit -m "Načíst opravu reklam na všech stránkách"
+          git commit -m "Načíst přesné popisy reklam na všech stránkách"
+          git pull --rebase origin main
           git push
