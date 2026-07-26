@@ -1,19 +1,29 @@
 {
-  "checked_at_utc": "2026-07-26T19:47:05.643Z",
-  "trigger_commit": "ef10d52e35aef88c28d908f39aff2b37e6e42cff",
+  "checked_at_utc": "2026-07-26T19:48:53.664Z",
+  "trigger_commit": "a649607332709cd1b4e80ecd78bcd687732b746a",
   "runners": [],
   "cancelled_runs": [
     {
-      "id": 30217575787,
+      "id": 30217635089,
       "workflow_id": "deploy-ovh.yml",
       "status": "queued",
-      "head_sha": "ef10d52e35aef88c28d908f39aff2b37e6e42cff"
+      "head_sha": "a649607332709cd1b4e80ecd78bcd687732b746a"
     }
   ],
   "dispatch": {
     "workflow": "deploy-ovh.yml",
     "ref": "main",
     "created": true
+  },
+  "latest_deploy_run": {
+    "id": 30217651926,
+    "status": "queued",
+    "conclusion": null,
+    "event": "workflow_dispatch",
+    "head_sha": "a649607332709cd1b4e80ecd78bcd687732b746a",
+    "created_at": "2026-07-26T19:49:16Z",
+    "updated_at": "2026-07-26T19:49:16Z",
+    "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30217651926"
   },
   "errors": [
     "list-runners: 403 Resource not accessible by integration"
