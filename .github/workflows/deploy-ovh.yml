@@ -13,11 +13,11 @@ on:
 permissions:
   contents: read
 
-# Běžící produkční deploy se už kvůli dalšímu drobnému commitu nezruší.
-# GitHub ponechá nanejvýš jeden další čekající běh a deploy skript si před
-# spuštěním stejně znovu načte nejnovější main.
+# Běžné push deploye se řadí za sebe. Kontrolovaný PR deploy má vlastní
+# frontu, takže jej časté automatické commity nemohou před spuštěním zrušit.
+# Samotný skript navíc používá serverový flock a vždy stáhne aktuální main.
 concurrency:
-  group: nasekadan-production
+  group: ${{ github.event_name == 'pull_request' && 'nasekadan-force-production' || 'nasekadan-production' }}
   cancel-in-progress: false
 
 jobs:
