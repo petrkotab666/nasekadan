@@ -1,0 +1,118 @@
+name: Ověřit skutečný zápis na Facebook
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/facebook-write-selftest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  write-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit neveřejný příspěvek, ověřit jej a smazat
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          page_id = os.environ.get('FACEBOOK_PAGE_ID', '').strip()
+          token = os.environ.get('FACEBOOK_PAGE_ACCESS_TOKEN', '').strip()
+          version = os.environ.get('FACEBOOK_GRAPH_VERSION', '').strip().strip('/') or 'v25.0'
+          if not page_id or not token:
+              raise SystemExit('Chybí FACEBOOK_PAGE_ID nebo FACEBOOK_PAGE_ACCESS_TOKEN.')
+
+          def call(path, params, method='GET'):
+              endpoint = f'https://graph.facebook.com/{version}/{path.lstrip("/")}'
+              encoded = urllib.parse.urlencode(params)
+              if method == 'GET':
+                  request = urllib.request.Request(f'{endpoint}?{encoded}', method='GET')
+              else:
+                  request = urllib.request.Request(endpoint, data=encoded.encode('utf-8'), method=method)
+              try:
+                  with urllib.request.urlopen(request, timeout=45) as response:
+                      return json.loads(response.read().decode('utf-8'))
+              except urllib.error.HTTPError as exc:
+                  detail = exc.read().decode('utf-8', errors='replace')
+                  raise RuntimeError(f'Graph API HTTP {exc.code}: {detail}') from exc
+
+          stamp = datetime.now(timezone.utc).isoformat()
+          created_id = ''
+          deleted = False
+          try:
+              created = call(
+                  f'{page_id}/feed',
+                  {
+                      'message': f'Naše Kadaň – neveřejný technický test automatu {stamp}',
+                      'published': 'false',
+                      'access_token': token,
+                  },
+                  method='POST',
+              )
+              created_id = str(created.get('id', '')).strip()
+              if not created_id:
+                  raise RuntimeError(f'Facebook nevrátil ID testovacího příspěvku: {created}')
+
+              checked = call(
+                  created_id,
+                  {
+                      'fields': 'id,is_published,created_time',
+                      'access_token': token,
+                  },
+              )
+              if checked.get('is_published') is True:
+                  raise RuntimeError('Testovací příspěvek byl neočekávaně veřejný.')
+          finally:
+              if created_id:
+                  result = call(created_id, {'access_token': token}, method='DELETE')
+                  deleted = result.get('success') is True
+
+          if not created_id or not deleted:
+              raise RuntimeError('Neveřejný testovací příspěvek se nepodařilo bezpečně vytvořit a odstranit.')
+
+          result = {
+              'state': 'success',
+              'tested_at': stamp,
+              'page_id': page_id,
+              'graph_version': version,
+              'created_post_id': created_id,
+              'was_public': False,
+              'deleted': True,
+              'note': 'Skutečný zápis přes /feed proběhl. Testovací příspěvek nebyl veřejný a byl ihned odstraněn.',
+          }
+          target = Path('.github/facebook-write-selftest-result.json')
+          target.write_text(json.dumps(result, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(result, ensure_ascii=False))
+          PY
+
+      - name: Uložit důkaz úspěšného testu
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Facebook automat'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/facebook-write-selftest-result.json
+          git commit -m 'Potvrdit skutečný zápis Facebook automatu'
+          git pull --rebase origin main
+          git push origin main
