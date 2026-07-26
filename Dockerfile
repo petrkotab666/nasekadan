@@ -23,6 +23,9 @@ RUN python scripts/generate_social_cards.py --write --check
 # obrázky a metadata jednotlivých článků.
 RUN python scripts/prepare_discovery.py
 
+# Zkrátit nevhodně dlouhé titulky, doplnit popisy a přesné časové značky článků.
+RUN python scripts/normalize_search_snippets.py
+
 # Ověření vlastnictví služby https://nasekadan.cz/ v Google Search Console.
 # Značka musí zůstat v produkčním <head>, jinak se vlastnictví časem ztratí.
 RUN sed -i 's#<head>#<head>\n  <meta name="google-site-verification" content="bFnU5Qjvk0Y52HY6N4d-b9_yy_IZ8DkY5LkoQsLAk8M">#' /site/index.html
