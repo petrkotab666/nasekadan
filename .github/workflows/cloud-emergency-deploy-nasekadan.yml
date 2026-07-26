@@ -1,0 +1,106 @@
+name: Nouzově nasadit Naše Kadaň přes GitHub cloud
+run-name: Cloudové nouzové nasazení nejnovějšího main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/cloud-deploy-nasekadan-trigger.txt'
+      - '.github/workflows/cloud-emergency-deploy-nasekadan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-cloud-emergency-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+
+    steps:
+      - name: Vybrat dostupný SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              printf '%s\n' "$value" > "$RUNNER_TEMP/nasekadan_ovh_key"
+              selected="$name"
+              break
+            fi
+          done
+          if [ -z "$selected" ]; then
+            echo 'Nebyl nalezen žádný použitelný SSH secret.' >&2
+            exit 20
+          fi
+          chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
+          echo "selected=$selected" >> "$GITHUB_OUTPUT"
+          echo "Použit SSH secret: $selected"
+
+      - name: Nasadit nejnovější main přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=4 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+
+          if [ ! -d /opt/nasekadan/.git ]; then
+            sudo rm -rf /opt/nasekadan
+            sudo git clone https://github.com/petrkotab666/nasekadan.git /opt/nasekadan
+            sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          fi
+
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          chmod +x deploy/sync-production.sh
+          bash deploy/sync-production.sh
+          REMOTE
+
+      - name: Ověřit veřejný web z GitHub cloudu
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
+            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
+            sources="$(curl -fsS --max-time 20 "https://nasekadan.cz/data/city-sources.json?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
+            health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
+
+            if grep -Fq 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$homepage" \
+              && grep -Fq 'Karlovy Vary' <<<"$article" \
+              && grep -Fq 'MŠ Hvězdička Kadaň' <<<"$sources" \
+              && grep -Fq 'source=' <<<"$health"; then
+              echo 'Veřejný web podává aktuální kulturní přehled i rozšířený registr zdrojů.'
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo 'Veřejný web ani po čekání nepodává požadovanou verzi.' >&2
+          exit 30
