@@ -23,17 +23,16 @@ def run(*parts: str) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
-def repair_newsletter_smtp() -> None:
-    """Na produkčním VPS srovná SMTP a restartuje newsletterovou službu.
+def on_production_vps() -> bool:
+    return ROOT == Path("/opt/nasekadan")
 
-    Lokální počítače a GitHub-hostované kontroly tento krok bezpečně přeskočí.
-    Heslo se nikdy nečte do Pythonu ani nevypisuje; opravný shellový skript je
-    pouze zachová v chráněném serverovém souboru.
-    """
+
+def repair_newsletter_smtp() -> None:
+    """Na produkčním VPS srovná SMTP a restartuje newsletterovou službu."""
 
     repair_script = ROOT / "deploy" / "repair-newsletter-smtp.sh"
     env_file = Path("/etc/nasekadan-newsletter.env")
-    if ROOT != Path("/opt/nasekadan") or not env_file.exists() or not repair_script.exists():
+    if not on_production_vps() or not env_file.exists() or not repair_script.exists():
         print("Newsletter SMTP: nejde o produkční VPS, oprava se přeskakuje.")
         return
 
@@ -46,10 +45,46 @@ def repair_newsletter_smtp() -> None:
         print(f"Upozornění: oprava SMTP newsletteru nebyla dokončena: {exc}", file=sys.stderr)
 
 
+def recover_github_runner() -> None:
+    """Je-li self-hosted runner nainstalovaný, ale neběží, znovu jej spustí."""
+
+    if not on_production_vps():
+        return
+
+    script = r"""
+set -euo pipefail
+mapfile -t services < <(systemctl list-unit-files --type=service --no-legend 'actions.runner*' 2>/dev/null | awk '{print $1}' | sort -u)
+if [ "${#services[@]}" -eq 0 ]; then
+  echo 'GitHub runner: žádná služba actions.runner nebyla nalezena.'
+  exit 0
+fi
+for service in "${services[@]}"; do
+  if systemctl is-active --quiet "$service"; then
+    echo "GitHub runner: $service je aktivní."
+  else
+    echo "GitHub runner: obnovuji $service."
+    systemctl reset-failed "$service" || true
+    systemctl restart "$service"
+    systemctl is-active --quiet "$service"
+  fi
+done
+"""
+    try:
+        subprocess.run(
+            ["sudo", "-n", "bash", "-lc", script],
+            cwd=ROOT,
+            check=True,
+            timeout=60,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        print(f"Upozornění: GitHub runner se nepodařilo obnovit: {exc}", file=sys.stderr)
+
+
 def main() -> int:
     # Serverová desetiminutová pojistka tento soubor spouští po každém git pullu.
-    # Díky tomu se servisní oprava dostane na VPS i při nedostupném GitHub runneru.
+    # Díky tomu se servisní opravy dostanou na VPS i při nedostupném runneru.
     repair_newsletter_smtp()
+    recover_github_runner()
 
     # Obnovit známé vazby článku o nočních výlukách.
     run("scripts/ensure_publication_integrity.py")
