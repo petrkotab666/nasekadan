@@ -47,14 +47,18 @@ COPY docker-entrypoint.d/40-indexnow.sh /docker-entrypoint.d/40-indexnow.sh
 RUN chmod +x /docker-entrypoint.d/40-indexnow.sh
 
 
-# Mobilní pravidla přidat přímo do hlavního CSS. Tím nejsou závislá na načtení dalšího souboru.
+# Mobilní pravidla a opravy kolizí článkových karet vložit přímo do hlavního CSS.
+# Články tak nejsou závislé na načtení dalšího souboru a třída .event z titulní
+# stránky už nemůže rozbít odstavce uvnitř týdenního přehledu.
 RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n' >> /usr/share/nginx/html/style.css \
- && cat /usr/share/nginx/html/mobile.css >> /usr/share/nginx/html/style.css
+ && cat /usr/share/nginx/html/mobile.css >> /usr/share/nginx/html/style.css \
+ && printf '\n\n/* Opravy rozvržení článků vložené při produkčním sestavení */\n' >> /usr/share/nginx/html/style.css \
+ && cat /usr/share/nginx/html/article-layout-fixes.css >> /usr/share/nginx/html/style.css
 
 # Reklamní balík už vložil jediný normalizátor článků. Zde se upravují pouze
 # obecné soubory webu a jednou se doplní navigace a upoutávky.
 RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
-  -e 's#style.css"#style.css?v=20260724-mobile-2"#g' \
+  -e 's#style.css"#style.css?v=20260726-event-layout-1"#g' \
   -e 's#site.js"#site.js?v=20260724-nemocnice-7"#g' \
   -e 's#<script src="[^"]*navigation\.js[^"]*"[^>]*></script>##g' \
   -e 's#<script src="[^"]*upoutavky\.js[^"]*"[^>]*></script>##g' \
@@ -72,6 +76,7 @@ RUN rm -rf /usr/share/nginx/html/.git \
            /usr/share/nginx/html/nginx \
            /usr/share/nginx/html/scripts \
            /usr/share/nginx/html/tools \
+           /usr/share/nginx/html/article-layout-fixes.css \
            /usr/share/nginx/html/Dockerfile \
            /usr/share/nginx/html/docker-compose.yml
 
