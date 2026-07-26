@@ -12,12 +12,17 @@ on:
       - 'scripts/normalize_footers.py'
       - '.github/footer-normalization-trigger.txt'
       - '.github/workflows/normalize-site-footer.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/footer-normalization-pr-trigger.txt'
   schedule:
     - cron: '53 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: nasekadan-unified-footer
