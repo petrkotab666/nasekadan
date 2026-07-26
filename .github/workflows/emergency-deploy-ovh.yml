@@ -18,12 +18,11 @@ on:
 permissions:
   contents: read
 
-# Nouzové i běžné nasazení používá stejný produkční zámek a stejný skript.
-# Probíhající nasazení se nezruší kvůli dalšímu commitu; další běh znovu
-# načte nejnovější main a ověří stejnou verzi v Dockeru i Caddy.
+# Nouzový běh má vlastní frontu, aby nebyl blokován starými běžnými deployi.
+# Na serveru jej se souběžným nasazením bezpečně serializuje flock.
 concurrency:
-  group: nasekadan-production
-  cancel-in-progress: false
+  group: nasekadan-emergency-production
+  cancel-in-progress: true
 
 jobs:
   deploy:
