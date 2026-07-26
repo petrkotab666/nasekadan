@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_PARTS = {".git", ".image-parts", "lms-rescue", "node_modules"}
+FOOTER_STYLESHEET = '<link rel="stylesheet" href="/footer.css?v=20260726-unified-footer-1">'
 
 FOOTER = '''<footer class="site-footer" data-site-footer="v1">
   <div class="wrap footer-grid">
@@ -45,6 +46,11 @@ FOOTER = '''<footer class="site-footer" data-site-footer="v1">
 </footer>'''
 
 FOOTER_RE = re.compile(r"<footer\b[^>]*>.*?</footer>", re.IGNORECASE | re.DOTALL)
+FOOTER_CSS_RE = re.compile(
+    r"\s*<link\b[^>]*href=[\"'][^\"']*footer\.css[^\"']*[\"'][^>]*>",
+    re.IGNORECASE,
+)
+HEAD_CLOSE_RE = re.compile(r"</head\s*>", re.IGNORECASE)
 BODY_CLOSE_RE = re.compile(r"</body\s*>", re.IGNORECASE)
 
 
@@ -59,15 +65,22 @@ def public_html_files() -> list[Path]:
 
 
 def normalized_html(text: str) -> str:
-    matches = list(FOOTER_RE.finditer(text))
+    # Jediný samostatný stylesheet má přednost před historickými lokálními
+    # pravidly jednotlivých stránek, takže patička vypadá všude stejně.
+    result = FOOTER_CSS_RE.sub("", text)
+    if not HEAD_CLOSE_RE.search(result):
+        raise ValueError("HTML nemá </head>")
+    result = HEAD_CLOSE_RE.sub(f"  {FOOTER_STYLESHEET}\n</head>", result, count=1)
+
+    matches = list(FOOTER_RE.finditer(result))
     if matches:
         start = matches[0].start()
         end = matches[-1].end()
-        result = text[:start].rstrip() + "\n\n" + FOOTER + text[end:]
+        result = result[:start].rstrip() + "\n\n" + FOOTER + result[end:]
     else:
-        if not BODY_CLOSE_RE.search(text):
+        if not BODY_CLOSE_RE.search(result):
             raise ValueError("HTML nemá </body>")
-        result = BODY_CLOSE_RE.sub(FOOTER + "\n</body>", text, count=1)
+        result = BODY_CLOSE_RE.sub(FOOTER + "\n</body>", result, count=1)
 
     # Odstraní případnou druhou patičku, kterou do stránky vložil starší generátor.
     first_end = result.find("</footer>")
@@ -103,9 +116,16 @@ def main() -> int:
 
         checked = normalized if args.write else text
         footer_count = len(FOOTER_RE.findall(checked))
-        if args.check and (footer_count != 1 or FOOTER not in checked):
+        css_count = len(FOOTER_CSS_RE.findall(checked))
+        if args.check and (
+            footer_count != 1
+            or FOOTER not in checked
+            or css_count != 1
+            or FOOTER_STYLESHEET not in checked
+        ):
             errors.append(
-                f"{path.relative_to(ROOT)}: očekávána právě jedna jednotná patička, nalezeno {footer_count}"
+                f"{path.relative_to(ROOT)}: očekávána jedna jednotná patička a jeden footer.css; "
+                f"patiček {footer_count}, stylů {css_count}"
             )
 
     if changed:
