@@ -1,0 +1,52 @@
+name: Doplnit článek o ePetici o nové důkazy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update_epetice_evidence.py'
+      - '.github/epetice-evidence-trigger.txt'
+      - '.github/workflows/update-epetice-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-update-epetice-evidence
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit článek
+        run: python3 scripts/update_epetice_evidence.py
+
+      - name: Ověřit doplnění
+        run: |
+          set -euo pipefail
+          grep -Fq 'Celé znění listinné petice obsahuje osm konkrétních požadavků' clanky/epetice-nemocnice-kadan.html
+          grep -Fq 'Osobní údaje nezveřejňujeme' clanky/epetice-nemocnice-kadan.html
+          grep -Fq 'Veřejný závazek města' clanky/epetice-nemocnice-kadan.html
+
+      - name: Uložit změnu
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – aktualizace ePetice'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/epetice-nemocnice-kadan.html
+          if git diff --cached --quiet; then
+            echo 'Článek už je doplněný.'
+            exit 0
+          fi
+          git commit -m 'Doplnit celé znění požadavků petice a nové snímky'
+          git pull --rebase origin main
+          git push origin main
