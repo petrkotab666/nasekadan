@@ -13,11 +13,12 @@ on:
 permissions:
   contents: read
 
-# Všechny cesty do produkce používají stejný zámek. Starší čekající běh se
-# zruší a každý spuštěný běh si před nasazením znovu stáhne aktuální main.
+# Běžící produkční deploy se už kvůli dalšímu drobnému commitu nezruší.
+# GitHub ponechá nanejvýš jeden další čekající běh a deploy skript si před
+# spuštěním stejně znovu načte nejnovější main.
 concurrency:
   group: nasekadan-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
