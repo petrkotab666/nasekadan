@@ -1,0 +1,88 @@
+name: SEO a AI audit
+
+on:
+  push:
+    paths:
+      - '**/*.html'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - 'news-sitemap.xml'
+      - 'rss.xml'
+      - 'llms.txt'
+      - 'scripts/**'
+      - '.github/workflows/seo-ai-audit.yml'
+  pull_request:
+    paths:
+      - '**/*.html'
+      - 'robots.txt'
+      - 'sitemap.xml'
+      - 'news-sitemap.xml'
+      - 'rss.xml'
+      - 'llms.txt'
+      - 'scripts/**'
+      - '.github/workflows/seo-ai-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout web
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Vytvořit úplný audit
+        run: |
+          python3 scripts/seo_ai_audit.py \
+            --report SEO-AI-AUDIT.md \
+            --json seo-ai-audit.json
+          cat SEO-AI-AUDIT.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Najít změněné HTML stránky
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch origin "${{ github.base_ref }}" --depth=1
+            git diff --name-only "origin/${{ github.base_ref }}...HEAD" > /tmp/changed-files.txt
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > /tmp/changed-files.txt
+          else
+            : > /tmp/changed-files.txt
+          fi
+          grep -E '\.html$' /tmp/changed-files.txt > /tmp/changed-html.txt || true
+          echo 'Změněné HTML:'
+          cat /tmp/changed-html.txt || true
+
+      - name: Zastavit chybnou novou nebo změněnou stránku
+        run: |
+          python3 scripts/seo_ai_audit.py \
+            --strict \
+            --paths-file /tmp/changed-html.txt
+
+      - name: Uložit audit jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-ai-audit
+          path: |
+            SEO-AI-AUDIT.md
+            seo-ai-audit.json
+
+      - name: Uložit první úplný audit do auditní větve
+        if: github.event_name == 'push' && github.ref == 'refs/heads/seo-ai-audit-20260726'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň SEO audit'
+          git config user.email 'info@nasekadan.cz'
+          git add SEO-AI-AUDIT.md seo-ai-audit.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Aktualizovat úplný SEO a AI audit'
+          git push origin HEAD:seo-ai-audit-20260726
