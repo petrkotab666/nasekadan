@@ -24,9 +24,12 @@ def run(*parts: str) -> None:
 
 
 def main() -> int:
-    # Nejprve obnovit známé vazby článků, které byly dříve opakovaně
-    # přepisovány staršími publikačními workflow.
+    # Obnovit známé vazby článku o nočních výlukách.
     run("scripts/ensure_publication_integrity.py")
+
+    # Doplnit také všechny novější články, které vznikly až po původní
+    # ochraně publikace, zejména ePetici a článek o pozemcích koupaliště.
+    run("scripts/ensure_newest_article_indexes.py")
 
     # Série o nemocnici se udržuje z jednoho zdroje a nesmí se rozpadnout při
     # serverové aktualizaci.
