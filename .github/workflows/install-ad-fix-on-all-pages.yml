@@ -1,4 +1,4 @@
-name: Sjednotit články a sociální obrázky
+name: Sjednotit články, sociální obrázky a přehled akcí
 
 on:
   push:
@@ -10,6 +10,7 @@ on:
       - 'obsah-doplnky.js'
       - 'scripts/normalize_articles.py'
       - 'scripts/generate_social_cards.py'
+      - 'scripts/publish_weekly_events.py'
       - '.github/workflows/install-ad-fix-on-all-pages.yml'
   workflow_dispatch:
 
@@ -35,24 +36,25 @@ jobs:
         shell: bash
         run: python3 -m pip install --disable-pip-version-check pillow
 
-      - name: Sjednotit a ověřit všechny články
+      - name: Sjednotit články, vytvořit obrázky a propagovat týdenní přehled
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/normalize_articles.py --write --check
           python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/publish_weekly_events.py
 
-      - name: Uložit sjednocené články a jejich obrázky
+      - name: Uložit články, obrázky, titulku, archiv a kanály
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- 'clanky/*.html' 'social/*.png' || true
+          git add -- 'clanky/*.html' 'social/*.png' index.html clanky/index.html rss.xml sitemap.xml || true
           if git diff --cached --quiet; then
-            echo "Všechny články i sociální obrázky jsou aktuální."
+            echo "Všechny články, sociální obrázky a publikační kanály jsou aktuální."
             exit 0
           fi
-          git commit -m "Sjednotit články a doplnit vlastní Facebook obrázky"
+          git commit -m "Zveřejnit týdenní přehled na celém webu"
           git pull --rebase origin main
           git push origin main
