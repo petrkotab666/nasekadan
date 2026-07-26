@@ -1,0 +1,88 @@
+/* Jednotná patička webu Naše Kadaň. Na všech stránkách se používá stejný HTML blok. */
+footer.site-footer{
+  margin:0;
+  padding:44px 0 0;
+  background:#0b171e;
+  color:#d9e2e7;
+  border-top:1px solid rgba(255,255,255,.08);
+  font-family:Inter,Arial,sans-serif;
+}
+footer.site-footer .footer-grid{
+  display:grid;
+  grid-template-columns:minmax(260px,2fr) minmax(180px,1fr) minmax(220px,1fr);
+  gap:42px;
+  align-items:start;
+  padding-bottom:34px;
+}
+footer.site-footer .footer-grid>div{min-width:0}
+footer.site-footer .footer-brand p{
+  max-width:390px;
+  margin:15px 0 0;
+  color:#b8c7ce;
+  font-size:15px;
+  line-height:1.65;
+}
+footer.site-footer a{
+  color:#e7eff2;
+  text-decoration:none;
+}
+footer.site-footer a:hover,
+footer.site-footer a:focus-visible{
+  color:#fff;
+  text-decoration:underline;
+  text-underline-offset:3px;
+}
+footer.site-footer a.logo{
+  display:flex;
+  width:max-content;
+  max-width:100%;
+  margin:0;
+  color:#fff;
+  text-decoration:none;
+}
+footer.site-footer .logo b{color:#e95b62}
+footer.site-footer .footer-column strong{
+  display:block;
+  margin:0 0 12px;
+  color:#fff;
+  font:800 18px/1.25 Georgia,serif;
+}
+footer.site-footer .footer-column>a{
+  display:block;
+  width:fit-content;
+  max-width:100%;
+  margin:7px 0;
+  color:#d9e2e7;
+  font-size:15px;
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+footer.site-footer .footer-column>a b{color:#fff}
+footer.site-footer .footer-legal{
+  width:min(1180px,calc(100% - 32px));
+  margin:0 auto;
+  padding:18px 0 22px;
+  border-top:1px solid rgba(255,255,255,.16);
+  display:flex;
+  align-items:center;
+  gap:10px 20px;
+  flex-wrap:wrap;
+  color:#9fb0b8;
+  font-size:13px;
+}
+footer.site-footer .footer-legal span{margin-right:auto}
+footer.site-footer .footer-legal a{
+  color:#dce7eb;
+  font-size:13px;
+}
+@media(max-width:850px){
+  footer.site-footer{padding-top:34px}
+  footer.site-footer .footer-grid{
+    grid-template-columns:1fr;
+    gap:26px;
+    padding-bottom:28px;
+  }
+  footer.site-footer .footer-brand p{max-width:none}
+  footer.site-footer .footer-legal{align-items:flex-start}
+  footer.site-footer .footer-legal span{width:100%;margin:0 0 3px}
+}
