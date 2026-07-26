@@ -7,6 +7,7 @@ on:
       - "clanky/*.html"
       - ".github/facebook-publish-trigger.txt"
       - ".github/facebook-publisher-config.json"
+      - "scripts/remove_unpublished_articles.py"
       - "scripts/publish_facebook.py"
       - "scripts/process_facebook_queue.py"
       - ".github/workflows/publish-facebook.yml"
@@ -73,10 +74,11 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Připravit stejná metadata a obrázky jako produkční web
+      - name: Vyřadit neschválené texty a připravit produkční metadata
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/remove_unpublished_articles.py
           python3 -m pip install --disable-pip-version-check --quiet Pillow
           python3 scripts/normalize_articles.py --write --check
           python3 scripts/generate_social_cards.py --write --check
