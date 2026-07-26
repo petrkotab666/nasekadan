@@ -28,28 +28,16 @@ if [[ ! -f "$ENV_FILE" ]]; then
 NEWSLETTER_BASE_URL=https://nasekadan.cz
 NEWSLETTER_FROM=info@nasekadan.cz
 NEWSLETTER_DB=/var/lib/nasekadan-newsletter/newsletter.sqlite3
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
+SMTP_HOST=smtp.seznam.cz
+SMTP_PORT=465
+SMTP_USER=info@nasekadan.cz
 SMTP_PASSWORD=
-SMTP_TLS=1
+SMTP_TLS=ssl
 EOF
  sudo chmod 600 "$ENV_FILE"
 fi
-sudo tee /etc/caddy/sites-enabled/nasekadan.caddy >/dev/null <<'EOF'
-nasekadan.cz, www.nasekadan.cz {
-    handle_path /api/newsletter/* {
-        reverse_proxy 127.0.0.1:8765
-    }
-    handle {
-        root * /var/www/nasekadan
-        file_server
-        encode gzip zstd
-    }
-}
-EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now nasekadan-newsletter.service
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
-echo "Newsletter backend nainstalován. Doplňte SMTP údaje v $ENV_FILE a spusťte: sudo systemctl restart nasekadan-newsletter"
+echo "Newsletter backend nainstalován. Doplňte pouze SMTP_PASSWORD v $ENV_FILE a spusťte: sudo systemctl restart nasekadan-newsletter"
