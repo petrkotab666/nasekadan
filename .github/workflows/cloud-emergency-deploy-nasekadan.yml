@@ -54,6 +54,7 @@ jobs:
           python3 scripts/enforce_production_article_order.py
           python3 scripts/normalize_articles.py --write --check
           python3 scripts/normalize_footers.py --write --check
+          python3 scripts/embed_static_article_ads.py
           python3 scripts/validate_production_manifest.py --root /opt/nasekadan
 
           ARTICLE='clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html'
@@ -61,6 +62,7 @@ jobs:
           grep -Fq '/reklamy.js' "$ARTICLE"
           grep -Fq '/reklamy-oprava-obrazku.js' "$ARTICLE"
           grep -Fq '/obsah-doplnky.js' "$ARTICLE"
+          grep -Fq 'static-article-ads' "$ARTICLE"
 
           SOURCE_SHA="$(git rev-parse HEAD)"
           STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
@@ -107,9 +109,11 @@ jobs:
             if grep -Fq 'Kadaňští hasiči cvičili na Nechranicích' <<<"$article" \
               && grep -Fq 'data-promos' <<<"$article" \
               && grep -Fq '/reklamy.js' <<<"$article" \
+              && grep -Fq 'static-article-ads' <<<"$article" \
+              && [[ "$(grep -o 'class="static-article-ad"' <<<"$article" | wc -l)" -eq 4 ]] \
               && check_order "$home" \
               && check_order "$archive"; then
-              echo 'Živý web obsahuje článek, reklamy a správné pořadí AVIES před kulturou.'
+              echo 'Živý web obsahuje článek, čtyři statické reklamy a správné pořadí AVIES před kulturou.'
               exit 0
             fi
             sleep 10
