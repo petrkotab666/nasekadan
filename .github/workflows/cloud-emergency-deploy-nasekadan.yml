@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'cloud-deploy-status.json'
+      - 'fast-publication-status.json'
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
