@@ -1,0 +1,85 @@
+name: Opravit návaznost článku o ePetici
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-epetice-flow-2026-07-27.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Srovnat časovou a věcnou návaznost článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+          import re
+
+          path = Path('clanky/epetice-nemocnice-kadan.html')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = {
+              '<p class="tag">MIMOŘÁDNĚ · NEMOCNICE KADAŇ · PETICE · 26. ČERVENCE 2026</p>':
+                  '<p class="tag">MIMOŘÁDNĚ · NEMOCNICE KADAŇ · PETICE · AKTUALIZOVÁNO 27. ČERVENCE 2026</p>',
+
+              '<p class="leadtext">Předkladatelka petice za zachování Nemocnice Kadaň ve vlastnictví města oznámila přípravu oficiální ePetice. Narazila přitom na limit 3500 znaků a uvedla, že čeká na její schválení. Vysvětlujeme, jak státní systém skutečně funguje a proč je zásadní, aby elektronická a listinná verze měly totožný text.</p>':
+                  '<p class="leadtext">Předkladatelka petice za zachování Nemocnice Kadaň ve vlastnictví města oznámila přípravu oficiální ePetice. Po původním zveřejnění článku doplnila fotografie celého listinného znění a snímky rozpracovaného formuláře. Nové podklady ukázaly osm konkrétních požadavků i problém s limitem 3500 znaků. Vysvětlujeme, co tato aktualizace mění a proč je zásadní, aby elektronická a listinná verze měly totožný text.</p>',
+
+              '<div class="status-box"><b>Stav při zveřejnění článku:</b> K 26. červenci 2026 v 10:11 nebyla petice za Nemocnici Kadaň ve veřejně dostupném seznamu oficiálních ePetic dohledatelná. Jakmile se objeví, porovnáme její úplné znění s listinnou verzí a článek aktualizujeme.</div>':
+                  '<div class="status-box"><b>Co se změnilo po původním zveřejnění:</b> Článek vyšel 26. července v 10:15, kdy veřejný odkaz na ePetici nebyl dohledatelný. Později předkladatelka zveřejnila celé listinné znění a snímky rozpracovaného formuláře. Díky nim už lze přesně popsat osm požadavků i místo, kde formulář narazil na limit. Veřejně otevřenou ePetici jsme při aktualizaci 27. července stále nedohledali.</div>',
+
+              '<div class="toc"><strong>Co v článku vysvětlujeme</strong><ol><li><a href="#oznameni">Co předkladatelka oznámila</a></li><li><a href="#plne-zneni">Co obsahuje celé znění petice</a></li>':
+                  '<div class="toc"><strong>Co v článku vysvětlujeme</strong><ol><li><a href="#oznameni">Původní oznámení ePetice</a></li><li><a href="#plne-zneni">Co přinesla pozdější aktualizace</a></li>',
+
+              '<h2 id="plne-zneni">Celé znění listinné petice obsahuje osm konkrétních požadavků</h2>\n  <p>Nově zveřejněné snímky zachycují celé znění listinné petice. Nejde pouze o obecný požadavek, aby Nemocnice Kadaň zůstala ve vlastnictví města. Dokument obsahuje osm konkrétních bodů, které mají být adresovány zastupitelstvu, starostovi a radě města.</p>':
+                  '<h2 id="plne-zneni">Pozdější aktualizace ukázala celé znění listinné petice</h2>\n  <p>Po původním zveřejnění tohoto článku předkladatelka doplnila další snímky. Poprvé tak bylo možné přečíst všech osm požadavků listinné petice a současně vidět rozpracovaný formulář ePetice. Aktualizace nemění pravidla elektronického sběru, ale zpřesňuje, jak rozsáhlý text se předkladatelka pokouší do systému převést.</p>\n  <p>Listinná petice není pouze obecným požadavkem, aby Nemocnice Kadaň zůstala ve vlastnictví města. Obsahuje osm konkrétních bodů adresovaných zastupitelstvu, starostovi a radě města.</p>',
+
+              '<p>Pokud chce předkladatelka současně sbírat listinné i elektronické podpisy jako podporu jedné petice, musí být konečné znění obou verzí naprosto stejné. Prakticky to znamená buď zkrátit a znovu použít totožný text na nových listinných arších i v ePetici, nebo pokračovat s původní listinnou verzí a elektronickou variantu evidovat jako samostatný dokument.</p>':
+                  '<p>Z nových podkladů tak vyplývá hlavní praktický problém: osmibodové listinné znění se do formuláře v dosavadní podobě nevešlo. Nejde jen o technické odstranění mezer. Rozhodující je, zda má vzniknout jedna společná petice s totožným textem, nebo dva samostatné dokumenty s oddělenými podpisy.</p>',
+
+              '<p>Pokud se podaří původní petici upravit do limitu bez změny textu a významu, mohou oba způsoby běžet vedle sebe jako jedna petice. Pokud bude elektronická verze jiná, je potřeba výsledky obou sběrů vykazovat odděleně.</p>':
+                  '<p>Jestliže se má elektronický a listinný sběr počítat jako jedna petice, musí se totožné zkrácené znění použít v ePetici i na nových listinných arších. Již získané podpisy pod delším původním zněním zůstávají podporou původního dokumentu. Pokud se elektronická verze od původní listinné petice liší, musí být oba sběry vykazovány odděleně.</p>',
+
+              '<small>Veřejný seznam ePetic byl kontrolován 26. 7. 2026 v 10:11. Nenalezení petice v tomto okamžiku neznamená, že nebyla rozpracována v neveřejné části Portálu občana.</small>':
+                  '<small>Veřejný odkaz na ePetici nebyl dohledatelný při původním zveřejnění 26. 7. 2026 ani při redakční aktualizaci 27. 7. 2026. To nevylučuje existenci rozpracovaného záznamu v neveřejné části Portálu občana.</small>',
+
+              '<aside class="sticky"><div class="sidebox"><h3>Stav článku</h3><p class="updated">Publikováno mimořádně: 26. 7. 2026 v 10:15</p><p>Text aktualizujeme, jakmile se ePetice objeví ve veřejném seznamu.</p></div>':
+                  '<aside class="sticky"><div class="sidebox"><h3>Stav článku</h3><p class="updated">Publikováno 26. 7. 2026 v 10:15 · aktualizováno 27. 7. 2026</p><p>Doplnili jsme celé listinné znění a snímky rozpracované ePetice. Veřejný odkaz na aktivní ePetici zatím chybí.</p></div>'
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Nenalezen očekávaný úsek pro opravu: {old[:120]}')
+              text = text.replace(old, new, 1)
+
+          now = datetime.now(ZoneInfo('Europe/Prague')).replace(microsecond=0).isoformat()
+          text = re.sub(r'"dateModified":"[^"]+"', f'"dateModified":"{now}"', text, count=1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+          print('Návaznost článku o ePetici byla opravena.')
+          PY
+
+      - name: Uložit opravený článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – redakční oprava'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/epetice-nemocnice-kadan.html
+          git commit -m 'Opravit návaznost aktualizace článku o ePetici'
+          git pull --rebase origin main
+          git push origin main
