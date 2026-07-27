@@ -1,8 +1,13 @@
 name: Publikovat článek o AVIES a Nemocnici Kadaň
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-avies-nemocnice-kadan-2026-07-27.yml"
+      - ".github/publish-avies-now.txt"
   schedule:
-    - cron: '0 3 * * *'
+    - cron: "7,17,27,37,47,57 3-5 27 7 *"
   workflow_dispatch:
     inputs:
       force:
@@ -21,6 +26,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Stáhnout hlavní větev
         uses: actions/checkout@v4
@@ -28,7 +34,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Ověřit termín a připravit článek
+      - name: Vytvořit a zařadit veřejný článek
         id: prepare
         shell: bash
         run: |
@@ -38,7 +44,7 @@ jobs:
           force='${{ inputs.force || false }}'
 
           if [[ -f clanky/avies-nemocnice-kadan.html ]]; then
-            echo 'Článek už je publikovaný.'
+            echo 'Článek už je ve veřejné složce.'
             echo 'changed=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -54,19 +60,24 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import json
           import re
 
-          path = Path('clanky/avies-nemocnice-kadan.html')
-          text = path.read_text(encoding='utf-8')
+          article_path = Path('clanky/avies-nemocnice-kadan.html')
+          text = article_path.read_text(encoding='utf-8')
           text = text.replace('noindex,nofollow', 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
           text = text.replace('../../', '../')
           text = text.replace('PŘIPRAVOVANÝ ČLÁNEK', '27. ČERVENCE 2026')
           text = re.sub(r'<div class="sidebox preview-note">.*?</div>', '', text, count=1, flags=re.S)
 
-          schema = '''<script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů","description":"Nemocnice Kadaň zaplatila AVIES v letech 2019 až 2025 téměř 170 milionů korun. Rekonstruujeme historii vztahu a hledáme chybějící dokument pro rok 2024.","datePublished":"2026-07-27T05:00:00+02:00","dateModified":"2026-07-27T05:00:00+02:00","author":{"@type":"Organization","name":"Naše Kadaň"},"publisher":{"@type":"Organization","name":"Naše Kadaň"}}</script>'''
-          if '"datePublished":"2026-07-27T05:00:00+02:00"' not in text:
-              text = text.replace('</head>', schema + '\n</head>', 1)
-          path.write_text(text, encoding='utf-8', newline='\n')
+          article_meta = '''
+          <meta property="article:published_time" content="2026-07-27T05:00:00+02:00">
+          <meta property="article:modified_time" content="2026-07-27T05:00:00+02:00">
+          <script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů","description":"Nemocnice Kadaň zaplatila AVIES v letech 2019 až 2025 téměř 170 milionů korun. Rekonstruujeme historii vztahu a hledáme chybějící dokument pro rok 2024.","datePublished":"2026-07-27T05:00:00+02:00","dateModified":"2026-07-27T05:00:00+02:00","author":{"@type":"Organization","name":"Naše Kadaň"},"publisher":{"@type":"Organization","name":"Naše Kadaň"}}</script>
+          '''
+          if 'article:published_time' not in text:
+              text = text.replace('</head>', article_meta + '</head>', 1)
+          article_path.write_text(text, encoding='utf-8', newline='\n')
 
           previous = Path('clanky/nemocnice-kadan-software-kyberbezpecnost.html')
           if previous.exists():
@@ -74,10 +85,127 @@ jobs:
               scheduled = '<span data-avies-teaser-state="scheduled" style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.4);border-radius:999px;color:#fff;font-weight:900">Vyjde v pondělí 27. 7. v 5:00</span>'
               published = '<a href="/clanky/avies-nemocnice-kadan.html" data-avies-teaser-state="published" style="display:inline-flex;padding:13px 18px;border-radius:10px;background:#fff;color:#8f2027;font-weight:900;text-decoration:none">Přečíst navazující článek →</a>'
               if scheduled in old:
-                  previous.write_text(old.replace(scheduled, published, 1), encoding='utf-8', newline='\n')
+                  old = old.replace(scheduled, published, 1)
+              previous.write_text(old, encoding='utf-8', newline='\n')
           PY
 
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/generate_social_cards.py --write --check
           python3 scripts/finalize_launch.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          url = 'https://nasekadan.cz/clanky/avies-nemocnice-kadan.html'
+          title = 'Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů'
+          description = 'Nemocnice Kadaň zaplatila AVIES v letech 2019 až 2025 téměř 170 milionů korun. Dokumenty ukazují sedm let plateb, ale pro rok 2024 zůstává veřejná mezera.'
+
+          article = Path('clanky/avies-nemocnice-kadan.html').read_text(encoding='utf-8')
+          image_match = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', article)
+          image = image_match.group(1) if image_match else 'https://nasekadan.cz/social-card.png'
+
+          # Titulní stránka
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          hero = '''<article class="lead" data-avies-hero>
+        <div class="photo" style="background:radial-gradient(circle at 78% 18%,rgba(255,255,255,.15),transparent 27%),linear-gradient(135deg,#121f27,#334f5e 55%,#9d222a)"><span>NOVÁ ANALÝZA</span><strong>169,8 MIL.</strong></div>
+        <div class="copy">
+          <small>NEMOCNICE KADAŇ · VEŘEJNÉ PENÍZE · 27. 07. 2026 · 5:00</small>
+          <h1>Kdo nastavil nákupy léčiv od AVIES?</h1>
+          <p>Nemocnice za sedm let zaplatila téměř 170 milionů. Rekonstruujeme historii vztahu a hledáme chybějící dokument pro rok 2024.</p>
+          <a class="btn" href="/clanky/avies-nemocnice-kadan.html">Přečíst celou analýzu →</a>
+        </div>
+      </article>'''
+          text, count = re.subn(r'<article class="lead"[^>]*>.*?</article>', hero, text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit('Nepodařilo se nahradit hlavní článek na titulní straně.')
+          if 'data-avies-card' not in text:
+              card = '''
+      <article class="article-card hospital" data-avies-card>
+        <div class="visual"><strong>AVIES a nemocnice</strong></div>
+        <div class="article-body">
+          <span class="meta">27. 7. 2026 · 5:00 · Zdravotnictví a veřejné peníze</span>
+          <h3>Sedm let plateb, téměř 170 milionů a chybějící dokument</h3>
+          <p>Co je doložené, kdo dlouhodobý systém převzal a proč zůstává klíčový rok 2024.</p>
+          <a class="read-more" href="/clanky/avies-nemocnice-kadan.html">Přečíst analýzu →</a>
+        </div>
+      </article>
+'''
+              marker = '<div class="article-list">'
+              if marker not in text:
+                  raise SystemExit('Na titulní straně chybí seznam článků.')
+              text = text.replace(marker, marker + card, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          # Archiv a ItemList
+          path = Path('clanky/index.html')
+          text = path.read_text(encoding='utf-8')
+          match = re.search(r'<script type="application/ld\+json">\s*(\{.*?\})\s*</script>', text, re.S)
+          if not match:
+              raise SystemExit('V archivu chybí JSON-LD.')
+          data = json.loads(match.group(1))
+          graph = data.get('@graph', [])
+          itemlist = next((item for item in graph if item.get('@type') == 'ItemList'), None)
+          if itemlist is None:
+              raise SystemExit('V JSON-LD chybí ItemList.')
+          existing = [item for item in itemlist.get('itemListElement', []) if item.get('url') != url]
+          elements = [{'@type':'ListItem','position':1,'url':url,'name':title}]
+          for position, item in enumerate(existing, start=2):
+              item['position'] = position
+              elements.append(item)
+          itemlist['itemListElement'] = elements
+          itemlist['numberOfItems'] = len(elements)
+          replacement = '<script type="application/ld+json">\n' + json.dumps(data, ensure_ascii=False, indent=2) + '\n  </script>'
+          text = text[:match.start()] + replacement + text[match.end():]
+          if 'data-avies-card' not in text:
+              item = '''
+    <article class="archive-item hospital" data-avies-card>
+      <div class="archive-visual"><strong>AVIES a nemocnice</strong></div>
+      <div class="archive-body">
+        <span class="archive-meta">27. července 2026 v 5:00 · Zdravotnictví a veřejné peníze</span>
+        <h2>Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů</h2>
+        <p>Analýza sedmi let plateb, vývoje smluvního vztahu, role jednotlivých vedení a veřejné dokumentační mezery roku 2024.</p>
+        <a href="/clanky/avies-nemocnice-kadan.html">Přečíst celou analýzu →</a>
+      </div>
+    </article>
+'''
+              marker = '<section class="archive-list" aria-label="Chronologický přehled článků">'
+              if marker not in text:
+                  raise SystemExit('V archivu chybí seznam článků.')
+              text = text.replace(marker, marker + item, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          # RSS
+          path = Path('rss.xml')
+          text = path.read_text(encoding='utf-8')
+          text = re.sub(r'<lastBuildDate>.*?</lastBuildDate>', '<lastBuildDate>Mon, 27 Jul 2026 05:00:00 +0200</lastBuildDate>', text, count=1)
+          if url not in text:
+              rss_item = f'''    <item>
+      <title>{title}</title>
+      <description><![CDATA[{description}]]></description>
+      <link>{url}</link>
+      <guid isPermaLink="true">{url}</guid>
+      <pubDate>Mon, 27 Jul 2026 05:00:00 +0200</pubDate>
+      <category>Nemocnice Kadaň</category>
+      <category>Veřejné peníze</category>
+      <category>AVIES</category>
+      <szn:image><szn:url>{image}</szn:url></szn:image>
+      <geo:lat>50.375984</geo:lat>
+      <geo:long>13.271307</geo:long>
+    </item>
+
+'''
+              marker = '    <item>'
+              if marker not in text:
+                  raise SystemExit('RSS neobsahuje žádnou položku.')
+              text = text.replace(marker, rss_item + marker, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+          python3 scripts/prepare_discovery.py
+          python3 scripts/seo_ai_audit.py --strict --paths clanky/avies-nemocnice-kadan.html
           echo 'changed=true' >> "$GITHUB_OUTPUT"
 
       - name: Uložit veřejnou verzi
@@ -85,12 +213,67 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'Naše Kadaň automat'
+          git config user.name 'Naše Kadaň Publisher'
           git config user.email 'info@nasekadan.cz'
-          git add clanky/avies-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html sitemap.xml robots.txt analytics.js 404.html o-webu navstevnost ochrana-osobnich-udaju style.css
+          git add -A -- \
+            clanky/avies-nemocnice-kadan.html \
+            clanky/nemocnice-kadan-software-kyberbezpecnost.html \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt \
+            social
           git commit -m 'Publikovat: vztah AVIES a Nemocnice Kadaň'
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
           git push origin main
 
-      - name: Potvrdit výsledek
+      - name: Potvrdit vytvoření článku
         if: steps.prepare.outputs.changed == 'true'
-        run: echo 'Článek o AVIES byl zveřejněn 27. 7. 2026 od 5:00 SELČ a upoutávka v předchozím článku byla změněna na odkaz.'
+        run: echo 'Veřejný článek byl zapsán do hlavní větve a čeká na produkční nasazení.'
+
+  deploy:
+    needs: publish
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit a spustit aktualizovaný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin main
+          docker compose up -d --build --remove-orphans
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3224/healthz >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3224/healthz >/dev/null
+
+      - name: Veřejně ověřit článek a zařazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          article="https://nasekadan.cz/clanky/avies-nemocnice-kadan.html?v=$stamp"
+          home="https://nasekadan.cz/?v=$stamp"
+          archive="https://nasekadan.cz/clanky/?v=$stamp"
+          rss="https://nasekadan.cz/rss.xml?v=$stamp"
+
+          for i in $(seq 1 45); do
+            if curl -fsS "$article" | grep -Fq 'Kdo nastavil nákupy léčiv od AVIES'; then
+              break
+            fi
+            sleep 3
+          done
+
+          curl -fsS "$article" | grep -Fq 'Kdo nastavil nákupy léčiv od AVIES'
+          curl -fsS "$home" | grep -Fq '/clanky/avies-nemocnice-kadan.html'
+          curl -fsS "$archive" | grep -Fq '/clanky/avies-nemocnice-kadan.html'
+          curl -fsS "$rss" | grep -Fq 'https://nasekadan.cz/clanky/avies-nemocnice-kadan.html'
+          echo 'Článek AVIES je veřejný, na titulní straně, v archivu a RSS.'
