@@ -57,13 +57,13 @@ jobs:
         id: deploy_server
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           ssh -i "$RUNNER_TEMP/nasekadan_key" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
+            ubuntu@57.129.43.215 'bash -s' 2>&1 <<'REMOTE' | tee "$RUNNER_TEMP/hospital-series-hotfix.log"
+          set -euxo pipefail
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
@@ -98,6 +98,9 @@ jobs:
           grep -Fq 'data-arc-med-teaser' /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
           grep -Fq 'Téměř 170 milionů za léčiva od AVIES' /var/www/nasekadan/clanky/nemocnice-kadan.html
           REMOTE
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
 
       - name: Ověřit veřejný web
         id: verify
@@ -127,10 +130,17 @@ jobs:
           DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
           KEY_SECRET: ${{ steps.key.outputs.secret }}
+          DEPLOY_EXIT_CODE: ${{ steps.deploy_server.outputs.exit_code }}
         with:
           script: |
+            const fs = require('fs');
             const path = '.github/hotfix-hospital-series-status.json';
             const ok = process.env.KEY_OUTCOME === 'success' && process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
+            let logTail = '';
+            try {
+              const raw = fs.readFileSync(process.env.RUNNER_TEMP + '/hospital-series-hotfix.log', 'utf8');
+              logTail = raw.slice(-6000);
+            } catch {}
             const status = {
               status: ok ? 'success' : 'failed',
               checked_at_utc: new Date().toISOString(),
@@ -139,7 +149,9 @@ jobs:
               run_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               ssh_key_secret_name: process.env.KEY_SECRET || null,
               server_deploy: process.env.DEPLOY_OUTCOME || 'skipped',
-              public_verification: process.env.VERIFY_OUTCOME || 'skipped'
+              server_exit_code: process.env.DEPLOY_EXIT_CODE || null,
+              public_verification: process.env.VERIFY_OUTCOME || 'skipped',
+              diagnostic_tail: logTail
             };
             const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
             let sha;
@@ -154,7 +166,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat stav hotfixu nemocniční série: ${status.status}`,
+              message: `Zapsat diagnostiku hotfixu nemocniční série: ${status.status}`,
               content,
               ...(sha ? {sha} : {})
             });
