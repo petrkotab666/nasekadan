@@ -1,4 +1,4 @@
-name: Pojistka obsahu a reklam Naše Kadaň
+name: Pojistka obsahu, reklam a pořadí Naše Kadaň
 run-name: Kontrola produkce, automatická oprava a rollback
 
 on:
@@ -10,6 +10,7 @@ on:
     paths:
       - 'production-content-manifest.json'
       - 'scripts/validate_production_manifest.py'
+      - 'scripts/enforce_production_article_order.py'
       - '.github/workflows/production-content-watchdog.yml'
 
 permissions:
@@ -43,17 +44,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          check_order() {
+            local text="$1"
+            local a b c d e
+            a="$(grep -bo 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+            b="$(grep -bo 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+            c="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+            d="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+            e="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+            [[ -n "$a" && -n "$b" && -n "$c" && -n "$d" && -n "$e" && "$a" -lt "$b" && "$b" -lt "$c" && "$c" -lt "$d" && "$d" -lt "$e" ]]
+          }
+
           check_public() {
             local suffix="$1"
             local home archive article
             home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?watchdog=${GITHUB_SHA}-${suffix}" || true)"
             archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?watchdog=${GITHUB_SHA}-${suffix}" || true)"
             article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?watchdog=${GITHUB_SHA}-${suffix}" || true)"
-            grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$home" \
-              && grep -Fq 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$home" \
-              && grep -Fq 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$home" \
-              && grep -Fq 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$home" \
-              && grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$archive" \
+            check_order "$home" \
+              && check_order "$archive" \
               && grep -Fq 'data-promos' <<<"$article" \
               && grep -Fq '/reklamy.js' <<<"$article" \
               && grep -Fq '/reklamy-oprava-obrazku.js' <<<"$article" \
@@ -61,11 +70,10 @@ jobs:
           }
 
           if check_public before; then
-            echo 'Produkce je úplná; oprava není potřeba.'
+            echo 'Produkce je úplná a pořadí je správné.'
             exit 0
           fi
 
-          echo 'Produkce není úplná. Spouštím bezpečnou obnovu.'
           ssh -i "$RUNNER_TEMP/ovh_key" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new \
@@ -78,6 +86,7 @@ jobs:
           git reset --hard origin/main
           git clean -fd
 
+          python3 scripts/enforce_production_article_order.py
           python3 scripts/normalize_articles.py --write --check
           python3 scripts/normalize_footers.py --write --check
           python3 scripts/validate_production_manifest.py --root /opt/nasekadan
@@ -95,10 +104,9 @@ jobs:
             --exclude='./docker-entrypoint.d' --exclude='./Dockerfile' \
             --exclude='./docker-compose.yml' --exclude='./cloud-deploy-status.json' \
             -cf - . | sudo tar -C "$STAGE" -xf -
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=watchdog\n' \
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=watchdog-with-order\n' \
             "$SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
           sudo chmod -R a+rX "$STAGE"
-
           python3 scripts/validate_production_manifest.py --root "$STAGE"
 
           if [ -d "$LIVE" ]; then
@@ -107,7 +115,6 @@ jobs:
             sudo mv "$LIVE" "$BROKEN"
           fi
           sudo mv "$STAGE" "$LIVE"
-
           if ! grep -Fq 'data-promos' "$LIVE/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html"; then
             sudo rm -rf "$LIVE"
             if [ -d "$LKG" ]; then sudo cp -a "$LKG" "$LIVE"; fi
@@ -118,10 +125,9 @@ jobs:
 
           for attempt in $(seq 1 12); do
             if check_public "after-${attempt}"; then
-              echo 'Produkce byla opravena a veřejně ověřena.'
+              echo 'Produkce byla opravena: AVIES je před kulturou, obsah i reklamy jsou přítomné.'
               exit 0
             fi
             sleep 10
           done
-          echo 'Opravená verze neprošla veřejnou kontrolou.' >&2
           exit 42
