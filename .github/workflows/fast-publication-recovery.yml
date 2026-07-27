@@ -41,12 +41,15 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
           python3 scripts/enforce_current_article_order.py
-          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          python3 scripts/ensure_right_article_ads.py
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
           sudo install -m 0644 index.html /var/www/nasekadan/index.html
           sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo install -m 0644 clanky/kolobezky-hriste-detektor-kovu-kadan.html /var/www/nasekadan/clanky/kolobezky-hriste-detektor-kovu-kadan.html
           sudo install -m 0644 clanky/avies-nemocnice-kadan.html /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
           sudo install -m 0644 clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
+          sudo install -m 0644 assets/reklamy/*.svg /var/www/nasekadan/assets/reklamy/
           sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
           sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
           printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=fast-recovery\n' "$(git rev-parse HEAD)" "$(date -u +%FT%TZ)" | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
@@ -62,6 +65,9 @@ jobs:
             archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?check=${GITHUB_SHA}-${attempt}" || true)"
             kolobezky="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html?check=${GITHUB_SHA}-${attempt}" || true)"
             kultura="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?check=${GITHUB_SHA}-${attempt}" || true)"
+            ads="$(curl -fsS --max-time 20 "https://nasekadan.cz/reklamy.js?check=${GITHUB_SHA}-${attempt}" || true)"
+            pojistime_svg="$(curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/pojistime-300x600.svg?check=${GITHUB_SHA}-${attempt}" || true)"
+            reality_svg="$(curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/realitykadan-300x600.svg?check=${GITHUB_SHA}-${attempt}" || true)"
             health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?check=${GITHUB_SHA}-${attempt}" || true)"
             home_kolob="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$homepage" | head -1 | cut -d: -f1 || true)"
             home_avies="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$homepage" | head -1 | cut -d: -f1 || true)"
@@ -76,13 +82,18 @@ jobs:
               && grep -Fq 'Polovina prázdnin je za námi' <<<"$kolobezky" \
               && grep -Fq 'Hudební srpnové léto na Liďáku' <<<"$kultura" \
               && ! grep -Fq 'Nově kontrolujeme jednotlivě všechny kadaňské školy a školky' <<<"$kultura" \
+              && grep -Fq "article-side-ad-column" <<<"$ads" \
+              && grep -Fq "realitykadan" <<<"$ads" \
+              && ! grep -Fq "document.body.append(left,right)" <<<"$ads" \
+              && grep -Fq "POJISTIME.TO" <<<"$pojistime_svg" \
+              && grep -Fq "REALITYKADAN.CZ" <<<"$reality_svg" \
               && grep -Fq 'mode=fast-recovery' <<<"$health"; then
-              echo 'Pořadí je správně: koloběžky, AVIES, kultura.'
+              echo 'Pořadí článků i reklamy v pravém sloupci jsou správně.'
               exit 0
             fi
             sleep 10
           done
-          echo 'Veřejná kontrola pořadí selhala.' >&2
+          echo 'Veřejná kontrola webu nebo reklam selhala.' >&2
           exit 1
 
       - name: Zapsat stav
