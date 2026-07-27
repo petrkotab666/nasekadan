@@ -95,8 +95,12 @@ def main() -> int:
 
     # Schválený článek AVIES musí vzniknout a zařadit se také při lokální
     # desetiminutové serverové aktualizaci, nikoli jen v Docker/GitHub buildu.
-    # Skript je idempotentní a zachová již publikovanou verzi.
     run("scripts/publish_avies_article.py")
+
+    # Bez Pillow vytvořit unikátní PNG 1200×630, doplnit kompletní OG/Twitter
+    # metadata, sitemapu a správný obrázek do RSS. Tím projde kontrola webu
+    # a článek je připraven i pro Facebook API.
+    run("scripts/ensure_avies_publication_assets.py")
 
     # Ověřené znění osmi požadavků musí být přímo v hlavním článku o petici,
     # nikoli pouze v samostatném vysvětlení pravidel ePetice.
