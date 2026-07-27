@@ -45,6 +45,10 @@ RUN python scripts/publish_avies_article.py
 RUN python scripts/update_online_petition_status.py
 RUN python scripts/update_petition_verified_details.py
 
+# Všechny dnešní schválené články musejí být chronologicky na titulce, v archivu
+# a RSS ještě před generováním sitemapy a před blokujícím auditem.
+RUN python scripts/enforce_current_article_order.py
+
 # Doplnit canonical, robots, Open Graph a Twitter metadata také všem starším
 # průvodcovským stránkám. Přísný audit tak neblokuje nové články kvůli historickým
 # souborům, kterým metadata dříve chyběla.
