@@ -1,20 +1,12 @@
 name: Nasadit Naše Kadaň na OVH
-run-name: Kanonické produkční nasazení nejnovější větve main
+run-name: Ruční záložní produkční nasazení
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/deploy-production-pr-trigger.txt'
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# Produkční zámek je společný pro workflow, ruční nasazení i serverový timer.
-# Novější push může zrušit starší čekající běh; samotné přepnutí webu je atomické.
 concurrency:
   group: nasekadan-canonical-production
   cancel-in-progress: true
@@ -24,22 +16,13 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 40
     steps:
-      - name: Stáhnout nejnovější main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-
-      - name: Spustit jediný kanonický produkční deploy
+      - name: Spustit ruční záložní deploy
         shell: bash
         run: |
           set -euo pipefail
           chmod +x deploy/sync-production.sh
-          sudo env \
-            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            bash deploy/sync-production.sh
-
-      - name: Obnovit soukromé statistiky
-        continue-on-error: true
-        shell: bash
-        run: sudo bash .github/scripts/nasekadan-stats/install-stats.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
