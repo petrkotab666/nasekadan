@@ -58,6 +58,10 @@ RUN python scripts/prepare_discovery.py
 # Zkrátit nevhodně dlouhé titulky, doplnit popisy a přesné časové značky článků.
 RUN python scripts/normalize_search_snippets.py
 
+# Fragmenty článků a ověřovací HTML Googlu nejsou samostatné veřejné stránky.
+# Generátory je proto před auditem odstraní z hlavní sitemapy.
+RUN python scripts/clean_sitemap_technical_entries.py
+
 # Kritická SEO/AI chyba musí zastavit sestavení ještě před přepnutím produkce.
 RUN python scripts/seo_ai_audit.py --strict
 
