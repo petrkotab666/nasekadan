@@ -38,12 +38,13 @@ jobs:
           sudo install -d -m 0755 /var/www/nasekadan/clanky
           sudo install -m 0644 index.html /var/www/nasekadan/index.html
           sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html /var/www/nasekadan/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html
           sudo install -m 0644 clanky/kolobezky-hriste-detektor-kovu-kadan.html /var/www/nasekadan/clanky/kolobezky-hriste-detektor-kovu-kadan.html
           sudo install -m 0644 clanky/avies-nemocnice-kadan.html /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
           sudo install -m 0644 clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
           REMOTE
 
-      - name: Ověřit pořadí
+      - name: Ověřit přesné pořadí
         shell: bash
         run: |
           set -euo pipefail
@@ -52,14 +53,15 @@ jobs:
             archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?order=${GITHUB_SHA}-${attempt}" || true)"
             check_order() {
               local text="$1"
-              local a b c
-              a="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              b="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              c="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              [[ -n "$a" && -n "$b" && -n "$c" && "$a" -lt "$b" && "$b" -lt "$c" ]]
+              local a b c d
+              a="$(grep -bo 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              b="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              c="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              d="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              [[ -n "$a" && -n "$b" && -n "$c" && -n "$d" && "$a" -lt "$b" && "$b" -lt "$c" && "$c" -lt "$d" ]]
             }
             if check_order "$home" && check_order "$archive"; then
-              echo 'Pořadí potvrzeno: koloběžky, AVIES, kultura.'
+              echo 'Pořadí potvrzeno: 82 lůžek, koloběžky, AVIES, kultura.'
               exit 0
             fi
             sleep 5
