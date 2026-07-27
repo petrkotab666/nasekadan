@@ -83,14 +83,14 @@ jobs:
             sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
           done
 
-          cid="$(docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
           if [[ -z "$cid" ]]; then
-            cid="$(docker ps --filter publish=3224 -q | head -n1)"
+            cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
           fi
           if [[ -n "$cid" ]]; then
-            docker cp style.css "$cid:/usr/share/nginx/html/style.css"
+            sudo docker cp style.css "$cid:/usr/share/nginx/html/style.css"
             for file in clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html clanky/avies-nemocnice-kadan.html; do
-              docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+              sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
             done
           fi
 
