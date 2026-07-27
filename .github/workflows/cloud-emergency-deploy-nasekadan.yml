@@ -59,18 +59,19 @@ jobs:
           PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
           sudo rm -rf "$STAGE" "$PREVIOUS"
           sudo mkdir -p "$STAGE"
-          sudo rsync -a --delete \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='scripts/' \
-            --exclude='deploy/' \
-            --exclude='tools/' \
-            --exclude='nginx/' \
-            --exclude='docker-entrypoint.d/' \
-            --exclude='Dockerfile' \
-            --exclude='docker-compose.yml' \
-            --exclude='cloud-deploy-status.json' \
-            ./ "$STAGE"/
+          sudo cp -a . "$STAGE"/
+          sudo rm -rf \
+            "$STAGE/.git" \
+            "$STAGE/.github" \
+            "$STAGE/scripts" \
+            "$STAGE/deploy" \
+            "$STAGE/tools" \
+            "$STAGE/nginx" \
+            "$STAGE/docker-entrypoint.d"
+          sudo rm -f \
+            "$STAGE/Dockerfile" \
+            "$STAGE/docker-compose.yml" \
+            "$STAGE/cloud-deploy-status.json"
           printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-main\n' \
             "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
           sudo chmod -R a+rX "$STAGE"
