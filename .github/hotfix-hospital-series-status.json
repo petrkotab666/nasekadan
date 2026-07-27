@@ -1,10 +1,12 @@
 {
   "status": "failed",
-  "checked_at_utc": "2026-07-27T20:22:58.864Z",
-  "trigger_commit": "8ceda4d5fba604c439948d4190e68b5cc74fff78",
-  "run_id": 30302321103,
-  "run_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30302321103",
+  "checked_at_utc": "2026-07-27T20:24:07.959Z",
+  "trigger_commit": "2bd9d5b520d141daee00f58b20aa8dfb55a2e0d9",
+  "run_id": 30302410019,
+  "run_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30302410019",
   "ssh_key_secret_name": "KEY_OVH_SSH_PRIVATE_KEY",
   "server_deploy": "failure",
-  "public_verification": "skipped"
+  "server_exit_code": "1",
+  "public_verification": "skipped",
+  "diagnostic_tail": "Warning: Permanently added '57.129.43.215' (ED25519) to the list of known hosts.\r\n+ cd /opt/nasekadan\n+ git fetch --prune origin main\nFrom https://github.com/petrkotab666/nasekadan\n * branch            main       -> FETCH_HEAD\n   6f9369a..2bd9d5b  main       -> origin/main\n+ git reset --hard origin/main\nHEAD is now at 2bd9d5b Zapsat diagnostiku selhání hotfixu nemocniční série\n+ git clean -fd\nRemoving analytics.js\nRemoving scripts/__pycache__/\n+ python3 scripts/link_hospital_series.py\nPropojení pěti dílů série Nemocnice Kadaň je kompletní. Změněno.\n+ files=(style.css clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html clanky/avies-nemocnice-kadan.html)\n+ sudo mkdir -p /var/www/nasekadan/clanky\n+ for file in \"${files[@]}\"\n+ sudo install -m 0644 style.css /var/www/nasekadan/style.css\n+ for file in \"${files[@]}\"\n+ sudo install -m 0644 clanky/nemocnice-kadan.html /var/www/nasekadan/clanky/nemocnice-kadan.html\n+ for file in \"${files[@]}\"\n+ sudo install -m 0644 clanky/petice-nemocnice-kadan.html /var/www/nasekadan/clanky/petice-nemocnice-kadan.html\n+ for file in \"${files[@]}\"\n+ sudo install -m 0644 clanky/nemocnice-kadan-software-kyberbezpecnost.html /var/www/nasekadan/clanky/nemocnice-kadan-software-kyberbezpecnost.html\n+ for file in \"${files[@]}\"\n+ sudo install -m 0644 clanky/avies-nemocnice-kadan.html /var/www/nasekadan/clanky/avies-nemocnice-kadan.html\n++ docker ps --filter 'name=^/nasekadan-web$' -q\n++ head -n1\npermission denied while trying to connect to the docker API at unix:///var/run/docker.sock\n+ cid=\n"
 }
