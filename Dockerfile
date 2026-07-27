@@ -9,6 +9,10 @@ RUN python scripts/remove_unpublished_articles.py
 # Skript vytvoří veřejnou verzi přímo z redakčního návrhu ještě před normalizací.
 RUN python scripts/publish_avies_article.py
 
+# Online petice byla spuštěna na soukromém portálu e-petice.cz. Článek musí
+# staticky rozlišit tuto platformu od státní ePetice v Portálu občana.
+RUN python scripts/update_online_petition_status.py
+
 # Pillow je potřeba pro jedinečné 1200×630 sociální obrázky jednotlivých článků.
 # Instalace přes pip zaručí, že se knihovna nahraje do stejného Pythonu 3.12,
 # ve kterém následně běží generátor obrázků.
@@ -34,6 +38,10 @@ RUN python scripts/publish_weekly_events.py
 # AVIES vyšel později než týdenní přehled. Druhý idempotentní běh ho proto
 # vrátí na správné první místo a do RSS zapíše už vygenerovaný OG obrázek.
 RUN python scripts/publish_avies_article.py
+
+# Publikační skripty mohly znovu sestavit archiv nebo kartu na titulce. Proto
+# stav online petice promítnout ještě jednou do všech výsledných přehledů.
+RUN python scripts/update_online_petition_status.py
 
 # Doplnit canonical, robots, Open Graph a Twitter metadata také všem starším
 # průvodcovským stránkám. Přísný audit tak neblokuje nové články kvůli historickým
