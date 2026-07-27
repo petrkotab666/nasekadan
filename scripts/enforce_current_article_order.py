@@ -9,9 +9,34 @@ ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "index.html"
 ARCHIVE = ROOT / "clanky" / "index.html"
 
+BEDS_PATH = "/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html"
 KOLOB_PATH = "/clanky/kolobezky-hriste-detektor-kovu-kadan.html"
 AVIES_PATH = "/clanky/avies-nemocnice-kadan.html"
 CULTURE_PATH = "/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html"
+
+BEDS_HOME = '''
+      <article class="article-card hospital" data-beds-card>
+        <div class="visual" style="background:linear-gradient(135deg,#142b37,#36586a 58%,#9d222a)"><strong>82 lůžek pro Ukrajinu</strong></div>
+        <div class="article-body">
+          <span class="meta">27. 7. 2026 · 21:40 · Nemocnice Kadaň</span>
+          <h3>Z Kadaně až k frontové linii</h3>
+          <p>Funkční nemocniční postele dostaly druhou šanci tam, kde jsou mimořádně potřebné.</p>
+          <a class="read-more" href="/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html">Přečíst článek →</a>
+        </div>
+      </article>
+'''
+
+BEDS_ARCHIVE = '''
+    <article class="archive-item hospital" data-beds-card>
+      <div class="archive-visual" style="background:linear-gradient(135deg,#142b37,#36586a 58%,#9d222a)"><strong>82 lůžek pro Ukrajinu</strong></div>
+      <div class="archive-body">
+        <span class="archive-meta">27. července 2026 v 21:40 · Nemocnice Kadaň</span>
+        <h2>Z Kadaně až k frontové linii. Nemocnice darovala na Ukrajinu 82 lůžek</h2>
+        <p>Darovaná lůžka byla převezena do vojenské nemocnice v Kyjevě a mají pokračovat do zařízení poblíž fronty.</p>
+        <a href="/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html">Přečíst celý článek →</a>
+      </div>
+    </article>
+'''
 
 KOLOB_HOME = '''
       <article class="article-card transport" data-kolobezky-card>
@@ -38,25 +63,25 @@ KOLOB_ARCHIVE = '''
 '''
 
 HERO = '''  <section class="wrap hero" id="clanky">
-    <article class="lead" data-kolobezky-hero>
-      <div class="photo" style="background:linear-gradient(135deg,#173442,#416d64 58%,#b08838)"><span>BEZPEČNOST</span><strong>Koloběžky</strong></div>
+    <article class="lead" data-beds-hero>
+      <div class="photo" style="background:radial-gradient(circle at 78% 18%,rgba(255,255,255,.16),transparent 27%),linear-gradient(135deg,#142b37,#36586a 52%,#9d222a)"><span>POMOC UKRAJINĚ</span><strong>82 LŮŽEK</strong></div>
       <div class="copy">
-        <small>BEZPEČNOST · DOPRAVA · 27. 07. 2026</small>
-        <h1>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h1>
-        <p>Větší dohled byl ohlášen na celé léto. Dětská hřiště strážníci současně kontrolují i detektorem kovu.</p>
-        <a class="btn" href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Otevřít celý článek →</a>
+        <small>NEMOCNICE KADAŇ · 27. 07. 2026 · 21:40</small>
+        <h1>Z Kadaně až k frontové linii</h1>
+        <p>Nemocnice darovala 82 stále funkčních lůžek. Z Kyjeva mají zamířit do zařízení poblíž frontové linie.</p>
+        <a class="btn" href="/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html">Přečíst celý článek →</a>
       </div>
     </article>
 
     <aside class="current-aside">
       <p class="aside-label">DALŠÍ DNEŠNÍ ČLÁNEK</p>
-      <p class="aside-date">27. 7. 2026 v 5:00</p>
-      <h2>Sedm let plateb, téměř 170 milionů a chybějící dokument</h2>
-      <p>Co je doložené, kdo dlouhodobý systém převzal a proč zůstává klíčový rok 2024.</p>
-      <a class="aside-button" href="/clanky/avies-nemocnice-kadan.html">Přečíst analýzu nemocnice →</a>
+      <p class="aside-date">27. 7. 2026</p>
+      <h2>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h2>
+      <p>Větší dohled byl ohlášen na celé léto. Hřiště se současně kontrolují i detektorem kovu.</p>
+      <a class="aside-button" href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst článek →</a>
       <div class="aside-links">
-        <a href="/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html">Včerejší kulturní přehled</a>
-        <a href="/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html">Noční výluky vlaků</a>
+        <a href="/clanky/avies-nemocnice-kadan.html">Dnešní analýza AVIES</a>
+        <a href="/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html">Kulturní přehled na tento týden</a>
         <a href="/clanky/">Všechny články podle data</a>
       </div>
     </aside>
@@ -67,11 +92,11 @@ def article_blocks(section: str) -> list[str]:
     return re.findall(r"<article\b[^>]*>.*?</article>", section, flags=re.S | re.I)
 
 
-def find_block(blocks: list[str], path: str) -> str:
+def find_optional(blocks: list[str], path: str) -> str | None:
     for block in blocks:
         if f'href="{path}"' in block:
             return block
-    raise RuntimeError(f"Chybí karta článku {path}")
+    return None
 
 
 def reorder_section(text: str, start_marker: str, end_marker: str, archive: bool) -> str:
@@ -79,11 +104,17 @@ def reorder_section(text: str, start_marker: str, end_marker: str, archive: bool
     end = text.index(end_marker, start)
     section = text[start:end]
     blocks = article_blocks(section)
-    avies = find_block(blocks, AVIES_PATH)
-    culture = find_block(blocks, CULTURE_PATH)
-    wanted = {KOLOB_PATH, AVIES_PATH, CULTURE_PATH}
+
+    beds = find_optional(blocks, BEDS_PATH) or (BEDS_ARCHIVE if archive else BEDS_HOME)
+    kolob = find_optional(blocks, KOLOB_PATH) or (KOLOB_ARCHIVE if archive else KOLOB_HOME)
+    avies = find_optional(blocks, AVIES_PATH)
+    culture = find_optional(blocks, CULTURE_PATH)
+    if avies is None or culture is None:
+        raise RuntimeError("Chybí karta AVIES nebo kulturního přehledu.")
+
+    wanted = {BEDS_PATH, KOLOB_PATH, AVIES_PATH, CULTURE_PATH}
     remaining = [b for b in blocks if not any(f'href="{p}"' in b for p in wanted)]
-    ordered = [KOLOB_ARCHIVE if archive else KOLOB_HOME, avies, culture, *remaining]
+    ordered = [beds, kolob, avies, culture, *remaining]
     replacement = "\n" + "\n".join(block.strip("\n") for block in ordered) + "\n    "
     return text[:start] + replacement + text[end:]
 
@@ -96,7 +127,9 @@ def update_archive_jsonld(text: str) -> str:
     itemlist = next((x for x in data.get("@graph", []) if x.get("@type") == "ItemList"), None)
     if not itemlist:
         return text
+
     urls = [
+        ("https://nasekadan.cz" + BEDS_PATH, "Z Kadaně až k frontové linii. Nemocnice darovala na Ukrajinu 82 lůžek"),
         ("https://nasekadan.cz" + KOLOB_PATH, "Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky"),
         ("https://nasekadan.cz" + AVIES_PATH, "Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů"),
         ("https://nasekadan.cz" + CULTURE_PATH, "Kam v Kadani a okolí od 27. července do 2. srpna"),
@@ -123,7 +156,8 @@ def main() -> int:
     archive = reorder_section(archive, '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>', archive=True)
     archive = update_archive_jsonld(archive)
     ARCHIVE.write_text(archive, encoding="utf-8", newline="\n")
-    print("Pořadí článků: koloběžky, AVIES, kultura.")
+
+    print("Pořadí článků: 82 lůžek, koloběžky, AVIES, kultura.")
     return 0
 
 
