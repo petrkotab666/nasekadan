@@ -47,6 +47,22 @@ python3 scripts/finalize_launch.py
 python3 scripts/normalize_footers.py --write --check
 python3 scripts/validate_publication_integrity.py
 
+KTK='vypadek-internetu-kadan-kradez-kabelu.html'
+KTK_TITLE="$(python3 - <<'PY'
+from html import unescape
+from pathlib import Path
+import re
+path = Path('clanky/vypadek-internetu-kadan-kradez-kabelu.html')
+text = path.read_text(encoding='utf-8')
+match = re.search(r'<h1\b[^>]*>(.*?)</h1>', text, re.I | re.S)
+if not match:
+    raise SystemExit('Článek KTK nemá nadpis H1.')
+plain = re.sub(r'<[^>]+>', ' ', match.group(1))
+print(re.sub(r'\s+', ' ', unescape(plain)).strip())
+PY
+)"
+test -n "$KTK_TITLE"
+
 cat > deployment-health.txt <<EOF
 site=nasekadan.cz
 source=$SOURCE_SHA
@@ -88,6 +104,9 @@ PETICE='petice-nemocnice-kadan.html'
 AVIES='avies-nemocnice-kadan.html'
 AVIES_TITLE='Kdo nastavil nákupy léčiv od AVIES'
 PETITION_DETAILS='Petice obsahuje osm požadavků. Rozpracovaná ePetice narazila na limit'
+EPETICE_TITLE='Online petice za nemocnici byla spuštěna'
+EPETICE_SIGNATURES='2 podpisy'
+EPETICE_REQUIREMENTS='všech osm požadavků'
 
 verify_endpoint() {
   local base="$1"
@@ -99,6 +118,7 @@ verify_endpoint() {
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$KTK" "$tmp"
   grep -Fq "$AVIES" "$tmp"
   grep -Fq 'data-site-footer="v1"' "$tmp"
 
@@ -106,6 +126,7 @@ verify_endpoint() {
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$KTK" "$tmp"
   grep -Fq "$AVIES" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/clanky/${TRAIN}?deploy=${SOURCE_SHA}" -o "$tmp"
@@ -119,16 +140,26 @@ verify_endpoint() {
   grep -Fq 'Přijetí personálních změn' "$tmp"
   grep -Fq 'Osobní údaje na web nevkládáme' "$tmp"
 
+  curl -kfsS --max-time 25 "${base}/clanky/${EPETICE}?deploy=${SOURCE_SHA}" -o "$tmp"
+  grep -Fq "$EPETICE_TITLE" "$tmp"
+  grep -Fq "$EPETICE_SIGNATURES" "$tmp"
+  grep -Fq "$EPETICE_REQUIREMENTS" "$tmp"
+
+  curl -kfsS --max-time 25 "${base}/clanky/${KTK}?deploy=${SOURCE_SHA}" -o "$tmp"
+  grep -Fq "$KTK_TITLE" "$tmp"
+
   curl -kfsS --max-time 25 "${base}/sitemap.xml?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$KTK" "$tmp"
   grep -Fq "$AVIES" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/rss.xml?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$KTK" "$tmp"
   grep -Fq "$AVIES" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/deployment-health.txt?deploy=${SOURCE_SHA}" -o "$tmp"
@@ -138,8 +169,8 @@ verify_endpoint() {
   echo "Ověřeno: $prefix"
 }
 
-# Přesný výstup produkčního kontejneru se použije i pro případný aktivní
-# Caddy document root. Nginx proxy i Caddy tak vždy podávají stejnou verzi.
+# Přesný výstup produkčního kontejneru se použije i pro aktivní Caddy document
+# root. Nginx proxy i Caddy tak vždy podávají stejnou, plně sestavenou verzi.
 STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
 PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
 BUILT="/tmp/nasekadan-built-$SHORT_SHA"
@@ -191,29 +222,41 @@ verify_public() {
 verify_public '/' "$WEEKLY"
 verify_public '/' "$TRAIN"
 verify_public '/' "$EPETICE"
+verify_public '/' "$KTK"
 verify_public '/' "$AVIES"
 verify_public '/clanky/' "$TRAIN"
 verify_public '/clanky/' "$EPETICE"
+verify_public '/clanky/' "$KTK"
 verify_public '/clanky/' "$AVIES"
 verify_public "/clanky/$TRAIN" 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov'
 verify_public "/clanky/$AVIES" "$AVIES_TITLE"
 verify_public "/clanky/$PETICE" "$PETITION_DETAILS"
 verify_public "/clanky/$PETICE" 'Přijetí personálních změn'
 verify_public "/clanky/$PETICE" 'Osobní údaje na web nevkládáme'
+verify_public "/clanky/$EPETICE" "$EPETICE_TITLE"
+verify_public "/clanky/$EPETICE" "$EPETICE_SIGNATURES"
+verify_public "/clanky/$EPETICE" "$EPETICE_REQUIREMENTS"
+verify_public "/clanky/$KTK" "$KTK_TITLE"
 verify_public '/sitemap.xml' "$TRAIN"
 verify_public '/sitemap.xml' "$EPETICE"
+verify_public '/sitemap.xml' "$KTK"
 verify_public '/sitemap.xml' "$AVIES"
 verify_public '/rss.xml' "$TRAIN"
 verify_public '/rss.xml' "$EPETICE"
+verify_public '/rss.xml' "$KTK"
 verify_public '/rss.xml' "$AVIES"
 verify_public '/deployment-health.txt' "source=$SOURCE_SHA"
 
-# Po úspěšném ověření obnovit i lokální desetiminutovou pojistku. Ta zajistí,
-# že se server sám srovná na aktuální main i při dočasně nedostupném runneru.
-if [[ -d /opt/nasekadan/.git ]]; then
-  sudo bash deploy/install-automation.sh
+# Běžný deploy po úspěchu nainstaluje aktuální desetiminutovou pojistku. Běh
+# spuštěný samotným timerem tento krok přeskočí, aby nevytvářel rekurzivní běhy.
+if [[ "${NASEKADAN_SKIP_AUTOMATION_INSTALL:-0}" != "1" ]]; then
+  if [[ -d /opt/nasekadan/.git ]]; then
+    sudo bash deploy/install-automation.sh
+  else
+    echo 'Upozornění: /opt/nasekadan není git checkout; lokální timer nebyl přeinstalován.' >&2
+  fi
 else
-  echo 'Upozornění: /opt/nasekadan není git checkout; lokální timer nebyl přeinstalován.' >&2
+  echo 'Instalace serverového timeru přeskočena: tento deploy spustila samotná serverová pojistka.'
 fi
 
-echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA, článek AVIES je veřejný a všechny přehledy jsou kompletní."
+echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA; online petice, KTK, články i všechny přehledy jsou ověřené."
