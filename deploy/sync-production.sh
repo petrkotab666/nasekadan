@@ -37,7 +37,13 @@ fi
 
 python3 scripts/ensure_publication_integrity.py
 python3 scripts/ensure_newest_article_indexes.py
+# AVIES musí být vytvořený a zařazený před blokující kontrolou, nikoli až uvnitř
+# Docker buildu. Skript je idempotentní a zachová již zveřejněnou verzi.
+python3 scripts/publish_avies_article.py
 python3 scripts/ensure_petition_document_details.py
+# Doplnit sitemapu, discovery metadata a ostatní podpůrné soubory po zařazení
+# AVIES, aby předprodukční kontrola viděla stejný stav jako výsledný web.
+python3 scripts/finalize_launch.py
 python3 scripts/normalize_footers.py --write --check
 python3 scripts/validate_publication_integrity.py
 
@@ -79,6 +85,8 @@ TRAIN='nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html'
 WEEKLY='kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
 EPETICE='epetice-nemocnice-kadan.html'
 PETICE='petice-nemocnice-kadan.html'
+AVIES='avies-nemocnice-kadan.html'
+AVIES_TITLE='Kdo nastavil nákupy léčiv od AVIES'
 PETITION_DETAILS='Petice obsahuje osm požadavků. Rozpracovaná ePetice narazila na limit'
 
 verify_endpoint() {
@@ -91,15 +99,20 @@ verify_endpoint() {
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$AVIES" "$tmp"
   grep -Fq 'data-site-footer="v1"' "$tmp"
 
   curl -kfsS --max-time 25 "${base}/clanky/?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$AVIES" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/clanky/${TRAIN}?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov' "$tmp"
+
+  curl -kfsS --max-time 25 "${base}/clanky/${AVIES}?deploy=${SOURCE_SHA}" -o "$tmp"
+  grep -Fq "$AVIES_TITLE" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/clanky/${PETICE}?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$PETITION_DETAILS" "$tmp"
@@ -110,11 +123,13 @@ verify_endpoint() {
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$AVIES" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/rss.xml?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "$TRAIN" "$tmp"
   grep -Fq "$WEEKLY" "$tmp"
   grep -Fq "$EPETICE" "$tmp"
+  grep -Fq "$AVIES" "$tmp"
 
   curl -kfsS --max-time 25 "${base}/deployment-health.txt?deploy=${SOURCE_SHA}" -o "$tmp"
   grep -Fq "source=$SOURCE_SHA" "$tmp"
@@ -176,16 +191,21 @@ verify_public() {
 verify_public '/' "$WEEKLY"
 verify_public '/' "$TRAIN"
 verify_public '/' "$EPETICE"
+verify_public '/' "$AVIES"
 verify_public '/clanky/' "$TRAIN"
 verify_public '/clanky/' "$EPETICE"
+verify_public '/clanky/' "$AVIES"
 verify_public "/clanky/$TRAIN" 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov'
+verify_public "/clanky/$AVIES" "$AVIES_TITLE"
 verify_public "/clanky/$PETICE" "$PETITION_DETAILS"
 verify_public "/clanky/$PETICE" 'Přijetí personálních změn'
 verify_public "/clanky/$PETICE" 'Osobní údaje na web nevkládáme'
 verify_public '/sitemap.xml' "$TRAIN"
 verify_public '/sitemap.xml' "$EPETICE"
+verify_public '/sitemap.xml' "$AVIES"
 verify_public '/rss.xml' "$TRAIN"
 verify_public '/rss.xml' "$EPETICE"
+verify_public '/rss.xml' "$AVIES"
 verify_public '/deployment-health.txt' "source=$SOURCE_SHA"
 
 # Po úspěšném ověření obnovit i lokální desetiminutovou pojistku. Ta zajistí,
@@ -196,4 +216,4 @@ else
   echo 'Upozornění: /opt/nasekadan není git checkout; lokální timer nebyl přeinstalován.' >&2
 fi
 
-echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA, hlavní článek obsahuje osm požadavků a všechny přehledy jsou kompletní."
+echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA, článek AVIES je veřejný a všechny přehledy jsou kompletní."
