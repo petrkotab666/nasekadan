@@ -1,10 +1,10 @@
-name: Dokončit opravu článku o soukromé e-petici
+name: Sjednotit článek o soukromé e-petici
 
 on:
   push:
     branches: [main]
     paths:
-      - 'scripts/fix_epetice_private_portal_followup.py'
+      - 'scripts/sync_epetice_private_portal_refs.py'
       - '.github/workflows/fix-epetice-private-portal.yml'
       - '.github/fix-epetice-private-portal-trigger.txt'
   workflow_dispatch:
@@ -27,20 +27,20 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Dokončit opravu článku
-        run: python3 scripts/fix_epetice_private_portal_followup.py
+      - name: Sjednotit všechny odkazy a výstupy
+        run: python3 scripts/sync_epetice_private_portal_refs.py
 
-      - name: Uložit opravený článek
+      - name: Uložit sjednocené výstupy
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň editor'
           git config user.email 'info@nasekadan.cz'
-          git add clanky/epetice-nemocnice-kadan.html
+          git add index.html clanky/index.html rss.xml llms.txt news-sitemap.xml
           if git diff --cached --quiet; then
-            echo 'Článek už odpovídá aktuálnímu stavu.'
+            echo 'Všechny odkazy už odpovídají aktuálnímu článku.'
             exit 0
           fi
-          git commit -m 'Dokončit opravu článku o soukromé e-petici'
+          git commit -m 'Sjednotit odkazy na článek o soukromé e-petici'
           git pull --rebase origin main
           git push origin main
