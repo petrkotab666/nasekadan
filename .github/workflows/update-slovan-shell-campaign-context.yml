@@ -1,0 +1,138 @@
+name: Doplnit přesný kontext kampaně ke Slovanu a lávce
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/update-slovan-shell-context-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-slovan-shell-campaign-context
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Zpřesnit politická tvrzení a redakční oddělení faktů
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {}
+
+          replacements[Path('.github/drafts/slovan-druhy-pokus.html')] = (
+          '''  <h2 id="kampan">Slovan a lávka u Shellu vstupují do předvolební kampaně</h2>
+            <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo 24. července 2026 příspěvek, který staví nedokončený Slovan do přímého kontrastu s lávkou u čerpací stanice Shell. Používá slogan: „Pojďme nejdříve vyřešit jámy a poté stavět mosty.“</p>
+            <p>Příspěvek nepřináší nový technický posudek, konečné vyúčtování ani dosud neznámou smlouvu. Jde o politické hodnocení a silný předvolební obraz. Přesně ale ukazuje, že se Slovan a lávka stávají společným symbolem debaty o prioritách, přípravě investic a hospodaření města.</p>
+            <p>Srovnání má své limity. Peníze na různé investice nelze vždy libovolně přesouvat, lávka není náhradou za bytový dům a Slovan není definitivně opuštěný projekt. Pro posouzení odpovědnosti proto zůstávají rozhodující průzkumy, změnové listy, faktury, dohoda o vypořádání, rozhodnutí SFPI a dokumentace nové zakázky. Volební slogan tyto podklady nenahrazuje.</p>
+            <div class="factcheck"><h3>Co politický příspěvek dokládá – a co ne</h3><ul><li><strong>Dokládá:</strong> Slovan a lávka se staly předvolebním tématem a jedním ze způsobů, jak opozice hodnotí investiční priority města.</li><li><strong>Nedokládá:</strong> přesnou škodu, porušení zákona, konečnou cenu první stavby ani to, že by bylo možné peníze určené na lávku jednoduše použít na Slovan.</li></ul></div>''',
+          '''  <h2 id="kampan">Slovan a lávka u Shellu vstupují do předvolební kampaně</h2>
+            <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo 24. července 2026 příspěvek, který proti sobě obrazově postavil lávku u čerpací stanice Shell a staveniště Slovanu. Použilo slogan „Pojďme nejdříve vyřešit jámy a poté stavět mosty“ a uvedlo, že „novou šanci si zaslouží především Slovan“.</p>
+            <p>Uskupení současně výslovně napsalo, že plánovaný bytový dům sám o sobě nebyl špatným projektem. Podle jeho hodnocení však selhala příprava a realizace, veřejné prostředky byly vynaloženy zbytečně a kvalitní statický posudek mohl situaci předejít a zabránit tomu, aby místo domu zůstala jáma.</p>
+            <p>Poslední tvrzení je konkrétní politický závěr o příčině neúspěchu. Veřejné dokumenty potvrzují, že se po zahájení prací projevily závažné problémy s konstrukcí, základy a azbestem. Z dosud dohledaných podkladů ale nelze uzavřít, že určitý statický posudek chyběl nebo byl nekvalitní, ani že by jeho jiné provedení s jistotou zabránilo demolici, ukončení smlouvy nebo dodatečným nákladům.</p>
+            <p>Navazující programové karty slibují správu veřejných financí s péčí řádného hospodáře, transparentnost, dokončování prospěšných projektů, posuzování dlouhodobých provozních nákladů a přínosů, využívání dotací tam, kde dávají ekonomický smysl, a hospodaření městských organizací bez dlouhodobého zatěžování rozpočtu. Jde zatím o obecné předvolební zásady; konkrétní metodiku, finanční limity ani vlastní úplné vyčíslení Slovanu a lávky uskupení v příspěvku nepředložilo.</p>
+            <p>Srovnání „jáma versus most“ má své limity. Peníze na různé investice nelze vždy libovolně přesouvat, lávka není náhradou za bytový dům a Slovan není definitivně opuštěný projekt. Pro posouzení odpovědnosti zůstávají rozhodující průzkumy, změnové listy, faktury, dohoda o vypořádání, rozhodnutí SFPI a dokumentace nové zakázky.</p>
+            <div class="factcheck"><h3>Co je doloženo a co zůstává politickým tvrzením</h3><ul><li><strong>Doloženo:</strong> původní rekonstrukce se změnila v úplnou demolici, první smlouva skončila před dokončením a úplné finanční vypořádání není veřejně dostupné.</li><li><strong>Politické tvrzení:</strong> příprava a realizace selhaly a veřejné prostředky byly vynaloženy zbytečně.</li><li><strong>Zatím neprokázáno:</strong> že konkrétní chybějící nebo nekvalitní statický posudek byl rozhodující příčinou a mohl výsledku s jistotou zabránit.</li><li><strong>Předvolební slib:</strong> budoucí investice budou posuzovány podle dlouhodobých nákladů, přínosů a ekonomického smyslu dotací.</li></ul></div>''')
+
+          replacements[Path('clanky/parts/slovan-01.html')] = (
+          '''  <h2 id="spor">„Nejdřív jámy, potom mosty.“ Slovan a lávka vstupují do kampaně</h2>
+            <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo v pátek 24. července příspěvek, v němž proti sobě postavilo současný stav Slovanu a novou lávku u Shellu. „Pojďme nejdříve vyřešit jámy a poté stavět mosty,“ napsalo. Slovan a lávka se tak stávají společným předvolebním symbolem debaty o prioritách, přípravě investic a hospodaření města.</p>
+            <p>Příspěvek nepřináší nový technický posudek, konečné vyúčtování ani dosud neznámou smlouvu. Jde o legitimní politické hodnocení, nikoli samo o sobě o důkaz pochybení nebo přesnou finanční bilanci. Z několika komentářů na sociální síti také nelze usuzovat, že stejný názor zastává většina obyvatel.</p>
+            <p>Slogan ale správně otevírá otázku, proč jedna velká investice skončila přerušeným staveništěm, zatímco jiná byla dokončována, podle jakých kritérií město projekty řadí a jak občanům vysvětluje jejich skutečné náklady a očekávaný přínos. Odpověď však musí vycházet z dokumentů, nikoli pouze z volebního obrazu.</p>''',
+          '''  <h2 id="spor">„Nejdřív jámy, potom mosty.“ Slovan a lávka vstupují do kampaně</h2>
+            <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo 24. července příspěvek, v němž obrazově postavilo proti sobě lávku u Shellu a staveniště Slovanu. Napsalo, že samotný plánovaný bytový dům nebyl špatným projektem, podle jeho názoru však selhala příprava a realizace a zbytečně se vynaložily veřejné prostředky.</p>
+            <p>Uskupení dále tvrdí, že kvalitní statický posudek mohl situaci předejít. Jde o konkrétní politický závěr, který dosud zveřejněné dokumenty sám o sobě nepotvrzují. Ty dokládají závažné statické a stavebně-technické problémy odhalené v průběhu prací, nikoli však s jistotou to, že rozhodující příčinou byl chybějící či nekvalitní posudek a že by jiný posudek zabránil výsledku.</p>
+            <p>Další karty příspěvku slibují transparentní hospodaření, dokončování prospěšných projektů, posuzování provozních nákladů a přínosů a využívání dotací pouze tam, kde dávají ekonomický smysl. Jde o předvolební zásady, nikoli o již zveřejněnou metodiku nebo úplný vlastní účet Slovanu a lávky. Slogan přesto oprávněně otevírá otázku priorit a kvality přípravy investic; odpověď musí vycházet z dokumentů.</p>''')
+
+          replacements[Path('.github/drafts/lavka-shell-research.md')] = (
+          '''## Předvolební souvislost
+
+          Uskupení **Dáme Kadani novou šanci** zveřejnilo 24. července 2026 příspěvek, který staví lávku u Shellu do přímého kontrastu s nedokončeným Slovanem a používá slogan: **„Pojďme nejdříve vyřešit jámy a poté stavět mosty.“** Lávku zároveň ve svých programových prioritách používá jako příklad projektu, který politicky hodnotí jako nepraktický a neefektivní.
+
+          Tento materiál nepřináší nový technický posudek, konečné vyúčtování, změnový list ani dosud neznámou smlouvu. Jde o předvolební hodnocení, nikoli o samostatný důkaz finanční škody, porušení zákona nebo zbytečnosti stavby. Přesto je pro článek relevantní, protože dokládá, že se lávka spolu se Slovanem stává jedním ze symbolů komunální kampaně a debaty o investičních prioritách města.
+
+          Redakční pravidlo pro finální text:
+
+          - politickou souvislost zařadit až po faktickém rozboru ceny, smluv, účelu a harmonogramu;
+          - přesně uvést, že jde o tvrzení kandidujícího uskupení;
+          - nepřebírat označení „neefektivní“ nebo „zbytečná“ jako redakční závěr;
+          - vysvětlit, že peníze mezi různými projekty nelze vždy jednoduše přesouvat a lávka není účetní ani funkční náhradou za bytový dům;
+          - současně nebagatelizovat oprávněnou otázku, podle jakých kritérií město projekty řadí a jak měří jejich očekávaný přínos;
+          - sledovat, zda se k lávce a Slovanu vyjádří také další kadaňská uskupení nebo současné vedení města.
+
+          Doporučená formulace do článku:
+
+          > Lávka u čerpací stanice už není pouze dopravní stavbou a předmětem otázek kolem smluv, nákladů a následného vypořádání závazků. V předvolební komunikaci uskupení Dáme Kadani novou šanci se objevuje také jako symbol údajně špatně nastavených investičních priorit. Jde o politické hodnocení, nikoli o doložený závěr účetní nebo technické kontroly. Uskupení zatím nepředložilo vlastní úplný ekonomický rozbor stavby. Její přímé spojení s nedokončeným Slovanem ale potvrzuje, že obě investice budou patřit mezi témata komunální kampaně.
+''',
+          '''## Předvolební souvislost
+
+          Uskupení **Dáme Kadani novou šanci** zveřejnilo 24. července 2026 vícedílný příspěvek, který v jedné obrazové sérii spojil fotografii lávky u Shellu, fotografii staveniště Slovanu a programové karty o efektivním hospodaření. V doprovodném textu uvedlo, že samotný plánovaný bytový dům nebyl špatným projektem, podle jeho názoru však selhala příprava a realizace, veřejné prostředky byly vynaloženy zbytečně a kvalitní statický posudek mohl zabránit tomu, aby místo domu zůstala jáma. Příspěvek uzavírá sloganem **„Pojďme nejdříve vyřešit jámy a poté stavět mosty.“**
+
+          Tvrzení o statickém posudku je konkrétní příčinný závěr politického subjektu. Dosud dohledané dokumenty potvrzují závažné statické problémy, změnu založení a úplnou demolici Slovanu, ale samy o sobě neprokazují, že určitý posudek chyběl nebo byl nekvalitní, ani že by jiné posouzení s jistotou zabránilo výsledku. Ve finálním textu proto tvrzení vždy připsat uskupení a nevydávat je za redakčně doložený fakt.
+
+          Navazující karty slibují:
+
+          - správu veřejných financí s péčí řádného hospodáře a transparentně;
+          - rozhodování s ohledem na dlouhodobý prospěch obyvatel;
+          - odmítnutí bezcílného zadlužování bez jasné vize;
+          - dokončení rozjetých a pro město prospěšných projektů;
+          - posuzování velkých investic podle dlouhodobých provozních nákladů i přínosů;
+          - vyhledávání dotací pouze tam, kde dávají ekonomický smysl;
+          - hospodaření městských organizací tak, aby dlouhodobě nezatěžovaly rozpočet a zachovaly kvalitu služeb.
+
+          Jde o obecné předvolební zásady. Příspěvek neobsahuje konkrétní hodnoticí metodiku, mezní náklady, výpočet dlouhodobého přínosu lávky, alternativní investiční plán ani úplné vlastní vyúčtování Slovanu a lávky.
+
+          Redakční pravidlo pro finální text:
+
+          - politickou souvislost zařadit až po faktickém rozboru ceny, smluv, účelu a harmonogramu;
+          - přesně uvést, co uskupení tvrdí a co pouze slibuje do budoucna;
+          - nepřebírat označení „neefektivní“, „zbytečné výdaje“ ani tvrzení o rozhodující roli statického posudku jako redakční závěr;
+          - vysvětlit, že peníze mezi různými projekty nelze vždy jednoduše přesouvat a lávka není účetní ani funkční náhradou za bytový dům;
+          - porovnat deklarovaný důraz na provozní náklady a přínosy s tím, zda uskupení později zveřejní vlastní propočet;
+          - sledovat vyjádření dalších kadaňských uskupení a současného vedení města.
+
+          Doporučená formulace do článku:
+
+          > Lávka u čerpací stanice už není pouze dopravní stavbou a předmětem otázek kolem smluv, nákladů a následného vypořádání závazků. Uskupení Dáme Kadani novou šanci ji v jedné obrazové sérii postavilo proti staveništi Slovanu a spojilo s programem efektivního hospodaření. Tvrdí, že u Slovanu selhala příprava a realizace a kvalitní statický posudek mohl situaci předejít. Jde o politické hodnocení; dosud veřejné dokumenty neumožňují tento příčinný závěr potvrdit. Příspěvek však jednoznačně dokládá, že se obě investice stávají společným symbolem komunální kampaně.
+''')
+
+          replacements[Path('nahled/lavka-shell-pracovni-7c26.html')] = (
+          '''  <h2 id="kampan">Lávka se stává předvolebním symbolem</h2>
+            <p>Uskupení <strong>Dáme Kadani novou šanci</strong> staví lávku do přímého kontrastu s nedokončeným Slovanem a používá slogan „Pojďme nejdříve vyřešit jámy a poté stavět mosty.“ Ve svých programových prioritách ji také politicky hodnotí jako příklad nepraktického a neefektivního projektu.</p>
+            <p>Jde o předvolební tvrzení, nikoli o doložený závěr účetní nebo technické kontroly. Uskupení zatím nepředložilo vlastní úplný ekonomický rozbor stavby. Přímé spojení lávky se Slovanem ale potvrzuje, že obě investice budou patřit mezi témata komunální kampaně.</p>
+            <blockquote>Politický slogan může otevřít správnou otázku. Odpověď ale musí přinést smlouvy, faktury, předávací protokol a konečné vyúčtování.</blockquote>''',
+          '''  <h2 id="kampan">Lávka se stává předvolebním symbolem</h2>
+            <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo obrazovou sérii, která přímo vedle sebe staví lávku u Shellu a staveniště Slovanu. V doprovodném textu uvádí, že samotný plánovaný bytový dům nebyl špatným projektem, podle jeho názoru však selhala příprava a realizace a zbytečně se vynaložily veřejné prostředky.</p>
+            <p>Uskupení zároveň tvrdí, že kvalitní statický posudek mohl situaci předejít. Veřejné dokumenty potvrzují závažné statické problémy odhalené během prací, ale zatím neumožňují prokázat, že rozhodující příčinou byl chybějící nebo nekvalitní posudek a že by jiný posudek s jistotou zabránil demolici či ukončení smlouvy.</p>
+            <p>Další karty slibují transparentní správu financí, dokončování prospěšných projektů, posuzování dlouhodobých provozních nákladů a přínosů a využívání dotací tam, kde dávají ekonomický smysl. Uskupení ale v příspěvku nepředložilo konkrétní metodiku ani vlastní úplný propočet nákladů a přínosů lávky.</p>
+            <div class="factcheck"><h3>Jak politický materiál číst</h3><ul><li><strong>Doložené je:</strong> lávka a Slovan jsou v kampani spojeny do jednoho tématu hospodaření.</li><li><strong>Politickým hodnocením je:</strong> že příprava Slovanu selhala a peníze byly vynaloženy zbytečně.</li><li><strong>Zatím neprokázané je:</strong> že kvalitní statický posudek mohl výsledku s jistotou zabránit.</li><li><strong>Předvolebním slibem je:</strong> budoucí projekty posuzovat podle dlouhodobých nákladů a přínosů.</li></ul></div>
+            <blockquote>Politický slogan může otevřít správnou otázku. Odpověď ale musí přinést smlouvy, posudky, faktury, předávací protokol a konečné vyúčtování.</blockquote>''')
+
+          for path, (old, new) in replacements.items():
+              text = path.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Nenalezen očekávaný blok v {path}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8', newline='\n')
+
+          Path('.github/update-slovan-shell-context-trigger.txt').unlink(missing_ok=True)
+          PY
+
+      - name: Uložit změny
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/drafts/slovan-druhy-pokus.html .github/drafts/lavka-shell-research.md clanky/parts/slovan-01.html nahled/lavka-shell-pracovni-7c26.html .github/update-slovan-shell-context-trigger.txt
+          git commit -m 'Zpřesnit tvrzení kampaně ke Slovanu a lávce'
+          git push origin main
