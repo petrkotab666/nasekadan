@@ -1,0 +1,46 @@
+name: Opravit článek o soukromé e-petici
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/fix_epetice_private_portal.py'
+      - '.github/workflows/fix-epetice-private-portal.yml'
+      - '.github/fix-epetice-private-portal-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-epetice-private-portal
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Stáhnout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přepsat článek podle skutečné platformy
+        run: python3 scripts/fix_epetice_private_portal.py
+
+      - name: Uložit opravený článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň editor'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/epetice-nemocnice-kadan.html
+          if git diff --cached --quiet; then
+            echo 'Článek už odpovídá aktuálnímu stavu.'
+            exit 0
+          fi
+          git commit -m 'Opravit článek: soukromý portál e-petice.cz'
+          git pull --rebase origin main
+          git push origin main
