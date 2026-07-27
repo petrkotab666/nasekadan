@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Návštěvnost webu | Naše Kadaň</title>
+  <meta name="description" content="Základní souhrnné statistiky návštěvnosti portálu Naše Kadaň bez osobních údajů a reklamních profilů.">
+  <meta name="robots" content="noindex,follow,noarchive">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .stats-page{padding:54px 0 78px}
+    .stats-page h1{font:800 clamp(42px,7vw,68px)/1.02 Georgia,serif;letter-spacing:-.035em;margin:.18em 0}
+    .stats-intro{max-width:820px;color:var(--muted);font-size:20px}
+    .stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin:34px 0}
+    .stat{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:var(--shadow)}
+    .stat b{display:block;color:var(--red);font:800 38px/1 Georgia,serif;margin-bottom:8px}
+    .stat span{color:var(--muted)}
+    .top-pages{background:#fff;border:1px solid var(--line);border-radius:18px;padding:26px;box-shadow:var(--shadow)}
+    .top-pages h2{font:800 31px/1.15 Georgia,serif;margin:0 0 18px}
+    .top-pages ol{margin:0;padding-left:24px}
+    .top-pages li{padding:8px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+    .top-pages li:last-child{border-bottom:0}
+    .privacy-note{margin-top:26px;padding:22px;background:var(--cream);border-radius:16px}
+    .loading{color:var(--muted)}
+    @media(max-width:760px){.stats-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap head">
+    <a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a>
+    <nav><a href="/">Úvod</a><a href="/clanky/">Články</a><a href="/#akce">Akce</a><a href="/pruvodce/">Průvodce</a></nav>
+  </div>
+</header>
+<main class="wrap stats-page">
+  <p class="tag">TRANSPARENTNOST WEBU</p>
+  <h1>Návštěvnost Naše Kadaň</h1>
+  <p class="stats-intro">Zobrazujeme pouze základní souhrnné údaje. Nepoužíváme reklamní cookies, nesledujeme pohyb konkrétních lidí a nevytváříme uživatelské profily.</p>
+  <section class="stats-grid" aria-label="Souhrn návštěvnosti">
+    <div class="stat"><b id="total">—</b><span>zobrazení celkem</span></div>
+    <div class="stat"><b id="today">—</b><span>zobrazení dnes</span></div>
+    <div class="stat"><b id="unique">—</b><span>unikátní návštěvníci dnes</span></div>
+  </section>
+  <section class="top-pages">
+    <h2>Nejčtenější stránky za posledních 30 dní</h2>
+    <p class="loading" id="status">Načítáme aktuální údaje…</p>
+    <ol id="top" hidden></ol>
+  </section>
+  <div class="privacy-note"><strong>Jak statistika funguje:</strong> systém ukládá navštívenou cestu, čas a anonymizovaný denní identifikátor. Stránka návštěvnosti sama se do statistik nezapočítává.</div>
+</main>
+<footer>
+  <div class="wrap footer-grid">
+    <div><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><p>Vlastní články, události a příběhy města.</p></div>
+    <div><strong>Obsah</strong><a href="/">Úvod</a><a href="/clanky/">Články</a><a href="/#akce">Akce</a><a href="/pruvodce/">Průvodce</a></div>
+    <div><strong>Kontakt</strong><a href="/zapojte-se/">Poslat tip</a><a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a></div>
+  </div>
+</footer>
+<script>
+(async()=>{
+  const fmt=new Intl.NumberFormat('cs-CZ');
+  const status=document.getElementById('status');
+  try{
+    const response=await fetch('/api/analytics/summary?nocache='+Date.now(),{cache:'no-store',credentials:'omit'});
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    const data=await response.json();
+    document.getElementById('total').textContent=fmt.format(Number(data.total||0));
+    document.getElementById('today').textContent=fmt.format(Number(data.today||0));
+    document.getElementById('unique').textContent=fmt.format(Number(data.uniqueToday||0));
+    const top=document.getElementById('top');
+    const rows=Array.isArray(data.topPages)?data.topPages:[];
+    top.innerHTML='';
+    for(const row of rows){
+      const li=document.createElement('li');
+      const path=String(row.path||'/');
+      const a=document.createElement('a');
+      a.href=path;a.textContent=path;
+      li.append(a,document.createTextNode(' — '+fmt.format(Number(row.views||0))+' zobrazení'));
+      top.appendChild(li);
+    }
+    status.hidden=true;top.hidden=false;
+  }catch(error){
+    status.textContent='Statistiku se nyní nepodařilo načíst. Zkuste stránku později obnovit.';
+    document.getElementById('total').textContent='—';
+    document.getElementById('today').textContent='—';
+    document.getElementById('unique').textContent='—';
+    console.error(error);
+  }
+})();
+</script>
+<script src="/site.js" defer></script>
+</body>
+</html>
