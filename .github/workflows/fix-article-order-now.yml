@@ -16,12 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Připravit klíč
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$SSH_KEY"
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
