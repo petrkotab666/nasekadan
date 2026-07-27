@@ -1,19 +1,20 @@
-name: Nouzově nasadit Naše Kadaň přes GitHub cloud
-run-name: Cloudové nouzové nasazení nejnovějšího main
+name: Nasadit Naše Kadaň spolehlivě přes GitHub cloud
+run-name: Produkční nasazení nejnovějšího main na OVH
 
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/cloud-deploy-nasekadan-trigger.txt'
-      - '.github/workflows/cloud-emergency-deploy-nasekadan.yml'
+    paths-ignore:
+      - 'cloud-deploy-status.json'
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: nasekadan-cloud-emergency-production
+  group: nasekadan-cloud-production
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +35,6 @@ jobs:
     steps:
       - name: Vybrat dostupný SSH klíč
         id: key
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -53,12 +53,9 @@ jobs:
           fi
           chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
           echo "selected=$selected" >> "$GITHUB_OUTPUT"
-          echo "Použit SSH secret: $selected"
 
       - name: Nasadit nejnovější main přímo na OVH
         id: deploy_server
-        if: steps.key.outcome == 'success'
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -71,13 +68,11 @@ jobs:
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
-
           if [ ! -d /opt/nasekadan/.git ]; then
             sudo rm -rf /opt/nasekadan
             sudo git clone https://github.com/petrkotab666/nasekadan.git /opt/nasekadan
             sudo chown -R ubuntu:ubuntu /opt/nasekadan
           fi
-
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
@@ -86,33 +81,29 @@ jobs:
           bash deploy/sync-production.sh
           REMOTE
 
-      - name: Ověřit veřejný web z GitHub cloudu
+      - name: Ověřit veřejný web
         id: verify
-        if: steps.deploy_server.outcome == 'success'
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
-            homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
-            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
-            sources="$(curl -fsS --max-time 20 "https://nasekadan.cz/data/city-sources.json?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
-            health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?cloud-deploy=${GITHUB_SHA}-${attempt}" || true)"
-
-            if grep -Fq 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$homepage" \
-              && grep -Fq 'Karlovy Vary' <<<"$article" \
-              && grep -Fq 'MŠ Hvězdička Kadaň' <<<"$sources" \
+            homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?deploy=${GITHUB_SHA}-${attempt}" || true)"
+            kolobezky="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
+            kultura="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
+            health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?deploy=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Koloběžky pod větším dohledem' <<<"$kolobezky" \
+              && grep -Fq 'Karlovy Vary' <<<"$kultura" \
+              && grep -Fq 'clanky/' <<<"$homepage" \
               && grep -Fq 'source=' <<<"$health"; then
-              echo 'Veřejný web podává aktuální kulturní přehled i rozšířený registr zdrojů.'
+              echo 'Veřejný web podává aktuální články.'
               exit 0
             fi
             sleep 10
           done
-
           echo 'Veřejný web ani po čekání nepodává požadovanou verzi.' >&2
           exit 30
 
-      - name: Zapsat výsledek cloudového nasazení
+      - name: Zapsat výsledek nasazení
         if: always()
         uses: actions/github-script@v7
         env:
@@ -147,20 +138,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat výsledek cloudového nasazení: ${status.status}`,
+              message: `Zapsat výsledek produkčního nasazení: ${status.status}`,
               content,
               ...(sha ? { sha } : {})
             });
-
-      - name: Vyhodnotit nasazení
-        if: always()
-        shell: bash
-        env:
-          KEY_OUTCOME: ${{ steps.key.outcome }}
-          DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
-          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
-        run: |
-          set -euo pipefail
-          test "$KEY_OUTCOME" = success
-          test "$DEPLOY_OUTCOME" = success
-          test "$VERIFY_OUTCOME" = success
