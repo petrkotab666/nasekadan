@@ -1,0 +1,127 @@
+name: Pojistka obsahu a reklam Naše Kadaň
+run-name: Kontrola produkce, automatická oprava a rollback
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'production-content-manifest.json'
+      - 'scripts/validate_production_manifest.py'
+      - '.github/workflows/production-content-watchdog.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-production-watchdog
+  cancel-in-progress: false
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Ověřit živý web a při chybě jej atomicky opravit
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_public() {
+            local suffix="$1"
+            local home archive article
+            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?watchdog=${GITHUB_SHA}-${suffix}" || true)"
+            archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?watchdog=${GITHUB_SHA}-${suffix}" || true)"
+            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?watchdog=${GITHUB_SHA}-${suffix}" || true)"
+            grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$home" \
+              && grep -Fq 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$home" \
+              && grep -Fq 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$home" \
+              && grep -Fq 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$home" \
+              && grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$archive" \
+              && grep -Fq 'data-promos' <<<"$article" \
+              && grep -Fq '/reklamy.js' <<<"$article" \
+              && grep -Fq '/reklamy-oprava-obrazku.js' <<<"$article" \
+              && grep -Fq '/obsah-doplnky.js' <<<"$article"
+          }
+
+          if check_public before; then
+            echo 'Produkce je úplná; oprava není potřeba.'
+            exit 0
+          fi
+
+          echo 'Produkce není úplná. Spouštím bezpečnou obnovu.'
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/normalize_footers.py --write --check
+          python3 scripts/validate_production_manifest.py --root /opt/nasekadan
+
+          SHA="$(git rev-parse HEAD)"
+          STAGE="/var/www/nasekadan.watchdog-$SHA"
+          LIVE="/var/www/nasekadan"
+          LKG="/var/www/nasekadan.last-known-good"
+          BROKEN="/var/www/nasekadan.broken-$SHA"
+          sudo rm -rf "$STAGE" "$BROKEN"
+          sudo mkdir -p "$STAGE"
+          sudo tar \
+            --exclude='./.git' --exclude='./.github' --exclude='./scripts' \
+            --exclude='./deploy' --exclude='./tools' --exclude='./nginx' \
+            --exclude='./docker-entrypoint.d' --exclude='./Dockerfile' \
+            --exclude='./docker-compose.yml' --exclude='./cloud-deploy-status.json' \
+            -cf - . | sudo tar -C "$STAGE" -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=watchdog\n' \
+            "$SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
+          sudo chmod -R a+rX "$STAGE"
+
+          python3 scripts/validate_production_manifest.py --root "$STAGE"
+
+          if [ -d "$LIVE" ]; then
+            sudo rm -rf "$LKG"
+            sudo cp -a "$LIVE" "$LKG"
+            sudo mv "$LIVE" "$BROKEN"
+          fi
+          sudo mv "$STAGE" "$LIVE"
+
+          if ! grep -Fq 'data-promos' "$LIVE/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html"; then
+            sudo rm -rf "$LIVE"
+            if [ -d "$LKG" ]; then sudo cp -a "$LKG" "$LIVE"; fi
+            exit 41
+          fi
+          sudo rm -rf "$BROKEN"
+          REMOTE
+
+          for attempt in $(seq 1 12); do
+            if check_public "after-${attempt}"; then
+              echo 'Produkce byla opravena a veřejně ověřena.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Opravená verze neprošla veřejnou kontrolou.' >&2
+          exit 42
