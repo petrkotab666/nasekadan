@@ -7,8 +7,8 @@ on:
       - emergency-deploy-trigger.txt
       - .github/workflows/emergency-deploy-ovh.yml
       - deploy/sync-production.sh
-      - footer.css
-      - scripts/normalize_footers.py
+      - deploy/install-automation.sh
+      - Dockerfile
   workflow_dispatch:
   pull_request:
     branches: [main]
@@ -18,16 +18,16 @@ on:
 permissions:
   contents: read
 
-# Nouzový běh má vlastní frontu, aby nebyl blokován starými běžnými deployi.
-# Na serveru jej se souběžným nasazením bezpečně serializuje flock.
+# Nouzový i běžný deploy používají stejný kanonický zámek. Nemohou si tedy
+# navzájem přepsat document root jinou nebo starší verzí.
 concurrency:
-  group: nasekadan-emergency-production
+  group: nasekadan-canonical-production
   cancel-in-progress: true
 
 jobs:
   deploy:
-    runs-on: [self-hosted, ovh, lastminuteslevy]
-    timeout-minutes: 25
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
     steps:
       - name: Stáhnout aktuální hlavní větev
         uses: actions/checkout@v4
@@ -40,4 +40,6 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/sync-production.sh
-          bash deploy/sync-production.sh
+          sudo env \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            bash deploy/sync-production.sh
