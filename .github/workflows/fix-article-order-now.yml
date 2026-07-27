@@ -1,0 +1,67 @@
+name: Okamžitě opravit pořadí článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-article-order-now-trigger.txt'
+      - '.github/workflows/fix-article-order-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Opravit pořadí přímo na produkci
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 scripts/enforce_current_article_order.py
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 clanky/kolobezky-hriste-detektor-kovu-kadan.html /var/www/nasekadan/clanky/kolobezky-hriste-detektor-kovu-kadan.html
+          sudo install -m 0644 clanky/avies-nemocnice-kadan.html /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
+          sudo install -m 0644 clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          REMOTE
+
+      - name: Ověřit pořadí
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?order=${GITHUB_SHA}-${attempt}" || true)"
+            archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?order=${GITHUB_SHA}-${attempt}" || true)"
+            check_order() {
+              local text="$1"
+              local a b c
+              a="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              b="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              c="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
+              [[ -n "$a" && -n "$b" && -n "$c" && "$a" -lt "$b" && "$b" -lt "$c" ]]
+            }
+            if check_order "$home" && check_order "$archive"; then
+              echo 'Pořadí potvrzeno: koloběžky, AVIES, kultura.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
