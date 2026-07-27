@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -140,7 +142,7 @@ def ensure_rss() -> bool:
         weekly = re.compile(r'(<item>.*?' + re.escape(WEEKLY_URL) + r'.*?</item>\s*)', re.S)
         text, count = weekly.subn(r"\1" + EPETICE_RSS, text, count=1)
         if count == 0:
-            marker = '    <item>'
+            marker = "    <item>"
             if marker not in text:
                 raise RuntimeError("RSS nemá žádnou položku.")
             text = text.replace(marker, EPETICE_RSS + marker, 1)
@@ -158,11 +160,28 @@ def ensure_sitemap() -> bool:
     return write_if_changed(SITEMAP, text)
 
 
+def enforce_current_articles() -> None:
+    """Zařadí všechny dnešní schválené články a srovná jejich pořadí.
+
+    Tento krok je součástí stejné pojistky, aby nový článek nemohl existovat jako
+    veřejný HTML soubor a současně chybět na titulce, v archivu nebo RSS.
+    """
+    script = ROOT / "scripts" / "enforce_current_article_order.py"
+    required = ROOT / "clanky" / "kolobezky-hriste-detektor-kovu-kadan.html"
+    if required.is_file() and script.is_file():
+        subprocess.run([sys.executable, str(script)], cwd=ROOT, check=True)
+
+
 def main() -> int:
     if not (ROOT / EPETICE_PATH.lstrip("/")).is_file():
         raise RuntimeError(f"Chybí zdrojový článek {EPETICE_PATH}")
     changed = [ensure_home(), ensure_archive(), ensure_rss(), ensure_sitemap()]
-    print("Zařazení nejnovějších schválených článků dokončeno.", "Změny:" if any(changed) else "Beze změn.", sum(changed))
+    enforce_current_articles()
+    print(
+        "Zařazení nejnovějších schválených článků dokončeno.",
+        "Změny:" if any(changed) else "Beze změn.",
+        sum(changed),
+    )
     return 0
 
 
