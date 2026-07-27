@@ -1,0 +1,52 @@
+name: Připravit ARC-MED a závěrečný profil nemocnice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/bootstrap_arc_med_draft.py"
+      - "scripts/update_hospital_profile_municipal_support.py"
+      - ".github/workflows/prepare-hospital-series-final.yml"
+      - ".github/prepare-hospital-series-final.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-hospital-series-final
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit ARC-MED, doplnit obce a nastavit termíny
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/bootstrap_arc_med_draft.py
+          python3 scripts/update_hospital_profile_municipal_support.py
+          python3 scripts/link_hospital_series.py
+
+      - name: Uložit připravené články
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – příprava série'
+          git config user.email 'info@nasekadan.cz'
+          git add -- .github/drafts/arc-med-nemocnice-kadan.html .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html scripts/link_hospital_series.py style.css
+          if git diff --cached --quiet; then
+            echo 'Příprava je beze změn.'
+            exit 0
+          fi
+          git commit -m 'Doplnit příspěvky obcí a upoutávku na závěr série'
+          git pull --rebase origin main
+          git push origin main
