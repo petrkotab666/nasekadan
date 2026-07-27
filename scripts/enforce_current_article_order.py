@@ -8,11 +8,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "index.html"
 ARCHIVE = ROOT / "clanky" / "index.html"
+RSS = ROOT / "rss.xml"
 
 BEDS_PATH = "/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html"
 KOLOB_PATH = "/clanky/kolobezky-hriste-detektor-kovu-kadan.html"
 AVIES_PATH = "/clanky/avies-nemocnice-kadan.html"
 CULTURE_PATH = "/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html"
+KOLOB_URL = "https://nasekadan.cz" + KOLOB_PATH
 
 BEDS_HOME = '''
       <article class="article-card hospital" data-beds-card>
@@ -42,7 +44,7 @@ KOLOB_HOME = '''
       <article class="article-card transport" data-kolobezky-card>
         <div class="visual" style="background:linear-gradient(135deg,#173442,#416d64 58%,#b08838)"><strong>Koloběžky a bezpečnost</strong></div>
         <div class="article-body">
-          <span class="meta">27. 7. 2026 · Bezpečnost a doprava</span>
+          <span class="meta">27. 7. 2026 · 14:00 · Bezpečnost a doprava</span>
           <h3>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h3>
           <p>Větší dohled byl ohlášen na celé léto. Hřiště se současně kontrolují i detektorem kovu.</p>
           <a class="read-more" href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst článek →</a>
@@ -54,12 +56,28 @@ KOLOB_ARCHIVE = '''
     <article class="archive-item transport" data-kolobezky-card>
       <div class="archive-visual" style="background:linear-gradient(135deg,#173442,#416d64 58%,#b08838)"><strong>Koloběžky a bezpečnost</strong></div>
       <div class="archive-body">
-        <span class="archive-meta">27. července 2026 · Bezpečnost a doprava</span>
+        <span class="archive-meta">27. července 2026 v 14:00 · Bezpečnost a doprava</span>
         <h2>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h2>
         <p>Větší dohled byl ohlášen na celé léto. Hřiště se současně kontrolují i detektorem kovu.</p>
         <a href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst článek →</a>
       </div>
     </article>
+'''
+
+KOLOB_RSS = '''    <item>
+      <title>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</title>
+      <description><![CDATA[Kadaňští strážníci avizovali větší letní dohled nad koloběžkami a jízdními koly. Dětská hřiště současně kontrolují i detektorem kovu.]]></description>
+      <link>https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html</link>
+      <guid isPermaLink="true">https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html</guid>
+      <pubDate>Mon, 27 Jul 2026 14:00:00 +0200</pubDate>
+      <category>Bezpečnost</category>
+      <category>Doprava</category>
+      <category>Kadaň</category>
+      <szn:image><szn:url>https://nasekadan.cz/social/kolobezky-hriste-detektor-kovu-kadan-dbbb2d5f7e.png</szn:url></szn:image>
+      <geo:lat>50.375984</geo:lat>
+      <geo:long>13.271307</geo:long>
+    </item>
+
 '''
 
 HERO = '''  <section class="wrap hero" id="clanky">
@@ -142,22 +160,55 @@ def update_archive_jsonld(text: str) -> str:
         item["position"] = i
     itemlist["itemListElement"] = ordered
     itemlist["numberOfItems"] = len(ordered)
-    replacement = '<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False, indent=2) + '</script>'
-    return text[:match.start()] + replacement + text[match.end():]
+    replacement = '<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False, indent=2) + "</script>"
+    return text[: match.start()] + replacement + text[match.end() :]
+
+
+def ensure_rss(text: str) -> str:
+    # Odebrat případnou starší nebo duplicitní položku a vložit ji chronologicky
+    # za večerní článek o 82 lůžkách. Tím je výsledek idempotentní.
+    item_re = re.compile(
+        r"\s*<item>.*?<link>" + re.escape(KOLOB_URL) + r"</link>.*?</item>\s*",
+        re.S,
+    )
+    text = item_re.sub("\n", text)
+    beds_item = re.compile(
+        r"(<item>.*?<link>https://nasekadan\.cz" + re.escape(BEDS_PATH) + r"</link>.*?</item>\s*)",
+        re.S,
+    )
+    text, count = beds_item.subn(r"\1\n" + KOLOB_RSS, text, count=1)
+    if count == 0:
+        marker = "    <item>"
+        if marker not in text:
+            raise RuntimeError("RSS nemá žádnou položku.")
+        text = text.replace(marker, KOLOB_RSS + marker, 1)
+    return text
 
 
 def main() -> int:
+    for required in (BEDS_PATH, KOLOB_PATH, AVIES_PATH, CULTURE_PATH):
+        if not (ROOT / required.lstrip("/")).is_file():
+            raise RuntimeError(f"Chybí veřejný článek {required}")
+
     home = HOME.read_text(encoding="utf-8")
     home = re.sub(r'  <section class="wrap hero" id="clanky">.*?</section>', HERO, home, count=1, flags=re.S)
     home = reorder_section(home, '<div class="article-list">', '<p class="archive-note">', archive=False)
     HOME.write_text(home, encoding="utf-8", newline="\n")
 
     archive = ARCHIVE.read_text(encoding="utf-8")
-    archive = reorder_section(archive, '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>', archive=True)
+    archive = reorder_section(
+        archive,
+        '<section class="archive-list" aria-label="Chronologický přehled článků">',
+        "</section>",
+        archive=True,
+    )
     archive = update_archive_jsonld(archive)
     ARCHIVE.write_text(archive, encoding="utf-8", newline="\n")
 
-    print("Pořadí článků: 82 lůžek, koloběžky, AVIES, kultura.")
+    rss = ensure_rss(RSS.read_text(encoding="utf-8"))
+    RSS.write_text(rss, encoding="utf-8", newline="\n")
+
+    print("Pořadí článků a RSS: 82 lůžek, koloběžky, AVIES, kultura.")
     return 0
 
 
