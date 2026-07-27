@@ -12,6 +12,7 @@ RUN python scripts/publish_avies_article.py
 # Online petice byla spuštěna na soukromém portálu e-petice.cz. Článek musí
 # staticky rozlišit tuto platformu od státní ePetice v Portálu občana.
 RUN python scripts/update_online_petition_status.py
+RUN python scripts/update_petition_verified_details.py
 
 # Pillow je potřeba pro jedinečné 1200×630 sociální obrázky jednotlivých článků.
 # Instalace přes pip zaručí, že se knihovna nahraje do stejného Pythonu 3.12,
@@ -42,6 +43,7 @@ RUN python scripts/publish_avies_article.py
 # Publikační skripty mohly znovu sestavit archiv nebo kartu na titulce. Proto
 # stav online petice promítnout ještě jednou do všech výsledných přehledů.
 RUN python scripts/update_online_petition_status.py
+RUN python scripts/update_petition_verified_details.py
 
 # Doplnit canonical, robots, Open Graph a Twitter metadata také všem starším
 # průvodcovským stránkám. Přísný audit tak neblokuje nové články kvůli historickým
