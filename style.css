@@ -7,14 +7,17 @@
 .series-nav__intro{margin:0 0 18px!important;color:#52616a;font-size:16px!important}
 .series-nav__list{display:grid;gap:10px;margin:0;padding:0;list-style:none;counter-reset:hospital-series}
 .series-nav__item{counter-increment:hospital-series;position:relative;margin:0!important;padding:0!important}
-.series-nav__item>a,.series-nav__current{display:block;padding:15px 16px 15px 54px;border:1px solid #d6e0e4;border-radius:14px;background:#fff;color:#172b38!important;text-decoration:none!important;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
-.series-nav__item>a:before,.series-nav__current:before{content:counter(hospital-series);position:absolute;left:16px;top:16px;width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#172b38;color:#fff;font-size:13px;font-weight:900}
+.series-nav__item>a,.series-nav__current,.series-nav__scheduled{display:block;padding:15px 16px 15px 54px;border:1px solid #d6e0e4;border-radius:14px;background:#fff;color:#172b38!important;text-decoration:none!important;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.series-nav__item>a:before,.series-nav__current:before,.series-nav__scheduled:before{content:counter(hospital-series);position:absolute;left:16px;top:16px;width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#172b38;color:#fff;font-size:13px;font-weight:900}
 .series-nav__item>a:hover{transform:translateY(-1px);border-color:#a9232b;box-shadow:0 8px 20px rgba(20,35,45,.09)}
 .series-nav__current{border-color:#a9232b;background:#fff7f7;box-shadow:inset 4px 0 0 #a9232b}
 .series-nav__current:before{background:#a9232b}
+.series-nav__scheduled{border-style:dashed;background:#f8fafb;color:#53636c!important}
+.series-nav__scheduled:before{background:#73838b}
 .series-nav__title{display:block;font:800 18px/1.25 Georgia,serif}
 .series-nav__meta{display:block;margin-top:3px;color:#6a7880;font-size:13px}
 .series-nav__summary{display:block;margin-top:5px;color:#52616a;font-size:14px;line-height:1.45}
 .series-nav__state{display:inline-block;margin-top:7px;color:#a9232b;font-size:12px;font-weight:900;letter-spacing:.05em;text-transform:uppercase}
-@media(max-width:700px){.series-nav{padding:19px}.series-nav h2{font-size:24px!important}.series-nav__item>a,.series-nav__current{padding-left:49px}}
+.series-nav__scheduled .series-nav__state{color:#5c6b73}
+@media(max-width:700px){.series-nav{padding:19px}.series-nav h2{font-size:24px!important}.series-nav__item>a,.series-nav__current,.series-nav__scheduled{padding-left:49px}}
 /* /Série Nemocnice Kadaň */
