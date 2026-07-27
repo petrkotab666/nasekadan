@@ -80,6 +80,7 @@ sudo systemctl daemon-reload
 sudo systemctl reset-failed nasekadan-refresh.service || true
 sudo systemctl enable --now nasekadan-refresh.timer
 sudo systemctl restart nasekadan-refresh.timer
-sudo systemctl start --no-block nasekadan-refresh.service || true
 
+# Právě dokončený deploy už web ověřil. Nespouštíme další souběžný refresh,
+# který by zbytečně čekal na stejný produkční zámek.
 echo "Serverová pojistka je aktivní každých 10 minut a používá jediný kanonický produkční build."
