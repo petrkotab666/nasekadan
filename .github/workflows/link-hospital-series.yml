@@ -7,7 +7,10 @@ on:
       - 'clanky/nemocnice-kadan.html'
       - 'clanky/petice-nemocnice-kadan.html'
       - 'clanky/nemocnice-kadan-software-kyberbezpecnost.html'
+      - 'clanky/avies-nemocnice-kadan.html'
+      - 'clanky/arc-med-nemocnice-kadan.html'
       - '.github/drafts/nemocnice-kadan-software-kyberbezpecnost.html'
+      - '.github/drafts/arc-med-nemocnice-kadan.html'
       - 'style.css'
       - 'scripts/link_hospital_series.py'
       - '.github/hospital-series-trigger.txt'
@@ -34,7 +37,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit navigaci celé série
+      - name: Doplnit navigaci celé série a zítřejší upoutávku
         run: python3 scripts/link_hospital_series.py
 
       - name: Uložit propojení
@@ -43,18 +46,27 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – propojení série'
           git config user.email 'info@nasekadan.cz'
-          git add style.css \
-            clanky/nemocnice-kadan.html \
-            clanky/petice-nemocnice-kadan.html \
-            clanky/nemocnice-kadan-software-kyberbezpecnost.html \
+
+          paths=(
+            style.css
+            clanky/nemocnice-kadan.html
+            clanky/petice-nemocnice-kadan.html
+            clanky/nemocnice-kadan-software-kyberbezpecnost.html
+            clanky/avies-nemocnice-kadan.html
+            clanky/arc-med-nemocnice-kadan.html
             .github/drafts/nemocnice-kadan-software-kyberbezpecnost.html
+            .github/drafts/arc-med-nemocnice-kadan.html
+          )
+          for path in "${paths[@]}"; do
+            [[ -e "$path" ]] && git add -- "$path"
+          done
 
           if git diff --cached --quiet; then
             echo 'Série je již správně propojena.'
             exit 0
           fi
 
-          git commit -m 'Propojit celou sérii článků o Nemocnici Kadaň'
+          git commit -m 'Propojit všech pět článků série Nemocnice Kadaň'
           git pull --rebase origin main
           git push origin main
 
