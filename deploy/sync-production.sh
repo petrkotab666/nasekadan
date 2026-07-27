@@ -5,10 +5,6 @@ ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
 cd "$ROOT"
 
 LOCK_FILE=/tmp/nasekadan-production-deploy.lock
-# Zámek sdílí ruční nasazení, self-hosted runner i rootovská serverová pojistka.
-# Soubor mohl dříve vytvořit root s režimem 0644, takže běžný uživatel jej
-# nedokázal otevřít. Oprávnění upravujeme bez mazání souboru, aby se zachovalo
-# korektní flock chování i při souběžném běhu.
 if command -v sudo >/dev/null 2>&1; then
   sudo touch "$LOCK_FILE"
   sudo chmod a+rw "$LOCK_FILE"
@@ -19,8 +15,9 @@ fi
 exec 9>"$LOCK_FILE"
 flock -w 900 9
 
-# Vždy nasazovat skutečně nejnovější hlavní větev, i když byl workflow spuštěn
-# starším commitem nebo čekal delší dobu ve frontě.
+# Vždy pracovat s nejnovější hlavní větví. Statusové commity jsou součástí
+# zdrojové verze stejně jako obsahové změny, takže deployment-health může přesně
+# potvrdit, jaký commit veřejný web skutečně podává.
 git fetch --prune origin main
 git reset --hard origin/main
 SOURCE_SHA="$(git rev-parse HEAD)"
@@ -28,37 +25,59 @@ SHORT_SHA="${SOURCE_SHA:0:12}"
 
 echo "Nasazuji main @ $SOURCE_SHA"
 
-# Oprava SMTP musí proběhnout i při nasazení spuštěném lokálním serverovým
-# timerem, protože self-hosted GitHub runner může být dočasně nedostupný.
 if [[ -f deploy/repair-newsletter-smtp.sh ]]; then
   chmod +x deploy/repair-newsletter-smtp.sh
   bash deploy/repair-newsletter-smtp.sh
 fi
 
+# Předprodukční ochrany. Jde o stejné idempotentní kroky pro ruční deploy,
+# GitHub workflow i desetiminutovou serverovou pojistku.
 python3 scripts/ensure_publication_integrity.py
 python3 scripts/ensure_newest_article_indexes.py
-# AVIES musí být vytvořený a zařazený před blokující kontrolou, nikoli až uvnitř
-# Docker buildu. Skript je idempotentní a zachová již zveřejněnou verzi.
 python3 scripts/publish_avies_article.py
 python3 scripts/ensure_petition_document_details.py
-# Doplnit sitemapu, discovery metadata a ostatní podpůrné soubory po zařazení
-# AVIES, aby předprodukční kontrola viděla stejný stav jako výsledný web.
 python3 scripts/finalize_launch.py
 python3 scripts/normalize_footers.py --write --check
 python3 scripts/validate_publication_integrity.py
 
-KTK='vypadek-internetu-kadan-kradez-kabelu.html'
+KTK_PATH='/clanky/vypadek-internetu-kadan-kradez-kabelu.html'
+KTK_FILE="clanky/vypadek-internetu-kadan-kradez-kabelu.html"
 KTK_TITLE="$(python3 - <<'PY'
 from html import unescape
 from pathlib import Path
 import re
-path = Path('clanky/vypadek-internetu-kadan-kradez-kabelu.html')
-text = path.read_text(encoding='utf-8')
+text = Path('clanky/vypadek-internetu-kadan-kradez-kabelu.html').read_text(encoding='utf-8')
 match = re.search(r'<h1\b[^>]*>(.*?)</h1>', text, re.I | re.S)
 if not match:
     raise SystemExit('Článek KTK nemá nadpis H1.')
 plain = re.sub(r'<[^>]+>', ' ', match.group(1))
 print(re.sub(r'\s+', ' ', unescape(plain)).strip())
+PY
+)"
+KTK_MODIFIED="$(python3 - <<'PY'
+from pathlib import Path
+import json
+import re
+text = Path('clanky/vypadek-internetu-kadan-kradez-kabelu.html').read_text(encoding='utf-8')
+pattern = r'<script\b[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>'
+value = ''
+for raw in re.findall(pattern, text, re.I | re.S):
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        continue
+    nodes = [data] if isinstance(data, dict) else []
+    if isinstance(data, dict) and isinstance(data.get('@graph'), list):
+        nodes.extend(node for node in data['@graph'] if isinstance(node, dict))
+    for node in nodes:
+        kind = node.get('@type')
+        kinds = {kind} if isinstance(kind, str) else set(kind or [])
+        if 'NewsArticle' in kinds:
+            value = str(node.get('dateModified', ''))
+            break
+    if value:
+        break
+print(value)
 PY
 )"
 test -n "$KTK_TITLE"
@@ -70,10 +89,6 @@ generated=$(date -u +%FT%TZ)
 mode=canonical-ovh
 EOF
 
-# Docker Buildx si standardně ukládá zámky do ~/.docker. Tento adresář mohl
-# dříve vytvořit root a ruční nasazení uživatele ubuntu pak končilo chybou
-# "permission denied". Každý uživatel proto používá samostatný zapisovatelný
-# dočasný konfigurační adresář. Přístup k Docker socketu tím není ovlivněn.
 DOCKER_CONFIG="/tmp/nasekadan-docker-config-$(id -u)"
 export DOCKER_CONFIG
 mkdir -p "$DOCKER_CONFIG/buildx"
@@ -97,80 +112,51 @@ for _ in $(seq 1 60); do
 done
 curl -fsS http://127.0.0.1:3224/healthz >/dev/null
 
-TRAIN='nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html'
-WEEKLY='kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
-EPETICE='epetice-nemocnice-kadan.html'
-PETICE='petice-nemocnice-kadan.html'
-AVIES='avies-nemocnice-kadan.html'
-AVIES_TITLE='Kdo nastavil nákupy léčiv od AVIES'
-PETITION_DETAILS='Petice obsahuje osm požadavků. Rozpracovaná ePetice narazila na limit'
-EPETICE_TITLE='Online petice za nemocnici byla spuštěna'
-EPETICE_SIGNATURES='2 podpisy'
-EPETICE_REQUIREMENTS='všech osm požadavků'
-
-verify_endpoint() {
-  local base="$1"
-  local prefix="$2"
+verify_contains() {
+  local url="$1"
+  local needle="$2"
+  local label="$3"
   local tmp
   tmp="$(mktemp)"
-
-  curl -kfsS --max-time 25 "${base}/?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$TRAIN" "$tmp"
-  grep -Fq "$WEEKLY" "$tmp"
-  grep -Fq "$EPETICE" "$tmp"
-  grep -Fq "$KTK" "$tmp"
-  grep -Fq "$AVIES" "$tmp"
-  grep -Fq 'data-site-footer="v1"' "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/clanky/?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$TRAIN" "$tmp"
-  grep -Fq "$WEEKLY" "$tmp"
-  grep -Fq "$EPETICE" "$tmp"
-  grep -Fq "$KTK" "$tmp"
-  grep -Fq "$AVIES" "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/clanky/${TRAIN}?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov' "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/clanky/${AVIES}?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$AVIES_TITLE" "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/clanky/${PETICE}?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$PETITION_DETAILS" "$tmp"
-  grep -Fq 'Přijetí personálních změn' "$tmp"
-  grep -Fq 'Osobní údaje na web nevkládáme' "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/clanky/${EPETICE}?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$EPETICE_TITLE" "$tmp"
-  grep -Fq "$EPETICE_SIGNATURES" "$tmp"
-  grep -Fq "$EPETICE_REQUIREMENTS" "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/clanky/${KTK}?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$KTK_TITLE" "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/sitemap.xml?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$TRAIN" "$tmp"
-  grep -Fq "$WEEKLY" "$tmp"
-  grep -Fq "$EPETICE" "$tmp"
-  grep -Fq "$KTK" "$tmp"
-  grep -Fq "$AVIES" "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/rss.xml?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$TRAIN" "$tmp"
-  grep -Fq "$WEEKLY" "$tmp"
-  grep -Fq "$EPETICE" "$tmp"
-  grep -Fq "$KTK" "$tmp"
-  grep -Fq "$AVIES" "$tmp"
-
-  curl -kfsS --max-time 25 "${base}/deployment-health.txt?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "source=$SOURCE_SHA" "$tmp"
-
+  if ! curl -kfsS --max-time 25 "$url" -o "$tmp"; then
+    echo "Kontrola selhala: nelze načíst $label ($url)." >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! grep -Fq "$needle" "$tmp"; then
+    echo "Kontrola selhala: $label neobsahuje očekávanou aktuální hodnotu: $needle" >&2
+    rm -f "$tmp"
+    return 1
+  fi
   rm -f "$tmp"
-  echo "Ověřeno: $prefix"
 }
 
-# Přesný výstup produkčního kontejneru se použije i pro aktivní Caddy document
-# root. Nginx proxy i Caddy tak vždy podávají stejnou, plně sestavenou verzi.
+verify_current_site() {
+  local base="$1"
+  local label="$2"
+  local suffix="?deploy=$SOURCE_SHA"
+
+  # Titulní strana se ověřuje jako funkční stránka současného webu. Starší článek
+  # KTK na ní nemusí zůstat navždy, jakmile jej chronologicky odsunou nové texty.
+  verify_contains "${base}/${suffix}" 'data-site-footer="v1"' "$label – titulní stránka"
+
+  # Archiv, článek a strojové přehledy musejí KTK obsahovat trvale.
+  verify_contains "${base}/clanky/${suffix}" "$KTK_FILE" "$label – archiv"
+  verify_contains "${base}${KTK_PATH}${suffix}" "$KTK_TITLE" "$label – článek KTK / H1"
+  if [[ -n "$KTK_MODIFIED" ]]; then
+    verify_contains "${base}${KTK_PATH}${suffix}" "$KTK_MODIFIED" "$label – článek KTK / dateModified"
+  fi
+  verify_contains "${base}/sitemap.xml${suffix}" "$KTK_FILE" "$label – sitemap"
+  verify_contains "${base}/rss.xml${suffix}" "$KTK_FILE" "$label – RSS"
+  verify_contains "${base}/deployment-health.txt${suffix}" "source=$SOURCE_SHA" "$label – deployment-health"
+
+  echo "Ověřeno: $label; KTK H1, dateModified, archiv, RSS, sitemap a source commit jsou aktuální."
+}
+
+# Nejdřív ověřit právě sestavený kontejner. Vadný build nesmí vstoupit do
+# aktivního document rootu.
+verify_current_site 'http://127.0.0.1:3224' 'produkční kontejner'
+
 STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
 PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
 BUILT="/tmp/nasekadan-built-$SHORT_SHA"
@@ -183,72 +169,71 @@ printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=canonical-ovh\n' \
   "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
 sudo chmod -R a+rX "$STAGE"
 
-if [ -e /var/www/nasekadan ]; then
+if [[ -e /var/www/nasekadan ]]; then
   sudo mv /var/www/nasekadan "$PREVIOUS"
 fi
 sudo mv "$STAGE" /var/www/nasekadan
-sudo rm -rf "$PREVIOUS"
 
-# Lokální kontejner je vždy povinný.
-verify_endpoint 'http://127.0.0.1:3224' 'produkční kontejner'
+rollback() {
+  local code=$?
+  if [[ $code -ne 0 && -e "$PREVIOUS" ]]; then
+    echo 'Veřejná kontrola selhala; vracím předchozí ověřený document root.' >&2
+    sudo rm -rf /var/www/nasekadan
+    sudo mv "$PREVIOUS" /var/www/nasekadan
+  fi
+  exit "$code"
+}
+trap rollback EXIT
 
-# Ověření skutečného HTTPS frontendu na serveru. Funguje pro Caddy i Nginx.
 PUBLIC_BASE=''
 if curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
   "https://nasekadan.cz/deployment-health.txt?deploy=$SOURCE_SHA" \
   | grep -Fq "source=$SOURCE_SHA"; then
   PUBLIC_BASE='https://nasekadan.cz'
-  curl_resolve=(--resolve nasekadan.cz:443:127.0.0.1)
+  CURL_RESOLVE=(--resolve nasekadan.cz:443:127.0.0.1)
 elif curl -fsS --max-time 10 --resolve nasekadan.cz:80:127.0.0.1 \
   "http://nasekadan.cz/deployment-health.txt?deploy=$SOURCE_SHA" \
   | grep -Fq "source=$SOURCE_SHA"; then
   PUBLIC_BASE='http://nasekadan.cz'
-  curl_resolve=(--resolve nasekadan.cz:80:127.0.0.1)
+  CURL_RESOLVE=(--resolve nasekadan.cz:80:127.0.0.1)
 else
   echo 'Veřejný frontend nepodává právě nasazenou verzi.' >&2
   exit 1
 fi
 
-verify_public() {
-  local path="$1" needle="$2"
+verify_public_contains() {
+  local path="$1"
+  local needle="$2"
+  local label="$3"
   local tmp
   tmp="$(mktemp)"
-  curl -kfsS --max-time 25 "${curl_resolve[@]}" \
-    "${PUBLIC_BASE}${path}?deploy=${SOURCE_SHA}" -o "$tmp"
-  grep -Fq "$needle" "$tmp"
+  if ! curl -kfsS --max-time 25 "${CURL_RESOLVE[@]}" \
+    "${PUBLIC_BASE}${path}?deploy=${SOURCE_SHA}" -o "$tmp"; then
+    echo "Veřejná kontrola selhala: nelze načíst $label." >&2
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! grep -Fq "$needle" "$tmp"; then
+    echo "Veřejná kontrola selhala: $label neobsahuje očekávanou aktuální hodnotu: $needle" >&2
+    rm -f "$tmp"
+    return 1
+  fi
   rm -f "$tmp"
 }
 
-verify_public '/' "$WEEKLY"
-verify_public '/' "$TRAIN"
-verify_public '/' "$EPETICE"
-verify_public '/' "$KTK"
-verify_public '/' "$AVIES"
-verify_public '/clanky/' "$TRAIN"
-verify_public '/clanky/' "$EPETICE"
-verify_public '/clanky/' "$KTK"
-verify_public '/clanky/' "$AVIES"
-verify_public "/clanky/$TRAIN" 'Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov'
-verify_public "/clanky/$AVIES" "$AVIES_TITLE"
-verify_public "/clanky/$PETICE" "$PETITION_DETAILS"
-verify_public "/clanky/$PETICE" 'Přijetí personálních změn'
-verify_public "/clanky/$PETICE" 'Osobní údaje na web nevkládáme'
-verify_public "/clanky/$EPETICE" "$EPETICE_TITLE"
-verify_public "/clanky/$EPETICE" "$EPETICE_SIGNATURES"
-verify_public "/clanky/$EPETICE" "$EPETICE_REQUIREMENTS"
-verify_public "/clanky/$KTK" "$KTK_TITLE"
-verify_public '/sitemap.xml' "$TRAIN"
-verify_public '/sitemap.xml' "$EPETICE"
-verify_public '/sitemap.xml' "$KTK"
-verify_public '/sitemap.xml' "$AVIES"
-verify_public '/rss.xml' "$TRAIN"
-verify_public '/rss.xml' "$EPETICE"
-verify_public '/rss.xml' "$KTK"
-verify_public '/rss.xml' "$AVIES"
-verify_public '/deployment-health.txt' "source=$SOURCE_SHA"
+verify_public_contains '/' 'data-site-footer="v1"' 'titulní stránka'
+verify_public_contains '/clanky/' "$KTK_FILE" 'archiv článků'
+verify_public_contains "$KTK_PATH" "$KTK_TITLE" 'článek KTK / H1'
+if [[ -n "$KTK_MODIFIED" ]]; then
+  verify_public_contains "$KTK_PATH" "$KTK_MODIFIED" 'článek KTK / dateModified'
+fi
+verify_public_contains '/sitemap.xml' "$KTK_FILE" 'sitemap'
+verify_public_contains '/rss.xml' "$KTK_FILE" 'RSS'
+verify_public_contains '/deployment-health.txt' "source=$SOURCE_SHA" 'deployment-health'
 
-# Běžný deploy po úspěchu nainstaluje aktuální desetiminutovou pojistku. Běh
-# spuštěný samotným timerem tento krok přeskočí, aby nevytvářel rekurzivní běhy.
+sudo rm -rf "$PREVIOUS"
+trap - EXIT
+
 if [[ "${NASEKADAN_SKIP_AUTOMATION_INSTALL:-0}" != "1" ]]; then
   if [[ -d /opt/nasekadan/.git ]]; then
     sudo bash deploy/install-automation.sh
@@ -259,4 +244,4 @@ else
   echo 'Instalace serverového timeru přeskočena: tento deploy spustila samotná serverová pojistka.'
 fi
 
-echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA; online petice, KTK, články i všechny přehledy jsou ověřené."
+echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA; KTK H1, dateModified, archiv, RSS, sitemap a deployment-health jsou ověřené."
