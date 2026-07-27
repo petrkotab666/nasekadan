@@ -1,0 +1,116 @@
+name: Okamžitě nasadit propojení série Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-hospital-series-live.yml'
+      - '.github/hotfix-hospital-series-live.txt'
+      - 'scripts/link_hospital_series.py'
+      - 'clanky/nemocnice-kadan.html'
+      - 'clanky/petice-nemocnice-kadan.html'
+      - 'clanky/nemocnice-kadan-software-kyberbezpecnost.html'
+      - 'clanky/avies-nemocnice-kadan.html'
+      - 'style.css'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hotfix-hospital-series-live
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Vybrat dostupný SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" > "$RUNNER_TEMP/nasekadan_key"
+              chmod 600 "$RUNNER_TEMP/nasekadan_key"
+              exit 0
+            fi
+          done
+          echo 'Chybí použitelný SSH klíč.' >&2
+          exit 20
+
+      - name: Přepsat aktuální HTML a CSS přímo v produkci
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          python3 scripts/link_hospital_series.py
+
+          files=(
+            style.css
+            clanky/nemocnice-kadan.html
+            clanky/petice-nemocnice-kadan.html
+            clanky/nemocnice-kadan-software-kyberbezpecnost.html
+            clanky/avies-nemocnice-kadan.html
+          )
+
+          sudo mkdir -p /var/www/nasekadan/clanky
+          for file in "${files[@]}"; do
+            sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
+          done
+
+          cid="$(docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then
+            cid="$(docker ps --filter publish=3224 -q | head -n1)"
+          fi
+          if [[ -n "$cid" ]]; then
+            docker cp style.css "$cid:/usr/share/nginx/html/style.css"
+            for file in clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html clanky/avies-nemocnice-kadan.html; do
+              docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+            done
+          fi
+
+          test "$(grep -c 'ARC-MED za 16 milionů: dva posudky a nejasné schválení' /var/www/nasekadan/clanky/avies-nemocnice-kadan.html)" -ge 1
+          grep -Fq 'data-arc-med-teaser' /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
+          grep -Fq 'Téměř 170 milionů za léčiva od AVIES' /var/www/nasekadan/clanky/nemocnice-kadan.html
+          REMOTE
+
+      - name: Ověřit veřejný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            avies="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html?series=${GITHUB_SHA}-${attempt}" || true)"
+            first="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan.html?series=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Vyjde v úterý 28. 7. v 5:00' <<<"$avies" \
+              && grep -Fq 'data-arc-med-teaser' <<<"$avies" \
+              && grep -Fq 'Téměř 170 milionů za léčiva od AVIES' <<<"$first" \
+              && grep -Fq 'ARC-MED za 16 milionů' <<<"$first"; then
+              echo 'Pětidílná série i zítřejší upoutávka jsou veřejně nasazené.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Veřejný web stále nevrací opravenou sérii.' >&2
+          exit 30
