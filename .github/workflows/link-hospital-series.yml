@@ -15,6 +15,8 @@ on:
       - '.github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html'
       - 'style.css'
       - 'scripts/link_hospital_series.py'
+      - 'scripts/bootstrap_arc_med_draft.py'
+      - 'scripts/update_hospital_profile_municipal_support.py'
       - '.github/hospital-series-trigger.txt'
       - '.github/workflows/link-hospital-series.yml'
   schedule:
@@ -39,8 +41,13 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit navigaci celé série a navazující upoutávky
-        run: python3 scripts/link_hospital_series.py
+      - name: Vytvořit ARC-MED, doplnit obce a propojit sérii
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/bootstrap_arc_med_draft.py
+          python3 scripts/update_hospital_profile_municipal_support.py
+          python3 scripts/link_hospital_series.py
 
       - name: Uložit propojení
         shell: bash
@@ -60,6 +67,7 @@ jobs:
             .github/drafts/nemocnice-kadan-software-kyberbezpecnost.html
             .github/drafts/arc-med-nemocnice-kadan.html
             .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html
+            scripts/link_hospital_series.py
           )
           for path in "${paths[@]}"; do
             [[ -e "$path" ]] && git add -- "$path"
@@ -70,9 +78,11 @@ jobs:
             exit 0
           fi
 
-          git commit -m 'Propojit všech šest článků série Nemocnice Kadaň'
+          git commit -m 'Doplnit obce, ARC-MED a šestidílnou sérii Nemocnice Kadaň'
           git pull --rebase origin main
           git push origin main
 
       - name: Závěrečná kontrola
-        run: python3 scripts/link_hospital_series.py
+        run: |
+          python3 scripts/update_hospital_profile_municipal_support.py
+          python3 scripts/link_hospital_series.py
