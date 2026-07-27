@@ -35,6 +35,11 @@ RUN python scripts/publish_weekly_events.py
 # vrátí na správné první místo a do RSS zapíše už vygenerovaný OG obrázek.
 RUN python scripts/publish_avies_article.py
 
+# Doplnit canonical, robots, Open Graph a Twitter metadata také všem starším
+# průvodcovským stránkám. Přísný audit tak neblokuje nové články kvůli historickým
+# souborům, kterým metadata dříve chyběla.
+RUN python scripts/finalize_launch.py
+
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
 # obrázky a metadata jednotlivých článků.
