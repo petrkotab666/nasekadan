@@ -44,11 +44,20 @@ SERIES = [
         "summary": "Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.",
         "scheduled_label": "Vyjde v úterý 28. 7. v 5:00",
     },
+    {
+        "path": "clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
+        "url": "/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
+        "date": "Závěrečný díl série",
+        "title": "Nemocnice Kadaň není jen spor o miliony",
+        "summary": "Oddělení, 254 lůžek, téměř 480 pracovních úvazků, výkony, spádová oblast a otázky budoucnosti.",
+        "scheduled_label": "Připravujeme závěrečný díl",
+    },
 ]
 
 DRAFTS = {
     ".github/drafts/nemocnice-kadan-software-kyberbezpecnost.html": 2,
     ".github/drafts/arc-med-nemocnice-kadan.html": 4,
+    ".github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html": 5,
 }
 
 CSS = r'''
@@ -102,7 +111,7 @@ def series_block(current_index: int) -> str:
             '  <section class="series-nav" data-hospital-series aria-labelledby="hospital-series-title">',
             '    <p class="series-nav__eyebrow">SÉRIE NAŠE KADAŇ</p>',
             '    <h2 id="hospital-series-title">Nemocnice Kadaň: celý příběh krok za krokem</h2>',
-            '    <p class="series-nav__intro">Pět navazujících textů odděluje doložená fakta, veřejná tvrzení a otázky, na které nemocnice nebo město zatím neodpověděly.</p>',
+            '    <p class="series-nav__intro">Šest navazujících textů odděluje doložená fakta, veřejná tvrzení a otázky, na které nemocnice nebo město zatím neodpověděly. Závěrečný díl představuje nemocnici jako celek.</p>',
             '    <ol class="series-nav__list">',
             *items,
             '    </ol>',
@@ -125,16 +134,8 @@ def rel_links(current_index: int) -> str:
 def patch_article(path: Path, current_index: int) -> bool:
     text = path.read_text(encoding="utf-8")
     original = text
-
-    text = re.sub(
-        r'\s*<section class="series-nav" data-hospital-series.*?</section>\s*',
-        "\n\n",
-        text,
-        flags=re.S,
-    )
+    text = re.sub(r'\s*<section class="series-nav" data-hospital-series.*?</section>\s*', "\n\n", text, flags=re.S)
     text = re.sub(r'\s*<link[^>]+data-hospital-series-rel[^>]*>\s*', "\n", text)
-
-    # Starší AVIES box nahradí jednotná navigace pětidílné série.
     text = re.sub(
         r'\s*<div class="series-box">\s*<strong>Série Naší Kadaně: Nemocnice Kadaň</strong>.*?</div>\s*',
         "\n\n",
@@ -146,8 +147,7 @@ def patch_article(path: Path, current_index: int) -> bool:
     lead = re.search(r'<p class="leadtext">.*?</p>', text, flags=re.S)
     if not lead:
         raise RuntimeError(f"V {path} chybí úvodní odstavec leadtext")
-    block = "\n\n" + series_block(current_index)
-    text = text[: lead.end()] + block + text[lead.end() :]
+    text = text[: lead.end()] + "\n\n" + series_block(current_index) + text[lead.end() :]
 
     rel = rel_links(current_index)
     if rel:
@@ -159,6 +159,23 @@ def patch_article(path: Path, current_index: int) -> bool:
     return text != original
 
 
+def insert_teaser(path: Path, attribute: str, teaser: str) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8")
+    original = text
+    text = re.sub(rf'\s*<section {re.escape(attribute)}.*?</section>\s*', "\n", text, flags=re.S)
+    marker = '  <div class="source-list">'
+    if marker in text:
+        text = text.replace(marker, teaser + "\n\n" + marker, 1)
+    elif "</article>" in text:
+        text = text.replace("</article>", teaser + "\n</article>", 1)
+    else:
+        raise RuntimeError(f"Článek {path} nemá blok zdrojů ani konec article.")
+    path.write_text(text, encoding="utf-8", newline="\n")
+    return text != original
+
+
 def arc_med_teaser() -> str:
     if is_public(4):
         cta = '<a href="/clanky/arc-med-nemocnice-kadan.html" style="display:inline-flex;padding:13px 18px;border-radius:10px;background:#fff;color:#8f2027;font-weight:900;text-decoration:none">Přečíst navazující analýzu →</a>'
@@ -166,8 +183,7 @@ def arc_med_teaser() -> str:
     else:
         cta = '<span style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:999px;color:#fff;font-weight:900">Vyjde v úterý 28. 7. v 5:00</span>'
         label = "ZÍTRA V 5:00 · PÁTÝ DÍL SÉRIE"
-    return f'''
-  <section data-arc-med-teaser style="margin:44px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px rgba(20,35,45,.20)">
+    return f'''  <section data-arc-med-teaser style="margin:44px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#14232d,#355d70 62%,#9f2626);color:#fff;box-shadow:0 18px 45px rgba(20,35,45,.20)">
     <p style="margin:0 0 8px;color:#ffd9d9;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">{label}</p>
     <h2 style="margin:0 0 12px;color:#fff;font:800 32px/1.15 Georgia,serif">ARC-MED za 16 milionů: dva posudky, nejasné schválení a spor o dvanáct milionů</h2>
     <p style="margin:0 0 16px;color:#edf3f5;font-size:18px">Co nemocnice skutečně koupila, proč se dva odhady hodnoty výrazně rozcházejí, kdo o ceně věděl a co zatím veřejné dokumenty neprokazují.</p>
@@ -175,34 +191,25 @@ def arc_med_teaser() -> str:
   </section>'''
 
 
-def patch_avies_teaser() -> bool:
-    path = ROOT / "clanky" / "avies-nemocnice-kadan.html"
-    if not path.is_file():
-        return False
-    text = path.read_text(encoding="utf-8")
-    original = text
-    text = re.sub(r'\s*<section data-arc-med-teaser.*?</section>\s*', "\n", text, flags=re.S)
-    marker = '  <div class="source-list">'
-    teaser = arc_med_teaser() + "\n\n"
-    if marker in text:
-        text = text.replace(marker, teaser + marker, 1)
-    elif "</article>" in text:
-        text = text.replace("</article>", teaser + "</article>", 1)
+def profile_teaser() -> str:
+    if is_public(5):
+        cta = '<a href="/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html" style="display:inline-flex;padding:13px 18px;border-radius:10px;background:#fff;color:#17606b;font-weight:900;text-decoration:none">Přečíst závěrečný díl →</a>'
+        label = "ZÁVĚREČNÝ DÍL SÉRIE · ZVEŘEJNĚNO"
     else:
-        raise RuntimeError("Článek AVIES nemá blok zdrojů ani konec article.")
-    path.write_text(text, encoding="utf-8", newline="\n")
-    return text != original
+        cta = '<span style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:999px;color:#fff;font-weight:900">Připravujeme</span>'
+        label = "PŘIPRAVUJEME · ZÁVĚREČNÝ DÍL SÉRIE"
+    return f'''  <section data-hospital-profile-teaser style="margin:44px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#10242e,#22606b 62%,#9d222a);color:#fff;box-shadow:0 18px 45px rgba(20,35,45,.20)">
+    <p style="margin:0 0 8px;color:#d8f2f4;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">{label}</p>
+    <h2 style="margin:0 0 12px;color:#fff;font:800 32px/1.15 Georgia,serif">Nemocnice Kadaň není jen spor o miliony. Co všechno zajišťuje pro region</h2>
+    <p style="margin:0 0 16px;color:#edf3f5;font-size:18px">Závěr série představí nemocnici jako celek: její oddělení, 254 lůžek, téměř 480 pracovních úvazků, výkony, spádovou oblast i otázky budoucnosti.</p>
+    {cta}
+  </section>'''
 
 
 def patch_style() -> bool:
     text = STYLE.read_text(encoding="utf-8")
     original = text
-    text = re.sub(
-        r'\n?/\* Série Nemocnice Kadaň \*/.*?/\* /Série Nemocnice Kadaň \*/\n?',
-        "\n",
-        text,
-        flags=re.S,
-    ).rstrip()
+    text = re.sub(r'\n?/\* Série Nemocnice Kadaň \*/.*?/\* /Série Nemocnice Kadaň \*/\n?', "\n", text, flags=re.S).rstrip()
     text += "\n\n" + CSS + "\n"
     STYLE.write_text(text, encoding="utf-8", newline="\n")
     return text != original
@@ -240,13 +247,14 @@ def main() -> int:
             changed = patch_article(path, index) or changed
             validate(path, index)
 
-    changed = patch_avies_teaser() or changed
+    changed = insert_teaser(ROOT / "clanky" / "avies-nemocnice-kadan.html", "data-arc-med-teaser", arc_med_teaser()) or changed
+    changed = insert_teaser(ROOT / "clanky" / "arc-med-nemocnice-kadan.html", "data-hospital-profile-teaser", profile_teaser()) or changed
 
     css = STYLE.read_text(encoding="utf-8")
     if ".series-nav__scheduled" not in css:
-        raise RuntimeError("V globálním stylu chybí pravidla pětidílné série")
+        raise RuntimeError("V globálním stylu chybí pravidla šestidílné série")
 
-    print("Propojení pěti dílů série Nemocnice Kadaň je kompletní.", "Změněno." if changed else "Beze změn.")
+    print("Propojení šesti dílů série Nemocnice Kadaň je kompletní.", "Změněno." if changed else "Beze změn.")
     return 0
 
 
