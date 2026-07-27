@@ -30,7 +30,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Synchronizovat celý veřejný web a reklamy
+      - name: Synchronizovat celý veřejný web a statické reklamy
         id: sync
         shell: bash
         run: |
@@ -41,7 +41,7 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
           python3 scripts/enforce_current_article_order.py
-          python3 scripts/ensure_right_article_ads.py
+          python3 scripts/embed_static_article_ads.py
 
           sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
           sudo install -m 0644 index.html /var/www/nasekadan/index.html
@@ -53,7 +53,7 @@ jobs:
           printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=fast-recovery\n' "$(git rev-parse HEAD)" "$(date -u +%FT%TZ)" | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
           REMOTE
 
-      - name: Ověřit články, grafiku a reklamní sloupec
+      - name: Ověřit články a čtyři statické grafické reklamy
         id: verify
         shell: bash
         run: |
@@ -63,7 +63,6 @@ jobs:
             archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?check=${GITHUB_SHA}-${attempt}" || true)"
             kolobezky="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html?check=${GITHUB_SHA}-${attempt}" || true)"
             kultura="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?check=${GITHUB_SHA}-${attempt}" || true)"
-            ads="$(curl -fsS --max-time 20 "https://nasekadan.cz/reklamy.js?check=${GITHUB_SHA}-${attempt}" || true)"
             health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?check=${GITHUB_SHA}-${attempt}" || true)"
 
             graphics_ok=true
@@ -86,22 +85,20 @@ jobs:
               && grep -Fq 'Polovina prázdnin je za námi' <<<"$kolobezky" \
               && grep -Fq 'Hudební srpnové léto na Liďáku' <<<"$kultura" \
               && ! grep -Fq 'Nově kontrolujeme jednotlivě všechny kadaňské školy a školky' <<<"$kultura" \
-              && grep -Fq '20260727-right-column-ads-2' <<<"$kolobezky" \
-              && grep -Fq 'article-side-ad-column' <<<"$ads" \
-              && grep -Fq "const ids=['pojistime','uklizecka','vyklidime','realitykadan']" <<<"$ads" \
-              && grep -Fq '/assets/reklamy/pojistime-300x600.svg' <<<"$ads" \
-              && grep -Fq '/assets/reklamy/vaseuklizecka-300x600.svg' <<<"$ads" \
-              && grep -Fq '/assets/reklamy/vyklidime-300x600.svg' <<<"$ads" \
-              && grep -Fq '/assets/reklamy/realitykadan-300x600.svg' <<<"$ads" \
-              && ! grep -Fq 'document.body.append(left,right)' <<<"$ads" \
+              && [[ "$(grep -o 'class="static-article-ad"' <<<"$kolobezky" | wc -l)" -eq 4 ]] \
+              && grep -Fq 'static-article-ads-style' <<<"$kolobezky" \
+              && grep -Fq '/assets/reklamy/pojistime-300x600.svg' <<<"$kolobezky" \
+              && grep -Fq '/assets/reklamy/vaseuklizecka-300x600.svg' <<<"$kolobezky" \
+              && grep -Fq '/assets/reklamy/vyklidime-300x600.svg' <<<"$kolobezky" \
+              && grep -Fq '/assets/reklamy/realitykadan-300x600.svg' <<<"$kolobezky" \
               && [[ "$graphics_ok" == true ]] \
               && grep -Fq 'mode=fast-recovery' <<<"$health"; then
-              echo 'Články, grafické bannery a pravý reklamní sloupec jsou veřejně správně.'
+              echo 'Články a čtyři statické grafické reklamy jsou veřejně správně.'
               exit 0
             fi
             sleep 10
           done
-          echo 'Veřejná kontrola článků nebo grafických reklam selhala.' >&2
+          echo 'Veřejná kontrola článků nebo statických grafických reklam selhala.' >&2
           exit 1
 
       - name: Zapsat stav
