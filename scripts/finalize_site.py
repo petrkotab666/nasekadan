@@ -90,8 +90,13 @@ def main() -> int:
     run("scripts/ensure_publication_integrity.py")
 
     # Doplnit také všechny novější články, které vznikly až po původní
-    # ochraně publikace, zejména ePetici a článek o pozemcích koupaliště.
+    # ochraně publikace, zejména ePetici.
     run("scripts/ensure_newest_article_indexes.py")
+
+    # Schválený článek AVIES musí vzniknout a zařadit se také při lokální
+    # desetiminutové serverové aktualizaci, nikoli jen v Docker/GitHub buildu.
+    # Skript je idempotentní a zachová již publikovanou verzi.
+    run("scripts/publish_avies_article.py")
 
     # Ověřené znění osmi požadavků musí být přímo v hlavním článku o petici,
     # nikoli pouze v samostatném vysvětlení pravidel ePetice.
