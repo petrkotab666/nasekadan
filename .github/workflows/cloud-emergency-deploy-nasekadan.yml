@@ -1,5 +1,5 @@
 name: Nasadit Naše Kadaň spolehlivě přes GitHub cloud
-run-name: Přímé atomické nasazení nejnovějšího main na OVH
+run-name: Atomické nasazení aktuálního main na OVH
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
           printf '%s\n' "$KEY_OVH_SSH_PRIVATE_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_ovh_key"
           chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
 
-      - name: Přenést přesný obsah main atomicky na OVH
+      - name: Obnovit aktuální web včetně reklam
         id: deploy_server
         shell: bash
         run: |
@@ -45,81 +45,45 @@ jobs:
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
-          if [ ! -d /opt/nasekadan/.git ]; then
-            sudo rm -rf /opt/nasekadan
-            sudo git clone https://github.com/petrkotab666/nasekadan.git /opt/nasekadan
-            sudo chown -R ubuntu:ubuntu /opt/nasekadan
-          fi
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
           git clean -fd
 
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+          # Každý článek musí mít reklamní slot i všechny tři reklamní skripty.
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/normalize_footers.py --write --check
 
-          order = [
-              '/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html',
-              '/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html',
-              '/clanky/kolobezky-hriste-detektor-kovu-kadan.html',
-              '/clanky/avies-nemocnice-kadan.html',
-              '/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html',
-          ]
-          kolob_home = '''<article class="article-card transport" data-kolobezky-card><div class="visual" style="background:linear-gradient(135deg,#173442,#416d64 58%,#b08838)"><strong>Koloběžky a bezpečnost</strong></div><div class="article-body"><span class="meta">27. 7. 2026 · 14:00 · Bezpečnost a doprava</span><h3>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h3><p>Větší dohled byl ohlášen na celé léto. Hřiště se současně kontrolují i detektorem kovu.</p><a class="read-more" href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst článek →</a></div></article>'''
-          kolob_archive = '''<article class="archive-item transport" data-kolobezky-card><div class="archive-visual" style="background:linear-gradient(135deg,#173442,#416d64 58%,#b08838)"><strong>Koloběžky a bezpečnost</strong></div><div class="archive-body"><span class="archive-meta">27. července 2026 v 14:00 · Bezpečnost a doprava</span><h2>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h2><p>Větší dohled byl ohlášen na celé léto. Hřiště se současně kontrolují i detektorem kovu.</p><a href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst článek →</a></div></article>'''
-
-          def reorder(path, start_marker, end_marker, missing_block):
-              p = Path(path)
-              text = p.read_text(encoding='utf-8')
-              start = text.index(start_marker) + len(start_marker)
-              end = text.index(end_marker, start)
-              section = text[start:end]
-              blocks = re.findall(r'<article\b[^>]*>.*?</article>', section, flags=re.S|re.I)
-              if not any('kolobezky-hriste-detektor-kovu-kadan.html' in b for b in blocks):
-                  blocks.append(missing_block)
-              selected = []
-              used = set()
-              for href in order:
-                  for i, block in enumerate(blocks):
-                      if i not in used and f'href="{href}"' in block:
-                          selected.append(block)
-                          used.add(i)
-                          break
-              selected.extend(block for i, block in enumerate(blocks) if i not in used)
-              replacement = '\n' + '\n'.join(b.strip() for b in selected) + '\n    '
-              p.write_text(text[:start] + replacement + text[end:], encoding='utf-8', newline='\n')
-
-          reorder('index.html', '<div class="article-list">', '<p class="archive-note">', kolob_home)
-          reorder('clanky/index.html', '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>', kolob_archive)
-          PY
+          ARTICLE='clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html'
+          test -f "$ARTICLE"
+          grep -Fq 'Kadaňští hasiči cvičili na Nechranicích' "$ARTICLE"
+          grep -Fq 'data-promos' "$ARTICLE"
+          grep -Fq '/reklamy.js' "$ARTICLE"
+          grep -Fq '/reklamy-oprava-obrazku.js' "$ARTICLE"
+          grep -Fq '/obsah-doplnky.js' "$ARTICLE"
+          grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' index.html
 
           SOURCE_SHA="$(git rev-parse HEAD)"
           STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
           PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
           sudo rm -rf "$STAGE" "$PREVIOUS"
           sudo mkdir -p "$STAGE"
-          sudo cp -a . "$STAGE"/
-          sudo rm -rf \
-            "$STAGE/.git" \
-            "$STAGE/.github" \
-            "$STAGE/scripts" \
-            "$STAGE/deploy" \
-            "$STAGE/tools" \
-            "$STAGE/nginx" \
-            "$STAGE/docker-entrypoint.d"
-          sudo rm -f \
-            "$STAGE/Dockerfile" \
-            "$STAGE/docker-compose.yml" \
-            "$STAGE/cloud-deploy-status.json"
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-main\n' \
+          sudo tar \
+            --exclude='./.git' \
+            --exclude='./.github' \
+            --exclude='./scripts' \
+            --exclude='./deploy' \
+            --exclude='./tools' \
+            --exclude='./nginx' \
+            --exclude='./docker-entrypoint.d' \
+            --exclude='./Dockerfile' \
+            --exclude='./docker-compose.yml' \
+            --exclude='./cloud-deploy-status.json' \
+            -cf - . | sudo tar -C "$STAGE" -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-main-with-ads\n' \
             "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
           sudo chmod -R a+rX "$STAGE"
-          test -f "$STAGE/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html"
-          test -f "$STAGE/clanky/kolobezky-hriste-detektor-kovu-kadan.html"
-          grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' "$STAGE/index.html"
-          grep -Fq 'kolobezky-hriste-detektor-kovu-kadan.html' "$STAGE/index.html"
-          grep -Fq 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' "$STAGE/index.html"
+
           if [ -e /var/www/nasekadan ]; then
             sudo mv /var/www/nasekadan "$PREVIOUS"
           fi
@@ -127,26 +91,25 @@ jobs:
           sudo rm -rf "$PREVIOUS"
           REMOTE
 
-      - name: Ověřit nový článek i zachované články na živém webu
+      - name: Ověřit článek a reklamy na živém webu
         id: verify
         shell: bash
         run: |
           set -euo pipefail
           for attempt in $(seq 1 30); do
-            new_article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            kolobezky="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            kultura="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq 'Kadaňští hasiči cvičili na Nechranicích' <<<"$new_article" \
-              && grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$homepage" \
-              && grep -Fq 'Polovina prázdnin je za námi' <<<"$kolobezky" \
-              && grep -Fq 'Karlovy Vary' <<<"$kultura"; then
-              echo 'Živý web podává nový článek i zachované předchozí články.'
+            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
+            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?deploy=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Kadaňští hasiči cvičili na Nechranicích' <<<"$article" \
+              && grep -Fq 'data-promos' <<<"$article" \
+              && grep -Fq '/reklamy.js' <<<"$article" \
+              && grep -Fq '/reklamy-oprava-obrazku.js' <<<"$article" \
+              && grep -Fq '/obsah-doplnky.js' <<<"$article" \
+              && grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$home"; then
+              echo 'Živý web obsahuje článek i reklamní systém.'
               exit 0
             fi
             sleep 10
           done
-          echo 'Živý web neprošel kontrolou.' >&2
           exit 30
 
       - name: Zapsat výsledek nasazení
