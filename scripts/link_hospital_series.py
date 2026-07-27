@@ -47,10 +47,10 @@ SERIES = [
     {
         "path": "clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
         "url": "/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
-        "date": "Závěrečný díl série",
+        "date": "29. července 2026 · 5:00",
         "title": "Nemocnice Kadaň není jen spor o miliony",
         "summary": "Oddělení, 254 lůžek, téměř 480 pracovních úvazků, výkony, spádová oblast a otázky budoucnosti.",
-        "scheduled_label": "Připravujeme závěrečný díl",
+        "scheduled_label": "Vyjde ve středu 29. 7. v 5:00",
     },
 ]
 
@@ -196,12 +196,12 @@ def profile_teaser() -> str:
         cta = '<a href="/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html" style="display:inline-flex;padding:13px 18px;border-radius:10px;background:#fff;color:#17606b;font-weight:900;text-decoration:none">Přečíst závěrečný díl →</a>'
         label = "ZÁVĚREČNÝ DÍL SÉRIE · ZVEŘEJNĚNO"
     else:
-        cta = '<span style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:999px;color:#fff;font-weight:900">Připravujeme</span>'
-        label = "PŘIPRAVUJEME · ZÁVĚREČNÝ DÍL SÉRIE"
+        cta = '<span style="display:inline-block;padding:10px 14px;border:1px solid rgba(255,255,255,.45);border-radius:999px;color:#fff;font-weight:900">Vyjde ve středu 29. 7. v 5:00</span>'
+        label = "STŘEDA 29. 7. V 5:00 · ZÁVĚREČNÝ DÍL SÉRIE"
     return f'''  <section data-hospital-profile-teaser style="margin:44px 0 24px;padding:28px;border-radius:20px;background:linear-gradient(135deg,#10242e,#22606b 62%,#9d222a);color:#fff;box-shadow:0 18px 45px rgba(20,35,45,.20)">
     <p style="margin:0 0 8px;color:#d8f2f4;font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase">{label}</p>
     <h2 style="margin:0 0 12px;color:#fff;font:800 32px/1.15 Georgia,serif">Nemocnice Kadaň není jen spor o miliony. Co všechno zajišťuje pro region</h2>
-    <p style="margin:0 0 16px;color:#edf3f5;font-size:18px">Závěr série představí nemocnici jako celek: její oddělení, 254 lůžek, téměř 480 pracovních úvazků, výkony, spádovou oblast i otázky budoucnosti.</p>
+    <p style="margin:0 0 16px;color:#edf3f5;font-size:18px">Závěr série představí nemocnici jako celek: její oddělení, 254 lůžek, téměř 480 pracovních úvazků, výkony, spádovou oblast, příspěvky okolních obcí i otázky budoucnosti.</p>
     {cta}
   </section>'''
 
