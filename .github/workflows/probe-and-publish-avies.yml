@@ -1,0 +1,167 @@
+name: Ověřit živý AVIES a dokončit Facebook
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/probe-and-publish-avies.yml"
+      - ".github/avies-live-probe-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: probe-and-publish-avies
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Stáhnout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit živý web bez cache
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re, ssl, struct, time
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          from urllib.error import HTTPError
+
+          stamp = f"{int(time.time())}-{time.time_ns()}"
+          ctx = ssl.create_default_context()
+          base = "https://nasekadan.cz"
+          urls = {
+              "article": f"{base}/clanky/avies-nemocnice-kadan.html?probe={stamp}",
+              "home": f"{base}/?probe={stamp}",
+              "archive": f"{base}/clanky/?probe={stamp}",
+              "sitemap": f"{base}/sitemap.xml?probe={stamp}",
+              "rss": f"{base}/rss.xml?probe={stamp}",
+              "train": f"{base}/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html?probe={stamp}",
+          }
+
+          def fetch(url):
+              req = Request(url, headers={
+                  "User-Agent": "NaseKadanLiveProbe/2.0",
+                  "Cache-Control": "no-cache, no-store, max-age=0",
+                  "Pragma": "no-cache",
+              })
+              try:
+                  with urlopen(req, timeout=30, context=ctx) as r:
+                      return r.status, dict(r.headers.items()), r.read()
+              except HTTPError as e:
+                  return e.code, dict(e.headers.items()), e.read()
+              except Exception as e:
+                  return 0, {}, str(e).encode()
+
+          fetched = {name: fetch(url) for name, url in urls.items()}
+          texts = {name: data.decode("utf-8", errors="replace") for name, (_, _, data) in fetched.items()}
+          article = texts["article"]
+          image_match = re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)', article, re.I)
+          image_url = image_match.group(1).strip() if image_match else ""
+          image_status = 0
+          image_dimensions = None
+          image_size = 0
+          if image_url:
+              image_status, _, image_data = fetch(image_url + ("&" if "?" in image_url else "?") + f"probe={stamp}")
+              image_size = len(image_data)
+              if len(image_data) >= 24 and image_data[:8] == b"\x89PNG\r\n\x1a\n":
+                  image_dimensions = list(struct.unpack(">II", image_data[16:24]))
+
+          article_path = "/clanky/avies-nemocnice-kadan.html"
+          article_url = base + article_path
+          train_title = "Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov"
+          expected_title = "Kdo nastavil nákupy léčiv od AVIES"
+          checks = {
+              "article_http_200": fetched["article"][0] == 200,
+              "article_title": expected_title in article,
+              "article_og_image": bool(image_url),
+              "image_http_200": image_status == 200,
+              "image_1200x630": image_dimensions == [1200, 630],
+              "image_not_tiny": image_size >= 10000,
+              "home_contains_article": article_path in texts["home"],
+              "archive_contains_article": article_path in texts["archive"],
+              "sitemap_contains_article": article_url in texts["sitemap"],
+              "rss_contains_article": article_url in texts["rss"],
+              "train_http_200": fetched["train"][0] == 200,
+              "train_title": train_title in texts["train"],
+              "train_on_home": "/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html" in texts["home"],
+              "train_in_archive": "/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html" in texts["archive"],
+              "train_in_sitemap": "https://nasekadan.cz/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html" in texts["sitemap"],
+              "train_in_rss": "https://nasekadan.cz/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html" in texts["rss"],
+          }
+          ready = all(checks.values())
+          report = {
+              "checked_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+              "ready_for_facebook": ready,
+              "http_status": {name: value[0] for name, value in fetched.items()},
+              "og_image": image_url or None,
+              "image_status": image_status,
+              "image_dimensions": image_dimensions,
+              "image_size": image_size,
+              "checks": checks,
+          }
+          Path(".github/avies-live-probe.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          with open("/tmp/ready", "w") as f:
+              f.write("true" if ready else "false")
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          PY
+          echo "ready=$(cat /tmp/ready)" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit Facebook klienta
+        if: steps.live.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/remove_unpublished_articles.py
+          python3 scripts/publish_avies_article.py
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/ensure_avies_publication_assets.py
+
+      - name: Zveřejnit AVIES na Facebook
+        id: facebook
+        if: steps.live.outputs.ready == 'true'
+        continue-on-error: true
+        env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+          FACEBOOK_WAIT_TIMEOUT: "180"
+        shell: bash
+        run: python3 scripts/process_facebook_queue_live.py clanky/avies-nemocnice-kadan.html
+
+      - name: Uložit kontrolu a Facebook stav
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň kontrola publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- .github/avies-live-probe.json
+          [[ -f .github/facebook-last-status.json ]] && git add -A -- .github/facebook-last-status.json
+          [[ -f .github/facebook-publish-pending.txt ]] && git add -A -- .github/facebook-publish-pending.txt
+          [[ -d .github/facebook-published ]] && git add -A -- .github/facebook-published
+
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+
+          git commit -m 'Zapsat živou kontrolu AVIES a Facebook'
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          git push origin main
