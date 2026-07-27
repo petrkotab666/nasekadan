@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Bezpečný závěrečný krok lokální aktualizace webu Naše Kadaň.
 
-Historická verze tohoto skriptu znovu přepisovala hlavičky, metadata, sitemapu
-a části konstrukce stránek podle staré šablony. Proto mohla pravidelná serverová
-aktualizace po správném nasazení vrátit web do staršího stavu. Tento kompatibilní
-vstupní bod už obsah nepřestavuje. Pouze spustí současné idempotentní ochrany.
+Tento vstupní bod nesmí vracet veřejný web na historickou šablonu. Spouští jen
+současné idempotentní publikační a kontrolní kroky. Hlavní serverová pojistka už
+používá plný kanonický Docker build; tento soubor zůstává druhou ochranou pro
+starší servisní volání.
 """
 
 from __future__ import annotations
@@ -28,41 +28,30 @@ def on_production_vps() -> bool:
 
 
 def repair_newsletter_smtp() -> None:
-    """Na produkčním VPS srovná SMTP a restartuje newsletterovou službu."""
-
     repair_script = ROOT / "deploy" / "repair-newsletter-smtp.sh"
     env_file = Path("/etc/nasekadan-newsletter.env")
     if not on_production_vps() or not env_file.exists() or not repair_script.exists():
         print("Newsletter SMTP: nejde o produkční VPS, oprava se přeskakuje.")
         return
-
-    command = ["sudo", "-n", "bash", str(repair_script)]
-    print("Spouštím bezpečnou opravu SMTP newsletteru na produkčním VPS.")
     try:
-        subprocess.run(command, cwd=ROOT, check=True, timeout=60)
+        subprocess.run(
+            ["sudo", "-n", "bash", str(repair_script)],
+            cwd=ROOT,
+            check=True,
+            timeout=60,
+        )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        # Dočasná chyba newsletteru nesmí zablokovat zveřejnění již hotového webu.
         print(f"Upozornění: oprava SMTP newsletteru nebyla dokončena: {exc}", file=sys.stderr)
 
 
 def recover_github_runner() -> None:
-    """Je-li self-hosted runner nainstalovaný, ale neběží, znovu jej spustí."""
-
     if not on_production_vps():
         return
-
     script = r"""
 set -euo pipefail
 mapfile -t services < <(systemctl list-unit-files --type=service --no-legend 'actions.runner*' 2>/dev/null | awk '{print $1}' | sort -u)
-if [ "${#services[@]}" -eq 0 ]; then
-  echo 'GitHub runner: žádná služba actions.runner nebyla nalezena.'
-  exit 0
-fi
 for service in "${services[@]}"; do
-  if systemctl is-active --quiet "$service"; then
-    echo "GitHub runner: $service je aktivní."
-  else
-    echo "GitHub runner: obnovuji $service."
+  if ! systemctl is-active --quiet "$service"; then
     systemctl reset-failed "$service" || true
     systemctl restart "$service"
     systemctl is-active --quiet "$service"
@@ -81,44 +70,26 @@ done
 
 
 def main() -> int:
-    # Serverová desetiminutová pojistka tento soubor spouští po každém git pullu.
-    # Díky tomu se servisní opravy dostanou na VPS i při nedostupném runneru.
     repair_newsletter_smtp()
     recover_github_runner()
 
-    # Obnovit známé vazby článku o nočních výlukách.
     run("scripts/ensure_publication_integrity.py")
-
-    # Doplnit také všechny novější články, které vznikly až po původní
-    # ochraně publikace, zejména ePetici.
     run("scripts/ensure_newest_article_indexes.py")
-
-    # Schválený článek AVIES musí vzniknout a zařadit se také při lokální
-    # desetiminutové serverové aktualizaci, nikoli jen v Docker/GitHub buildu.
     run("scripts/publish_avies_article.py")
-
-    # Bez Pillow vytvořit unikátní PNG 1200×630, doplnit kompletní OG/Twitter
-    # metadata, sitemapu a správný obrázek do RSS. Tím projde kontrola webu
-    # a článek je připraven i pro Facebook API.
     run("scripts/ensure_avies_publication_assets.py")
 
-    # Ověřené znění osmi požadavků musí být přímo v hlavním článku o petici,
-    # nikoli pouze v samostatném vysvětlení pravidel ePetice.
+    # Tyto dva kroky jsou zásadní: syrový článek v repozitáři je historický
+    # základ, ale veřejná verze musí vždy obsahovat spuštěnou soukromou petici,
+    # dva ověřené podpisy při kontrole a shodu všech osmi požadavků.
+    run("scripts/update_online_petition_status.py")
+    run("scripts/update_petition_verified_details.py")
+
     run("scripts/ensure_petition_document_details.py")
-
-    # Série o nemocnici se udržuje z jednoho zdroje a nesmí se rozpadnout při
-    # serverové aktualizaci.
     run("scripts/link_hospital_series.py")
-
-    # Všechny veřejné stránky dostanou identickou statickou patičku a jeden
-    # společný stylesheet. Staré varianty se odstraní.
     run("scripts/normalize_footers.py", "--write", "--check")
-
-    # Závěrečná kontrola je blokující: neúplný web se nesmí překopírovat do
-    # veřejného document rootu.
     run("scripts/validate_publication_integrity.py")
 
-    print("Finální kontrola webu je v pořádku; žádná stará šablona nebyla použita.")
+    print("Finální kontrola webu je v pořádku; stará verze článku o petici se nemůže vrátit.")
     return 0
 
 
