@@ -9,8 +9,10 @@ on:
       - 'clanky/nemocnice-kadan-software-kyberbezpecnost.html'
       - 'clanky/avies-nemocnice-kadan.html'
       - 'clanky/arc-med-nemocnice-kadan.html'
+      - 'clanky/nemocnice-kadan-profil-sluzby-budoucnost.html'
       - '.github/drafts/nemocnice-kadan-software-kyberbezpecnost.html'
       - '.github/drafts/arc-med-nemocnice-kadan.html'
+      - '.github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html'
       - 'style.css'
       - 'scripts/link_hospital_series.py'
       - '.github/hospital-series-trigger.txt'
@@ -37,7 +39,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit navigaci celé série a zítřejší upoutávku
+      - name: Doplnit navigaci celé série a navazující upoutávky
         run: python3 scripts/link_hospital_series.py
 
       - name: Uložit propojení
@@ -54,8 +56,10 @@ jobs:
             clanky/nemocnice-kadan-software-kyberbezpecnost.html
             clanky/avies-nemocnice-kadan.html
             clanky/arc-med-nemocnice-kadan.html
+            clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
             .github/drafts/nemocnice-kadan-software-kyberbezpecnost.html
             .github/drafts/arc-med-nemocnice-kadan.html
+            .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html
           )
           for path in "${paths[@]}"; do
             [[ -e "$path" ]] && git add -- "$path"
@@ -66,7 +70,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m 'Propojit všech pět článků série Nemocnice Kadaň'
+          git commit -m 'Propojit všech šest článků série Nemocnice Kadaň'
           git pull --rebase origin main
           git push origin main
 
