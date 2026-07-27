@@ -40,6 +40,7 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
+          python3 scripts/ensure_kolobezky_order.py
           sudo install -d -m 0755 /var/www/nasekadan/clanky
           sudo install -m 0644 index.html /var/www/nasekadan/index.html
           sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
@@ -56,11 +57,19 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 18); do
+            homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?check=${GITHUB_SHA}-${attempt}" || true)"
+            archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?check=${GITHUB_SHA}-${attempt}" || true)"
             kolobezky="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html?check=${GITHUB_SHA}-${attempt}" || true)"
             kultura="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?check=${GITHUB_SHA}-${attempt}" || true)"
             health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?check=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq 'Koloběžky pod větším dohledem' <<<"$kolobezky" && grep -Fq 'Karlovy Vary' <<<"$kultura" && grep -Fq 'mode=fast-recovery' <<<"$health"; then
-              echo 'Aktuální články jsou veřejně dostupné.'
+            if grep -Fq 'Koloběžky pod větším dohledem' <<<"$homepage" \
+              && grep -Fq 'PŘEDCHOZÍ ČLÁNEK' <<<"$homepage" \
+              && grep -Fq 'data-kolobezky-card' <<<"$archive" \
+              && grep -Fq 'Koloběžky pod větším dohledem' <<<"$kolobezky" \
+              && grep -Fq 'Hudební srpnové léto na Liďáku' <<<"$kultura" \
+              && ! grep -Fq 'Nově kontrolujeme jednotlivě všechny kadaňské školy a školky' <<<"$kultura" \
+              && grep -Fq 'mode=fast-recovery' <<<"$health"; then
+              echo 'Pořadí článků i kulturní přehled jsou veřejně správně.'
               exit 0
             fi
             sleep 10
