@@ -1,10 +1,10 @@
-name: Opravit článek o soukromé e-petici
+name: Dokončit opravu článku o soukromé e-petici
 
 on:
   push:
     branches: [main]
     paths:
-      - 'scripts/fix_epetice_private_portal.py'
+      - 'scripts/fix_epetice_private_portal_followup.py'
       - '.github/workflows/fix-epetice-private-portal.yml'
       - '.github/fix-epetice-private-portal-trigger.txt'
   workflow_dispatch:
@@ -27,8 +27,8 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Přepsat článek podle skutečné platformy
-        run: python3 scripts/fix_epetice_private_portal.py
+      - name: Dokončit opravu článku
+        run: python3 scripts/fix_epetice_private_portal_followup.py
 
       - name: Uložit opravený článek
         shell: bash
@@ -41,6 +41,6 @@ jobs:
             echo 'Článek už odpovídá aktuálnímu stavu.'
             exit 0
           fi
-          git commit -m 'Opravit článek: soukromý portál e-petice.cz'
+          git commit -m 'Dokončit opravu článku o soukromé e-petici'
           git pull --rebase origin main
           git push origin main
