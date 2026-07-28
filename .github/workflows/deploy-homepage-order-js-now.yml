@@ -1,0 +1,49 @@
+name: Nasadit opravu pořadí titulní stránky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deploy-homepage-order-js-now.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+      - name: Nasadit pouze app.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -m 0644 app.js /var/www/nasekadan/app.js
+          REMOTE
+      - name: Ověřit živý app.js
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 20); do
+            js="$(curl -fsS --max-time 20 "https://nasekadan.cz/app.js?order=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'enforceHomepageOrder' <<<"$js" && grep -Fq 'ARC-MED za 16 milionů' <<<"$js"; then
+              echo 'Opravený app.js je veřejný.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
