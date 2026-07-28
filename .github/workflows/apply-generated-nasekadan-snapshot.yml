@@ -1,0 +1,36 @@
+name: Dočasně použít opravený snapshot Naše Kadaň
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.issue.title == '[affiliate-apply-nasekadan] trigger'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stáhnout vygenerovaný artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -L --fail \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -o /tmp/snapshots.zip \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/8688026556/zip"
+          mkdir -p /tmp/snapshots
+          unzip -q /tmp/snapshots.zip -d /tmp/snapshots
+          cp /tmp/snapshots/nasekadan/affiliate-site-snapshot.json assets/affiliate-site-snapshot.json
+          cp /tmp/snapshots/nasekadan/affiliate-site-snapshot.js assets/affiliate-site-snapshot.js
+      - name: Uložit opravený snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/affiliate-site-snapshot.json assets/affiliate-site-snapshot.js
+          git commit -m "Opravit affiliate snapshot Naše Kadaň" || exit 0
+          git push
