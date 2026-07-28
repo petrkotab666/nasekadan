@@ -4,7 +4,6 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
       - '.github/workflows/check-all-caddy-rotations-pr.yml'
 
 permissions:
@@ -22,7 +21,7 @@ jobs:
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Porovnat původní pravidla s uloženými souhrny
+      - name: Oddělit zobrazení stránek od návštěv a návštěvníků
         id: reconstruct
         shell: bash
         run: |
@@ -51,38 +50,56 @@ jobs:
           TARGET_TODAY = (1104, 439, 389)
           MAX_CUTOFF = dt.datetime(2026, 7, 25, 22, 5, 59, tzinfo=TZ)
           TODAY = dt.date(2026, 7, 25)
+          WEBROOTS = [Path('/var/www/nasekadan'), Path('/opt/nasekadan')]
 
           def string_expr(node):
               if isinstance(node, ast.Constant) and isinstance(node.value, str):
                   return node.value
               if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
                   return string_expr(node.left) + string_expr(node.right)
-              if isinstance(node, ast.JoinedStr):
-                  raise ValueError('neočekávaný f-string')
-              raise ValueError(f'nepodporovaný řetězcový uzel {type(node).__name__}')
+              raise ValueError(type(node).__name__)
 
           source = Path('/usr/local/lib/nasekadan-stats/generate.py').read_text(encoding='utf-8')
           tree = ast.parse(source)
           patterns = {}
           for node in tree.body:
-              if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
-                  continue
-              name = node.targets[0].id
-              if name not in {'BOT_RE', 'STATIC_RE'} or not isinstance(node.value, ast.Call) or not node.value.args:
-                  continue
-              patterns[name] = string_expr(node.value.args[0])
-          if set(patterns) != {'BOT_RE', 'STATIC_RE'}:
-              raise SystemExit(f'Původní pravidla nebyla kompletně nalezena: {sorted(patterns)}')
+              if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                  name = node.targets[0].id
+                  if name in {'BOT_RE', 'STATIC_RE'} and isinstance(node.value, ast.Call) and node.value.args:
+                      patterns[name] = string_expr(node.value.args[0])
           bot_re = re.compile(patterns['BOT_RE'], re.I)
           static_re = re.compile(patterns['STATIC_RE'], re.I)
-          print('BOT_PATTERN=' + patterns['BOT_RE'])
-          print('STATIC_PATTERN=' + patterns['STATIC_RE'])
+          technical_ext = re.compile(r'\.(?:xml|txt|json|csv|pdf|mp4|webm|avif|zip|gz|webmanifest)$', re.I)
+          suspicious = re.compile(r'(?:^|/)(?:\.well-known|wp-|wordpress|admin|login|cgi-bin|phpmyadmin|\.git|\.env)(?:/|$)', re.I)
+
+          def hv(headers, name):
+              value = headers.get(name) or headers.get(name.lower()) or headers.get(name.title()) or ''
+              return ','.join(map(str, value)) if isinstance(value, list) else str(value)
+
+          def existing_html(path_text):
+              clean = urllib.parse.unquote(path_text, errors='replace').lstrip('/')
+              candidates = []
+              if not clean:
+                  candidates.append('index.html')
+              else:
+                  candidates.append(clean)
+                  candidates.append(clean + '.html')
+                  candidates.append(clean.rstrip('/') + '/index.html')
+              for root in WEBROOTS:
+                  for relative in candidates:
+                      candidate = (root / relative)
+                      try:
+                          if candidate.is_file() and candidate.suffix.lower() in {'.html', '.htm'}:
+                              return True
+                      except OSError:
+                          pass
+              return False
 
           rows = []
           files = [Path(name) for name in sorted(set(glob.glob('/var/log/caddy/nasekadan.access*'))) if Path(name).is_file()]
-          for path in files:
-              opener = gzip.open if path.suffix == '.gz' else open
-              with opener(path, 'rt', encoding='utf-8', errors='replace') as handle:
+          for log_path in files:
+              opener = gzip.open if log_path.suffix == '.gz' else open
+              with opener(log_path, 'rt', encoding='utf-8', errors='replace') as handle:
                   for line in handle:
                       try:
                           data = json.loads(line)
@@ -94,14 +111,16 @@ jobs:
                           status = int(data.get('status', 0))
                           ip = str(request.get('client_ip') or request.get('remote_ip') or '')
                           headers = request.get('headers') or {}
-                          ua_value = headers.get('User-Agent') or headers.get('user-agent') or ''
-                          ua = ua_value[0] if isinstance(ua_value, list) and ua_value else str(ua_value)
+                          ua = hv(headers, 'User-Agent')
                           raw_uri = str(request.get('uri', '/'))
+                          accept = hv(headers, 'Accept').lower()
+                          dest = hv(headers, 'Sec-Fetch-Dest').lower()
+                          mode = hv(headers, 'Sec-Fetch-Mode').lower()
                       except (ValueError, TypeError, json.JSONDecodeError, OverflowError):
                           continue
-                      if method not in {'GET', 'HEAD'} or not ip or ip in {'127.0.0.1', '::1'}:
+                      if method not in {'GET', 'HEAD'} or not ip or ip in {'127.0.0.1', '::1'} or bot_re.search(ua):
                           continue
-                      if not (200 <= status < 300 or status == 304) or bot_re.search(ua):
+                      if not (200 <= status < 300 or status == 304):
                           continue
                       try:
                           page = urllib.parse.unquote(urllib.parse.urlsplit(raw_uri).path or '/', errors='replace')
@@ -113,49 +132,106 @@ jobs:
                           continue
                       stable = hashlib.sha256(f'{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
                       daily = hashlib.sha256(f'{when.date()}\0{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
-                      rows.append((when, method, stable, daily, page))
+                      no_dot_ext = page == '/' or page.endswith(('.html', '.htm')) or page.endswith('/') or not re.search(r'\.[a-z0-9]{1,10}$', page, re.I)
+                      rows.append({
+                          'when': when, 'method': method, 'stable': stable, 'daily': daily, 'path': page,
+                          'html_accept': 'text/html' in accept or 'application/xhtml+xml' in accept,
+                          'document': dest in {'document', 'iframe'},
+                          'navigate': mode == 'navigate',
+                          'page_shape': no_dot_ext,
+                          'nontechnical': not technical_ext.search(page) and not suspicious.search(page),
+                          'existing_html': existing_html(page),
+                      })
 
-          def aggregate(selected, gap_minutes, daily_sessions):
-              selected = sorted(selected)
-              visitors = len({row[3] for row in selected})
+          page_filters = {
+              'all_filtered': lambda r: True,
+              'get_only': lambda r: r['method'] == 'GET',
+              'page_shape': lambda r: r['page_shape'],
+              'nontechnical': lambda r: r['nontechnical'],
+              'shape_nontechnical': lambda r: r['page_shape'] and r['nontechnical'],
+              'accept_html': lambda r: r['html_accept'],
+              'document': lambda r: r['document'],
+              'navigate': lambda r: r['navigate'],
+              'document_or_navigate': lambda r: r['document'] or r['navigate'],
+              'accept_or_document': lambda r: r['html_accept'] or r['document'],
+              'shape_accept': lambda r: r['page_shape'] and r['html_accept'],
+              'shape_document': lambda r: r['page_shape'] and r['document'],
+              'existing_html': lambda r: r['existing_html'],
+              'existing_or_document': lambda r: r['existing_html'] or r['document'],
+              'existing_or_accept': lambda r: r['existing_html'] or r['html_accept'],
+          }
+
+          def sessions(selected, gap_minutes, daily_key):
               groups = defaultdict(list)
-              key_index = 3 if daily_sessions else 2
+              key = 'daily' if daily_key else 'stable'
               for row in selected:
-                  groups[row[key_index]].append(row[0])
-              sessions = 0
+                  groups[row[key]].append(row['when'])
+              total = 0
               gap = dt.timedelta(minutes=gap_minutes)
               for stamps in groups.values():
+                  stamps.sort()
                   previous = None
                   for stamp in stamps:
                       if previous is None or stamp - previous > gap:
-                          sessions += 1
+                          total += 1
                       previous = stamp
-              return len(selected), sessions, visitors
+              return total
 
-          print(f'FILES_LOADED={len(files)}')
-          print(f'FILTERED_ROWS_TO_MAX={len(rows)}')
-          print(f'FIRST={min((row[0] for row in rows), default=None)}')
           results = []
+          print(f'LOG_FILES={len(files)}')
+          print(f'BASE_ROWS={len(rows)}')
           for minute_index in range(45, 66):
               cutoff = dt.datetime(2026, 7, 25, 21 + minute_index // 60, minute_index % 60, 59, tzinfo=TZ)
-              for get_only in (False, True):
-                  selected = [row for row in rows if row[0] <= cutoff and (not get_only or row[1] == 'GET')]
-                  today_rows = [row for row in selected if row[0].date() == TODAY]
-                  for gap in range(5, 21):
-                      for daily_sessions in (False, True):
-                          total = aggregate(selected, gap, daily_sessions)
-                          today = aggregate(today_rows, gap, daily_sessions)
-                          score = (
-                              abs(total[0]-TARGET[0])*5 + abs(total[1]-TARGET[1])*6 + abs(total[2]-TARGET[2])*6 +
-                              abs(today[0]-TARGET_TODAY[0])*5 + abs(today[1]-TARGET_TODAY[1])*6 + abs(today[2]-TARGET_TODAY[2])*6
-                          )
-                          results.append((score, cutoff, get_only, gap, daily_sessions, total, today))
+              base = [row for row in rows if row['when'] <= cutoff]
+              today_base = [row for row in base if row['when'].date() == TODAY]
+              for page_name, page_filter in page_filters.items():
+                  page_rows = [row for row in base if page_filter(row)]
+                  page_today = [row for row in today_base if page_filter(row)]
+                  for dedup_seconds in (0, 1, 2, 3, 5, 10):
+                      if dedup_seconds:
+                          def dedup(items):
+                              out = []
+                              last = {}
+                              for row in sorted(items, key=lambda value: value['when']):
+                                  key = (row['stable'], row['path'])
+                                  previous = last.get(key)
+                                  if previous is not None and row['when'] - previous <= dt.timedelta(seconds=dedup_seconds):
+                                      continue
+                                  last[key] = row['when']
+                                  out.append(row)
+                              return out
+                          view_rows = dedup(page_rows)
+                          view_today = dedup(page_today)
+                      else:
+                          view_rows, view_today = page_rows, page_today
+                      for gap in range(12, 19):
+                          for daily_session in (False, True):
+                              total_metrics = (
+                                  len(view_rows),
+                                  sessions(base, gap, daily_session),
+                                  len({row['daily'] for row in base}),
+                              )
+                              today_metrics = (
+                                  len(view_today),
+                                  sessions(today_base, gap, daily_session),
+                                  len({row['daily'] for row in today_base}),
+                              )
+                              score = sum((
+                                  abs(total_metrics[0]-TARGET[0])*6,
+                                  abs(total_metrics[1]-TARGET[1])*6,
+                                  abs(total_metrics[2]-TARGET[2])*6,
+                                  abs(today_metrics[0]-TARGET_TODAY[0])*6,
+                                  abs(today_metrics[1]-TARGET_TODAY[1])*6,
+                                  abs(today_metrics[2]-TARGET_TODAY[2])*6,
+                              ))
+                              results.append((score, cutoff, page_name, dedup_seconds, gap, daily_session, total_metrics, today_metrics))
 
           print('CLOSEST_BEGIN')
-          for score, cutoff, get_only, gap, daily_sessions, total, today in sorted(results)[:50]:
+          for score, cutoff, page_name, dedup_seconds, gap, daily_session, total, today in sorted(results)[:80]:
               print(
-                  f'score={score}|cutoff={cutoff.isoformat()}|get_only={get_only}|gap={gap}|daily_sessions={daily_sessions}|'
-                  f'total={total[0]}/{total[1]}/{total[2]}|today={today[0]}/{today[1]}/{today[2]}'
+                  f'score={score}|cutoff={cutoff.isoformat()}|page_filter={page_name}|dedup={dedup_seconds}|'
+                  f'gap={gap}|daily_session={daily_session}|total={total[0]}/{total[1]}/{total[2]}|'
+                  f'today={today[0]}/{today[1]}/{today[2]}'
               )
           print('CLOSEST_END')
           PY
@@ -175,11 +251,11 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
-                `## Přesná rekonstrukce původní metodiky: ${process.env.OUTCOME}`,
+                `## Oddělená rekonstrukce zobrazení a návštěv: ${process.env.OUTCOME}`,
                 '',
-                '- Kontrolní stav: celkem 2 553 / 1 032 / 915; dnešek 1 104 / 439 / 389.',
+                '- Cíl: celkem 2 553 / 1 032 / 915; dnešek 1 104 / 439 / 389.',
                 '',
-                '```text', log.slice(-30000).replace(/```/g, '---'), '```'
+                '```text', log.slice(-50000).replace(/```/g, '---'), '```'
               ].join('\n')
             });
 
