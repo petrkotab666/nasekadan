@@ -1,138 +1,62 @@
-name: Rychlé publikování a obnova Naše Kadaň
+name: Ruční kanonická obnova Naše Kadaň
 
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'fast-publication-status.json'
-      - 'cloud-deploy-status.json'
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: nasekadan-fast-publication
+  group: nasekadan-production
   cancel-in-progress: false
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-    steps:
-      - name: Připravit SSH klíč
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 30
 
-      - name: Synchronizovat celý veřejný web a statické reklamy
-        id: sync
+    steps:
+      - name: Spustit jediný kanonický produkční postup
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
+          sudo -n true
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          python3 scripts/enforce_current_article_order.py
-          python3 scripts/embed_static_article_ads.py
+          git clean -fd
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
 
-          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
-          sudo install -m 0644 index.html /var/www/nasekadan/index.html
-          sudo cp -a clanky/. /var/www/nasekadan/clanky/
-          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
-          sudo install -m 0644 assets/reklamy/*.svg /var/www/nasekadan/assets/reklamy/
-          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
-          sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=fast-recovery\n' "$(git rev-parse HEAD)" "$(date -u +%FT%TZ)" | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
-          REMOTE
-
-      - name: Ověřit články a čtyři statické grafické reklamy
-        id: verify
+      - name: Potvrdit zdrojový commit a aktuální článek KTK
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 18); do
-            homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?check=${GITHUB_SHA}-${attempt}" || true)"
-            archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?check=${GITHUB_SHA}-${attempt}" || true)"
-            kolobezky="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html?check=${GITHUB_SHA}-${attempt}" || true)"
-            kultura="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?check=${GITHUB_SHA}-${attempt}" || true)"
-            health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?check=${GITHUB_SHA}-${attempt}" || true)"
-
-            graphics_ok=true
-            for banner in pojistime vaseuklizecka vyklidime realitykadan; do
-              body="$(curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/${banner}-300x600.svg?check=${GITHUB_SHA}-${attempt}" || true)"
-              [[ "$body" == *'<svg'* ]] || graphics_ok=false
-            done
-
-            home_kolob="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$homepage" | head -1 | cut -d: -f1 || true)"
-            home_avies="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$homepage" | head -1 | cut -d: -f1 || true)"
-            home_culture="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$homepage" | head -1 | cut -d: -f1 || true)"
-            archive_kolob="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$archive" | head -1 | cut -d: -f1 || true)"
-            archive_avies="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$archive" | head -1 | cut -d: -f1 || true)"
-            archive_culture="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$archive" | head -1 | cut -d: -f1 || true)"
-
-            if [[ -n "$home_kolob" && -n "$home_avies" && -n "$home_culture" \
-              && "$home_kolob" -lt "$home_avies" && "$home_avies" -lt "$home_culture" \
-              && -n "$archive_kolob" && -n "$archive_avies" && -n "$archive_culture" \
-              && "$archive_kolob" -lt "$archive_avies" && "$archive_avies" -lt "$archive_culture" ]] \
-              && grep -Fq 'Polovina prázdnin je za námi' <<<"$kolobezky" \
-              && grep -Fq 'Hudební srpnové léto na Liďáku' <<<"$kultura" \
-              && ! grep -Fq 'Nově kontrolujeme jednotlivě všechny kadaňské školy a školky' <<<"$kultura" \
-              && [[ "$(grep -o 'class="static-article-ad"' <<<"$kolobezky" | wc -l)" -eq 4 ]] \
-              && grep -Fq 'static-article-ads-style' <<<"$kolobezky" \
-              && grep -Fq '/assets/reklamy/pojistime-300x600.svg' <<<"$kolobezky" \
-              && grep -Fq '/assets/reklamy/vaseuklizecka-300x600.svg' <<<"$kolobezky" \
-              && grep -Fq '/assets/reklamy/vyklidime-300x600.svg' <<<"$kolobezky" \
-              && grep -Fq '/assets/reklamy/realitykadan-300x600.svg' <<<"$kolobezky" \
-              && [[ "$graphics_ok" == true ]] \
-              && grep -Fq 'mode=fast-recovery' <<<"$health"; then
-              echo 'Články a čtyři statické grafické reklamy jsou veřejně správně.'
-              exit 0
-            fi
-            sleep 10
-          done
-          echo 'Veřejná kontrola článků nebo statických grafických reklam selhala.' >&2
-          exit 1
-
-      - name: Zapsat stav
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          SYNC_OUTCOME: ${{ steps.sync.outcome }}
-          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
-        with:
-          script: |
-            const status = {
-              status: process.env.SYNC_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
-              checked_at_utc: new Date().toISOString(),
-              trigger_commit: context.sha,
-              run_id: context.runId,
-              run_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              sync: process.env.SYNC_OUTCOME,
-              public_verification: process.env.VERIFY_OUTCOME
-            };
-            const path = 'fast-publication-status.json';
-            let sha;
-            try {
-              const current = await github.rest.repos.getContent({owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main'});
-              if (!Array.isArray(current.data)) sha = current.data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path,
-              branch: 'main',
-              message: `Zapsat stav rychlého publikování: ${status.status}`,
-              content: Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64'),
-              ...(sha ? {sha} : {})
-            });
+          source_sha="$(git -C /opt/nasekadan rev-parse HEAD)"
+          article='/opt/nasekadan/clanky/vypadek-internetu-kadan-kradez-kabelu.html'
+          h1="$(python3 - "$article" <<'PY'
+          from html import unescape
+          from pathlib import Path
+          import re, sys
+          text=Path(sys.argv[1]).read_text(encoding='utf-8')
+          match=re.search(r'<h1\b[^>]*>(.*?)</h1>', text, re.I|re.S)
+          if not match: raise SystemExit(1)
+          print(re.sub(r'\s+',' ',unescape(re.sub(r'<[^>]+>',' ',match.group(1)))).strip())
+          PY
+          )"
+          modified="$(python3 - "$article" <<'PY'
+          from pathlib import Path
+          import re, sys
+          text=Path(sys.argv[1]).read_text(encoding='utf-8')
+          match=re.search(r'"dateModified"\s*:\s*"([^"]+)"', text)
+          if not match: raise SystemExit(1)
+          print(match.group(1))
+          PY
+          )"
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          health="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/deployment-health.txt?manual=$stamp")"
+          live="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/clanky/vypadek-internetu-kadan-kradez-kabelu.html?manual=$stamp")"
+          grep -Fq "source=$source_sha" <<<"$health"
+          grep -Fq "$h1" <<<"$live"
+          grep -Fq "$modified" <<<"$live"
+          echo 'Ruční kanonická obnova a dynamická kontrola KTK prošly.'
