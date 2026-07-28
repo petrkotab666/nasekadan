@@ -1,0 +1,104 @@
+name: Přímé nasazení článku o tropických dnech
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-heat-article-direct-now.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_ovh_key"
+          chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
+
+      - name: Přímé statické nasazení aktuálního main
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          ssh -i "$RUNNER_TEMP/nasekadan_ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          STAGE="/var/www/nasekadan.direct-$SHA"
+          PREVIOUS="/var/www/nasekadan.previous-direct-$SHA"
+          sudo rm -rf "$STAGE" "$PREVIOUS"
+          sudo mkdir -p "$STAGE"
+          tar \
+            --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
+            --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
+            --exclude='deploy' --exclude='tools' -C /opt/nasekadan -cf - . \
+            | sudo tar -C "$STAGE" -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-static-heat-article\n' \
+            "$SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
+          sudo chmod -R a+rX "$STAGE"
+          if [[ -e /var/www/nasekadan ]]; then
+            sudo mv /var/www/nasekadan "$PREVIOUS"
+          fi
+          sudo mv "$STAGE" /var/www/nasekadan
+          sudo rm -rf "$PREVIOUS"
+          REMOTE
+
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=0
+          for attempt in $(seq 1 30); do
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html?direct=$stamp-$attempt" -o /tmp/nk-heat.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?direct=$stamp-$attempt" -o /tmp/nk-home.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?direct=$stamp-$attempt" -o /tmp/nk-archive.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?direct=$stamp-$attempt" -o /tmp/nk-health.txt || true
+            if grep -Fq 'Kadaň čekají tropické dny. Ve čtvrtek může být až 35 stupňů' /tmp/nk-heat.html \
+              && grep -Fq '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html' /tmp/nk-home.html \
+              && grep -Fq '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html' /tmp/nk-archive.html \
+              && grep -Fq "source=$SOURCE_SHA" /tmp/nk-health.txt \
+              && ! grep -Fq 'koupaliste-kadan-oteviraci-doba-2026.jpg?v=20260728-2' /tmp/nk-heat.html; then
+              ok=1
+              break
+            fi
+            sleep 4
+          done
+          test "$ok" = 1
+          echo 'Článek, titulní stránka, archiv a odstranění poškozeného obrázku jsou veřejně ověřené.'
+
+      - name: Uklidit jednorázový workflow
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          rm -f .github/workflows/deploy-heat-article-direct-now.yml
+          git config user.name 'Naše Kadaň deploy'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Uklidit přímé nasazení článku o tropických dnech [skip ci]'
+          git push origin HEAD:main
