@@ -1,0 +1,104 @@
+name: Zjistit původní metodiku a uložené souhrny statistik
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/inspect-original-stats-generator-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst pouze metodiku a agregované hodnoty
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/original-stats.txt"
+          from __future__ import annotations
+
+          import ast
+          import html
+          import re
+          from pathlib import Path
+
+          generator = Path('/usr/local/lib/nasekadan-stats/generate.py')
+          dashboard = Path('/opt/nasekadan-stats/web/index.html')
+
+          source = generator.read_text(encoding='utf-8', errors='replace')
+          tree = ast.parse(source)
+          print('GENERATOR_FILE=' + str(generator))
+          print('GENERATOR_BYTES=' + str(generator.stat().st_size))
+          print('FUNCTIONS=' + ','.join(node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))))
+          print('CLASSES=' + ','.join(node.name for node in tree.body if isinstance(node, ast.ClassDef)))
+
+          safe_keywords = re.compile(r'(LOG|CADDY|NGINX|session|visitor|visit|view|zobra|návště|unique|bot|static|access|glob|30)', re.I)
+          print('SAFE_SOURCE_LINES_BEGIN')
+          for number, line in enumerate(source.splitlines(), 1):
+              if safe_keywords.search(line):
+                  low = line.lower()
+                  if any(secret in low for secret in ('password', 'token', 'secret', 'salt', 'smtp')):
+                      continue
+                  print(f'{number}: {line[:500]}')
+          print('SAFE_SOURCE_LINES_END')
+
+          text = dashboard.read_text(encoding='utf-8', errors='replace')
+          visible = re.sub(r'<script\b.*?</script>', ' ', text, flags=re.I | re.S)
+          visible = re.sub(r'<style\b.*?</style>', ' ', visible, flags=re.I | re.S)
+          visible = re.sub(r'<[^>]+>', '\n', visible)
+          visible = html.unescape(visible)
+          visible = re.sub(r'[ \t]+', ' ', visible)
+          visible = re.sub(r'\n+', '\n', visible)
+          lines = [line.strip() for line in visible.splitlines() if line.strip()]
+          print('DASHBOARD_FILE=' + str(dashboard))
+          print('DASHBOARD_BYTES=' + str(dashboard.stat().st_size))
+          print('DASHBOARD_MTIME=' + str(dashboard.stat().st_mtime))
+          print('DASHBOARD_AGGREGATES_BEGIN')
+          for index, line in enumerate(lines):
+              if re.search(r'(zobrazení|návštěv|návštěvní|měření od|celkem|dnes|7 dní|30 dní|aktivní)', line, re.I):
+                  window = lines[max(0, index - 1): min(len(lines), index + 4)]
+                  print(' | '.join(window)[:1000])
+          print('DASHBOARD_AGGREGATES_END')
+          PY
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/original-stats.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Původní generátor a uložené souhrny: ${process.env.OUTCOME}`,
+                '',
+                '- Výstup obsahuje jen metodické řádky zdrojového kódu a agregované hodnoty dashboardu.',
+                '',
+                '```text', log.slice(-50000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+        run: test "$OUTCOME" = success
