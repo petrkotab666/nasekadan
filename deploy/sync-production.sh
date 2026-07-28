@@ -38,6 +38,7 @@ python3 scripts/publish_avies_article.py
 python3 scripts/ensure_petition_document_details.py
 python3 scripts/finalize_launch.py
 python3 scripts/normalize_footers.py --write --check
+python3 scripts/sort_articles_chronologically.py
 python3 scripts/validate_publication_integrity.py
 
 KTK_PATH='/clanky/vypadek-internetu-kadan-kradez-kabelu.html'
