@@ -1,0 +1,73 @@
+name: Jednorázově opravit živý Docker ARC-MED a AVIES
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-live-docker-arc-avies.yml'
+      - '.github/hotfix-live-docker-arc-avies.txt'
+  workflow_dispatch:
+
+concurrency:
+  group: hotfix-live-docker-arc-avies
+  cancel-in-progress: true
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Přepsat aktivní web
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 scripts/normalize_arc_med_article.py
+          python3 scripts/update_avies_oswald_context.py
+          python3 scripts/enforce_homepage_latest_order.py
+
+          files=(
+            index.html
+            clanky/index.html
+            clanky/arc-med-nemocnice-kadan.html
+            clanky/avies-nemocnice-kadan.html
+            clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
+            reklamy.js
+            reklamy-sidebar.js
+            reklamy-sidebar.css
+            site.js
+            rss.xml
+            sitemap.xml
+          )
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          test -n "$cid"
+
+          for file in "${files[@]}"; do
+            sudo install -d -m 0755 "/var/www/nasekadan/$(dirname "$file")"
+            sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
+            sudo docker exec "$cid" mkdir -p "/usr/share/nginx/html/$(dirname "$file")"
+            sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+          done
+
+          curl -fsS http://127.0.0.1:3224/index.html | grep -Fq 'data-arc-med-hero'
+          curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq 'data-promos data-context="sidebar"'
+          curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq '/reklamy-sidebar.js?'
+          curl -fsS http://127.0.0.1:3224/clanky/avies-nemocnice-kadan.html | grep -Fq 'data-oswald-avies-context'
+          ! curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK'
+          ! curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq 'static-article-ads'
+          REMOTE
