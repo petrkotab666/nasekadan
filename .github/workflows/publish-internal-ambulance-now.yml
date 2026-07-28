@@ -26,10 +26,7 @@ jobs:
           python3 scripts/normalize_articles.py --write --check
           python3 -m pip install --quiet Pillow
           python3 scripts/generate_social_cards.py --write --check
-          grep -Fq 'interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html' index.html
-          grep -Fq 'interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html' clanky/index.html
-          grep -Fq 'interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html' rss.xml
-          grep -Fq 'interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html' sitemap.xml
+          for f in index.html clanky/index.html rss.xml sitemap.xml; do grep -Fq 'interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html' "$f"; done
       - name: Uložit vygenerované veřejné soubory
         run: |
           set -euo pipefail
@@ -49,19 +46,25 @@ jobs:
           OG_URL=$(grep -oP '<meta property="og:image" content="\K[^"]+' clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html)
           OG_FILE=${OG_URL##*/}
           test -f "social/$OG_FILE"
-          scp -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new \
-            index.html clanky/index.html clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html rss.xml sitemap.xml news-sitemap.xml "social/$OG_FILE" \
-            ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 "sudo -n bash -s" <<EOF
+          mkdir -p deploy-package/clanky deploy-package/social
+          cp index.html rss.xml sitemap.xml news-sitemap.xml deploy-package/
+          cp clanky/index.html clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html deploy-package/clanky/
+          cp "social/$OG_FILE" deploy-package/social/
+          tar -C deploy-package -czf "$RUNNER_TEMP/internal-ambulance.tar.gz" .
+          scp -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new "$RUNNER_TEMP/internal-ambulance.tar.gz" ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 "sudo -n bash -s" <<'EOF'
           set -euo pipefail
-          install -m 0644 /tmp/index.html /var/www/nasekadan/index.html
-          install -m 0644 /tmp/index.html /var/www/nasekadan/clanky/index.html
-          install -m 0644 /tmp/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html /var/www/nasekadan/clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html
-          install -m 0644 /tmp/rss.xml /var/www/nasekadan/rss.xml
-          install -m 0644 /tmp/sitemap.xml /var/www/nasekadan/sitemap.xml
-          install -m 0644 /tmp/news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+          stage=$(mktemp -d)
+          tar -xzf /tmp/internal-ambulance.tar.gz -C "$stage"
+          install -m 0644 "$stage/index.html" /var/www/nasekadan/index.html
+          install -m 0644 "$stage/clanky/index.html" /var/www/nasekadan/clanky/index.html
+          install -m 0644 "$stage/clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html" /var/www/nasekadan/clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html
+          install -m 0644 "$stage/rss.xml" /var/www/nasekadan/rss.xml
+          install -m 0644 "$stage/sitemap.xml" /var/www/nasekadan/sitemap.xml
+          install -m 0644 "$stage/news-sitemap.xml" /var/www/nasekadan/news-sitemap.xml
           mkdir -p /var/www/nasekadan/social
-          install -m 0644 /tmp/$OG_FILE /var/www/nasekadan/social/$OG_FILE
+          install -m 0644 "$stage"/social/* /var/www/nasekadan/social/
+          rm -rf "$stage"
           EOF
       - name: Ověřit veřejný web
         run: |
