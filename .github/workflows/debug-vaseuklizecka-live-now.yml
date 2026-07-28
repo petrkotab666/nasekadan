@@ -1,0 +1,90 @@
+name: Diagnostikovat živou reklamu Vaše uklízečka
+run-name: Zjistit přesný důvod nevykreslení banneru
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/debug-vaseuklizecka-live-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Stáhnout živé podklady a otestovat JavaScript
+        shell: bash
+        run: |
+          set -u
+          cb="$(date +%s)"
+          curl -sS --max-time 30 -D /tmp/js.headers "https://nasekadan.cz/reklamy.js?debug=$cb" -o /tmp/reklamy.js || true
+          curl -sS --max-time 30 -D /tmp/page.headers "https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html?debug=$cb" -o /tmp/page.html || true
+          wide_code="$(curl -sS -o /tmp/wide.webp -w '%{http_code}' --max-time 30 "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp?debug=$cb" || true)"
+          tower_code="$(curl -sS -o /tmp/tower.webp -w '%{http_code}' --max-time 30 "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp?debug=$cb" || true)"
+          node_check=failed
+          node --check /tmp/reklamy.js >/tmp/node.out 2>/tmp/node.err && node_check=success
+          browser="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          if [ -n "$browser" ]; then
+            "$browser" --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --enable-logging=stderr --v=1 \
+              --virtual-time-budget=12000 --dump-dom \
+              "https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html?domdebug=$cb" \
+              >/tmp/dom.html 2>/tmp/chrome.log || true
+          else
+            : >/tmp/dom.html
+            echo 'browser-not-found' >/tmp/chrome.log
+          fi
+          export WIDE_CODE="$wide_code" TOWER_CODE="$tower_code" NODE_CHECK="$node_check"
+          python3 - <<'PY'
+          import json, os, hashlib
+          from datetime import datetime, timezone
+          from pathlib import Path
+          def read(path):
+              p=Path(path)
+              return p.read_text(encoding='utf-8',errors='replace') if p.exists() else ''
+          js=read('/tmp/reklamy.js'); page=read('/tmp/page.html'); dom=read('/tmp/dom.html')
+          payload={
+            'checked_at_utc':datetime.now(timezone.utc).isoformat(),
+            'js_bytes':len(js.encode()),
+            'js_sha256':hashlib.sha256(js.encode()).hexdigest(),
+            'js_has_featured_function':'function installGuaranteedCleaningBanner()' in js,
+            'js_has_featured_call':'installGuaranteedCleaningBanner();' in js,
+            'js_has_cleaning_item':"id:'uklizecka-cisteni'" in js,
+            'js_has_forced_tower':"featuredTower=towerCreativeItems.find" in js,
+            'js_node_check':os.environ.get('NODE_CHECK'),
+            'article_has_cache_version':'20260728-vaseuklizecka-guaranteed-3' in page,
+            'article_script_lines':[line.strip() for line in page.splitlines() if 'reklamy.js' in line][:10],
+            'wide_http':os.environ.get('WIDE_CODE'),
+            'wide_bytes':Path('/tmp/wide.webp').stat().st_size if Path('/tmp/wide.webp').exists() else 0,
+            'tower_http':os.environ.get('TOWER_CODE'),
+            'tower_bytes':Path('/tmp/tower.webp').stat().st_size if Path('/tmp/tower.webp').exists() else 0,
+            'dom_bytes':len(dom.encode()),
+            'dom_has_featured_class':'featured-cleaning-ad' in dom,
+            'dom_has_wide_image':'vaseuklizecka-cisteni-wide-1200x400.webp' in dom,
+            'dom_has_target':'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/' in dom,
+            'dom_has_phone':'603 206 308' in dom,
+            'node_error':read('/tmp/node.err')[-3000:],
+            'chrome_log_tail':read('/tmp/chrome.log')[-6000:],
+            'js_headers':read('/tmp/js.headers'),
+            'page_headers':read('/tmp/page.headers'),
+          }
+          Path('vaseuklizecka-live-debug.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+      - name: Uložit diagnostiku
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/debug-vaseuklizecka-live-now.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add vaseuklizecka-live-debug.json .github/workflows/debug-vaseuklizecka-live-now.yml
+          git commit -m 'Zapsat diagnostiku živé reklamy Vaše uklízečka'
+          git pull --rebase origin main
+          git push origin HEAD:main
