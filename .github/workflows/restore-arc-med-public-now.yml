@@ -1,0 +1,33 @@
+name: Obnovit dnešní článek ARC-MED
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/restore-arc-med-now.txt'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Obnovit veřejný článek a reklamy
+        run: |
+          set -euo pipefail
+          python3 scripts/restore_arc_med_public.py
+          python3 scripts/enforce_homepage_latest_order.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/validate_publication_integrity.py
+      - name: Uložit opravu
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/arc-med-nemocnice-kadan.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt
+          git diff --cached --quiet || git commit -m 'Obnovit dnešní článek ARC-MED a správné pořadí'
+          git pull --rebase origin main
+          git push origin main
