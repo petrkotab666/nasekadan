@@ -1,0 +1,60 @@
+name: Doplnit Café Lingua Romania
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/add_cafe_lingua_romania.py'
+      - '.github/add-cafe-lingua-romania.txt'
+      - '.github/workflows/add-cafe-lingua-romania.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Doplnit událost
+        run: python3 scripts/add_cafe_lingua_romania.py
+      - name: Uložit článek do main
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Bot'
+          git config user.email 'bot@nasekadan.cz'
+          git add clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Doplnit Café Lingua Romania do kulturního přehledu'
+          git pull --rebase origin main
+          git push origin main
+      - name: Nasadit pouze kulturní přehled
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -m 0644 clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          REMOTE
+      - name: Ověřit živý článek
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            html=$(curl -fsS "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?cafe=$GITHUB_SHA-$i" || true)
+            if grep -Fq 'Café Lingua Romania v RADCE' <<<"$html" && ! grep -Fq 'Nově kontrolujeme jednotlivě všechny kadaňské školy a školky' <<<"$html"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
