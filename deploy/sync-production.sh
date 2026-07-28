@@ -38,6 +38,10 @@ python3 scripts/publish_avies_article.py
 python3 scripts/ensure_petition_document_details.py
 python3 scripts/finalize_launch.py
 python3 scripts/normalize_footers.py --write --check
+# Sjednotit také článek, sidebar a společný balík dynamických reklam ještě před
+# blokující integritní kontrolou. Docker build stejný krok zopakuje idempotentně,
+# ale syrový main nesmí selhat dříve jen kvůli chybějícímu site.js.
+python3 scripts/normalize_articles.py --write --check
 python3 scripts/sort_articles_chronologically.py
 python3 scripts/validate_publication_integrity.py
 
