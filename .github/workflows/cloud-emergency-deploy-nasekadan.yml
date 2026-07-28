@@ -1,5 +1,5 @@
-name: Nasadit Naše Kadaň spolehlivě přes GitHub cloud
-run-name: Atomické nasazení aktuálního main na OVH
+name: Kanonická produkční pojistka Naše Kadaň
+run-name: Ověřit a případně kanonicky nasadit aktuální main
 
 on:
   push:
@@ -7,25 +7,63 @@ on:
     paths-ignore:
       - 'cloud-deploy-status.json'
       - 'fast-publication-status.json'
+      - '.github/facebook-last-status.json'
+      - '.github/facebook-publish-pending.txt'
+      - '.github/facebook-published/**'
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: nasekadan-cloud-production
-  cancel-in-progress: true
+  group: nasekadan-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
 
     steps:
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Načíst dynamické údaje aktuálního článku KTK
+        id: expected
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          from html import unescape
+          from pathlib import Path
+          import re
+          import subprocess
+
+          path = Path('clanky/vypadek-internetu-kadan-kradez-kabelu.html')
+          text = path.read_text(encoding='utf-8')
+
+          h1 = re.search(r'<h1\b[^>]*>(.*?)</h1>', text, re.I | re.S)
+          if not h1:
+              raise SystemExit('Článek KTK nemá H1.')
+          title = re.sub(r'\s+', ' ', unescape(re.sub(r'<[^>]+>', ' ', h1.group(1)))).strip()
+
+          modified = re.search(r'"dateModified"\s*:\s*"([^"]+)"', text)
+          if not modified:
+              raise SystemExit('Článek KTK nemá dateModified.')
+
+          sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          print(f'source_sha={sha}')
+          print(f'ktk_h1={title}')
+          print(f'ktk_modified={modified.group(1)}')
+          PY
+
       - name: Připravit SSH klíč
         shell: bash
         run: |
@@ -34,8 +72,30 @@ jobs:
           printf '%s\n' "$KEY_OVH_SSH_PRIVATE_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_ovh_key"
           chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
 
-      - name: Obnovit aktuální web včetně reklam a pevného pořadí
-        id: deploy_server
+      - name: Zjistit, zda je veřejný web aktuální
+        id: state
+        env:
+          SOURCE_SHA: ${{ steps.expected.outputs.source_sha }}
+          KTK_H1: ${{ steps.expected.outputs.ktk_h1 }}
+          KTK_MODIFIED: ${{ steps.expected.outputs.ktk_modified }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-pre-$(date +%s)"
+          health="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/deployment-health.txt?check=$stamp" 2>/dev/null || true)"
+          article="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/clanky/vypadek-internetu-kadan-kradez-kabelu.html?check=$stamp" 2>/dev/null || true)"
+          if grep -Fq "source=$SOURCE_SHA" <<<"$health" \
+            && grep -Fq "$KTK_H1" <<<"$article" \
+            && grep -Fq "$KTK_MODIFIED" <<<"$article"; then
+            echo 'needs_deploy=false' >> "$GITHUB_OUTPUT"
+            echo 'Veřejný web již podává aktuální main a aktuální článek KTK.'
+          else
+            echo 'needs_deploy=true' >> "$GITHUB_OUTPUT"
+            echo 'Veřejný web je zastaralý nebo neúplný; bude spuštěn jediný kanonický deploy.'
+          fi
+
+      - name: Kanonicky nasadit aktuální main
+        if: steps.state.outputs.needs_deploy == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -43,6 +103,8 @@ jobs:
             -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
@@ -50,108 +112,39 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
           git clean -fd
-
-          python3 scripts/enforce_production_article_order.py
-          python3 scripts/normalize_articles.py --write --check
-          python3 scripts/normalize_footers.py --write --check
-          python3 scripts/embed_static_article_ads.py
-          python3 scripts/validate_production_manifest.py --root /opt/nasekadan
-
-          ARTICLE='clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html'
-          grep -Fq 'data-promos' "$ARTICLE"
-          grep -Fq '/reklamy.js' "$ARTICLE"
-          grep -Fq '/reklamy-oprava-obrazku.js' "$ARTICLE"
-          grep -Fq '/obsah-doplnky.js' "$ARTICLE"
-          grep -Fq 'static-article-ads' "$ARTICLE"
-
-          SOURCE_SHA="$(git rev-parse HEAD)"
-          STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
-          PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
-          sudo rm -rf "$STAGE" "$PREVIOUS"
-          sudo mkdir -p "$STAGE"
-          sudo tar \
-            --exclude='./.git' --exclude='./.github' --exclude='./scripts' \
-            --exclude='./deploy' --exclude='./tools' --exclude='./nginx' \
-            --exclude='./docker-entrypoint.d' --exclude='./Dockerfile' \
-            --exclude='./docker-compose.yml' --exclude='./cloud-deploy-status.json' \
-            -cf - . | sudo tar -C "$STAGE" -xf -
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-main-with-ads-and-order\n' \
-            "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
-          sudo chmod -R a+rX "$STAGE"
-          python3 scripts/validate_production_manifest.py --root "$STAGE"
-
-          if [ -e /var/www/nasekadan ]; then
-            sudo mv /var/www/nasekadan "$PREVIOUS"
-          fi
-          sudo mv "$STAGE" /var/www/nasekadan
-          sudo rm -rf "$PREVIOUS"
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
           REMOTE
 
-      - name: Ověřit článek, reklamy a přesné pořadí na živém webu
-        id: verify
+      - name: Veřejně ověřit commit, KTK a přehledy
+        env:
+          SOURCE_SHA: ${{ steps.expected.outputs.source_sha }}
+          KTK_H1: ${{ steps.expected.outputs.ktk_h1 }}
+          KTK_MODIFIED: ${{ steps.expected.outputs.ktk_modified }}
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 30); do
-            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?deploy=${GITHUB_SHA}-${attempt}" || true)"
-            check_order() {
-              local text="$1"
-              local a b c d e
-              a="$(grep -bo 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              b="$(grep -bo 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              c="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              d="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              e="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-              [[ -n "$a" && -n "$b" && -n "$c" && -n "$d" && -n "$e" && "$a" -lt "$b" && "$b" -lt "$c" && "$c" -lt "$d" && "$d" -lt "$e" ]]
-            }
-            if grep -Fq 'Kadaňští hasiči cvičili na Nechranicích' <<<"$article" \
-              && grep -Fq 'data-promos' <<<"$article" \
-              && grep -Fq '/reklamy.js' <<<"$article" \
-              && grep -Fq 'static-article-ads' <<<"$article" \
-              && [[ "$(grep -o 'class="static-article-ad"' <<<"$article" | wc -l)" -eq 4 ]] \
-              && check_order "$home" \
-              && check_order "$archive"; then
-              echo 'Živý web obsahuje článek, čtyři statické reklamy a správné pořadí AVIES před kulturou.'
-              exit 0
+          slug='vypadek-internetu-kadan-kradez-kabelu.html'
+          ok=0
+          for attempt in $(seq 1 40); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            health="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/deployment-health.txt?verify=$stamp" 2>/dev/null || true)"
+            article="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/clanky/$slug?verify=$stamp" 2>/dev/null || true)"
+            home="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/?verify=$stamp" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/clanky/?verify=$stamp" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/rss.xml?verify=$stamp" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsSL --max-time 25 "https://nasekadan.cz/sitemap.xml?verify=$stamp" 2>/dev/null || true)"
+            if grep -Fq "source=$SOURCE_SHA" <<<"$health" \
+              && grep -Fq "$KTK_H1" <<<"$article" \
+              && grep -Fq "$KTK_MODIFIED" <<<"$article" \
+              && grep -Fq "$slug" <<<"$home" \
+              && grep -Fq "$slug" <<<"$archive" \
+              && grep -Fq "$slug" <<<"$rss" \
+              && grep -Fq "$slug" <<<"$sitemap"; then
+              ok=1
+              break
             fi
-            sleep 10
+            sleep 5
           done
-          exit 30
-
-      - name: Zapsat výsledek nasazení
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
-          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
-        with:
-          script: |
-            const path = 'cloud-deploy-status.json';
-            const status = {
-              status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
-              checked_at_utc: new Date().toISOString(),
-              trigger_commit: context.sha,
-              run_id: context.runId,
-              run_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              server_deploy: process.env.DEPLOY_OUTCOME || 'skipped',
-              public_verification: process.env.VERIFY_OUTCOME || 'skipped'
-            };
-            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
-            let sha;
-            try {
-              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
-              if (!Array.isArray(current.data)) sha = current.data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path,
-              branch: 'main',
-              message: `Zapsat výsledek produkčního nasazení: ${status.status}`,
-              content,
-              ...(sha ? { sha } : {})
-            });
+          test "$ok" = 1
+          echo 'Kanonická veřejná kontrola aktuálního main a článku KTK prošla.'
