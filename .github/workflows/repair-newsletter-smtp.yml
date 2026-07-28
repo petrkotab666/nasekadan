@@ -1,5 +1,5 @@
 name: Opravit SMTP newsletteru
-run-name: Nastavit Seznam Email Profi a restartovat newsletter
+run-name: Nastavit Seznam Email Profi, statistiky a ověřit reset hesla
 
 on:
   push:
@@ -8,11 +8,13 @@ on:
       - 'newsletter/**'
       - 'deploy/install-newsletter.sh'
       - 'deploy/repair-newsletter-smtp.sh'
+      - '.github/scripts/nasekadan-stats/**'
       - '.github/workflows/repair-newsletter-smtp.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: nasekadan-newsletter-smtp
@@ -21,24 +23,95 @@ concurrency:
 jobs:
   repair:
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - name: Stáhnout repozitář
         uses: actions/checkout@v4
         with:
           ref: main
 
-      - name: Srovnat SMTP na Seznam Email Profi
+      - name: Srovnat SMTP a nainstalovat statistiky
+        id: repair
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           chmod +x deploy/repair-newsletter-smtp.sh
-          bash deploy/repair-newsletter-smtp.sh
+          bash deploy/repair-newsletter-smtp.sh > /tmp/nasekadan-stats-deploy.log 2>&1
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          tail -n 120 /tmp/nasekadan-stats-deploy.log
+          exit 0
 
-      - name: Ověřit lokální API newsletteru
+      - name: Ověřit lokální služby a veřejnou stránku
+        id: verify
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
+          code=0
           curl -fsS --max-time 10 http://127.0.0.1:8765/health \
-            | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true'
-          echo 'Newsletter API odpovídá.'
+            | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' || code=1
+          stats_health="$(curl -fsS --max-time 10 http://127.0.0.1:3225/healthz 2>/dev/null)" || code=1
+          grep -Fq '"ok": true' <<<"$stats_health" || code=1
+          grep -Fq '"auth": "application"' <<<"$stats_health" || code=1
+          grep -Fq '"smtpConfigured": true' <<<"$stats_health" || code=1
+          curl -fsS --max-time 10 http://127.0.0.1:3225/ \
+            | grep -Fq 'Zapomenuté heslo' || code=1
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 \
+            'https://nasekadan.cz/statistiky/' \
+            | grep -Fq 'Zapomenuté heslo' || code=1
+          sudo nginx -t || code=1
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Zapsat výsledek diagnostiky
+        uses: actions/github-script@v7
+        env:
+          REPAIR_CODE: ${{ steps.repair.outputs.code }}
+          VERIFY_CODE: ${{ steps.verify.outputs.code }}
+        with:
+          script: |
+            const fs = require('fs');
+            const title = '[NASAZENÍ STATISTIK] Obnova hesla přes e-mail';
+            const repairOk = process.env.REPAIR_CODE === '0';
+            const verifyOk = process.env.VERIFY_CODE === '0';
+            const ok = repairOk && verifyOk;
+            let log = '';
+            try { log = fs.readFileSync('/tmp/nasekadan-stats-deploy.log', 'utf8'); } catch (_) {}
+            log = log.slice(-12000).replace(/```/g, '---');
+            const body = [
+              `## ${ok ? 'ÚSPĚCH' : 'NEÚSPĚCH'}`,
+              '',
+              `- Instalace: ${repairOk ? 'úspěšná' : 'selhala'}`,
+              `- Lokální a veřejné ověření: ${verifyOk ? 'úspěšné' : 'selhalo'}`,
+              `- Commit: \`${context.sha}\``,
+              `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              '<details><summary>Poslední část instalačního logu</summary>',
+              '',
+              '```text',
+              log || '(log není dostupný)',
+              '```',
+              '</details>'
+            ].join('\n');
+            const all = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100
+            });
+            const existing = all.find(i => !i.pull_request && i.title === title);
+            let number;
+            if (existing) {
+              number = existing.number;
+              await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body, state: ok ? 'closed' : 'open'});
+            } else {
+              const created = await github.rest.issues.create({owner: context.repo.owner, repo: context.repo.repo, title, body});
+              number = created.data.number;
+              if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: number, state: 'closed'});
+            }
+
+      - name: Ukončit podle výsledku
+        shell: bash
+        run: |
+          test '${{ steps.repair.outputs.code }}' = '0'
+          test '${{ steps.verify.outputs.code }}' = '0'
