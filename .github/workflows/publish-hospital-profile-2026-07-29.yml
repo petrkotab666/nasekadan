@@ -40,6 +40,7 @@ jobs:
           if [[ "$force" != 'true' && "$now" < "$target" ]]; then echo 'changed=false' >> "$GITHUB_OUTPUT"; exit 0; fi
           python3 scripts/bootstrap_arc_med_draft.py
           python3 scripts/update_hospital_profile_municipal_support.py
+          python3 scripts/add_syringe_teaser.py
           cp .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           python3 - <<'PY'
           from pathlib import Path
@@ -69,7 +70,7 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
-          git add -A -- clanky/nemocnice-kadan-profil-sluzby-budoucnost.html clanky/arc-med-nemocnice-kadan.html clanky/avies-nemocnice-kadan.html clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html scripts/link_hospital_series.py style.css index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt social
+          git add -A -- clanky/nemocnice-kadan-profil-sluzby-budoucnost.html clanky/arc-med-nemocnice-kadan.html clanky/avies-nemocnice-kadan.html clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html scripts/link_hospital_series.py scripts/add_syringe_teaser.py style.css index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt social
           git commit -m 'Publikovat: závěrečný profil Nemocnice Kadaň'
           git pull --rebase origin main
           git push origin main
