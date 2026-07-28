@@ -1,0 +1,152 @@
+name: Nouzově synchronizovat chronologický web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/emergency-chronology-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-emergency-static-chronology
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$KEY_OVH_SSH_PRIVATE_KEY"
+          printf '%s\n' "$KEY_OVH_SSH_PRIVATE_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_ovh_key"
+          chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
+
+      - name: Synchronizovat aktuální main do aktivního webu
+        id: deploy_server
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+
+          python3 scripts/enforce_current_article_order.py
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/normalize_footers.py --write --check
+          python3 scripts/sort_articles_chronologically.py
+
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          STAGE="/var/www/nasekadan.release-$SOURCE_SHA"
+          PREVIOUS="/var/www/nasekadan.previous-$SOURCE_SHA"
+          sudo rm -rf "$STAGE" "$PREVIOUS"
+          sudo mkdir -p "$STAGE"
+          sudo tar \
+            --exclude='./.git' --exclude='./.github' --exclude='./scripts' \
+            --exclude='./deploy' --exclude='./tools' --exclude='./nginx' \
+            --exclude='./docker-entrypoint.d' --exclude='./Dockerfile' \
+            --exclude='./docker-compose.yml' --exclude='./cloud-deploy-status.json' \
+            -cf - . | sudo tar -C "$STAGE" -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=emergency-static-chronology\n' \
+            "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
+          sudo chmod -R a+rX "$STAGE"
+
+          if [ -e /var/www/nasekadan ]; then
+            sudo mv /var/www/nasekadan "$PREVIOUS"
+          fi
+          sudo mv "$STAGE" /var/www/nasekadan
+          sudo rm -rf "$PREVIOUS"
+          REMOTE
+
+      - name: Ověřit přesné pořadí na živém webu
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?emergency=${GITHUB_RUN_ID}-${attempt}" -o /tmp/home.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?emergency=${GITHUB_RUN_ID}-${attempt}" -o /tmp/archive.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?emergency=${GITHUB_RUN_ID}-${attempt}" -o /tmp/autokemp.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?emergency=${GITHUB_RUN_ID}-${attempt}" -o /tmp/culture.html || true
+            if python3 - <<'PY'
+          import re
+          from pathlib import Path
+          expected = [
+              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html',
+              '/clanky/arc-med-nemocnice-kadan.html',
+              '/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html',
+              '/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html',
+              '/clanky/kolobezky-hriste-detektor-kovu-kadan.html',
+              '/clanky/avies-nemocnice-kadan.html',
+              '/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html',
+          ]
+          def order(path, start, end):
+              text=Path(path).read_text(encoding='utf-8',errors='replace')
+              if start not in text or end not in text: return []
+              body=text.split(start,1)[1].split(end,1)[0]
+              result=[]
+              for block in re.findall(r'<article\b[^>]*>.*?</article>',body,re.I|re.S):
+                  m=re.search(r'href=["\'](/clanky/[^"\']+\.html)["\']',block,re.I)
+                  if m: result.append(m.group(1))
+              return result
+          home=order('/tmp/home.html','<div class="article-list">','<p class="archive-note">')
+          archive=order('/tmp/archive.html','<section class="archive-list" aria-label="Chronologický přehled článků">','</section>')
+          article=Path('/tmp/autokemp.html').read_text(encoding='utf-8',errors='replace')
+          culture=Path('/tmp/culture.html').read_text(encoding='utf-8',errors='replace')
+          ok=(home[:len(expected)]==expected and archive[:len(expected)]==expected and
+              'Odstávky elektřiny omezí v srpnu provoz restaurace' in article and
+              'data-autokemp-outages-note' in culture)
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              echo 'Veřejné pořadí je správné.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat výsledek nouzové synchronizace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = '.github/emergency-chronology-status.json';
+            const status = {
+              status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'passed' : 'failed',
+              checkedAtUtc: new Date().toISOString(),
+              runId: context.runId,
+              serverDeploy: process.env.DEPLOY_OUTCOME || 'skipped',
+              publicVerification: process.env.VERIFY_OUTCOME || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner, repo: context.repo.repo, path, branch: 'main',
+              message: `Zapsat nouzové chronologické nasazení: ${status.status} [skip ci]`,
+              content, ...(sha ? {sha} : {})
+            });
