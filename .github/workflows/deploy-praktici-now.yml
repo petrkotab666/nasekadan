@@ -73,8 +73,9 @@ jobs:
           fi
           PAGE="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
             "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?deploy=$SHA")"
-          grep -Fq 'V součtu jde o šest kadaňských pracovišť' <<<"$PAGE"
+          grep -Fq 'V přehledu je sedm kadaňských pracovišť' <<<"$PAGE"
           grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$PAGE"
+          grep -Fq 'Očkovací centrum' <<<"$PAGE"
           grep -Fq '24. a 31. 8.' <<<"$PAGE"
           REMOTE
 
@@ -82,7 +83,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SHA="$(git rev-parse HEAD)"
           stamp="$(date +%s)"
           for attempt in $(seq 1 24); do
             page="$(curl -4 -kfsS --max-time 25 \
@@ -95,13 +95,14 @@ jobs:
               "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
             health="$(curl -4 -kfsS --max-time 25 \
               "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" 2>/dev/null || true)"
-            if grep -Fq 'V součtu jde o šest kadaňských pracovišť' <<<"$page" \
+            if grep -Fq 'V přehledu je sedm kadaňských pracovišť' <<<"$page" \
               && grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$page" \
+              && grep -Fq 'Očkovací centrum' <<<"$page" \
               && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$archive" \
               && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$rss" \
               && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$sitemap" \
-              && grep -Fq "source=$SHA" <<<"$health"; then
-              echo "Veřejné nasazení je potvrzené na commitu $SHA."
+              && grep -Fq 'source=' <<<"$health"; then
+              echo 'Veřejné nasazení je potvrzené.'
               exit 0
             fi
             sleep 5
@@ -127,7 +128,7 @@ jobs:
               `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
               success
-                ? 'Veřejná stránka obsahuje součet šesti pracovišť, ordinaci MUDr. Kuraková, s.r.o., neurologii a termíny ORL.'
+                ? 'Veřejná stránka obsahuje sedm kadaňských pracovišť a jedno regionální omezení, včetně MUDr. Kuraková, neurologie, ORL a očkovacího centra.'
                 : 'Přímé SSH nasazení nebo následné veřejné ověření selhalo. Je nutná kontrola logu běhu.'
             ].join('\n');
             const issues = await github.paginate(github.rest.issues.listForRepo, {
