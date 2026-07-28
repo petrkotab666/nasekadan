@@ -1,0 +1,62 @@
+name: Rychle opravit zdrojové pořadí článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/chronology-source-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Spustit chronologické řazení
+        id: sort
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 scripts/sort_articles_chronologically.py 2>&1 | tee /tmp/chronology.log
+
+      - name: Zapsat výsledek a změny
+        if: always()
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.sort.outcome }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          log = Path('/tmp/chronology.log').read_text(encoding='utf-8', errors='replace') if Path('/tmp/chronology.log').exists() else ''
+          Path('.github/chronology-source-status.json').write_text(json.dumps({
+              'status': 'passed' if os.environ.get('OUTCOME') == 'success' else 'failed',
+              'log': log[-8000:],
+          }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/chronology-source-status.json index.html clanky/index.html rss.xml news-sitemap.xml || true
+          git commit -m "Opravit zdrojové pořadí článků: $OUTCOME" || true
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
+
+      - name: Ukončit při chybě řazení
+        if: steps.sort.outcome != 'success'
+        run: exit 1
