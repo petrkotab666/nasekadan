@@ -1,0 +1,178 @@
+name: Doručit záložní upozornění monitoringu
+run-name: Doručení monitorovacího upozornění přes GitHub Issues
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'monitoring-alerts/pending/*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-monitoring-alert-delivery
+  cancel-in-progress: false
+
+jobs:
+  deliver:
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 15
+    steps:
+      - name: Načíst repozitář
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Najít čekající upozornění
+        id: pending
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          files = sorted(Path('monitoring-alerts/pending').glob('*.json'))
+          valid = []
+          for path in files:
+              try:
+                  data = json.loads(path.read_text(encoding='utf-8'))
+              except Exception as exc:
+                  print(f'Neplatný JSON {path}: {exc}')
+                  continue
+              required = ('fingerprint', 'title', 'summary', 'observed_at')
+              if not all(str(data.get(key, '')).strip() for key in required):
+                  print(f'Přeskakuji neúplný soubor {path}')
+                  continue
+              valid.append(str(path))
+
+          output = os.environ['GITHUB_OUTPUT']
+          with open(output, 'a', encoding='utf-8') as fh:
+              fh.write('count=%d\n' % len(valid))
+              fh.write('files<<EOF\n')
+              fh.write('\n'.join(valid))
+              fh.write('\nEOF\n')
+          print(f'Nalezeno {len(valid)} platných upozornění.')
+          PY
+
+      - name: Doručit upozornění jako GitHub Issue
+        if: steps.pending.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALERT_FILES: ${{ steps.pending.outputs.files }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p monitoring-alerts/delivered
+
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            export ALERT_FILE="$file"
+
+            eval "$(python3 - <<'PY'
+          import json, os, shlex
+          from pathlib import Path
+
+          path = Path(os.environ['ALERT_FILE'])
+          data = json.loads(path.read_text(encoding='utf-8'))
+          fingerprint = str(data['fingerprint']).strip()
+          title = str(data['title']).strip()
+          summary = str(data['summary']).strip()
+          observed = str(data['observed_at']).strip()
+          severity = str(data.get('severity', 'medium')).strip()
+          action = str(data.get('recommended_action', '')).strip()
+          facts = data.get('facts') or []
+          sources = data.get('sources') or []
+
+          body = [
+              '## Automatické upozornění monitoringu Naše Kadaň',
+              '',
+              summary,
+              '',
+              f'**Zachyceno:** {observed}',
+              f'**Závažnost:** {severity}',
+              f'**Fingerprint:** `{fingerprint}`',
+          ]
+          if facts:
+              body += ['', '### Ověřená zjištění']
+              body += [f'- {item}' for item in facts]
+          if sources:
+              body += ['', '### Zdroje']
+              for item in sources:
+                  if isinstance(item, dict):
+                      name = item.get('name') or item.get('url') or 'Zdroj'
+                      url = item.get('url') or ''
+                      body.append(f'- [{name}]({url})' if url else f'- {name}')
+                  else:
+                      body.append(f'- {item}')
+          if action:
+              body += ['', '### Doporučený další krok', action]
+          body += ['', '_Toto upozornění vytvořil záložní doručovací kanál GitHub Actions. Nevychází pouze ze stavového souboru; podklad musí být před vložením ověřen monitoringem._']
+
+          body_path = Path('/tmp/monitoring-alert-body.md')
+          body_path.write_text('\n'.join(body) + '\n', encoding='utf-8')
+          print('FINGERPRINT=' + shlex.quote(fingerprint))
+          print('ISSUE_TITLE=' + shlex.quote(f'[MONITORING KADAŇ] {title} [{fingerprint}]'))
+          print('BODY_PATH=' + shlex.quote(str(body_path)))
+          PY
+          )"
+
+            existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "$FINGERPRINT in:title" --json number,url --limit 1 --jq '.[0].number // empty')"
+            if [ -n "$existing" ]; then
+              issue_number="$existing"
+              issue_url="$(gh issue view "$issue_number" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
+              echo "Upozornění $FINGERPRINT již bylo doručeno jako issue #$issue_number."
+            else
+              issue_url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body-file "$BODY_PATH" --assignee petrkotab666)"
+              issue_number="${issue_url##*/}"
+              echo "Vytvořeno issue #$issue_number: $issue_url"
+            fi
+
+            python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          source = Path(os.environ['ALERT_FILE'])
+          data = json.loads(source.read_text(encoding='utf-8'))
+          data['delivery'] = {
+              'status': 'delivered',
+              'delivered_at': datetime.now(timezone.utc).isoformat(),
+              'issue_number': int(os.environ['issue_number']),
+              'issue_url': os.environ['issue_url'],
+              'workflow_run_id': os.environ.get('GITHUB_RUN_ID', ''),
+          }
+          target = Path('monitoring-alerts/delivered') / source.name
+          target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          source.unlink()
+          Path('monitoring-alert-channel-status.json').write_text(json.dumps({
+              'status': 'success',
+              'last_fingerprint': data['fingerprint'],
+              'last_issue_number': int(os.environ['issue_number']),
+              'last_issue_url': os.environ['issue_url'],
+              'checked_at_utc': datetime.now(timezone.utc).isoformat(),
+              'workflow_run_id': os.environ.get('GITHUB_RUN_ID', ''),
+              'delivery_channel': 'github-issues',
+          }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          done <<< "$ALERT_FILES"
+
+      - name: Uložit potvrzení doručení
+        if: steps.pending.outputs.count != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add monitoring-alerts monitoring-alert-channel-status.json
+          if git diff --cached --quiet; then
+            echo 'Není co ukládat.'
+            exit 0
+          fi
+          git commit -m 'Potvrdit doručení upozornění monitoringu'
+          git pull --rebase origin main
+          git push origin HEAD:main
