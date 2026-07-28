@@ -42,7 +42,7 @@ jobs:
           python3 scripts/embed_static_article_ads.py
           sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
           sudo cp -a clanky/. /var/www/nasekadan/clanky/
-          sudo install -m 0644 assets/reklamy/*.svg /var/www/nasekadan/assets/reklamy/
+          sudo cp -a assets/reklamy/. /var/www/nasekadan/assets/reklamy/
           REMOTE
 
       - name: Ověřit živé grafické reklamy
@@ -59,8 +59,15 @@ jobs:
             for banner in pojistime vaseuklizecka vyklidime realitykadan; do
               curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/${banner}-300x600.svg?ads-lock=${GITHUB_SHA}-${attempt}" | grep -Fq '<svg' || ok=false
             done
+            for banner in vaseuklizecka-cisteni-wide-1200x400.webp vaseuklizecka-cisteni-tower-300x600.webp; do
+              output="$RUNNER_TEMP/$banner"
+              curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/${banner}?ads-lock=${GITHUB_SHA}-${attempt}" -o "$output" || ok=false
+              [[ -s "$output" ]] || ok=false
+              [[ "$(wc -c < "$output")" -gt 1000 ]] || ok=false
+              [[ "$(head -c 4 "$output")" == 'RIFF' ]] || ok=false
+            done
             if [[ "$ok" == true ]]; then
-              echo 'Čtyři grafické reklamy jsou uzamčené a veřejně dostupné.'
+              echo 'Grafické reklamy včetně WebP bannerů jsou veřejně dostupné.'
               exit 0
             fi
             sleep 10
