@@ -50,6 +50,7 @@ jobs:
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
