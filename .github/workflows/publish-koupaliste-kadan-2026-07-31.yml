@@ -40,6 +40,7 @@ jobs:
           if [[ "$force" != 'true' && "$now" < "$target" ]]; then echo 'changed=false' >> "$GITHUB_OUTPUT"; exit 0; fi
 
           python3 scripts/update_koupaliste_research_20260729.py
+          python3 scripts/patch_koupaliste_final_council.py
           cp .github/drafts/koupaliste-kadan-skluzavka-niagara.html clanky/koupaliste-kadan-skluzavka-niagara.html
           python3 - <<'PY'
           from pathlib import Path
