@@ -1,0 +1,61 @@
+name: Nasadit náhled závěrečného profilu nemocnice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-profile-preview-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit neveřejný náhled
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          src='.github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html'
+          dst='/var/www/nasekadan/nahled/nemocnice-kadan-profil-sluzby-budoucnost.html'
+          test -f "$src"
+          sudo mkdir -p /var/www/nasekadan/nahled
+          tmp="$(mktemp)"
+          cp "$src" "$tmp"
+          sed -i 's#../../#../#g' "$tmp"
+          sed -i 's#PŘIPRAVOVANÝ ZÁVĚREČNÝ DÍL#NÁHLED · ZVEŘEJNĚNÍ 29. ČERVENCE 2026 V 5:00#g' "$tmp"
+          sudo cp "$tmp" "$dst"
+          rm -f "$tmp"
+          grep -Fq 'Nemocnice Kadaň není jen spor o miliony' "$dst"
+          grep -Fq 'noindex,nofollow' "$dst"
+          REMOTE
+
+      - name: Ověřit veřejný náhled
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            body="$(curl -kfsS --max-time 20 "https://nasekadan.cz/nahled/nemocnice-kadan-profil-sluzby-budoucnost.html?preview=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$body" \
+              && grep -Fq 'NÁHLED · ZVEŘEJNĚNÍ 29. ČERVENCE 2026 V 5:00' <<<"$body" \
+              && grep -Fq 'noindex,nofollow' <<<"$body"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
