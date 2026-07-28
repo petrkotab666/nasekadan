@@ -16,8 +16,10 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --user --quiet Pillow
+          python3 -m pip install --quiet Pillow
           python3 scripts/publish_autokemp_outages_article.py
           python3 scripts/generate_social_cards.py --write --check
 
@@ -71,14 +73,20 @@ jobs:
           done
           exit 1
 
-      - name: Kanonicky nasadit na OVH
+      - name: Kanonicky nasadit na OVH přes SSH
         shell: bash
         run: |
           set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
           chmod +x deploy/sync-production.sh
-          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
+          REMOTE
 
       - name: Veřejně ověřit článek i kulturní přehled
         shell: bash
