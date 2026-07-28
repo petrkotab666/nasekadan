@@ -14,6 +14,7 @@ const promoItems=[
   {id:'rixo',title:'RIXO.cz',text:'Online srovnání pojištění vozidel, majetku, cestování i dalších rizik.',url:'https://www.rixo.cz/pojisteni-vozidel/?a_box=9n97unga&a_cam=1',tag:'Pojištění',contexts:['finance','auto','travel','home','general']},
   {id:'vyklidime',title:'VYKLIDIME.TO',text:'Vyklízení bytů, domů, sklepů a pozůstalostí v Kadani a širokém okolí.',url:'https://vyklidime.to',tag:'Místní služba',contexts:['home','sidebar','local','general']},
   {id:'uklizecka',title:'Vaše uklízečka',text:'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',url:'https://vaseuklizecka.cz',tag:'Místní služba',contexts:['home','sidebar','local','general']},
+  {id:'uklizecka-cisteni',title:'Čištění koberců, sedaček a čalounění',text:'Hloubkové čištění koberců, sedaček a čalounění na Kadaňsku. Objednávky: 603 206 308.',url:'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',banner:'/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp',wideBanner:'/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp',tag:'Místní služba',contexts:['home','sidebar','local','general'],weight:4},
   {id:'haffit',title:'Haffit',text:'Krmivo pro psy připravené na míru podle potřeb konkrétního psa.',url:'https://www.haffit.cz/?a_box=cbhtyjjm&a_cam=1',tag:'Pro chovatele',contexts:['pets','family','general']},
   {id:'zonky',title:'Zonky půjčka',text:'Online půjčka od Zonky s přehledným vyřízením a možností předčasného splacení.',url:'https://www.zonky.cz/pujcka-od-zonky/?a_box=s8m27mmy',tag:'Finance',contexts:['finance','home','general']}
 ];
@@ -36,6 +37,16 @@ const towerCreativeItems=[
     width:300,
     height:600,
     contexts:['general','finance','auto','home','local']
+  }
+  ,{
+    id:'uklizecka-cisteni-tower',
+    title:'Čištění koberců, sedaček a čalounění',
+    url:'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',
+    image:'/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp',
+    width:300,
+    height:600,
+    contexts:['general','home','local','health','sidebar'],
+    weight:4
   }
 ];
 
@@ -189,8 +200,10 @@ async function loadAffiliateSnapshot(){
 }
 
 function pickPromos(context,count,offset){
-  const exact=promoItems.filter(item=>item.contexts.includes(context));
-  const fallback=promoItems.filter(item=>!exact.includes(item));
+  const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);
+  const exact=promoItems.filter(item=>item.contexts.includes(context)).flatMap(expand);
+  const exactIds=new Set(exact.map(item=>item.id));
+  const fallback=promoItems.filter(item=>!exactIds.has(item.id)).flatMap(expand);
   const pool=[...exact,...fallback];
   if(!pool.length)return [];
   const day=new Date().toISOString().slice(0,10);
@@ -373,7 +386,7 @@ function renderFeedCard(item){
 
 function renderBannerCard(item){
   const title=escapeHtml(item.title);
-  const banner=safeHttpUrl(item.banner);
+  const banner=safeHttpUrl(item.wideBanner||item.banner);
   const visual=banner
     ?`<span class="promo-banner"><img src="${escapeHtml(banner)}" alt="${title}" loading="lazy" decoding="async"></span>`
     :`<span class="promo-banner promo-banner-fallback">${title}</span>`;
@@ -395,10 +408,10 @@ function renderPromos(){
 }
 
 function pickTowerCreative(context,offset=0){
-  const pool=[
-    ...towerCreativeItems.filter(item=>item.contexts.includes(context)),
-    ...towerCreativeItems.filter(item=>!item.contexts.includes(context))
-  ];
+  const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);
+  const exact=towerCreativeItems.filter(item=>item.contexts.includes(context)).flatMap(expand);
+  const exactIds=new Set(exact.map(item=>item.id));
+  const pool=[...exact,...towerCreativeItems.filter(item=>!exactIds.has(item.id)).flatMap(expand)];
   if(!pool.length)return null;
   const day=new Date().toISOString().slice(0,10);
   return pool[(hashSeed(`${location.pathname}|${day}|tower`)+offset)%pool.length];
