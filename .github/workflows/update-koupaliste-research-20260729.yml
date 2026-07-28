@@ -25,7 +25,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Doplnit nové zjištění do obou neveřejných draftů
+      - name: Doplnit nové zjištění do neveřejných draftů
         run: python3 scripts/update_koupaliste_research_20260729.py
       - name: Uložit aktualizované drafty
         shell: bash
@@ -33,7 +33,10 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – rešerše'
           git config user.email 'info@nasekadan.cz'
-          git add -- .github/drafts/koupaliste-kadan-research-2026.html .github/drafts/pozemky-koupaliste-kadan.html
+          git add -- \
+            .github/drafts/koupaliste-kadan-research-2026.html \
+            .github/drafts/pozemky-koupaliste-kadan.html \
+            .github/drafts/koupaliste-kadan-skluzavka-niagara.html
           if git diff --cached --quiet; then
             echo 'Drafty už obsahují aktuální zjištění.'
             exit 0
