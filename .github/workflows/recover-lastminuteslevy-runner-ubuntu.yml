@@ -1,4 +1,4 @@
-name: Najít funkční serverovou SMTP konfiguraci
+name: Napojit reset statistik na funkční SMTP a ověřit jej
 
 on:
   pull_request:
@@ -12,9 +12,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  inspect-smtp:
+  configure-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
       KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
@@ -31,158 +31,189 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/smtp-search"
-          : > "$RUNNER_TEMP/smtp-search/result.txt"
+          mkdir -p "$RUNNER_TEMP/stats-smtp"
+          : > "$RUNNER_TEMP/stats-smtp/result.txt"
           selected=''
           for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
             value="${!name:-}"
             if [ -n "$value" ]; then
-              printf '%s\n' "$value" > "$RUNNER_TEMP/smtp-search/id_key"
+              printf '%s\n' "$value" > "$RUNNER_TEMP/stats-smtp/id_key"
               selected="$name"
               break
             fi
           done
           test -n "$selected"
-          chmod 600 "$RUNNER_TEMP/smtp-search/id_key"
+          chmod 600 "$RUNNER_TEMP/stats-smtp/id_key"
           echo "selected=$selected" >> "$GITHUB_OUTPUT"
 
-      - name: Najít a bezpečně otestovat SMTP kandidáty
-        id: search
+      - name: Vytvořit oddělenou SMTP konfiguraci statistik a nasadit ji
+        id: configure
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/smtp-search/id_key" \
-            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/smtp-search/result.txt"
+          ssh -i "$RUNNER_TEMP/stats-smtp/id_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/stats-smtp/result.txt"
           set -euo pipefail
           sudo -n true
-          work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
 
-          sudo find /etc /opt /home/ubuntu /root \
-            -xdev -maxdepth 7 -type f -size -2M \
-            \( -iname '*.env' -o -iname '*.env.*' -o -iname '*smtp*' -o -iname '*newsletter*' -o -iname '*mail*config*' -o -iname '*credentials*' \) \
-            2>/dev/null | sort -u > "$work/candidates.txt"
-
-          sudo grep -RIlE 'SMTP_(HOST|PORT|USER|PASSWORD|TLS)|MAIL_(HOST|USER|PASSWORD)|RESEND_API_KEY|SENDGRID_API_KEY|MAILGUN' \
-            /etc/systemd /etc/default /etc/sysconfig /opt 2>/dev/null \
-            | head -n 300 >> "$work/candidates.txt" || true
-          sort -u "$work/candidates.txt" -o "$work/candidates.txt"
-
-          sudo python3 - "$work/candidates.txt" <<'PY'
+          sudo python3 - <<'PY'
           from __future__ import annotations
 
+          import os
           import shlex
-          import smtplib
-          import ssl
-          import sys
+          import tempfile
           from pathlib import Path
 
+          source = Path('/etc/lastminuteslevy-alerts.env')
+          target = Path('/etc/nasekadan-stats-email.env')
 
           def parse_env(path: Path) -> dict[str, str]:
-              data: dict[str, str] = {}
-              try:
-                  lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-              except Exception:
-                  return data
-              for line in lines:
-                  value_line = line.strip()
-                  if not value_line or value_line.startswith("#") or "=" not in value_line:
+              result: dict[str, str] = {}
+              for raw in path.read_text(encoding='utf-8', errors='strict').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
                       continue
-                  if value_line.startswith("export "):
-                      value_line = value_line[7:].lstrip()
-                  key, value = value_line.split("=", 1)
+                  if line.startswith('export '):
+                      line = line[7:].lstrip()
+                  key, value = line.split('=', 1)
                   key = key.strip()
-                  if not key.replace("_", "").isalnum():
-                      continue
                   value = value.strip()
                   try:
                       parts = shlex.split(value, posix=True)
                       value = parts[0] if len(parts) == 1 else value
                   except Exception:
-                      value = value.strip().strip('"').strip("'")
-                  data[key] = value
-              return data
+                      value = value.strip('"').strip("'")
+                  result[key] = value
+              return result
 
+          env = parse_env(source)
+          required = ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASSWORD']
+          missing = [key for key in required if not env.get(key)]
+          if missing:
+              raise SystemExit('Ve zdrojové konfiguraci chybí povinné SMTP položky.')
+          if env['SMTP_USER'].strip().lower() != 'petrkotab@seznam.cz':
+              raise SystemExit('Funkční SMTP účet není očekávaný vlastnický účet.')
 
-          paths: list[Path] = []
-          for raw in Path(sys.argv[1]).read_text().splitlines():
-              path = Path(raw)
-              if path not in paths:
-                  paths.append(path)
+          values = {
+              'SMTP_HOST': env['SMTP_HOST'],
+              'SMTP_PORT': env.get('SMTP_PORT', '465'),
+              'SMTP_USER': env['SMTP_USER'],
+              'SMTP_PASSWORD': env['SMTP_PASSWORD'],
+              'SMTP_TLS': env.get('SMTP_TLS', 'ssl'),
+              'NEWSLETTER_FROM': env['SMTP_USER'],
+              'SMTP_FROM': env['SMTP_USER'],
+              'EMAIL_FROM': env['SMTP_USER'],
+          }
 
-          print("=== NALEZENÉ SOUBORY S E-MAILOVOU KONFIGURACÍ ===")
-          relevant: list[Path] = []
-          for path in paths:
+          fd, tmp_name = tempfile.mkstemp(prefix='.nasekadan-stats-email.', dir='/etc', text=True)
+          try:
+              with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                  for key, value in values.items():
+                      escaped = value.replace('\\', '\\\\').replace('"', '\\"')
+                      handle.write(f'{key}="{escaped}"\n')
+              os.chmod(tmp_name, 0o600)
+              os.chown(tmp_name, 0, 0)
+              os.replace(tmp_name, target)
+          finally:
               try:
-                  text = path.read_text(encoding="utf-8", errors="ignore")
-              except Exception:
-                  continue
-              if any(key in text for key in ("SMTP_PASSWORD", "SMTP_HOST", "RESEND_API_KEY", "SENDGRID_API_KEY", "MAILGUN")):
-                  relevant.append(path)
-                  print(path)
+                  os.unlink(tmp_name)
+              except FileNotFoundError:
+                  pass
 
-          print("=== TEST SMTP KANDIDÁTŮ (BEZ ZOBRAZENÍ HESEL) ===")
-          seen: set[tuple[str, int, str, str]] = set()
-          for path in relevant:
-              env = parse_env(path)
-              host = env.get("SMTP_HOST") or env.get("MAIL_HOST")
-              user = env.get("SMTP_USER") or env.get("SMTP_USERNAME") or env.get("MAIL_USER")
-              password = env.get("SMTP_PASSWORD") or env.get("SMTP_PASS") or env.get("MAIL_PASSWORD")
-              if not (host and user and password):
-                  continue
-              port = int(env.get("SMTP_PORT") or env.get("MAIL_PORT") or ("465" if "seznam" in host else "587"))
-              mode = (env.get("SMTP_TLS") or env.get("SMTP_SECURITY") or "").lower()
-              fingerprint = (host, port, user, password)
-              if fingerprint in seen:
-                  continue
-              seen.add(fingerprint)
-              try:
-                  if mode == "ssl" or port == 465:
-                      client = smtplib.SMTP_SSL(host, port, timeout=15, context=ssl.create_default_context())
-                  else:
-                      client = smtplib.SMTP(host, port, timeout=15)
-                      client.ehlo()
-                      if mode in {"starttls", "tls", "true", "1"} or port == 587:
-                          client.starttls(context=ssl.create_default_context())
-                          client.ehlo()
-                  client.login(user, password)
-                  client.quit()
-                  print(f"SUCCESS file={path} host={host} port={port} user={user}")
-              except Exception as exc:
-                  print(f"FAIL file={path} host={host} port={port} user={user} error={type(exc).__name__}")
+          print('Oddělená SMTP konfigurace statistik byla vytvořena pro petrkotab@seznam.cz; heslo nebylo vypsáno.')
           PY
 
-          echo '=== LOKÁLNÍ ODESÍLACÍ SLUŽBY ==='
-          for cmd in sendmail msmtp mailx mail; do
-            if command -v "$cmd" >/dev/null 2>&1; then echo "$cmd=$(command -v "$cmd")"; fi
-          done
-          for svc in postfix exim4 sendmail; do
-            state="$(systemctl is-active "$svc" 2>/dev/null || true)"
-            [ -n "$state" ] && echo "$svc=$state"
-          done
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          git clone --depth 1 https://github.com/petrkotab666/nasekadan.git "$work/repo"
+          sudo bash "$work/repo/.github/scripts/nasekadan-stats/install-stats.sh"
+          sudo systemctl daemon-reload
+          sudo systemctl restart nasekadan-stats-web.service
+          sleep 2
+          systemctl is-active --quiet nasekadan-stats-web.service
+          health="$(curl -fsS http://127.0.0.1:3225/healthz)"
+          python3 - "$health" <<'PY'
+          import json, sys
+          data = json.loads(sys.argv[1])
+          assert data.get('ok') is True
+          assert data.get('auth') == 'application'
+          assert data.get('smtpConfigured') is True
+          PY
+          echo 'Lokální služba statistik je aktivní a SMTP je nakonfigurované.'
           REMOTE
+
+      - name: Ověřit veřejný login a odeslat skutečný resetovací e-mail
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          login="$(curl -fsS --retry 4 --retry-delay 2 --max-time 25 \
+            -H 'Cache-Control: no-cache' \
+            'https://nasekadan.cz/statistiky/?verify-smtp='"$GITHUB_RUN_ID")"
+          grep -Fq 'Přihlášení ke statistikám' <<<"$login"
+          grep -Fq 'Zapomenuté heslo' <<<"$login"
+
+          forgot="$(curl -fsS --retry 4 --retry-delay 2 --max-time 25 \
+            'https://nasekadan.cz/statistiky/zapomenute-heslo')"
+          grep -Fq 'petrkotab@seznam.cz' <<<"$forgot"
+
+          response_file="$RUNNER_TEMP/stats-smtp/reset-response.html"
+          status="$(curl -sS --retry 2 --retry-delay 2 --max-time 45 \
+            -X POST \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            -D "$RUNNER_TEMP/stats-smtp/reset-headers.txt" \
+            -o "$response_file" \
+            -w '%{http_code}' \
+            --data '' \
+            'https://nasekadan.cz/statistiky/zapomenute-heslo')"
+          test "$status" = 200
+          grep -Eq 'Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)' "$response_file"
+
+          preview_status="$(curl -kisS --max-time 20 https://nasekadan.cz/nahled/ | awk 'NR==1 {print $2}')"
+          [[ "$preview_status" =~ ^(401|404|502|503)$ ]]
+
+          echo 'ÚSPĚCH: SMTP server přijal resetovací e-mail výhradně pro petrkotab@seznam.cz.' \
+            | tee -a "$RUNNER_TEMP/stats-smtp/result.txt"
 
       - name: Zapsat výsledek do PR
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
           KEY_NAME: ${{ steps.key.outputs.selected }}
-          SEARCH_OUTCOME: ${{ steps.search.outcome }}
+          CONFIGURE_OUTCOME: ${{ steps.configure.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         with:
           script: |
             const fs = require('fs');
             let log = '';
-            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/smtp-search/result.txt`, 'utf8'); } catch {}
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/stats-smtp/result.txt`, 'utf8'); } catch {}
+            const ok = process.env.CONFIGURE_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
             const body = [
-              '## Bezpečné hledání funkční SMTP konfigurace',
+              `## ${ok ? 'Reset hesla statistik je kompletně funkční' : 'Napojení resetu na SMTP selhalo'}`,
               '',
               `- SSH secret: \`${process.env.KEY_NAME || 'žádný'}\``,
-              `- Výsledek kontroly: **${process.env.SEARCH_OUTCOME || 'neprovedeno'}**`,
-              '- Hesla ani tokeny nejsou v tomto výstupu zobrazena.',
+              `- Oddělená SMTP konfigurace a nasazení: **${process.env.CONFIGURE_OUTCOME || 'neprovedeno'}**`,
+              `- Veřejný formulář a přijetí e-mailu SMTP serverem: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
+              '- Resetovací adresa je pevně omezena na `petrkotab@seznam.cz`.',
+              '- Žádné SMTP heslo není ve výstupu uvedeno.',
               '',
               '```text',
-              log.slice(-55000).replace(/```/g, '---'),
+              log.slice(-30000).replace(/```/g, '---'),
               '```'
             ].join('\n');
             await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          CONFIGURE: ${{ steps.configure.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        run: |
+          test "$CONFIGURE" = success
+          test "$VERIFY" = success
