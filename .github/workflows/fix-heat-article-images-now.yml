@@ -1,0 +1,119 @@
+name: Opravit obrázky článku o vedrech
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-heat-article-images-now.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-heat-image-fix
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit a převést obrázky na JPEG
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+
+          pairs = [
+              (Path('obrazky/koupaliste-kadan-budova-2026.webp'), Path('obrazky/koupaliste-kadan-budova-2026.jpg')),
+              (Path('obrazky/koupaliste-kadan-oteviraci-doba-2026.webp'), Path('obrazky/koupaliste-kadan-oteviraci-doba-2026.jpg')),
+          ]
+          for src, dst in pairs:
+              if not src.is_file() or src.stat().st_size < 1000:
+                  raise SystemExit(f'Chybí nebo je prázdný zdrojový obrázek: {src}')
+              with Image.open(src) as im:
+                  im.verify()
+              with Image.open(src) as im:
+                  im = im.convert('RGB')
+                  im.save(dst, 'JPEG', quality=90, optimize=True, progressive=True)
+              with Image.open(dst) as check:
+                  check.verify()
+              if dst.stat().st_size < 1000:
+                  raise SystemExit(f'Výsledný JPEG je podezřele malý: {dst}')
+              print(src, '->', dst, dst.stat().st_size)
+          PY
+
+      - name: Přepnout článek a přehledy na JPEG
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html'),
+              Path('index.html'),
+              Path('clanky/index.html'),
+              Path('rss.xml'),
+          ]
+          replacements = {
+              'koupaliste-kadan-budova-2026.webp': 'koupaliste-kadan-budova-2026.jpg?v=20260728-2',
+              'koupaliste-kadan-oteviraci-doba-2026.webp': 'koupaliste-kadan-oteviraci-doba-2026.jpg?v=20260728-2',
+          }
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              for old, new in replacements.items():
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8', newline='\n')
+
+          article = Path('clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html').read_text(encoding='utf-8')
+          for needle in (
+              '/obrazky/koupaliste-kadan-budova-2026.jpg?v=20260728-2',
+              '/obrazky/koupaliste-kadan-oteviraci-doba-2026.jpg?v=20260728-2',
+          ):
+              if needle not in article:
+                  raise SystemExit(f'Článek neobsahuje opravenou cestu: {needle}')
+          PY
+
+      - name: Zapsat opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-heat-article-images-now.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Opravit obrázky článku o tropických dnech"
+          git push origin HEAD:main
+
+  deploy:
+    needs: repair
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nasadit a ověřit opravený článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+          curl -kfsS --resolve nasekadan.cz:443:127.0.0.1 \
+            'https://nasekadan.cz/obrazky/koupaliste-kadan-budova-2026.jpg?v=20260728-2' -o /tmp/heat-main.jpg
+          curl -kfsS --resolve nasekadan.cz:443:127.0.0.1 \
+            'https://nasekadan.cz/obrazky/koupaliste-kadan-oteviraci-doba-2026.jpg?v=20260728-2' -o /tmp/heat-sign.jpg
+          test "$(wc -c < /tmp/heat-main.jpg)" -gt 1000
+          test "$(wc -c < /tmp/heat-sign.jpg)" -gt 1000
+          file /tmp/heat-main.jpg | grep -q 'JPEG image data'
+          file /tmp/heat-sign.jpg | grep -q 'JPEG image data'
