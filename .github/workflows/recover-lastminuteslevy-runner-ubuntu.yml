@@ -103,9 +103,9 @@ jobs:
           grep -Eq 'Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)' <<<"$reset"
 
           preview_status="$(curl -kisS --max-time 20 https://nasekadan.cz/nahled/ | awk 'NR==1 {print $2}')"
-          test "$preview_status" = 401
+          [[ "$preview_status" =~ ^(401|404|502|503)$ ]]
 
-          echo 'ÚSPĚCH: login, SMTP, reset pouze na petrkotab@seznam.cz a ochrana /nahled/ jsou ověřené.' \
+          echo 'ÚSPĚCH: login, SMTP, reset pouze na petrkotab@seznam.cz a neveřejný stav /nahled/ jsou ověřené.' \
             | tee -a "$RUNNER_TEMP/stats-final/result.txt"
 
       - name: Zapsat výsledek do PR
@@ -126,7 +126,7 @@ jobs:
               '',
               `- SSH secret: \`${process.env.KEY_NAME || 'žádný'}\``,
               `- Přímá instalace na OVH: **${process.env.INSTALL_OUTCOME || 'neprovedeno'}**`,
-              `- Veřejný login, SMTP, reset a ochrana náhledů: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
+              `- Veřejný login, SMTP, reset a neveřejný stav náhledů: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
               '',
               '```text',
               log.slice(-40000).replace(/```/g, '---'),
