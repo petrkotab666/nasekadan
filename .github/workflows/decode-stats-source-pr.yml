@@ -1,0 +1,49 @@
+name: Rozbalit současný zdroj statistik pro opravu
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/decode-stats-source-pr.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  decode:
+    if: github.head_ref == 'repair-stats-live-20260728'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 1
+      - name: Rozbalit program do čitelného souboru
+        run: |
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import re
+          from pathlib import Path
+
+          source_path = Path('.github/scripts/nasekadan-stats/stats_server.py')
+          output_path = Path('.github/scripts/nasekadan-stats/stats_server.decoded.py')
+          source = source_path.read_text(encoding='utf-8')
+          match = re.search(r'base64\.b64decode\("([A-Za-z0-9+/=]+)"\)', source)
+          if not match:
+              raise SystemExit('Komprimovaný zdroj nebyl nalezen.')
+          decoded = gzip.decompress(base64.b64decode(match.group(1))).decode('utf-8')
+          output_path.write_text(decoded, encoding='utf-8')
+          print(f'Rozbaleno {len(decoded)} znaků do {output_path}.')
+          PY
+      - name: Uložit čitelnou kopii do servisní větve
+        run: |
+          if git diff --quiet -- .github/scripts/nasekadan-stats/stats_server.decoded.py && git ls-files --error-unmatch .github/scripts/nasekadan-stats/stats_server.decoded.py >/dev/null 2>&1; then
+            echo 'Čitelná kopie už je aktuální.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/scripts/nasekadan-stats/stats_server.decoded.py
+          git commit -m 'Rozbalit zdroj statistik pro bezpečnou opravu'
+          git push origin HEAD:${{ github.head_ref }}
