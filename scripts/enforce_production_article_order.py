@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# LATEST_AUTOKEMP_GUARD: staré opravné skripty nesmějí přepsat novější titulní článek.
+if (ROOT / "clanky" / "odstavky-elektriny-autokemp-prunerov-srpen-2026.html").exists():
+    print("Novější článek o odstávkách Autokempu Prunéřov je již publikován; staré pořadí se nepoužije.")
+    raise SystemExit(0)
 ORDER = [
     "/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html",
     "/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html",

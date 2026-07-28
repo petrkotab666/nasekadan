@@ -35,37 +35,4 @@ function render(events,generatedAt){
  if(generatedAt)grid.insertAdjacentHTML('afterend',`<p class="events-updated">Kalendář naposledy automaticky zkontrolován: ${new Date(generatedAt).toLocaleString('cs-CZ')}.</p>`);
 }
 
-const FIREFIGHTERS_HREF='/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html';
-function repairHomepageEditorialOrder(){
- const path=location.pathname.replace(/\/+$/,'');
- if(path!==''&&path!=='/index.html')return;
- const aside=document.querySelector('.current-aside');
- if(!aside)return;
- const currentMainLink=aside.querySelector('.aside-button')?.getAttribute('href');
- if(currentMainLink===FIREFIGHTERS_HREF)return;
- aside.innerHTML=`
-   <p class="aside-label">DALŠÍ AKTUÁLNÍ ČLÁNEK</p>
-   <p class="aside-date">27. 7. 2026 v 22:35</p>
-   <h2>Kadaňští hasiči cvičili na Nechranicích záchranu lidí z vody</h2>
-   <p>Společný výcvik prověřil práci člunů, záchranu osob z vody i součinnost hasičů, policie a vodních záchranářů.</p>
-   <a class="aside-button" href="${FIREFIGHTERS_HREF}">Přečíst článek →</a>
-   <div class="aside-links">
-     <a href="/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html">82 lůžek pro Ukrajinu</a>
-     <a href="/clanky/avies-nemocnice-kadan.html">Téměř 170 milionů za léčiva od AVIES</a>
-     <a href="/clanky/">Všechny články podle data</a>
-   </div>`;
-}
-
-function lockHomepageEditorialOrder(){
- repairHomepageEditorialOrder();
- window.addEventListener('load',repairHomepageEditorialOrder,{once:true});
- [0,100,350,1000].forEach(delay=>setTimeout(repairHomepageEditorialOrder,delay));
- const aside=document.querySelector('.current-aside');
- if(aside){
-   const observer=new MutationObserver(()=>repairHomepageEditorialOrder());
-   observer.observe(aside,{childList:true,subtree:true,characterData:true});
- }
-}
-
-document.addEventListener('DOMContentLoaded',lockHomepageEditorialOrder);
 fetch('/data/events.json?ts='+Date.now(),{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(data=>render(Array.isArray(data.events)?data.events:[],data.generatedAt)).catch(()=>{if(grid)grid.innerHTML='<p>Kalendář se právě nepodařilo načíst. Napište na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>.</p>';});

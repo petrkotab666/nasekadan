@@ -3,6 +3,10 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
+# LATEST_AUTOKEMP_GUARD: staré opravné skripty nesmějí přepsat novější titulní článek.
+if (ROOT / "clanky" / "odstavky-elektriny-autokemp-prunerov-srpen-2026.html").exists():
+    print("Novější článek o odstávkách Autokempu Prunéřov je již publikován; staré pořadí se nepoužije.")
+    raise SystemExit(0)
 HOME = ROOT / "index.html"
 ARCHIVE = ROOT / "clanky" / "index.html"
 CULTURE = ROOT / "clanky" / "kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html"
