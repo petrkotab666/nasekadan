@@ -1,0 +1,43 @@
+name: Aktualizovat rešerši koupaliště
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update_koupaliste_research_20260729.py'
+      - '.github/koupaliste-research-trigger-20260729.txt'
+      - '.github/workflows/update-koupaliste-research-20260729.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-koupaliste-research-20260729
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Doplnit nové zjištění do obou neveřejných draftů
+        run: python3 scripts/update_koupaliste_research_20260729.py
+      - name: Uložit aktualizované drafty
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add -- .github/drafts/koupaliste-kadan-research-2026.html .github/drafts/pozemky-koupaliste-kadan.html
+          if git diff --cached --quiet; then
+            echo 'Drafty už obsahují aktuální zjištění.'
+            exit 0
+          fi
+          git commit -m 'Aktualizovat rešerši koupaliště o schválení dotace'
+          git pull --rebase origin main
+          git push origin main
