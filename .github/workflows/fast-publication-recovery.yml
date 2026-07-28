@@ -1,7 +1,11 @@
-name: Ruční kanonická obnova Naše Kadaň
+name: Rychlé publikování a obnova Naše Kadaň
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fast-publication-recovery-trigger.txt'
 
 permissions:
   contents: read
@@ -59,4 +63,4 @@ jobs:
           grep -Fq "source=$source_sha" <<<"$health"
           grep -Fq "$h1" <<<"$live"
           grep -Fq "$modified" <<<"$live"
-          echo 'Ruční kanonická obnova a dynamická kontrola KTK prošly.'
+          echo 'Rychlé publikování a obnova i dynamická kontrola KTK prošly.'
