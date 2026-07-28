@@ -1,0 +1,78 @@
+name: Doplnit Folk Rock a Horní hrad do aktuálního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/current-week-castle-events-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Upravit článek a uložit změnu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/add_current_week_castle_events.py
+          python3 scripts/normalize_articles.py --write --check
+          git config user.name "Naše Kadaň automat"
+          git config user.email "actions@users.noreply.github.com"
+          git add clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          git diff --cached --quiet || git commit -m "Doplnit Folk Rock Festival a Chválu medu do aktuálního přehledu"
+          git push origin main
+
+      - name: Nasadit pouze aktualizovaný článek atomicky
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          python3 scripts/add_current_week_castle_events.py
+          python3 scripts/normalize_articles.py --write --check
+          SRC='clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
+          DST='/var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
+          TMP="${DST}.new"
+          grep -Fq 'data-folk-rock-loucna' "$SRC"
+          grep -Fq 'data-chvala-medu-horni-hrad' "$SRC"
+          grep -Fq 'data-promos' "$SRC"
+          sudo cp "$SRC" "$TMP"
+          sudo chmod 644 "$TMP"
+          sudo mv "$TMP" "$DST"
+          REMOTE
+
+      - name: Ověřit živý článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            html="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?castle=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Folk Rock Festival na Horách' <<<"$html" \
+              && grep -Fq 'Chvála medu na Horním hradě' <<<"$html" \
+              && grep -Fq 'data-promos' <<<"$html"; then
+              echo 'Živý článek obsahuje obě doplněné akce i reklamy.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Živý článek se neaktualizoval.' >&2
+          exit 1
