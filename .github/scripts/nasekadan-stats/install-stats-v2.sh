@@ -98,6 +98,27 @@ location ^~ /statistiky/ {
     add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
+
+# Naše Kadaň – soukromé náhledy článků zůstávají chráněné původním Basic Auth.
+location = /nahled {
+    return 301 /nahled/;
+}
+
+location ^~ /nahled/ {
+    auth_basic "Naše Kadaň – soukromý náhled";
+    auth_basic_user_file /etc/nginx/.nasekadan-stats.htpasswd;
+    access_log off;
+    proxy_pass http://127.0.0.1:3224/nahled/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    add_header Pragma "no-cache" always;
+    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
 NGINX
 
 if [[ ! -e "$LOG_FILE" ]]; then
