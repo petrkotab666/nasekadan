@@ -1,0 +1,80 @@
+name: Opravit produkční kontrolu článku o vedrech
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-cloud-heat-publication-guard.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit článek o vedrech do produkční kontroly
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/cloud-emergency-deploy-nasekadan.yml')
+          text = path.read_text(encoding='utf-8')
+          heat = '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html'
+
+          old_expected = "          expected = [\n              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html',"
+          new_expected = "          expected = [\n              '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html',\n              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html',"
+          if heat not in text.split('def order', 1)[0]:
+              if old_expected not in text:
+                  raise SystemExit('Nenalezen očekávaný seznam článků.')
+              text = text.replace(old_expected, new_expected, 1)
+
+          old_download = "            curl -4 -kfsS --max-time 25 \"https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?verify=$stamp-$attempt\" -o /tmp/nk-autokemp.html || true"
+          new_download = "            curl -4 -kfsS --max-time 25 \"https://nasekadan.cz/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html?verify=$stamp-$attempt\" -o /tmp/nk-heat.html || true\n" + old_download
+          if '/tmp/nk-heat.html' not in text:
+              if old_download not in text:
+                  raise SystemExit('Nenalezen blok stahování ověřovaných článků.')
+              text = text.replace(old_download, new_download, 1)
+
+          old_read = "          article = Path('/tmp/nk-autokemp.html').read_text(encoding='utf-8', errors='replace')"
+          new_read = "          heat_article = Path('/tmp/nk-heat.html').read_text(encoding='utf-8', errors='replace')\n" + old_read
+          if 'heat_article =' not in text:
+              if old_read not in text:
+                  raise SystemExit('Nenalezen blok čtení článků.')
+              text = text.replace(old_read, new_read, 1)
+
+          old_checks = "              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html' in home_text,\n              'Odstávky elektřiny omezí v srpnu provoz restaurace' in article,"
+          new_checks = "              '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html' in home_text,\n              'Kadaň čekají tropické dny. Ve čtvrtek může být až 35 stupňů' in heat_article,\n              'koupaliste-kadan-oteviraci-doba-2026.jpg?v=20260728-2' not in heat_article,\n              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html' in home_text,\n              'Odstávky elektřiny omezí v srpnu provoz restaurace' in article,"
+          if "'Kadaň čekají tropické dny. Ve čtvrtek může být až 35 stupňů' in heat_article" not in text:
+              if old_checks not in text:
+                  raise SystemExit('Nenalezen blok produkčních kontrol.')
+              text = text.replace(old_checks, new_checks, 1)
+
+          old_required = "               'requiredOrder': [\n                   'odstavky-elektriny-autokemp-prunerov-srpen-2026.html',"
+          new_required = "               'requiredOrder': [\n                   'kadan-tropicke-dny-koupaliste-cervenec-2026.html',\n                   'odstavky-elektriny-autokemp-prunerov-srpen-2026.html',"
+          if "'kadan-tropicke-dny-koupaliste-cervenec-2026.html'," not in text.split("'requiredOrder':", 1)[-1]:
+              if old_required not in text:
+                  raise SystemExit('Nenalezen stavový seznam článků.')
+              text = text.replace(old_required, new_required, 1)
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+      - name: Zapsat trvalou ochranu publikace
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-cloud-heat-publication-guard.yml
+          git config user.name 'Naše Kadaň deploy'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Chránit článek o tropických dnech při produkčním nasazení'
+          git push origin HEAD:main
