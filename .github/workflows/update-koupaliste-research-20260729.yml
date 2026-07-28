@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/update_koupaliste_research_20260729.py'
+      - 'scripts/patch_koupaliste_final_council.py'
       - '.github/koupaliste-research-trigger-20260729.txt'
       - '.github/workflows/update-koupaliste-research-20260729.yml'
   workflow_dispatch:
@@ -26,7 +27,9 @@ jobs:
           ref: main
           fetch-depth: 0
       - name: Doplnit nové zjištění do neveřejných draftů
-        run: python3 scripts/update_koupaliste_research_20260729.py
+        run: |
+          python3 scripts/update_koupaliste_research_20260729.py
+          python3 scripts/patch_koupaliste_final_council.py
       - name: Uložit aktualizované drafty
         shell: bash
         run: |
