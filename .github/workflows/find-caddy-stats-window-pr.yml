@@ -1,0 +1,82 @@
+name: Najít Caddy statistiky z doby před změnou přihlášení
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/find-caddy-stats-window-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  find-window:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Projít pouze časové okno vzniku Caddy měření
+        id: find
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/caddy-window.txt"
+          set -euo pipefail
+          cd /opt/nasekadan
+          echo 'WINDOW_COMMITS_BEGIN'
+          git log --all --since='2026-07-28T15:30:00Z' --until='2026-07-28T20:00:00Z' \
+            --date=iso-strict --pretty='format:%H | %cI | %s' | head -1000
+          echo 'WINDOW_COMMITS_END'
+          echo 'WINDOW_MATCHES_BEGIN'
+          for rev in $(git log --all --since='2026-07-28T15:30:00Z' --until='2026-07-28T20:00:00Z' --format='%H'); do
+            matches="$(git grep -I -n -E 'nasekadan\.access\.log|log nk_counter|Návštěvy|Návštěvníci|Zobrazení|session|visitor|pageview|CADDY' "$rev" -- \
+              '.github/**' 'deploy/**' '*.py' '*.sh' '*.yml' '*.yaml' 2>/dev/null | head -120 || true)"
+            if [[ -n "$matches" ]]; then
+              echo "REV $rev | $(git show -s --format='%cI | %s' "$rev")"
+              printf '%s\n' "$matches"
+            fi
+          done | awk '!seen[$0]++' | head -5000
+          echo 'WINDOW_MATCHES_END'
+
+          echo 'CADDY_BACKUPS_BEGIN'
+          sudo find /etc/caddy -maxdepth 3 -type f -printf '%T@|%p|%s\n' 2>/dev/null \
+            | sort -nr | head -100 | while IFS='|' read -r mtime path size; do
+                echo "FILE $path | $size B | mtime=$mtime"
+                sudo grep -nE 'statistiky|nasekadan\.access\.log|nk_counter|reverse_proxy 127\.0\.0\.1:3225' "$path" 2>/dev/null | head -80 || true
+              done
+          echo 'CADDY_BACKUPS_END'
+          REMOTE
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.find.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/caddy-window.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Caddy statistiky před změnou přihlášení: ${process.env.OUTCOME}`,
+                '',
+                '```text', log.slice(-60000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.find.outcome }}
+        run: test "$OUTCOME" = success
