@@ -42,6 +42,7 @@ python3 scripts/normalize_footers.py --write --check
 # blokující integritní kontrolou. Docker build stejný krok zopakuje idempotentně,
 # ale syrový main nesmí selhat dříve jen kvůli chybějícímu site.js.
 python3 scripts/normalize_articles.py --write --check
+python3 scripts/enable_heat_feed.py
 python3 scripts/sort_articles_chronologically.py
 python3 scripts/validate_publication_integrity.py
 

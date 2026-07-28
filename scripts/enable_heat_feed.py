@@ -1,46 +1,69 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = '<script src="/horko-feed.js?v=20260728-heat-1"></script>'
+SCRIPT = '<script src="/horko-feed.js?v=20260728-heat-2"></script>'
+SCRIPT_RE = re.compile(
+    r'\s*<script\s+src=["\']/horko-feed\.js(?:\?[^"\']*)?["\'][^>]*></script>\s*',
+    re.IGNORECASE,
+)
 
 
-def eligible(path: Path, text: str) -> bool:
-    if path.parts and any(part in {'.git', '.github', 'nahled', 'sdilet'} for part in path.parts):
-        return False
-    return '<body' in text.lower() and '</body>' in text.lower()
+def is_public_article(path: Path, text: str) -> bool:
+    relative = path.relative_to(ROOT)
+    return (
+        len(relative.parts) == 2
+        and relative.parts[0] == 'clanky'
+        and relative.name != 'index.html'
+        and 'article-shell' in text
+        and re.search(r'<article\b[^>]*class=["\'][^"\']*\barticle\b', text, re.I) is not None
+        and '<body' in text.lower()
+        and '</body>' in text.lower()
+    )
 
 
 def main() -> int:
+    articles = 0
     changed = 0
-    checked = 0
     for path in sorted(ROOT.rglob('*.html')):
+        relative = path.relative_to(ROOT)
+        if any(part in {'.git', '.github', 'nahled', 'sdilet'} for part in relative.parts):
+            continue
         try:
-            text = path.read_text(encoding='utf-8')
+            original = path.read_text(encoding='utf-8')
         except UnicodeDecodeError:
             continue
-        if not eligible(path.relative_to(ROOT), text):
-            continue
-        checked += 1
-        if '/horko-feed.js' in text:
-            continue
-        pos = text.lower().rfind('</body>')
-        updated = text[:pos].rstrip() + '\n' + SCRIPT + '\n' + text[pos:]
-        path.write_text(updated, encoding='utf-8', newline='\n')
-        changed += 1
-        print(f'Doplněno: {path.relative_to(ROOT)}')
 
-    if checked == 0:
-        raise RuntimeError('Nebyla nalezena žádná HTML stránka.')
-    homepage = (ROOT / 'index.html').read_text(encoding='utf-8')
-    if homepage.count('/horko-feed.js') != 1:
-        raise RuntimeError('Titulní stránka nemá právě jeden sezónní feed.')
-    article = ROOT / 'clanky' / 'hasici-kadan-vycvik-zachrana-voda-nechranice.html'
-    if article.exists() and article.read_text(encoding='utf-8').count('/horko-feed.js') != 1:
-        raise RuntimeError('Kontrolní článek nemá právě jeden sezónní feed.')
-    print(f'HTML zkontrolováno: {checked}; změněno: {changed}')
+        current = SCRIPT_RE.sub('\n', original)
+        if is_public_article(path, current):
+            articles += 1
+            pos = current.lower().rfind('</body>')
+            current = current[:pos].rstrip() + '\n' + SCRIPT + '\n' + current[pos:]
+
+        if current != original:
+            path.write_text(current, encoding='utf-8', newline='\n')
+            changed += 1
+            print(f'Upraveno: {relative}')
+
+    if articles == 0:
+        raise RuntimeError('Nebyl nalezen žádný veřejný článek.')
+
+    failures = []
+    for path in sorted((ROOT / 'clanky').glob('*.html')):
+        text = path.read_text(encoding='utf-8')
+        if is_public_article(path, text) and text.count('/horko-feed.js?v=20260728-heat-2') != 1:
+            failures.append(str(path.relative_to(ROOT)))
+    if failures:
+        raise RuntimeError('Feed není právě jednou v článcích: ' + ', '.join(failures))
+
+    for path in (ROOT / 'index.html', ROOT / 'clanky' / 'index.html'):
+        if path.exists() and '/horko-feed.js' in path.read_text(encoding='utf-8'):
+            raise RuntimeError(f'Feed zůstal na nečlánkové stránce: {path.relative_to(ROOT)}')
+
+    print(f'Veřejných článků: {articles}; změněných souborů: {changed}')
     return 0
 
 
