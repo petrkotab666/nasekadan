@@ -73,18 +73,39 @@ jobs:
           python3 scripts/update_avies_oswald_context.py
           python3 scripts/enforce_homepage_latest_order.py
 
+          files=(
+            index.html
+            clanky/index.html
+            clanky/arc-med-nemocnice-kadan.html
+            clanky/avies-nemocnice-kadan.html
+            clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
+            reklamy.js
+            reklamy-sidebar.js
+            reklamy-sidebar.css
+            site.js
+            rss.xml
+            sitemap.xml
+          )
+
           sudo install -d -m 0755 /var/www/nasekadan/clanky
-          sudo install -m 0644 index.html /var/www/nasekadan/index.html
-          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
-          sudo install -m 0644 clanky/arc-med-nemocnice-kadan.html /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
-          sudo install -m 0644 clanky/avies-nemocnice-kadan.html /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
-          sudo install -m 0644 clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html /var/www/nasekadan/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
-          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
-          sudo install -m 0644 reklamy-sidebar.js /var/www/nasekadan/reklamy-sidebar.js
-          sudo install -m 0644 reklamy-sidebar.css /var/www/nasekadan/reklamy-sidebar.css
-          sudo install -m 0644 site.js /var/www/nasekadan/site.js
-          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
-          sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
+          for file in "${files[@]}"; do
+            sudo install -d -m 0755 "/var/www/nasekadan/$(dirname "$file")"
+            sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
+          done
+
+          # Ostrý nginx je v Dockeru; přepsat proto i aktivní kontejner.
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then
+            cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
+          fi
+          if [[ -z "$cid" ]]; then
+            echo 'Aktivní kontejner nasekadan-web nebyl nalezen.' >&2
+            exit 31
+          fi
+          for file in "${files[@]}"; do
+            sudo docker exec "$cid" mkdir -p "/usr/share/nginx/html/$(dirname "$file")"
+            sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+          done
 
           grep -Fq 'data-arc-med-hero' /var/www/nasekadan/index.html
           grep -Fq 'data-promos data-context="sidebar"' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
