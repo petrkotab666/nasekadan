@@ -68,10 +68,11 @@ PY
   fi
 fi
 
-STATS_INSTALLER="${GITHUB_WORKSPACE:-$(pwd)}/.github/scripts/nasekadan-stats/install-stats.sh"
+STATS_DIR="${GITHUB_WORKSPACE:-$(pwd)}/.github/scripts/nasekadan-stats"
+STATS_INSTALLER="$STATS_DIR/install-stats.sh"
 if [[ -f "$STATS_INSTALLER" ]]; then
   echo "Statistiky: instaluji vlastní přihlášení a obnovu hesla přes e-mail."
-  sudo bash "$STATS_INSTALLER"
+  sudo env NASEKADAN_STATS_SOURCE_DIR="$STATS_DIR" bash "$STATS_INSTALLER"
 else
   echo "Statistiky: instalátor $STATS_INSTALLER nebyl nalezen, krok se přeskakuje."
 fi
