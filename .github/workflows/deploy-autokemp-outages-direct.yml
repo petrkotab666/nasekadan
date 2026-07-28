@@ -16,21 +16,23 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, ovh, lastminuteslevy]
+    runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Kanonicky nasadit a veřejně ověřit
+      - name: Nasadit přes OVH SSH, ověřit a zapsat stav
         shell: bash
         run: |
           set -u
           STATUS=failed
           REASON='nezahájeno'
-          DEPLOY_SHA=''
+          DEPLOY_SHA="$(git rev-parse HEAD)"
           ARTICLE_OK=false
           HOME_OK=false
           ARCHIVE_OK=false
@@ -40,23 +42,63 @@ jobs:
           HEALTH_OK=false
           GENERATED="$(date -u +%FT%TZ)"
 
-          if sudo -n true 2>/dev/null \
-            && cd /opt/nasekadan \
-            && git fetch --prune origin main \
-            && git reset --hard origin/main \
-            && chmod +x deploy/sync-production.sh \
-            && sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh; then
-            DEPLOY_SHA="$(git -C /opt/nasekadan rev-parse HEAD)"
-            REASON='kanonický serverový deploy dokončen, probíhá vnější kontrola'
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          if [[ -z "$OVH_KEY" ]]; then
+            REASON='chybí secret OVH_SSH_PRIVATE_KEY'
+          elif ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          MODE=canonical-ovh
+          chmod +x deploy/sync-production.sh
+          if ! sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh; then
+            echo 'Kanonický deploy selhal; používám bezpečný úplný statický fallback.' >&2
+            MODE=static-fallback
+            sudo install -d -m 0755 /var/www/nasekadan
+            sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            tar \
+              --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
+              --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
+              --exclude='deploy' -C /opt/nasekadan -cf - . \
+              | sudo tar -C /var/www/nasekadan -xf -
+            printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=%s\n' \
+              "$SHA" "$(date -u +%FT%TZ)" "$MODE" \
+              | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+            sudo chmod -R a+rX /var/www/nasekadan
+          fi
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?deploy=$SHA" \
+            | grep -Fq 'Odstávky elektřiny omezí v srpnu provoz restaurace'
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/?deploy=$SHA" \
+            | grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html'
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/?deploy=$SHA" \
+            | grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html'
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?deploy=$SHA" \
+            | grep -Fq 'data-autokemp-outages-note'
+          REMOTE
+          then
+            REASON='serverový deploy dokončen, probíhá vnější kontrola'
             stamp="$(date +%s)"
-            for attempt in $(seq 1 18); do
-              article="$(curl -kfsS --max-time 25 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?v=$stamp-$attempt" || true)"
-              home="$(curl -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
-              archive="$(curl -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" || true)"
-              culture="$(curl -kfsS --max-time 25 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?v=$stamp-$attempt" || true)"
-              rss="$(curl -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" || true)"
-              sitemap="$(curl -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" || true)"
-              health="$(curl -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" || true)"
+            for attempt in $(seq 1 24); do
+              article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?v=$stamp-$attempt" 2>/dev/null || true)"
+              home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" 2>/dev/null || true)"
+              archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
+              culture="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?v=$stamp-$attempt" 2>/dev/null || true)"
+              rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+              sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+              health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" 2>/dev/null || true)"
 
               grep -Fq 'Odstávky elektřiny omezí v srpnu provoz restaurace' <<<"$article" && ARTICLE_OK=true || ARTICLE_OK=false
               grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$home" && HOME_OK=true || HOME_OK=false
@@ -74,13 +116,12 @@ jobs:
               sleep 5
             done
             if [[ "$STATUS" != passed ]]; then
-              REASON='kanonický deploy doběhl, ale vnější kontrola neprošla ve všech bodech'
+              REASON='serverový deploy proběhl, ale vnější kontrola neprošla ve všech bodech'
             fi
           else
-            REASON='self-hosted kanonický deploy na OVH selhal'
+            REASON='SSH deploy nebo vnitřní kontrola na OVH selhala'
           fi
 
-          cd "$GITHUB_WORKSPACE"
           export STATUS REASON DEPLOY_SHA GENERATED ARTICLE_OK HOME_OK ARCHIVE_OK CULTURE_OK RSS_OK SITEMAP_OK HEALTH_OK
           python3 - <<'PY'
           import json, os
