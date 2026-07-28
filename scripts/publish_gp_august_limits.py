@@ -12,7 +12,7 @@ ARTICLE_PATH = ROOT / "clanky" / f"{SLUG}.html"
 ARTICLE_URL = f"https://nasekadan.cz/clanky/{SLUG}.html"
 ARTICLE_HREF = f"/clanky/{SLUG}.html"
 PUBLISHED = "2026-07-28T19:45:00+02:00"
-TITLE = "Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz. Pět pracovních dnů se překryjí dovolené"
+TITLE = "V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů"
 DESC = "Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna. MUDr. Roman Šindelář má dovolenou od 10. do 21. srpna; překryv nastane 10.–14. srpna."
 
 ARTICLE = '''<!doctype html>
@@ -20,7 +20,7 @@ ARTICLE = '''<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz | Naše Kadaň</title>
+  <title>V srpnu omezí provoz více ordinací v Kadani a okolí | Naše Kadaň</title>
   <meta name="description" content="Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna. MUDr. Roman Šindelář má dovolenou od 10. do 21. srpna; překryv nastane 10.–14. srpna.">
   <link rel="icon" href="../favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../style.css">
@@ -30,7 +30,7 @@ ARTICLE = '''<!doctype html>
   <meta property="og:locale" content="cs_CZ">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="Naše Kadaň">
-  <meta property="og:title" content="Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz">
+  <meta property="og:title" content="V srpnu omezí provoz více ordinací v Kadani a okolí">
   <meta property="og:description" content="Od 10. do 14. srpna se překryjí dovolené dvou praktických lékařů. Nemocnice zveřejnila režim pro akutní případy.">
   <meta property="og:url" content="https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html">
   <meta property="og:image" content="https://nasekadan.cz/social-card.png">
@@ -51,7 +51,7 @@ ARTICLE = '''<!doctype html>
     .source-list{background:#eef3f5;padding:24px;border-radius:18px;margin-top:44px}.source-list li{font-size:15px;margin-bottom:8px}.sticky{position:sticky;top:100px}.sidebox{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 10px 30px #16242d0d}.sidebox h3{font:800 23px Georgia,serif;margin:0 0 12px}.sidebox p,.sidebox li{font-size:14px}
     @media(max-width:980px){.article-shell{grid-template-columns:1fr}.sticky{position:static}}@media(max-width:700px){.dates{grid-template-columns:1fr}.hero-visual{min-height:270px}.hero-visual:after{font-size:36px}.article h1{font-size:42px}.article .leadtext{font-size:20px}}
   </style>
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz. Pět pracovních dnů se překryjí dovolené","description":"Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna. MUDr. Roman Šindelář má dovolenou od 10. do 21. srpna; překryv nastane 10.–14. srpna.","datePublished":"2026-07-28T19:45:00+02:00","dateModified":"2026-07-28T19:45:00+02:00","author":{"@type":"Organization","name":"Naše Kadaň"},"publisher":{"@type":"Organization","name":"Naše Kadaň"},"mainEntityOfPage":"https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html","inLanguage":"cs-CZ"}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů","description":"Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna. MUDr. Roman Šindelář má dovolenou od 10. do 21. srpna; překryv nastane 10.–14. srpna.","datePublished":"2026-07-28T19:45:00+02:00","dateModified":"2026-07-28T19:45:00+02:00","author":{"@type":"Organization","name":"Naše Kadaň"},"publisher":{"@type":"Organization","name":"Naše Kadaň"},"mainEntityOfPage":"https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html","inLanguage":"cs-CZ"}</script>
   <link rel="stylesheet" href="/footer.css?v=20260726-event-hotfix-2">
 </head>
 <body>
@@ -59,7 +59,7 @@ ARTICLE = '''<!doctype html>
 <main class="wrap article-shell" data-article-template="unified-v1">
 <article class="article">
   <p class="tag">PRAKTICKÉ INFORMACE · ZDRAVOTNICTVÍ · 28. ČERVENCE 2026</p>
-  <h1>Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz. Pět pracovních dnů se překryjí dovolené</h1>
+  <h1>V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů</h1>
   <p class="leadtext"><strong>Pacienti dvou ambulancí praktických lékařů v Nemocnici Kadaň by si měli včas zajistit recepty, objednání a neakutní konzultace. Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna a MUDr. Roman Šindelář má zveřejněnou dovolenou od 10. do 21. srpna.</strong></p>
   <div class="hero-visual"><strong>Nejvýraznější omezení nastane od pondělí 10. do pátku 14. srpna, kdy se termíny obou lékařů překryjí.</strong></div>
   <div class="dates"><div><b>3.–14. 8.</b><span>uzavřená ambulance MUDr. Suchecké</span></div><div><b>10.–21. 8.</b><span>dovolená MUDr. Šindeláře</span></div><div><b>10.–14. 8.</b><span>překryv obou omezení</span></div></div>
@@ -89,7 +89,7 @@ HERO_SECTION = '''  <section class="wrap hero" id="clanky">
       <div class="photo" style="background:linear-gradient(135deg,#173240,#496d7c 58%,#9f2626)"><span>PRAKTICKÉ INFORMACE</span><strong>10.–14. SRPNA</strong></div>
       <div class="copy">
         <small>NEMOCNICE KADAŇ · 28. 07. 2026 · 19:45</small>
-        <h1>Praktičtí lékaři v srpnu omezí provoz. Pět dní se překryjí dovolené</h1>
+        <h1>V srpnu omezí provoz více ordinací v Kadani a okolí</h1>
         <p>Ambulance MUDr. Suchecké bude zavřená od 3. do 14. srpna. MUDr. Šindelář má dovolenou od 10. do 21. srpna.</p>
         <a class="btn" href="/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html">Přečíst praktické informace →</a>
       </div>
@@ -105,19 +105,19 @@ HERO_SECTION = '''  <section class="wrap hero" id="clanky">
   </section>'''
 
 HOME_CARD = '''    <article class="article-card hospital" data-gp-august-card>
-      <div class="visual" style="background:linear-gradient(135deg,#173240,#496d7c 58%,#9f2626)"><strong>Praktičtí lékaři v srpnu</strong></div>
-      <div class="article-body"><span class="meta">28. 7. 2026 · 19:45 · Praktické informace</span><h3>Pět pracovních dnů se překryjí dovolené dvou praktických lékařů</h3><p>Nemocnice zveřejnila termíny uzavření a režim pro akutní případy.</p><a class="read-more" href="/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html">Přečíst článek →</a></div>
+      <div class="visual" style="background:linear-gradient(135deg,#173240,#496d7c 58%,#9f2626)"><strong>Omezení ordinací v srpnu</strong></div>
+      <div class="article-body"><span class="meta">28. 7. 2026 · 19:45 · Praktické informace</span><h3>Srpnová omezení se týkají více ordinací a ambulancí</h3><p>Nemocnice zveřejnila termíny uzavření a režim pro akutní případy.</p><a class="read-more" href="/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html">Přečíst článek →</a></div>
     </article>'''
 
 ARCHIVE_CARD = '''    <article class="archive-item hospital" data-gp-august-card>
-      <div class="archive-visual" style="background:linear-gradient(135deg,#173240,#496d7c 58%,#9f2626)"><strong>Praktičtí lékaři v srpnu</strong></div>
-      <div class="archive-body"><span class="archive-meta">28. července 2026 v 19:45 · Praktické informace · Nemocnice Kadaň</span><h2>Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz. Pět pracovních dnů se překryjí dovolené</h2><p>Ambulance MUDr. Suchecké bude zavřená od 3. do 14. srpna a MUDr. Šindelář má dovolenou od 10. do 21. srpna.</p><a href="/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html">Přečíst praktické informace →</a></div>
+      <div class="archive-visual" style="background:linear-gradient(135deg,#173240,#496d7c 58%,#9f2626)"><strong>Omezení ordinací v srpnu</strong></div>
+      <div class="archive-body"><span class="archive-meta">28. července 2026 v 19:45 · Praktické informace · Nemocnice Kadaň</span><h2>V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů</h2><p>Přehled zahrnuje praktické lékaře, neurologii, ORL, očkovací centrum, internu a související regionální omezení.</p><a href="/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html">Přečíst praktické informace →</a></div>
     </article>'''
 
-RSS_ITEM = '''    <item><title>Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz</title><description><![CDATA[Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna. MUDr. Roman Šindelář má dovolenou od 10. do 21. srpna; překryv nastane 10.–14. srpna.]]></description><link>https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html</guid><pubDate>Tue, 28 Jul 2026 19:45:00 +0200</pubDate><category>Praktické informace</category><category>Nemocnice Kadaň</category><category>Zdravotnictví</category><szn:image><szn:url>https://nasekadan.cz/social-card.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>
+RSS_ITEM = '''    <item><title>V srpnu omezí provoz více ordinací v Kadani a okolí</title><description><![CDATA[Ambulance MUDr. Barbory Suchecké bude zavřená od 3. do 14. srpna. MUDr. Roman Šindelář má dovolenou od 10. do 21. srpna; překryv nastane 10.–14. srpna.]]></description><link>https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html</guid><pubDate>Tue, 28 Jul 2026 19:45:00 +0200</pubDate><category>Praktické informace</category><category>Nemocnice Kadaň</category><category>Zdravotnictví</category><szn:image><szn:url>https://nasekadan.cz/social-card.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>
 '''
 
-NEWS_URL = '''  <url><loc>https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>2026-07-28T19:45:00+02:00</news:publication_date><news:title>Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz</news:title></news:news></url>
+NEWS_URL = '''  <url><loc>https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>2026-07-28T19:45:00+02:00</news:publication_date><news:title>V srpnu omezí provoz více ordinací v Kadani a okolí</news:title></news:news></url>
 '''
 
 
@@ -196,7 +196,7 @@ def update_manifest() -> None:
         return
     data = json.loads(path.read_text(encoding="utf-8"))
     items = [x for x in data.get("required_articles", []) if x.get("path") != f"clanky/{SLUG}.html"]
-    items.insert(0, {"path": f"clanky/{SLUG}.html", "needle": "Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz", "must_be_on_home": True, "must_be_in_archive": True})
+    items.insert(0, {"path": f"clanky/{SLUG}.html", "needle": "V srpnu omezí provoz více ordinací v Kadani a okolí", "must_be_on_home": True, "must_be_in_archive": True})
     data["required_articles"] = items
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -229,7 +229,10 @@ def rewrite_latest_enforcer() -> None:
 
 def main() -> None:
     ARTICLE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    ARTICLE_PATH.write_text(ARTICLE, encoding="utf-8", newline="\n")
+    if not ARTICLE_PATH.exists():
+        ARTICLE_PATH.write_text(ARTICLE, encoding="utf-8", newline="\n")
+    else:
+        print("Existující rozšířená redakční verze článku se zachovává.")
     replace_home()
     update_archive()
     update_rss()
