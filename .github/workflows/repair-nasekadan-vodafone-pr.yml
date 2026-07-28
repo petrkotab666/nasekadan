@@ -1,0 +1,58 @@
+name: Opravit affiliate snapshot a reklamy Naše Kadaň bez Vodafone
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-nasekadan-vodafone-pr.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    uses: petrkotab666/nasekadan/.github/workflows/reusable-affiliate-sync-public.yml@main
+    with:
+      runs_on: '["ubuntu-latest"]'
+
+  verify-cleanup:
+    needs: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Odstranit pevný Vodafone, ověřit snapshot a uklidit workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin "${{ github.head_ref }}"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,re
+          d=json.loads(Path('assets/affiliate-site-snapshot.json').read_text(encoding='utf-8'))
+          assert d.get('schemaVersion') == 2
+          assert d.get('centralUpdatedAt') == '2026-07-28'
+          vf=[x for x in d.get('partners',[]) if str(x.get('defaultLinkId','')).lower()=='aface625' or str(x.get('name','')).lower()=='vodafone.cz' or str(x.get('id','')).lower() in {'vodafone','ehub-aface625'}]
+          assert not vf
+          for name in ('reklamy.js','obsah-doplnky.js'):
+              path=Path(name)
+              text=path.read_text(encoding='utf-8')
+              text=re.sub(r"^\s*\{id:'vodafone'.*?\},\s*\n",'',text,flags=re.M)
+              text=re.sub(r"^\s*vodafone:'[^']*',?\s*\n",'',text,flags=re.M)
+              if 'aface625' in text or "id:'vodafone'" in text or 'Vodafone.cz' in text:
+                  raise SystemExit(f'{name}: zůstal pevně zapsaný Vodafone')
+              path.write_text(text,encoding='utf-8',newline='\n')
+          print({'centralSha256':d.get('centralSha256'),'partners':d.get('partnerCount'),'vodafone':False})
+          PY
+          node --check reklamy.js
+          node --check obsah-doplnky.js
+          rm -f .github/workflows/repair-nasekadan-vodafone-pr.yml
+          rm -f .github/workflows/remove-vodafone-hardcoded-now.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Ověřit reklamy a snapshot bez Vodafone [skip ci]'
+          git push origin HEAD:"${{ github.head_ref }}"
