@@ -1,5 +1,5 @@
-name: Pojistka obsahu, reklam a pořadí Naše Kadaň
-run-name: Kontrola produkce, automatická oprava a rollback
+name: Pojistka obsahu a skutečné produkce Naše Kadaň
+run-name: Přímá kontrola veřejného webu, automatická oprava a záložní upozornění
 
 on:
   schedule:
@@ -8,13 +8,19 @@ on:
   push:
     branches: [main]
     paths:
+      - 'index.html'
+      - 'clanky/**'
+      - 'rss.xml'
+      - 'sitemap.xml'
       - 'production-content-manifest.json'
-      - 'scripts/validate_production_manifest.py'
-      - 'scripts/enforce_production_article_order.py'
+      - 'deploy/**'
+      - 'scripts/verify_public_release.py'
+      - 'scripts/upsert_github_issue.py'
       - '.github/workflows/production-content-watchdog.yml'
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: nasekadan-production-watchdog
@@ -22,112 +28,135 @@ concurrency:
 
 jobs:
   protect:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 35
     env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      WATCHDOG_FINGERPRINT: production-watchdog-current-main
     steps:
-      - uses: actions/checkout@v4
+      - name: Načíst nejnovější main
+        uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Připravit klíč
+      - name: Zjistit očekávaný commit
+        id: source
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$SSH_KEY"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-
-      - name: Ověřit živý web a při chybě jej atomicky opravit
-        shell: bash
-        run: |
-          set -euo pipefail
-          check_order() {
-            local text="$1"
-            local a b c d e
-            a="$(grep -bo 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-            b="$(grep -bo 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-            c="$(grep -bo 'kolobezky-hriste-detektor-kovu-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-            d="$(grep -bo 'avies-nemocnice-kadan.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-            e="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$text" | head -1 | cut -d: -f1 || true)"
-            [[ -n "$a" && -n "$b" && -n "$c" && -n "$d" && -n "$e" && "$a" -lt "$b" && "$b" -lt "$c" && "$c" -lt "$d" && "$d" -lt "$e" ]]
-          }
-
-          check_public() {
-            local suffix="$1"
-            local home archive article
-            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?watchdog=${GITHUB_SHA}-${suffix}" || true)"
-            archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?watchdog=${GITHUB_SHA}-${suffix}" || true)"
-            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?watchdog=${GITHUB_SHA}-${suffix}" || true)"
-            check_order "$home" \
-              && check_order "$archive" \
-              && grep -Fq 'data-promos' <<<"$article" \
-              && grep -Fq '/reklamy.js' <<<"$article" \
-              && grep -Fq '/reklamy-oprava-obrazku.js' <<<"$article" \
-              && grep -Fq '/obsah-doplnky.js' <<<"$article"
-          }
-
-          if check_public before; then
-            echo 'Produkce je úplná a pořadí je správné.'
-            exit 0
-          fi
-
-          ssh -i "$RUNNER_TEMP/ovh_key" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo -n true
-          cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          git clean -fd
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-          python3 scripts/enforce_production_article_order.py
-          python3 scripts/normalize_articles.py --write --check
-          python3 scripts/normalize_footers.py --write --check
-          python3 scripts/validate_production_manifest.py --root /opt/nasekadan
+      - name: Přímá kontrola skutečně veřejného webu
+        id: initial
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/verify_public_release.py \
+            --root . \
+            --base https://nasekadan.cz \
+            --expected-sha '${{ steps.source.outputs.sha }}' \
+            --cache-key '${{ github.run_id }}-before' \
+            2>&1 | tee /tmp/nasekadan-watchdog-before.log
+          code=${PIPESTATUS[0]}
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
 
-          SHA="$(git rev-parse HEAD)"
-          STAGE="/var/www/nasekadan.watchdog-$SHA"
-          LIVE="/var/www/nasekadan"
-          LKG="/var/www/nasekadan.last-known-good"
-          BROKEN="/var/www/nasekadan.broken-$SHA"
-          sudo rm -rf "$STAGE" "$BROKEN"
-          sudo mkdir -p "$STAGE"
-          sudo tar \
-            --exclude='./.git' --exclude='./.github' --exclude='./scripts' \
-            --exclude='./deploy' --exclude='./tools' --exclude='./nginx' \
-            --exclude='./docker-entrypoint.d' --exclude='./Dockerfile' \
-            --exclude='./docker-compose.yml' --exclude='./cloud-deploy-status.json' \
-            -cf - . | sudo tar -C "$STAGE" -xf -
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=watchdog-with-order\n' \
-            "$SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
-          sudo chmod -R a+rX "$STAGE"
-          python3 scripts/validate_production_manifest.py --root "$STAGE"
+      - name: Kanonicky opravit produkci
+        id: repair
+        if: steps.initial.outputs.code != '0'
+        shell: bash
+        run: |
+          set +e
+          export NASEKADAN_SKIP_AUTOMATION_INSTALL=1
+          bash deploy/sync-production.sh 2>&1 | tee /tmp/nasekadan-watchdog-repair.log
+          code=${PIPESTATUS[0]}
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          exit 0
 
-          if [ -d "$LIVE" ]; then
-            sudo rm -rf "$LKG"
-            sudo cp -a "$LIVE" "$LKG"
-            sudo mv "$LIVE" "$BROKEN"
-          fi
-          sudo mv "$STAGE" "$LIVE"
-          if ! grep -Fq 'data-promos' "$LIVE/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html"; then
-            sudo rm -rf "$LIVE"
-            if [ -d "$LKG" ]; then sudo cp -a "$LKG" "$LIVE"; fi
-            exit 41
-          fi
-          sudo rm -rf "$BROKEN"
-          REMOTE
-
-          for attempt in $(seq 1 12); do
-            if check_public "after-${attempt}"; then
-              echo 'Produkce byla opravena: AVIES je před kulturou, obsah i reklamy jsou přítomné.'
-              exit 0
-            fi
+      - name: Závěrečná veřejná kontrola po opravě
+        id: final
+        if: steps.initial.outputs.code != '0'
+        shell: bash
+        run: |
+          set +e
+          expected='${{ steps.repair.outputs.sha }}'
+          [ -n "$expected" ] || expected='${{ steps.source.outputs.sha }}'
+          code=1
+          for attempt in $(seq 1 6); do
+            python3 scripts/verify_public_release.py \
+              --root . \
+              --base https://nasekadan.cz \
+              --expected-sha "$expected" \
+              --cache-key '${{ github.run_id }}-after-'"$attempt" \
+              2>&1 | tee /tmp/nasekadan-watchdog-after.log
+            code=${PIPESTATUS[0]}
+            [ "$code" -eq 0 ] && break
             sleep 10
           done
-          exit 42
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "sha=$expected" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Uzavřít staré upozornění po úspěchu
+        if: steps.initial.outputs.code == '0' || steps.final.outputs.code == '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/watchdog-recovered.md <<EOF
+          Veřejný web byl přímo ověřen proti aktuálnímu main.
+
+          - Očekávaný commit: \`${{ steps.final.outputs.sha || steps.source.outputs.sha }}\`
+          - Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          - Kontrola proběhla přes živé HTTPS URL s cache-busting parametrem; stav nevychází pouze z interního JSON.
+          EOF
+          python3 scripts/upsert_github_issue.py \
+            --fingerprint "$WATCHDOG_FINGERPRINT" \
+            --title '[MONITORING KADAŇ] Produkční watchdog Naše Kadaň [production-watchdog-current-main]' \
+            --body-file /tmp/watchdog-recovered.md \
+            --close \
+            --comment-existing
+
+      - name: Vytvořit záložní upozornění při trvajícím selhání
+        if: steps.initial.outputs.code != '0' && steps.final.outputs.code != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected='${{ steps.final.outputs.sha }}'
+          [ -n "$expected" ] || expected='${{ steps.source.outputs.sha }}'
+          {
+            echo '## Produkční watchdog Naše Kadaň selhal'
+            echo
+            echo "Veřejný web ani po jednom kanonickém opravném pokusu neprošel přímou kontrolou."
+            echo
+            echo "- Očekávaný commit: \`$expected\`"
+            echo "- Výsledek deploye: \`${{ steps.repair.outputs.code }}\`"
+            echo "- Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo '### Kontrola před opravou'
+            echo '```'
+            tail -n 120 /tmp/nasekadan-watchdog-before.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### Opravný pokus'
+            echo '```'
+            tail -n 160 /tmp/nasekadan-watchdog-repair.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '### Závěrečná veřejná kontrola'
+            echo '```'
+            tail -n 160 /tmp/nasekadan-watchdog-after.log 2>/dev/null || true
+            echo '```'
+          } > /tmp/watchdog-failed.md
+
+          python3 scripts/upsert_github_issue.py \
+            --fingerprint "$WATCHDOG_FINGERPRINT" \
+            --title '[MONITORING KADAŇ] Produkční watchdog Naše Kadaň [production-watchdog-current-main]' \
+            --body-file /tmp/watchdog-failed.md \
+            --assignee petrkotab666 \
+            --comment-existing
+
+          exit 1
