@@ -29,6 +29,8 @@ if [[ ! -f "$SCRIPT_DIR/stats_server.py" ]]; then
   exit 1
 fi
 
+# Odstranit starý nefunkční Nginx patcher. Ochranu Caddy zajišťuje přímo tento
+# instalátor a později také bezpečný instalátor newsletteru.
 systemctl disable --now nasekadan-stats-patch.path >/dev/null 2>&1 || true
 systemctl disable --now nasekadan-stats-patch.timer >/dev/null 2>&1 || true
 systemctl stop nasekadan-stats-patch.service >/dev/null 2>&1 || true
@@ -41,6 +43,19 @@ rm -f \
 
 install -d -o www-data -g www-data -m 0750 "$BASE_DIR"
 install -d -o root -g root -m 0755 "$APP_DIR" /etc/nginx/snippets
+
+# Statistiky musí umět přečíst jak starší Nginx logy, tak nové Caddy logy.
+# Soubory ani jejich rotované kopie se zde nemažou ani nevynulují.
+for group in adm caddy; do
+  if getent group "$group" >/dev/null 2>&1; then
+    usermod -a -G "$group" www-data >/dev/null 2>&1 || true
+  fi
+done
+if id caddy >/dev/null 2>&1; then
+  install -d -o caddy -g caddy -m 0750 /var/log/caddy
+else
+  install -d -o root -g adm -m 0750 /var/log/caddy
+fi
 
 if [[ ! -s "$BASE_DIR/secret-salt" ]]; then
   umask 077
@@ -193,6 +208,10 @@ curl -fsS --max-time 3 http://127.0.0.1:3225/ | grep -Fq 'Zapomenuté heslo'
 nginx -t
 systemctl reload nginx
 
+# Caddy je veřejná vstupní vrstva webu. Původní instalátor pouze upravoval
+# již existující blok, a po jeho přepsání newsletterem proto vznikla 404.
+# Nově trasu i měřicí log bezpečně doplníme, pokud chybějí, a vše ostatní
+# v konfiguraci (newsletter, web, další služby) ponecháme beze změny.
 if [[ -f "$CADDY_SITE" ]] && command -v caddy >/dev/null 2>&1; then
   python3 - "$CADDY_SITE" <<'PY'
 from __future__ import annotations
@@ -205,13 +224,16 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
+original = text
 lines = text.splitlines(keepends=True)
 out: list[str] = []
 i = 0
 in_stats = False
 stats_depth = 0
-removed = 0
+removed_auth = 0
 
+# Odstranit jen případný starý Caddy Basic Auth uvnitř statistik. Vlastní
+# přihlášení zajišťuje aplikace na portu 3225; ochrany jiných cest se nedotýkáme.
 while i < len(lines):
     line = lines[i]
     stripped = line.strip()
@@ -227,7 +249,7 @@ while i < len(lines):
         while i < len(lines) and depth > 0:
             depth += lines[i].count("{") - lines[i].count("}")
             i += 1
-        removed += 1
+        removed_auth += 1
         continue
     out.append(line)
     if in_stats:
@@ -236,17 +258,55 @@ while i < len(lines):
             in_stats = False
     i += 1
 
-new_text = "".join(out)
-if "handle_path /statistiky/*" not in new_text or "reverse_proxy 127.0.0.1:3225" not in new_text:
-    raise SystemExit("Caddy konfigurace statistik nemá očekávanou strukturu; změna nebyla provedena.")
-if removed:
+text = "".join(out)
+site = re.search(r"(?m)^(?P<indent>\s*)nasekadan\.cz\s*,\s*www\.nasekadan\.cz\s*\{\s*$", text)
+if not site:
+    raise SystemExit("Caddy: nebyl nalezen blok nasekadan.cz, konfigurace nebyla změněna.")
+
+parts: list[str] = []
+if not re.search(r"(?m)^\s*handle_path\s+/statistiky/\*\s*\{", text):
+    parts.append('''
+    # BEGIN NASEKADAN_STATS_ROUTE_V4
+    redir /statistiky /statistiky/ 308
+
+    handle_path /statistiky/* {
+        header {
+            Cache-Control "no-store, no-cache, must-revalidate"
+            Pragma "no-cache"
+            X-Robots-Tag "noindex, nofollow, noarchive"
+            X-Content-Type-Options "nosniff"
+        }
+        reverse_proxy 127.0.0.1:3225
+    }
+    # END NASEKADAN_STATS_ROUTE_V4
+''')
+
+if not re.search(r"(?m)^\s*log\s+nk_counter\s*\{", text):
+    parts.append('''
+    # BEGIN NASEKADAN_STATS_LOG_V4
+    log nk_counter {
+        output file /var/log/caddy/nasekadan.access.log {
+            mode 0640
+            roll_size 20MiB
+            roll_keep 180
+            roll_keep_for 4320h
+        }
+    }
+    # END NASEKADAN_STATS_LOG_V4
+''')
+
+if parts:
+    insert_at = site.end()
+    text = text[:insert_at] + "\n" + "".join(parts) + text[insert_at:]
+
+if text != original:
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = path.with_name(path.name + f".bak-{stamp}")
     shutil.copy2(path, backup)
-    path.write_text(new_text, encoding="utf-8")
-    print(f"Caddy: odstraněn Basic Auth z /statistiky/*, záloha {backup}")
+    path.write_text(text, encoding="utf-8")
+    print(f"Caddy: obnovena/potvrzena trasa statistik, záloha {backup}; odstraněné staré auth bloky: {removed_auth}.")
 else:
-    print("Caddy: /statistiky/* už nemá Basic Auth; bez změny.")
+    print("Caddy: trasa statistik i měřicí log jsou už správně nastavené; bez změny.")
 PY
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   systemctl reload caddy
@@ -264,4 +324,9 @@ if [[ ! "$preview_status" =~ ^(401|404|502|503)$ ]]; then
   exit 1
 fi
 
-echo "HOTOVO: statistiky mají vlastní přihlášení a reset hesla pouze přes petrkotab@seznam.cz."
+echo "Datové soubory statistik (pouze velikosti a data, obsah se nevypisuje):"
+find /var/log/nginx /var/log/caddy -maxdepth 1 -type f \
+  \( -name 'nasekadan.access.log' -o -name 'nasekadan.access.log.*' -o -name 'nasekadan.access.log-*.gz' \) \
+  -printf '%p | %s B | %TY-%Tm-%Td %TH:%TM:%TS\n' 2>/dev/null | sort || true
+
+echo "HOTOVO: statistiky mají obnovenou veřejnou trasu, pokračující měření a vlastní přihlášení s resetem pouze přes petrkotab@seznam.cz."
