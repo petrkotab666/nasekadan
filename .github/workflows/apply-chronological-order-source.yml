@@ -27,6 +27,18 @@ jobs:
         run: |
           set -o pipefail
           python3 scripts/enforce_current_article_order.py 2>&1 | tee /tmp/chronology.log
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('deploy/sync-production.sh')
+          text = path.read_text(encoding='utf-8')
+          call = 'python3 scripts/sort_articles_chronologically.py\n'
+          if call not in text:
+              needle = 'python3 scripts/normalize_footers.py --write --check\n'
+              if needle not in text:
+                  raise SystemExit('V deployi chybí bod pro chronologické řazení.')
+              text = text.replace(needle, needle + call, 1)
+              path.write_text(text, encoding='utf-8', newline='\n')
+          PY
 
       - name: Zapsat výsledek a změny
         if: always()
@@ -46,7 +58,7 @@ jobs:
           PY
           git config user.name 'Naše Kadaň automat'
           git config user.email 'actions@users.noreply.github.com'
-          git add .github/chronology-source-status.json index.html clanky/index.html rss.xml news-sitemap.xml || true
+          git add .github/chronology-source-status.json index.html clanky/index.html rss.xml news-sitemap.xml deploy/sync-production.sh || true
           git commit -m "Opravit zdrojové pořadí článků: $OUTCOME" || true
           for attempt in 1 2 3; do
             if git pull --rebase origin main && git push origin HEAD:main; then
