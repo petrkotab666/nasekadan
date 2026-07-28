@@ -18,4 +18,4 @@ jobs:
     if: github.event_name != 'issues' || github.event.issue.title == '[affiliate-sync] trigger'
     uses: ./.github/workflows/reusable-affiliate-sync-public.yml
     with:
-      runs_on: '["self-hosted","Linux","X64"]'
+      runs_on: '["ubuntu-latest"]'
