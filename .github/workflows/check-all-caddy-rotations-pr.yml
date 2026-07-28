@@ -1,4 +1,4 @@
-name: Spočítat všechny rotované Caddy statistiky
+name: Rekonstruovat původní statistiky z Caddy logů
 
 on:
   pull_request:
@@ -12,14 +12,14 @@ permissions:
   pull-requests: write
 
 jobs:
-  count-all:
+  reconstruct:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Načíst všechny Caddy rotace a varianty původních metrik
-        id: count
+      - name: Najít filtr odpovídající uloženému přehledu z 25. července
+        id: reconstruct
         shell: bash
         run: |
           set -euo pipefail
@@ -27,7 +27,7 @@ jobs:
           printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
           chmod 600 "$RUNNER_TEMP/key"
           ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/all-caddy.txt"
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/reconstruction.txt"
           from __future__ import annotations
 
           import datetime as dt
@@ -42,29 +42,33 @@ jobs:
           from zoneinfo import ZoneInfo
 
           TZ = ZoneInfo('Europe/Prague')
-          files = []
-          for name in sorted(set(glob.glob('/var/log/caddy/nasekadan.access*'))):
-              path = Path(name)
-              if path.is_file():
-                  files.append(path)
-          print('CADDY_FILES_BEGIN')
-          for path in files:
-              stat = path.stat()
-              print(f'{path}|bytes={stat.st_size}|mtime={stat.st_mtime:.0f}')
-          print('CADDY_FILES_END')
+          CUTOFF = dt.datetime(2026, 7, 25, 21, 55, 0, tzinfo=TZ)
+          TODAY = CUTOFF.date()
+          TARGET = (2553, 1032, 915)
+          TARGET_TODAY = (1104, 439, 389)
 
-          static = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt|pdf|mp4|webm|avif)$', re.I)
-          obvious_bot = re.compile(r'bot\b|crawler|spider|slurp|headless|lighthouse|pagespeed|curl/|wget/|python-requests|go-http-client', re.I)
-          strict_bot = re.compile(
-              r'bot\b|crawler|spider|slurp|googleinspection|facebookexternalhit|facebot|'
-              r'twitterbot|linkedinbot|pinterestbot|whatsapp|telegrambot|discordbot|'
-              r'semrush|ahrefs|mj12|dotbot|blexbot|gptbot|chatgpt|claudebot|anthropic|'
-              r'perplexity|uptime|monitor|statuscake|pingdom|headless|lighthouse|pagespeed|'
-              r'curl/|wget/|python-requests|go-http-client|nasekadanstatsselftest', re.I)
+          static = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt|pdf|mp4|webm|avif|zip|gz)$', re.I)
+          old_bot = re.compile(
+              r'(?:bot\b|crawler|spider|slurp|bingpreview|googleinspectiontool|'
+              r'facebookexternalhit|facebot|twitterbot|linkedinbot|pinterestbot|'
+              r'whatsapp|telegrambot|discordbot|applebot|yandex|baiduspider|petalbot|'
+              r'semrush|ahrefs|mj12bot|dotbot|rogerbot|blexbot|serpstat|dataforseo|'
+              r'bytespider|gptbot|chatgpt-user|claudebot|anthropic-ai|perplexitybot|'
+              r'uptimerobot|statuscake|pingdom|healthcheck|monitoring|headless|lighthouse|'
+              r'pagespeed|curl/|wget/|python-requests|go-http-client)', re.I)
+          aggressive_bot = re.compile(
+              old_bot.pattern + r'|preview|scanner|scan\b|zgrab|masscan|nmap|nikto|sqlmap|'
+              r'libwww|httpclient|okhttp|java/|apache-httpclient|node-fetch|axios|postman|'
+              r'phantomjs|selenium|puppeteer|playwright|scrapy|feedfetcher|validator|archive', re.I)
+
+          def header(headers: dict, name: str) -> str:
+              value = headers.get(name) or headers.get(name.lower()) or headers.get(name.title()) or ''
+              if isinstance(value, list):
+                  return ','.join(str(x) for x in value)
+              return str(value)
 
           rows = []
-          raw = parsed = 0
-          file_counts = defaultdict(int)
+          files = [Path(name) for name in sorted(set(glob.glob('/var/log/caddy/nasekadan.access*'))) if Path(name).is_file()]
           for path in files:
               opener = gzip.open if path.suffix == '.gz' else open
               try:
@@ -73,23 +77,26 @@ jobs:
                   continue
               with handle:
                   for line in handle:
-                      raw += 1
                       try:
                           data = json.loads(line)
                           req = data.get('request') or {}
+                          when = dt.datetime.fromtimestamp(float(data.get('ts')), dt.timezone.utc).astimezone(TZ)
+                          if when > CUTOFF:
+                              continue
                           method = str(req.get('method', '')).upper()
                           target = str(req.get('uri', '/'))
                           status = int(data.get('status', 0))
                           ip = str(req.get('client_ip') or req.get('remote_ip') or '')
                           headers = req.get('headers') or {}
-                          ua_value = headers.get('User-Agent') or headers.get('user-agent') or ''
-                          ua = ua_value[0] if isinstance(ua_value, list) and ua_value else str(ua_value)
-                          stamp = data.get('ts')
-                          when = dt.datetime.fromtimestamp(float(stamp), dt.timezone.utc).astimezone(TZ)
+                          ua = header(headers, 'User-Agent')
+                          accept = header(headers, 'Accept').lower()
+                          dest = header(headers, 'Sec-Fetch-Dest').lower()
+                          mode = header(headers, 'Sec-Fetch-Mode').lower()
                       except (ValueError, TypeError, json.JSONDecodeError, OverflowError):
                           continue
-                      parsed += 1
                       if method not in {'GET', 'HEAD'} or not ip or ip in {'127.0.0.1', '::1'}:
+                          continue
+                      if not (200 <= status < 300 or status == 304):
                           continue
                       try:
                           path_value = urllib.parse.urlsplit(target).path or '/'
@@ -100,83 +107,139 @@ jobs:
                           decoded = decoded.rstrip('/') or '/'
                       if decoded == '/healthz' or decoded.startswith(('/statistiky', '/api/', '/nahled')) or static.search(decoded):
                           continue
-                      if not (200 <= status < 300 or status == 304):
-                          continue
                       ip_key = hashlib.sha256(ip.encode('utf-8', 'replace')).hexdigest()[:24]
-                      client_key = hashlib.sha256(f'{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
-                      rows.append((when, ip_key, client_key, decoded, ua, obvious_bot.search(ua) is not None, strict_bot.search(ua) is not None))
-                      file_counts[path.name] += 1
+                      ua_key = hashlib.sha256(f'{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
+                      ua_family = re.sub(r'\d+(?:[._]\d+)+', '#', ua.lower())
+                      family_key = hashlib.sha256(f'{ip}\0{ua_family}'.encode('utf-8', 'replace')).hexdigest()[:24]
+                      page_shape = decoded == '/' or decoded.endswith('.html') or decoded.endswith('/') or not re.search(r'\.[a-z0-9]{1,8}$', decoded, re.I)
+                      rows.append({
+                          'when': when, 'path': decoded, 'method': method, 'ua': ua,
+                          'accept_html': 'text/html' in accept or 'application/xhtml+xml' in accept,
+                          'dest_doc': dest in {'document', 'iframe'},
+                          'mode_nav': mode == 'navigate',
+                          'mozilla': 'mozilla/' in ua.lower(),
+                          'old_human': not old_bot.search(ua),
+                          'aggressive_human': not aggressive_bot.search(ua),
+                          'page_shape': page_shape,
+                          'ip': ip_key, 'ip_ua': ua_key, 'ip_family': family_key,
+                      })
 
-          print(f'RAW_LINES={raw}')
-          print(f'PARSED_LINES={parsed}')
-          print('CONTENT_ROWS_BY_FILE_BEGIN')
-          for name, count in sorted(file_counts.items()):
-              print(f'{name}|rows={count}')
-          print('CONTENT_ROWS_BY_FILE_END')
+          print(f'FILES_LOADED={len(files)}')
+          print(f'BASE_ROWS_TO_CUTOFF={len(rows)}')
+          print(f'FIRST_BASE={min((r["when"] for r in rows), default=None)}')
+          print(f'LAST_BASE={max((r["when"] for r in rows), default=None)}')
 
-          def summarize(label, selected):
-              selected = sorted(selected, key=lambda r: r[0])
-              print(f'{label}_PAGEVIEWS={len(selected)}')
-              for key_index, key_name in ((1, 'IP'), (2, 'IP_UA')):
-                  grouped = defaultdict(list)
-                  for row in selected:
-                      grouped[row[key_index]].append(row[0])
-                  print(f'{label}_UNIQUE_{key_name}={len(grouped)}')
-                  for minutes in (15, 30, 45, 60):
-                      gap = dt.timedelta(minutes=minutes)
-                      sessions = 0
-                      for times in grouped.values():
-                          previous = None
-                          for when in times:
-                              if previous is None or when - previous > gap:
-                                  sessions += 1
-                              previous = when
-                      print(f'{label}_SESSIONS_{minutes}_{key_name}={sessions}')
-              print(f'{label}_FIRST={selected[0][0].isoformat() if selected else "none"}')
-              print(f'{label}_LAST={selected[-1][0].isoformat() if selected else "none"}')
+          predicates = {
+              'all': lambda r: True,
+              'oldbot': lambda r: r['old_human'],
+              'aggbot': lambda r: r['aggressive_human'],
+              'mozilla_oldbot': lambda r: r['mozilla'] and r['old_human'],
+              'mozilla_aggbot': lambda r: r['mozilla'] and r['aggressive_human'],
+              'html_oldbot': lambda r: r['accept_html'] and r['old_human'],
+              'html_aggbot': lambda r: r['accept_html'] and r['aggressive_human'],
+              'doc_oldbot': lambda r: r['dest_doc'] and r['old_human'],
+              'doc_aggbot': lambda r: r['dest_doc'] and r['aggressive_human'],
+              'nav_oldbot': lambda r: r['mode_nav'] and r['old_human'],
+              'nav_aggbot': lambda r: r['mode_nav'] and r['aggressive_human'],
+              'doc_html_oldbot': lambda r: r['dest_doc'] and r['accept_html'] and r['old_human'],
+              'doc_html_aggbot': lambda r: r['dest_doc'] and r['accept_html'] and r['aggressive_human'],
+              'nav_html_oldbot': lambda r: r['mode_nav'] and r['accept_html'] and r['old_human'],
+              'nav_html_aggbot': lambda r: r['mode_nav'] and r['accept_html'] and r['aggressive_human'],
+              'shape_oldbot': lambda r: r['page_shape'] and r['old_human'],
+              'shape_aggbot': lambda r: r['page_shape'] and r['aggressive_human'],
+              'shape_html_oldbot': lambda r: r['page_shape'] and r['accept_html'] and r['old_human'],
+              'shape_html_aggbot': lambda r: r['page_shape'] and r['accept_html'] and r['aggressive_human'],
+          }
 
-          summarize('ALL', rows)
-          summarize('NO_OBVIOUS_BOTS', [r for r in rows if not r[5]])
-          summarize('NO_STRICT_BOTS', [r for r in rows if not r[6]])
+          def deduplicate(selected, seconds, key_name):
+              if not seconds:
+                  return sorted(selected, key=lambda r: r['when'])
+              output = []
+              last = {}
+              for row in sorted(selected, key=lambda r: r['when']):
+                  key = (row[key_name], row['path'])
+                  previous = last.get(key)
+                  if previous is not None and row['when'] - previous <= dt.timedelta(seconds=seconds):
+                      continue
+                  last[key] = row['when']
+                  output.append(row)
+              return output
 
-          # Varianta s odfiltrováním rychlých duplicit stejné stránky stejného klienta.
-          dedup = []
-          previous_by_key = {}
-          for row in sorted(rows, key=lambda r: r[0]):
-              key = (row[2], row[3])
-              previous = previous_by_key.get(key)
-              if previous is not None and row[0] - previous <= dt.timedelta(seconds=5):
-                  continue
-              previous_by_key[key] = row[0]
-              dedup.append(row)
-          summarize('DEDUP_5S', dedup)
+          def metrics(selected, key_name, gap_minutes):
+              selected = sorted(selected, key=lambda r: r['when'])
+              grouped = defaultdict(list)
+              for row in selected:
+                  grouped[row[key_name]].append(row['when'])
+              sessions = 0
+              gap = dt.timedelta(minutes=gap_minutes)
+              for times in grouped.values():
+                  previous = None
+                  for when in times:
+                      if previous is None or when - previous > gap:
+                          sessions += 1
+                      previous = when
+              return len(selected), sessions, len(grouped)
+
+          candidates = []
+          for pred_name, pred in predicates.items():
+              base = [r for r in rows if pred(r)]
+              for method_only_get in (False, True):
+                  selected0 = [r for r in base if not method_only_get or r['method'] == 'GET']
+                  for key_name in ('ip', 'ip_ua', 'ip_family'):
+                      for dedup_seconds in (0, 1, 2, 3, 5, 10, 20, 30):
+                          selected = deduplicate(selected0, dedup_seconds, key_name)
+                          today_rows = [r for r in selected if r['when'].date() == TODAY]
+                          for gap_minutes in (5, 10, 15, 20, 25, 30, 45, 60):
+                              total = metrics(selected, key_name, gap_minutes)
+                              today = metrics(today_rows, key_name, gap_minutes)
+                              score = (
+                                  abs(total[0] - TARGET[0]) * 3 +
+                                  abs(total[1] - TARGET[1]) * 4 +
+                                  abs(total[2] - TARGET[2]) * 4 +
+                                  abs(today[0] - TARGET_TODAY[0]) * 2 +
+                                  abs(today[1] - TARGET_TODAY[1]) * 3 +
+                                  abs(today[2] - TARGET_TODAY[2]) * 3
+                              )
+                              candidates.append((score, pred_name, method_only_get, key_name, dedup_seconds, gap_minutes, total, today))
+
+          print('CLOSEST_VARIANTS_BEGIN')
+          for item in sorted(candidates)[:40]:
+              score, pred, get_only, key, dedup_s, gap_m, total, today = item
+              print(
+                  f'score={score}|filter={pred}|get_only={get_only}|identity={key}|'
+                  f'dedup_s={dedup_s}|session_min={gap_m}|'
+                  f'total_views={total[0]}|total_visits={total[1]}|total_visitors={total[2]}|'
+                  f'today_views={today[0]}|today_visits={today[1]}|today_visitors={today[2]}'
+              )
+          print('CLOSEST_VARIANTS_END')
           PY
 
       - name: Zapsat výsledek do PR
         if: always()
         uses: actions/github-script@v7
         env:
-          OUTCOME: ${{ steps.count.outcome }}
+          OUTCOME: ${{ steps.reconstruct.outcome }}
         with:
           script: |
             const fs = require('fs');
             let log = '';
-            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/all-caddy.txt`, 'utf8'); } catch {}
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/reconstruction.txt`, 'utf8'); } catch {}
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
-                `## Všechny rotace Caddy statistik: ${process.env.OUTCOME}`,
+                `## Rekonstrukce původní metodiky: ${process.env.OUTCOME}`,
                 '',
-                '- Pouze agregované počty; bez IP adres, user-agentů a jednotlivých návštěv.',
+                '- Cílové uložené hodnoty: celkem 2 553 / 1 032 / 915; dnešek 1 104 / 439 / 389.',
+                '- Výstup obsahuje pouze agregované varianty, žádné údaje jednotlivých návštěv.',
                 '',
-                '```text', log.slice(-40000).replace(/```/g, '---'), '```'
+                '```text', log.slice(-50000).replace(/```/g, '---'), '```'
               ].join('\n')
             });
 
       - name: Vyhodnotit
         if: always()
         env:
-          OUTCOME: ${{ steps.count.outcome }}
+          OUTCOME: ${{ steps.reconstruct.outcome }}
         run: test "$OUTCOME" = success
