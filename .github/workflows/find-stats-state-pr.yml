@@ -1,0 +1,145 @@
+name: Najít původní stav a databázi statistik
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/find-stats-state-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Bezpečně prohledat soubory statistik
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/stats-state.txt"
+          from __future__ import annotations
+
+          import json
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          roots = [
+              Path('/opt/nasekadan-stats'),
+              Path('/usr/local/lib/nasekadan-stats'),
+              Path('/var/lib/nasekadan-stats'),
+              Path('/var/lib/nasekadan'),
+              Path('/opt/nasekadan'),
+          ]
+          interesting_suffixes = {'.db', '.sqlite', '.sqlite3', '.json', '.jsonl', '.csv', '.tsv', '.bak', '.old'}
+          name_tokens = ('stat', 'visit', 'view', 'counter', 'analytic', 'traffic', 'history', 'snapshot')
+          seen = set()
+          candidates = []
+
+          for root in roots:
+              if not root.exists():
+                  continue
+              try:
+                  iterator = root.rglob('*')
+              except OSError:
+                  continue
+              for path in iterator:
+                  try:
+                      if not path.is_file():
+                          continue
+                      resolved = str(path.resolve())
+                      if resolved in seen:
+                          continue
+                      seen.add(resolved)
+                      rel = str(path).lower()
+                      if path.suffix.lower() in interesting_suffixes or any(token in rel for token in name_tokens):
+                          stat = path.stat()
+                          candidates.append((stat.st_mtime, path, stat.st_size))
+                  except OSError:
+                      continue
+
+          print('CANDIDATE_FILES_BEGIN')
+          for mtime, path, size in sorted(candidates, reverse=True)[:200]:
+              print(f'{path} | {size} B | mtime={mtime:.0f}')
+          print('CANDIDATE_FILES_END')
+
+          for _, path, size in sorted(candidates, reverse=True):
+              suffix = path.suffix.lower()
+              if suffix in {'.db', '.sqlite', '.sqlite3'} and size > 0:
+                  print(f'SQLITE_BEGIN {path}')
+                  try:
+                      con = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+                      tables = [row[0] for row in con.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%' order by name")]
+                      for table in tables:
+                          safe = table.replace('"', '""')
+                          try:
+                              count = con.execute(f'SELECT COUNT(*) FROM "{safe}"').fetchone()[0]
+                          except Exception:
+                              count = 'unavailable'
+                          columns = [row[1] for row in con.execute(f'PRAGMA table_info("{safe}")')]
+                          print(f'TABLE {table} rows={count} columns={columns}')
+                      con.close()
+                  except Exception as exc:
+                      print(f'SQLITE_ERROR {type(exc).__name__}: {exc}')
+                  print(f'SQLITE_END {path}')
+              elif suffix == '.json' and 0 < size <= 5_000_000:
+                  # U JSONů tisknout jen strukturu a číselné souhrny, nikdy IP/UA/tokeny.
+                  try:
+                      data = json.loads(path.read_text(encoding='utf-8', errors='strict'))
+                  except Exception:
+                      continue
+                  print(f'JSON_BEGIN {path}')
+                  if isinstance(data, dict):
+                      print('TOP_KEYS=' + ','.join(sorted(map(str, data.keys()))[:100]))
+                      for key, value in data.items():
+                          low = str(key).lower()
+                          if isinstance(value, (int, float)) and any(token in low for token in ('total','count','view','visit','session','user','start','first')):
+                              print(f'NUMERIC {key}={value}')
+                          elif isinstance(value, list):
+                              print(f'LIST {key} length={len(value)}')
+                          elif isinstance(value, dict):
+                              print(f'DICT {key} keys={len(value)}')
+                  elif isinstance(data, list):
+                      print(f'TOP_LIST_LENGTH={len(data)}')
+                  print(f'JSON_END {path}')
+          PY
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/stats-state.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Hledání původního stavu statistik: ${process.env.OUTCOME}`,
+                '',
+                '- Výpis obsahuje jen názvy, velikosti, strukturu tabulek a číselné souhrny; žádné IP, user-agenty, tokeny ani hesla.',
+                '',
+                '```text', log.slice(-30000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+        run: test "$OUTCOME" = success
