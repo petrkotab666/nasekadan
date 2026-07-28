@@ -1,0 +1,99 @@
+name: Přímá oprava ARC-MED a hasičů
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/direct-server-fix-arc-med.txt'
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Opravit přímo produkční web
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          article=Path('clanky/arc-med-nemocnice-kadan.html')
+          t=article.read_text(encoding='utf-8')
+          t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          t=t.replace('../../','../').replace('PŘIPRAVOVANÝ ČLÁNEK','28. ČERVENCE 2026')
+          published='2026-07-28T05:00:00+02:00'
+          if 'article:published_time' not in t:
+              t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
+          article.write_text(t,encoding='utf-8',newline='\n')
+
+          home=Path('index.html')
+          h=home.read_text(encoding='utf-8')
+          card='<article class="article-card hospital" data-arc-med-card><div class="visual" style="background:linear-gradient(135deg,#132630,#3f6576 58%,#a9232b)"><strong>ARC-MED za 16 milionů</strong></div><div class="article-body"><span class="meta">28. 7. 2026 · 5:00 · Zdravotnictví a veřejné peníze</span><h3>Dva posudky, nejasné schválení a spor o dvanáct milionů</h3><p>Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.</p><a class="read-more" href="/clanky/arc-med-nemocnice-kadan.html">Přečíst analýzu →</a></div></article>'
+          h=re.sub(r'<article class="article-card hospital" data-arc-med-card>.*?</article>','',h,flags=re.S)
+          h=h.replace('<div class="article-list">','<div class="article-list">'+card,1)
+          home.write_text(h,encoding='utf-8',newline='\n')
+
+          archive=Path('clanky/index.html')
+          a=archive.read_text(encoding='utf-8')
+          acard='<article class="archive-item hospital" data-arc-med-card><div class="archive-visual"><strong>ARC-MED za 16 milionů</strong></div><div class="archive-body"><span class="archive-meta">28. července 2026 v 5:00 · Zdravotnictví a veřejné peníze</span><h2>Dva posudky, nejasné schválení a spor o dvanáct milionů</h2><p>Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.</p><a href="/clanky/arc-med-nemocnice-kadan.html">Přečíst analýzu →</a></div></article>'
+          a=re.sub(r'<article class="archive-item hospital" data-arc-med-card>.*?</article>','',a,flags=re.S)
+          a=a.replace('<section class="archive-list" aria-label="Chronologický přehled článků">','<section class="archive-list" aria-label="Chronologický přehled článků">'+acard,1)
+          archive.write_text(a,encoding='utf-8',newline='\n')
+
+          url='https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html'
+          rss=Path('rss.xml')
+          r=rss.read_text(encoding='utf-8')
+          if url not in r:
+              item=f'    <item><title>ARC-MED za 16 milionů: dva posudky, nejasné schválení a spor o dvanáct milionů</title><description><![CDATA[Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.]]></description><link>{url}</link><guid isPermaLink="true">{url}</guid><pubDate>Tue, 28 Jul 2026 05:00:00 +0200</pubDate><category>Nemocnice Kadaň</category></item>\n'
+              r=r.replace('<item>',item+'<item>',1)
+              rss.write_text(r,encoding='utf-8',newline='\n')
+
+          sm=Path('sitemap.xml')
+          s=sm.read_text(encoding='utf-8')
+          if url not in s:
+              s=s.replace('</urlset>',f'  <url><loc>{url}</loc><lastmod>2026-07-28</lastmod></url>\n</urlset>',1)
+              sm.write_text(s,encoding='utf-8',newline='\n')
+          PY
+          python3 scripts/embed_static_article_ads.py
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 clanky/arc-med-nemocnice-kadan.html /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          sudo install -m 0644 clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html /var/www/nasekadan/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
+          sudo install -m 0644 assets/reklamy/*.svg /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
+          REMOTE
+
+      - name: Ověřit živý web
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            home=$(curl -fsS "https://nasekadan.cz/?fix=$GITHUB_SHA-$i" || true)
+            arc=$(curl -fsS "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html?fix=$GITHUB_SHA-$i" || true)
+            fire=$(curl -fsS "https://nasekadan.cz/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html?fix=$GITHUB_SHA-$i" || true)
+            if grep -Fq 'ARC-MED za 16 milionů' <<<"$home" && grep -Fq 'Kadaňští hasiči cvičili' <<<"$home" && grep -Fq 'index,follow' <<<"$arc" && grep -Fq 'Kadaňští hasiči cvičili' <<<"$fire"; then
+              echo 'ARC-MED i hasiči jsou veřejně dostupní.'
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
