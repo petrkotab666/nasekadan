@@ -17,32 +17,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Vypsat runnery a aktivní běhy
+      - name: Vypsat pouze relevantní aktivní běhy
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            let runnerLines = [];
-            try {
-              const response = await github.request('GET /repos/{owner}/{repo}/actions/runners', {owner, repo, per_page: 100});
-              runnerLines = response.data.runners.map(r => {
-                const labels = (r.labels || []).map(x => x.name).join(', ');
-                return `- **${r.name}** — stav: ${r.status}, vytížený: ${r.busy}, štítky: ${labels}`;
-              });
-              if (!runnerLines.length) runnerLines.push('- Žádný repository-level runner nebyl nalezen.');
-            } catch (error) {
-              runnerLines.push(`- Chyba při čtení runnerů: ${error.message}`);
-            }
-
             const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
               owner, repo, branch: 'main', per_page: 100
             });
-            const active = runs.filter(r => ['queued','in_progress','waiting','pending','requested'].includes(r.status));
-            const runLines = active.length ? active.map(r => `- #${r.run_number} **${r.name}** — ${r.status}, ${r.head_sha.slice(0,7)}`) : ['- Žádný aktivní běh.'];
-
-            const body = [
-              '## Stav self-hosted runnerů', '', ...runnerLines,
-              '', '## Aktivní běhy na main', '', ...runLines
-            ].join('\n');
+            const activeStates = new Set(['queued','in_progress','waiting','pending','requested']);
+            const words = ['statistik', 'OVH', 'Nasadit', 'nasadit', 'Rychlé publikování', 'ordinací', 'feed', 'snímek', 'obrázky'];
+            const relevant = runs.filter(run => activeStates.has(run.status) && words.some(word => run.name.includes(word)));
+            const lines = relevant.length ? relevant.map(run => [
+              `- ID \`${run.id}\`, #${run.run_number} **${run.name}**`,
+              `  - stav: ${run.status}`,
+              `  - commit: \`${run.head_sha.slice(0,7)}\``,
+              `  - vytvořeno: ${run.created_at}`,
+              `  - aktualizováno: ${run.updated_at}`,
+              `  - ${run.html_url}`
+            ].join('\n')) : ['- Žádný relevantní aktivní běh.'];
+            const body = ['## Relevantní aktivní běhy', '', ...lines].join('\n');
             await github.rest.issues.createComment({owner, repo, issue_number: context.issue.number, body});
