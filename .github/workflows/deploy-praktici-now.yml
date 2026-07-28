@@ -1,0 +1,108 @@
+name: Okamžitě nasadit přehled kadaňských ordinací
+run-name: Přímé OVH nasazení a ověření přehledu ordinací
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - deploy-praktici-now.txt
+      - .github/workflows/deploy-praktici-now.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit nejnovější main přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          chmod +x deploy/sync-production.sh
+          if ! sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh; then
+            echo 'Kanonický deploy selhal; používám bezpečný statický fallback.' >&2
+            sudo install -d -m 0755 /var/www/nasekadan
+            sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            tar \
+              --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
+              --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
+              --exclude='deploy' -C /opt/nasekadan -cf - . \
+              | sudo tar -C /var/www/nasekadan -xf -
+            printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=static-fallback\n' \
+              "$SHA" "$(date -u +%FT%TZ)" \
+              | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+            sudo chmod -R a+rX /var/www/nasekadan
+          fi
+          PAGE="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?deploy=$SHA")"
+          grep -Fq 'V součtu jde o šest kadaňských pracovišť' <<<"$PAGE"
+          grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$PAGE"
+          grep -Fq '24. a 31. 8.' <<<"$PAGE"
+          REMOTE
+
+      - name: Veřejně ověřit nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(git rev-parse HEAD)"
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 24); do
+            page="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?v=$stamp-$attempt" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            health="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" 2>/dev/null || true)"
+            if grep -Fq 'V součtu jde o šest kadaňských pracovišť' <<<"$page" \
+              && grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$page" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$archive" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$rss" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$sitemap" \
+              && grep -Fq "source=$SHA" <<<"$health"; then
+              echo "Veřejné nasazení je potvrzené na commitu $SHA."
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Veřejné ověření neprošlo ve všech bodech.' >&2
+          exit 1
