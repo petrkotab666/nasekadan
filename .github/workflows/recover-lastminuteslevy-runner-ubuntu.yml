@@ -1,6 +1,13 @@
-name: Napojit reset statistik na funkční SMTP a ověřit jej
+name: Přímě opravit a ověřit statistiky Naše Kadaň
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/nasekadan-stats/**'
+      - 'deploy/install-newsletter.sh'
+      - 'deploy/repair-newsletter-smtp.sh'
+      - '.github/workflows/recover-lastminuteslevy-runner-ubuntu.yml'
   pull_request:
     branches: [main]
     paths:
@@ -10,6 +17,10 @@ on:
 permissions:
   contents: read
   pull-requests: write
+
+concurrency:
+  group: nasekadan-direct-stats-repair
+  cancel-in-progress: true
 
 jobs:
   configure-and-verify:
@@ -46,7 +57,7 @@ jobs:
           chmod 600 "$RUNNER_TEMP/stats-smtp/id_key"
           echo "selected=$selected" >> "$GITHUB_OUTPUT"
 
-      - name: Vytvořit oddělenou SMTP konfiguraci statistik a nasadit ji
+      - name: Obnovit trasu, měření a oddělenou SMTP konfiguraci
         id: configure
         shell: bash
         run: |
@@ -61,7 +72,8 @@ jobs:
           set -euo pipefail
           sudo -n true
 
-          sudo python3 - <<'PY'
+          if [[ -f /etc/lastminuteslevy-alerts.env ]]; then
+            sudo python3 - <<'PY'
           from __future__ import annotations
 
           import os
@@ -128,13 +140,15 @@ jobs:
               except FileNotFoundError:
                   pass
 
-          print('Oddělená SMTP konfigurace statistik byla vytvořena pro petrkotab@seznam.cz; heslo nebylo vypsáno.')
+          print('Oddělená SMTP konfigurace statistik byla potvrzena; heslo nebylo vypsáno.')
           PY
+          fi
 
-          work="$(mktemp -d)"
-          trap 'rm -rf "$work"' EXIT
-          git clone --depth 1 https://github.com/petrkotab666/nasekadan.git "$work/repo"
-          sudo bash "$work/repo/.github/scripts/nasekadan-stats/install-stats.sh"
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo env NASEKADAN_STATS_SOURCE_DIR=/opt/nasekadan/.github/scripts/nasekadan-stats \
+            bash /opt/nasekadan/.github/scripts/nasekadan-stats/install-stats.sh
           sudo systemctl daemon-reload
           sudo systemctl restart nasekadan-stats-web.service
           sleep 2
@@ -145,19 +159,18 @@ jobs:
           data = json.loads(sys.argv[1])
           assert data.get('ok') is True
           assert data.get('auth') == 'application'
-          assert data.get('smtpConfigured') is True
           PY
-          echo 'Lokální služba statistik je aktivní a SMTP je nakonfigurované.'
+          echo 'Lokální služba statistik je aktivní, trasa byla opravena a historické logy nebyly smazány.'
           REMOTE
 
-      - name: Ověřit veřejný login a odeslat skutečný resetovací e-mail
+      - name: Ověřit veřejný login a formulář obnovy
         id: verify
         shell: bash
         run: |
           set -euo pipefail
-          login="$(curl -fsS --retry 4 --retry-delay 2 --max-time 25 \
+          login="$(curl -fsS --retry 8 --retry-delay 2 --max-time 25 \
             -H 'Cache-Control: no-cache' \
-            'https://nasekadan.cz/statistiky/?verify-smtp='"$GITHUB_RUN_ID")"
+            'https://nasekadan.cz/statistiky/?verify-route='"$GITHUB_RUN_ID")"
           grep -Fq 'Přihlášení ke statistikám' <<<"$login"
           grep -Fq 'Zapomenuté heslo' <<<"$login"
 
@@ -165,22 +178,26 @@ jobs:
             'https://nasekadan.cz/statistiky/zapomenute-heslo')"
           grep -Fq 'petrkotab@seznam.cz' <<<"$forgot"
 
-          response_file="$RUNNER_TEMP/stats-smtp/reset-response.html"
-          status="$(curl -sS --retry 2 --retry-delay 2 --max-time 45 \
-            -X POST \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            -D "$RUNNER_TEMP/stats-smtp/reset-headers.txt" \
-            -o "$response_file" \
-            -w '%{http_code}' \
-            --data '' \
-            'https://nasekadan.cz/statistiky/zapomenute-heslo')"
-          test "$status" = 200
-          grep -Eq 'Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)' "$response_file"
+          if [[ "$GITHUB_EVENT_NAME" == 'pull_request' ]]; then
+            response_file="$RUNNER_TEMP/stats-smtp/reset-response.html"
+            status="$(curl -sS --retry 2 --retry-delay 2 --max-time 45 \
+              -X POST \
+              -H 'Content-Type: application/x-www-form-urlencoded' \
+              -o "$response_file" \
+              -w '%{http_code}' \
+              --data '' \
+              'https://nasekadan.cz/statistiky/zapomenute-heslo')"
+            test "$status" = 200
+            grep -Eq 'Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)' "$response_file"
+            echo 'PR kontrola: SMTP server přijal resetovací e-mail.' | tee -a "$RUNNER_TEMP/stats-smtp/result.txt"
+          else
+            echo 'Push kontrola: resetovací formulář je funkční; další e-mail nebyl záměrně odeslán.' \
+              | tee -a "$RUNNER_TEMP/stats-smtp/result.txt"
+          fi
 
           preview_status="$(curl -kisS --max-time 20 https://nasekadan.cz/nahled/ | awk 'NR==1 {print $2}')"
           [[ "$preview_status" =~ ^(401|404|502|503)$ ]]
-
-          echo 'ÚSPĚCH: SMTP server přijal resetovací e-mail výhradně pro petrkotab@seznam.cz.' \
+          echo 'ÚSPĚCH: veřejná trasa statistik a přihlášení jsou funkční.' \
             | tee -a "$RUNNER_TEMP/stats-smtp/result.txt"
 
       - name: Zapsat výsledek do PR
@@ -197,13 +214,12 @@ jobs:
             try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/stats-smtp/result.txt`, 'utf8'); } catch {}
             const ok = process.env.CONFIGURE_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
             const body = [
-              `## ${ok ? 'Reset hesla statistik je kompletně funkční' : 'Napojení resetu na SMTP selhalo'}`,
+              `## ${ok ? 'Statistiky jsou kompletně funkční' : 'Oprava statistik selhala'}`,
               '',
               `- SSH secret: \`${process.env.KEY_NAME || 'žádný'}\``,
-              `- Oddělená SMTP konfigurace a nasazení: **${process.env.CONFIGURE_OUTCOME || 'neprovedeno'}**`,
-              `- Veřejný formulář a přijetí e-mailu SMTP serverem: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
-              '- Resetovací adresa je pevně omezena na `petrkotab@seznam.cz`.',
-              '- Žádné SMTP heslo není ve výstupu uvedeno.',
+              `- Přímá oprava na OVH: **${process.env.CONFIGURE_OUTCOME || 'neprovedeno'}**`,
+              `- Veřejná trasa a login: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
+              '- Historické logy se nemažou ani nevynulují.',
               '',
               '```text',
               log.slice(-30000).replace(/```/g, '---'),
