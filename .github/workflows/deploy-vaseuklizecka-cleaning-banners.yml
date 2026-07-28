@@ -1,0 +1,110 @@
+name: Nasadit bannery čištění Vaše uklízečka
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/vaseuklizecka-cleaning-banners-trigger.txt'
+      - 'assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp'
+      - 'assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-vaseuklizecka-cleaning-banners
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      WIDE_SHA256: f2988b6b8636bf546a28bf4cef10d78d2e6a1db1327055aa51feb1d2e2c15bbb
+      TOWER_SHA256: 3512657597f83c6f784ed4853120bc53a7d472a974bf55879775b9c155e79194
+    steps:
+      - name: Načíst repozitář
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit oba WebP bannery na Caddy server
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp /var/www/nasekadan/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp /var/www/nasekadan/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp
+          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
+          REMOTE
+
+      - name: Ověřit veřejné soubory podle přesného SHA-256
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          wide_url="https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp?v=${GITHUB_SHA}"
+          tower_url="https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp?v=${GITHUB_SHA}"
+          success=false
+          for attempt in $(seq 1 24); do
+            rm -f "$RUNNER_TEMP/wide.webp" "$RUNNER_TEMP/tower.webp"
+            curl -fsS --max-time 20 "$wide_url&attempt=$attempt" -o "$RUNNER_TEMP/wide.webp" || true
+            curl -fsS --max-time 20 "$tower_url&attempt=$attempt" -o "$RUNNER_TEMP/tower.webp" || true
+            wide_sha="$(sha256sum "$RUNNER_TEMP/wide.webp" 2>/dev/null | awk '{print $1}' || true)"
+            tower_sha="$(sha256sum "$RUNNER_TEMP/tower.webp" 2>/dev/null | awk '{print $1}' || true)"
+            if [[ "$wide_sha" == "$WIDE_SHA256" && "$tower_sha" == "$TOWER_SHA256" ]]; then
+              success=true
+              break
+            fi
+            sleep 10
+          done
+          [[ "$success" == true ]]
+          wide_bytes="$(wc -c < "$RUNNER_TEMP/wide.webp")"
+          tower_bytes="$(wc -c < "$RUNNER_TEMP/tower.webp")"
+          echo "wide_sha=$WIDE_SHA256" >> "$GITHUB_OUTPUT"
+          echo "tower_sha=$TOWER_SHA256" >> "$GITHUB_OUTPUT"
+          echo "wide_bytes=$wide_bytes" >> "$GITHUB_OUTPUT"
+          echo "tower_bytes=$tower_bytes" >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat ověřený stav do repozitáře
+        shell: bash
+        env:
+          WIDE_BYTES: ${{ steps.verify.outputs.wide_bytes }}
+          TOWER_BYTES: ${{ steps.verify.outputs.tower_bytes }}
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          checked_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          cat > vaseuklizecka-cleaning-live-status.json <<JSON
+          {
+            "status": "success",
+            "checked_at_utc": "$checked_at",
+            "deployment_commit": "$GITHUB_SHA",
+            "wide_url": "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp",
+            "wide_bytes": $WIDE_BYTES,
+            "wide_sha256": "$WIDE_SHA256",
+            "tower_url": "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp",
+            "tower_bytes": $TOWER_BYTES,
+            "tower_sha256": "$TOWER_SHA256",
+            "public_verification": true
+          }
+          JSON
+          git config user.name 'nasekadan-deploy-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add vaseuklizecka-cleaning-live-status.json
+          git commit -m 'Zapsat ověřené nasazení bannerů čištění' || exit 0
+          git push origin HEAD:main
