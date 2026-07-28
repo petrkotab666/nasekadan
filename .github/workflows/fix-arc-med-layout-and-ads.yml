@@ -1,0 +1,59 @@
+name: Opravit vzhled ARC-MED a reklamy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-arc-med-layout-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Sjednotit ARC-MED a reklamy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 scripts/embed_static_article_ads.py
+          sudo install -m 0644 footer.css /var/www/nasekadan/footer.css
+          sudo install -m 0644 clanky/arc-med-nemocnice-kadan.html /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          REMOTE
+
+      - name: Ověřit veřejnou podobu
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            html="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html?fix=${GITHUB_SHA}-${attempt}" || true)"
+            css="$(curl -fsS --max-time 20 "https://nasekadan.cz/footer.css?fix=${GITHUB_SHA}-${attempt}" || true)"
+            if [[ "$(grep -o 'class="static-article-ad"' <<<"$html" | wc -l)" -eq 4 ]] \
+              && grep -Fq 'grid-template-columns:minmax(0,1fr) 300px' <<<"$css" \
+              && grep -Fq 'main.article-shell>article:not(.article) h1' <<<"$css" \
+              && grep -Fq '/assets/reklamy/pojistime-300x600.svg' <<<"$html" \
+              && grep -Fq '/assets/reklamy/realitykadan-300x600.svg' <<<"$html"; then
+              echo 'ARC-MED má jednotnou šablonu a čtyři grafické reklamy.'
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'Veřejná kontrola ARC-MED selhala.' >&2
+          exit 1
