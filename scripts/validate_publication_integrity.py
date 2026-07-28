@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -21,13 +20,6 @@ RSS_MAX_AGE_DAYS = 120
 
 TRAIN_PATH = "/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html"
 TRAIN_URL = f"https://{SITE_HOST}{TRAIN_PATH}"
-AD_MARKER = 'data-static-article-ads="locked-v1"'
-AD_IMAGES = (
-    "/assets/reklamy/pojistime-300x600.svg",
-    "/assets/reklamy/vaseuklizecka-300x600.svg",
-    "/assets/reklamy/vyklidime-300x600.svg",
-    "/assets/reklamy/realitykadan-300x600.svg",
-)
 
 
 @dataclass(frozen=True)
@@ -121,36 +113,33 @@ def present(text: str, article: Article) -> bool:
     return article.relative_url in text or article.canonical in text
 
 
-def ensure_locked_ads() -> None:
-    script = ROOT / "scripts" / "embed_static_article_ads.py"
-    subprocess.run([sys.executable, str(script)], cwd=ROOT, check=True)
-
-
 def validate_article_ads(path: Path, html: str, errors: list[str]) -> None:
     if '<main class="wrap article-shell"' not in html or '<aside class="sticky"' not in html:
         return
     label = path.relative_to(ROOT)
-    if AD_MARKER not in html:
-        errors.append(f"{label}: chybí uzamčený pravý reklamní sloupec.")
-    count = html.count('class="static-article-ad"')
-    if count != 4:
-        errors.append(f"{label}: očekávány 4 grafické reklamy, nalezeno {count}.")
-    for image in AD_IMAGES:
-        if image not in html:
-            errors.append(f"{label}: chybí grafický banner {image}.")
-    required_css = (
-        "width:300px!important;min-width:300px!important;max-width:300px!important",
-        "height:600px!important;min-height:600px!important;max-height:600px!important",
-        ".article-ad-auto,article.article>[data-promos]{display:none!important}",
+
+    # Pevná čtveřice bannerů byla chybný mezistav a nesmí se vrátit.
+    forbidden = (
+        'static-article-ads',
+        'class="static-article-ad"',
+        'static-article-ads-style',
+        'data-static-ads="locked-v1"',
+        'data-static-article-ads="locked-v1"',
     )
-    for rule in required_css:
-        if rule not in html:
-            errors.append(f"{label}: chybí ochranné CSS reklam: {rule}")
+    for marker in forbidden:
+        if marker in html:
+            errors.append(f"{label}: obsahuje zakázaný pevný reklamní systém ({marker}).")
+
+    # Správný systém vybírá různé partnerské nabídky dynamicky.
+    if 'data-promos data-context="sidebar"' not in html:
+        errors.append(f"{label}: chybí dynamická reklamní pozice v pravém sloupci.")
+    if '/reklamy.js' not in html:
+        errors.append(f"{label}: chybí hlavní dynamický reklamní skript reklamy.js.")
+    if '/site.js' not in html and '/reklamy-sidebar.js' not in html:
+        errors.append(f"{label}: chybí načtení proudu různých reklam v pravém sloupci.")
 
 
 def main() -> int:
-    ensure_locked_ads()
-
     now = datetime.now(timezone.utc)
     home = read(HOME)
     archive = read(ARCHIVE)
@@ -205,7 +194,7 @@ def main() -> int:
 
     print(
         f"Kontrola publikace je v pořádku: {len(articles)} veřejných článků, "
-        f"{min(HOME_RECENT_LIMIT, len(dated))} nejnovějších ověřeno a reklamy jsou uzamčené."
+        f"{min(HOME_RECENT_LIMIT, len(dated))} nejnovějších ověřeno a používá se dynamický reklamní systém."
     )
     return 0
 
