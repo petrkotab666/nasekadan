@@ -1,4 +1,4 @@
-name: Diagnostikovat Caddy ochranu statistik přes GitHub cloud
+name: Přímo nasadit a ověřit reset hesla statistik přes GitHub cloud
 
 on:
   pull_request:
@@ -12,9 +12,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  diagnose-caddy:
+  deploy-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
       KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
@@ -31,67 +31,115 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/caddy-diagnostic"
-          : > "$RUNNER_TEMP/caddy-diagnostic/result.txt"
+          mkdir -p "$RUNNER_TEMP/stats-final"
+          : > "$RUNNER_TEMP/stats-final/result.txt"
           selected=''
           for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
             value="${!name:-}"
             if [ -n "$value" ]; then
-              printf '%s\n' "$value" > "$RUNNER_TEMP/caddy-diagnostic/id_key"
+              printf '%s\n' "$value" > "$RUNNER_TEMP/stats-final/id_key"
               selected="$name"
               break
             fi
           done
           test -n "$selected"
-          chmod 600 "$RUNNER_TEMP/caddy-diagnostic/id_key"
+          chmod 600 "$RUNNER_TEMP/stats-final/id_key"
           echo "selected=$selected" >> "$GITHUB_OUTPUT"
 
-      - name: Vypsat aktivní Caddy konfiguraci statistik
-        id: inspect
+      - name: Nainstalovat reset statistik přímo na OVH
+        id: install
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/caddy-diagnostic/id_key" \
+          ssh -i "$RUNNER_TEMP/stats-final/id_key" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/caddy-diagnostic/result.txt"
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/stats-final/result.txt"
           set -euo pipefail
-          echo '=== CADDY SLUŽBA ==='
-          systemctl is-active caddy || true
-          sudo systemctl cat caddy | sed -n '1,180p' || true
-          echo '=== CADDY SOUBORY ==='
-          sudo find /etc/caddy /usr/local/etc/caddy /opt -maxdepth 5 -type f 2>/dev/null \
-            | sort | head -n 300 || true
-          echo '=== VÝSKYT STATISTIK / RESTRICTED / BASIC_AUTH ==='
-          sudo grep -RniE 'statistiky|restricted|basic_auth|basicauth|forward_auth|3225' \
-            /etc/caddy /usr/local/etc/caddy /opt 2>/dev/null \
-            | head -n 400 || true
-          echo '=== HLAVNÍ CADDYFILE ==='
-          sudo sed -n '1,320p' /etc/caddy/Caddyfile 2>/dev/null || true
-          echo '=== VEŘEJNÁ ODPOVĚĎ ==='
-          curl -kisS --max-time 15 https://nasekadan.cz/statistiky/ | head -n 50 || true
+          sudo -n true
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          git clone --depth 1 https://github.com/petrkotab666/nasekadan.git "$work/repo"
+          sudo bash "$work/repo/.github/scripts/nasekadan-stats/install-stats.sh"
+          echo 'Lokální health:'
+          curl -fsS http://127.0.0.1:3225/healthz
+          echo
+          echo 'Caddy konfigurace statistik:'
+          sudo sed -n '10,30p' /etc/caddy/sites-enabled/nasekadan.caddy
           REMOTE
 
-      - name: Zapsat diagnostiku do PR
+      - name: Ověřit veřejný login, SMTP a odeslat testovací reset
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          login="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' \
+            'https://nasekadan.cz/statistiky/?verify-final='"$GITHUB_RUN_ID")"
+          grep -Fq 'Přihlášení ke statistikám' <<<"$login"
+          grep -Fq 'Zapomenuté heslo' <<<"$login"
+
+          health="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' \
+            'https://nasekadan.cz/statistiky/healthz?verify-final='"$GITHUB_RUN_ID")"
+          python3 - "$health" <<'PY'
+          import json, sys
+          data = json.loads(sys.argv[1])
+          assert data.get('ok') is True
+          assert data.get('auth') == 'application'
+          assert data.get('smtpConfigured') is True
+          PY
+
+          forgot="$(curl -fsS --max-time 20 \
+            'https://nasekadan.cz/statistiky/zapomenute-heslo')"
+          grep -Fq 'petrkotab@seznam.cz' <<<"$forgot"
+
+          reset="$(curl -fsS --max-time 30 \
+            -X POST \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data '' \
+            'https://nasekadan.cz/statistiky/zapomenute-heslo')"
+          grep -Eq 'Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)' <<<"$reset"
+
+          preview_status="$(curl -kisS --max-time 20 https://nasekadan.cz/nahled/ | awk 'NR==1 {print $2}')"
+          test "$preview_status" = 401
+
+          echo 'ÚSPĚCH: login, SMTP, reset pouze na petrkotab@seznam.cz a ochrana /nahled/ jsou ověřené.' \
+            | tee -a "$RUNNER_TEMP/stats-final/result.txt"
+
+      - name: Zapsat výsledek do PR
         if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
           KEY_NAME: ${{ steps.key.outputs.selected }}
-          INSPECT_OUTCOME: ${{ steps.inspect.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         with:
           script: |
             const fs = require('fs');
             let log = '';
-            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/caddy-diagnostic/result.txt`, 'utf8'); } catch {}
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/stats-final/result.txt`, 'utf8'); } catch {}
+            const ok = process.env.INSTALL_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
             const body = [
-              '## Diagnostika Caddy ochrany statistik',
+              `## ${ok ? 'Obnova hesla statistik je nasazená a ověřená' : 'Finální ověření resetu statistik selhalo'}`,
               '',
               `- SSH secret: \`${process.env.KEY_NAME || 'žádný'}\``,
-              `- Výsledek: **${process.env.INSPECT_OUTCOME || 'neprovedeno'}**`,
+              `- Přímá instalace na OVH: **${process.env.INSTALL_OUTCOME || 'neprovedeno'}**`,
+              `- Veřejný login, SMTP, reset a ochrana náhledů: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
               '',
               '```text',
-              log.slice(-50000).replace(/```/g, '---'),
+              log.slice(-40000).replace(/```/g, '---'),
               '```'
             ].join('\n');
             await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          INSTALL: ${{ steps.install.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        run: |
+          test "$INSTALL" = success
+          test "$VERIFY" = success
