@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTICLES = ROOT / 'clanky'
 
 SCRIPTS = '''
-<script src="/reklamy.js?v=20260728-dynamic-2"></script>
+<script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script>
 <script src="/reklamy-sidebar.js?v=20260728-adstream-4"></script>
 <script src="/reklamy-oprava-obrazku.js?v=20260728-dynamic-2"></script>
 <script src="/obsah-doplnky.js?v=20260728-dynamic-2"></script>
@@ -41,7 +41,7 @@ for path in ARTICLES.glob('*.html'):
     text = text.replace('</aside>', '  <div data-promos data-context="sidebar"></div>\n</aside>', 1)
 
     # Odstranit starší verze reklamních skriptů a vložit jedinou aktuální sadu.
-    for script_name in ('reklamy.js', 'reklamy-sidebar.js', 'reklamy-oprava-obrazku.js', 'obsah-doplnky.js'):
+    for script_name in ('reklamy.js?v=20260728-vaseuklizecka-guaranteed-3', 'reklamy-sidebar.js', 'reklamy-oprava-obrazku.js', 'obsah-doplnky.js'):
         text = re.sub(rf'\s*<script[^>]+src="/{re.escape(script_name)}[^>]*></script>', '', text)
     text = text.replace('</body>', SCRIPTS + '</body>', 1)
 

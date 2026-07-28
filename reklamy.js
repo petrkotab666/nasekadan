@@ -332,6 +332,12 @@ function ensurePromoStyles(){
     .promo-wide-copy .promo-description{color:#53616a;flex:1;overflow-wrap:anywhere}
     .promo-wide-copy b{color:var(--red);margin-top:12px}
     .article-ad-auto{margin:52px 0}
+    .featured-cleaning-ad{display:block;margin:28px auto 48px;max-width:1180px;padding:0 20px}
+    article.article>.featured-cleaning-ad{margin:34px 0 46px;padding:0;max-width:none}
+    .featured-cleaning-ad>.promo-label{margin-bottom:8px;color:#747f85;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+    .featured-cleaning-ad>a{display:block;overflow:hidden;border:1px solid #d8e0e4;border-radius:16px;background:#fff;box-shadow:0 12px 32px rgba(18,35,45,.12)}
+    .featured-cleaning-ad img{display:block;width:100%;height:auto;aspect-ratio:3/1;object-fit:contain;background:#fff}
+
 
     .article-ad-rail{display:none;position:fixed;top:96px;width:176px;z-index:8;max-height:calc(100vh - 116px);overflow:hidden}
     .article-ad-rail-left{left:calc((100vw - 1180px)/2 - 194px)}
@@ -397,7 +403,11 @@ function renderPromos(){
     const layout=box.dataset.layout||(context==='sidebar'?'compact':'feed');
     const isBanner=layout==='banner';
     const count=box.dataset.count?Number(box.dataset.count):(context==='sidebar'||isBanner?1:3);
-    const items=pickPromos(context,count,index*5);
+    let items=pickPromos(context,count,index*5);
+    const featured=promoItems.find(item=>item.id==='uklizecka-cisteni');
+    if(featured&&(index===0||context==='sidebar')){
+      items=[featured,...items.filter(item=>item.id!==featured.id)].slice(0,Math.max(1,count));
+    }
     const compact=context==='sidebar'?' promo-grid-compact':'';
     const bannerClass=isBanner?' promo-grid-banner':'';
     const cards=items.map(item=>isBanner?renderBannerCard(item):renderFeedCard(item)).join('');
@@ -456,7 +466,8 @@ function renderArticleSideRails(){
   if(!shell||!article||document.querySelector('.article-ad-rail'))return;
 
   const context=inferPromoContext(`${document.title} ${article.textContent||''}`);
-  const tower=pickTowerCreative(context,0);
+  const featuredTower=towerCreativeItems.find(item=>item.id==='uklizecka-cisteni-tower');
+  const tower=featuredTower||pickTowerCreative(context,0);
   const custom=pickRailPromo(context,7);
   if(!tower&&!custom)return;
 
@@ -494,8 +505,29 @@ function renderArticleSideRails(){
   installImageFallbacks(document);
 }
 
+
+function installGuaranteedCleaningBanner(){
+  if(document.querySelector('.featured-cleaning-ad'))return;
+  const item=promoItems.find(entry=>entry.id==='uklizecka-cisteni');
+  if(!item)return;
+  const section=document.createElement('section');
+  section.className='featured-cleaning-ad';
+  section.setAttribute('aria-label','Reklama: Čištění koberců, sedaček a čalounění');
+  section.innerHTML=`<div class="promo-label">REKLAMA</div><a href="${escapeHtml(safeHttpUrl(item.url))}" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp" width="1200" height="400" alt="Čištění koberců, sedaček a čalounění – Vaše uklízečka, telefon 603 206 308" decoding="async"></a>`;
+  const article=document.querySelector('article.article');
+  if(article){
+    const anchor=article.querySelector('.hero-visual')||article.querySelector('.leadtext')||article.querySelector('h1');
+    if(anchor){anchor.after(section);return;}
+  }
+  const homeHero=document.querySelector('main .hero');
+  if(homeHero){homeHero.after(section);return;}
+  const main=document.querySelector('main');
+  if(main)main.prepend(section);
+}
+
 document.addEventListener('DOMContentLoaded',async()=>{
   ensurePromoStyles();
+  installGuaranteedCleaningBanner();
   await loadAffiliateSnapshot();
   redistributeArticlePromos();
   renderArticleSideRails();

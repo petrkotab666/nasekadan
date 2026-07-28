@@ -3,7 +3,7 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[1]
-js_path = root / 'reklamy.js'
+js_path = root / 'reklamy.js?v=20260728-vaseuklizecka-guaranteed-3'
 text = js_path.read_text(encoding='utf-8')
 
 records = {
@@ -102,8 +102,8 @@ js_path.write_text(text, encoding='utf-8', newline='\n')
 version = '20260727-right-column-ads-4'
 for article in (root / 'clanky').glob('*.html'):
     html = article.read_text(encoding='utf-8')
-    updated = re.sub(r'/reklamy\.js\?v=[^"\']+', f'/reklamy.js?v={version}', html)
-    if '/reklamy.js' in updated and updated != html:
+    updated = re.sub(r'/reklamy\.js\?v=[^"\']+', f'/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3', html)
+    if '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' in updated and updated != html:
         article.write_text(updated, encoding='utf-8', newline='\n')
 
 print('Grafické reklamy v pravém sloupci byly opraveny bez ořezu a bez textového fallbacku.')

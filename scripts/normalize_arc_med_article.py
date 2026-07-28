@@ -54,12 +54,12 @@ def update_json(match: re.Match[str]) -> str:
     return match.group(1) + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + match.group(3)
 text = re.sub(pattern, update_json, text, count=1, flags=re.S)
 
-# Jediný správný reklamní systém: reklamy.js + proud různých nabídek vpravo.
-for script_name in ('reklamy.js', 'reklamy-sidebar.js', 'reklamy-oprava-obrazku.js', 'obsah-doplnky.js'):
+# Jediný správný reklamní systém: reklamy.js?v=20260728-vaseuklizecka-guaranteed-3 + proud různých nabídek vpravo.
+for script_name in ('reklamy.js?v=20260728-vaseuklizecka-guaranteed-3', 'reklamy-sidebar.js', 'reklamy-oprava-obrazku.js', 'obsah-doplnky.js'):
     text = re.sub(rf'\s*<script[^>]+src="/{re.escape(script_name)}[^>]*></script>', '', text)
 
 scripts = '''
-<script src="/reklamy.js?v=20260728-dynamic-2"></script>
+<script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script>
 <script src="/reklamy-sidebar.js?v=20260728-adstream-4"></script>
 <script src="/reklamy-oprava-obrazku.js?v=20260728-dynamic-2"></script>
 <script src="/obsah-doplnky.js?v=20260728-dynamic-2"></script>
@@ -73,7 +73,7 @@ assert 'Pracovní verze' not in text
 assert 'static-article-ads' not in text
 assert '<article class="article">' in text
 assert '<div data-promos data-context="sidebar"></div>' in text
-assert '/reklamy.js?' in text
+assert '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3?' in text
 assert '/reklamy-sidebar.js?' in text
 
 path.write_text(text, encoding='utf-8', newline='\n')

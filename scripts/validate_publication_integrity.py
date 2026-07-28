@@ -133,8 +133,8 @@ def validate_article_ads(path: Path, html: str, errors: list[str]) -> None:
     # Správný systém vybírá různé partnerské nabídky dynamicky.
     if 'data-promos data-context="sidebar"' not in html:
         errors.append(f"{label}: chybí dynamická reklamní pozice v pravém sloupci.")
-    if '/reklamy.js' not in html:
-        errors.append(f"{label}: chybí hlavní dynamický reklamní skript reklamy.js.")
+    if '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' not in html:
+        errors.append(f"{label}: chybí hlavní dynamický reklamní skript reklamy.js?v=20260728-vaseuklizecka-guaranteed-3.")
     if '/site.js' not in html and '/reklamy-sidebar.js' not in html:
         errors.append(f"{label}: chybí načtení proudu různých reklam v pravém sloupci.")
 

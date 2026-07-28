@@ -17,7 +17,7 @@ TEMPLATE_VERSION = "unified-v1"
 ASSET_VERSION = "20260726-unified-article-1"
 SCRIPT_BLOCK = (
     '<script src="/site.js" defer></script>\n'
-    f'<script src="/reklamy.js?v={ASSET_VERSION}"></script>\n'
+    f'<script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script>\n'
     f'<script src="/reklamy-oprava-obrazku.js?v={ASSET_VERSION}"></script>\n'
     f'<script src="/obsah-doplnky.js?v={ASSET_VERSION}"></script>'
 )
@@ -130,7 +130,7 @@ def validate(path: Path, text: str) -> list[str]:
         re.I | re.S,
     ):
         errors.append("pravý panel nemá společný reklamní slot")
-    for asset in ("/site.js", "/reklamy.js", "/reklamy-oprava-obrazku.js", "/obsah-doplnky.js"):
+    for asset in ("/site.js", "/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3", "/reklamy-oprava-obrazku.js", "/obsah-doplnky.js"):
         if text.count(asset) != 1:
             errors.append(f"soubor {asset} není načten právě jednou")
     if "</body>" not in text.lower():

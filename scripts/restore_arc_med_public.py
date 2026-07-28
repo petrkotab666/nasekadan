@@ -17,7 +17,7 @@ assert 'Pracovní verze' not in final
 assert 'static-article-ads' not in final
 assert '<article class="article">' in final
 assert '<div data-promos data-context="sidebar"></div>' in final
-assert '/reklamy.js?' in final
+assert '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3?' in final
 assert '/reklamy-sidebar.js?' in final
 
 print('ARC-MED obnoven jako veřejný článek s dynamickým proudem různých reklam.')
