@@ -1,82 +1,14 @@
-name: Zveřejnit rychlou zprávu o interní ambulanci
+name: Zastavit duplicitní zprávu o interní ambulanci
 on:
   push:
     branches: [main]
     paths: ['.github/publish-internal-ambulance-trigger.txt']
   workflow_dispatch:
-permissions:
-  contents: write
 concurrency:
   group: publish-internal-ambulance
   cancel-in-progress: true
 jobs:
-  publish:
+  stop-duplicate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-        with: {fetch-depth: 0}
-      - name: Sestavit článek a přehledy
-        run: |
-          set -euo pipefail
-          python3 scripts/publish_internal_ambulance_closure.py
-          python3 scripts/normalize_footers.py --write --check
-          python3 scripts/normalize_articles.py --write --check
-          python3 -m pip install --quiet Pillow
-          python3 scripts/generate_social_cards.py --write --check
-          for f in index.html clanky/index.html rss.xml sitemap.xml; do grep -Fq 'interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html' "$f"; done
-      - name: Uložit vygenerované veřejné soubory
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html clanky/index.html clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html rss.xml sitemap.xml news-sitemap.xml production-content-manifest.json social/
-          git diff --cached --quiet || git commit -m 'Zveřejnit omezení interní ambulance Nemocnice Kadaň'
-          git push origin HEAD:main
-      - name: Připravit SSH
-        run: |
-          test -n "$SSH_KEY"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
-          chmod 600 "$RUNNER_TEMP/key"
-      - name: Nasadit pouze nové a změněné veřejné soubory
-        run: |
-          set -euo pipefail
-          OG_URL=$(grep -oP '<meta property="og:image" content="\K[^"]+' clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html)
-          OG_FILE=${OG_URL##*/}
-          test -f "social/$OG_FILE"
-          mkdir -p deploy-package/clanky deploy-package/social
-          cp index.html rss.xml sitemap.xml news-sitemap.xml deploy-package/
-          cp clanky/index.html clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html deploy-package/clanky/
-          cp "social/$OG_FILE" deploy-package/social/
-          tar -C deploy-package -czf "$RUNNER_TEMP/internal-ambulance.tar.gz" .
-          scp -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new "$RUNNER_TEMP/internal-ambulance.tar.gz" ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 "sudo -n bash -s" <<'EOF'
-          set -euo pipefail
-          stage=$(mktemp -d)
-          tar -xzf /tmp/internal-ambulance.tar.gz -C "$stage"
-          install -m 0644 "$stage/index.html" /var/www/nasekadan/index.html
-          install -m 0644 "$stage/clanky/index.html" /var/www/nasekadan/clanky/index.html
-          install -m 0644 "$stage/clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html" /var/www/nasekadan/clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html
-          install -m 0644 "$stage/rss.xml" /var/www/nasekadan/rss.xml
-          install -m 0644 "$stage/sitemap.xml" /var/www/nasekadan/sitemap.xml
-          install -m 0644 "$stage/news-sitemap.xml" /var/www/nasekadan/news-sitemap.xml
-          mkdir -p /var/www/nasekadan/social
-          install -m 0644 "$stage"/social/* /var/www/nasekadan/social/
-          rm -rf "$stage"
-          EOF
-      - name: Ověřit veřejný web
-        run: |
-          set -euo pipefail
-          URL='https://nasekadan.cz/clanky/interni-ambulance-nemocnice-kadan-uzavrena-do-14-srpna-2026.html'
-          for i in $(seq 1 18); do
-            article=$(curl -kfsS "$URL?v=$GITHUB_SHA-$i" || true)
-            home=$(curl -kfsS "https://nasekadan.cz/?v=$GITHUB_SHA-$i" || true)
-            archive=$(curl -kfsS "https://nasekadan.cz/clanky/?v=$GITHUB_SHA-$i" || true)
-            rss=$(curl -kfsS "https://nasekadan.cz/rss.xml?v=$GITHUB_SHA-$i" || true)
-            sitemap=$(curl -kfsS "https://nasekadan.cz/sitemap.xml?v=$GITHUB_SHA-$i" || true)
-            if grep -Fq 'Interní ambulance Nemocnice Kadaň je do 14. srpna uzavřená' <<<"$article" && grep -Fq "$URL" <<<"$home" && grep -Fq "$URL" <<<"$archive" && grep -Fq "$URL" <<<"$rss" && grep -Fq "$URL" <<<"$sitemap"; then exit 0; fi
-            sleep 10
-          done
-          exit 1
+      - run: echo 'Zpráva o uzavření interní ambulance už na webu existuje; duplicitní publikace byla zastavena.'
