@@ -17,25 +17,39 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Vypsat pouze relevantní aktivní běhy
+      - name: Najít běh, který drží self-hosted runner
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+            const states = new Set(['queued','in_progress','waiting','pending','requested']);
+            const all = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
               owner, repo, branch: 'main', per_page: 100
             });
-            const activeStates = new Set(['queued','in_progress','waiting','pending','requested']);
-            const words = ['statistik', 'OVH', 'Nasadit', 'nasadit', 'Rychlé publikování', 'ordinací', 'feed', 'snímek', 'obrázky'];
-            const relevant = runs.filter(run => activeStates.has(run.status) && words.some(word => run.name.includes(word)));
-            const lines = relevant.length ? relevant.map(run => [
-              `- ID \`${run.id}\`, #${run.run_number} **${run.name}**`,
-              `  - stav: ${run.status}`,
-              `  - commit: \`${run.head_sha.slice(0,7)}\``,
-              `  - vytvořeno: ${run.created_at}`,
-              `  - aktualizováno: ${run.updated_at}`,
-              `  - ${run.html_url}`
-            ].join('\n')) : ['- Žádný relevantní aktivní běh.'];
-            const body = ['## Relevantní aktivní běhy', '', ...lines].join('\n');
+            const active = all.filter(run => states.has(run.status)).slice(0, 40);
+            const blocks = [];
+            for (const run of active) {
+              let jobs = [];
+              try {
+                const response = await github.rest.actions.listJobsForWorkflowRun({owner, repo, run_id: run.id, per_page: 100});
+                jobs = response.data.jobs || [];
+              } catch (error) {
+                jobs = [];
+              }
+              const selfHosted = jobs.filter(job => (job.labels || []).some(label => String(label).toLowerCase() === 'self-hosted'));
+              const relevantName = /statistik|OVH|nasadit|publik|ordinac|feed|snímek|obrázk/i.test(run.name);
+              if (!selfHosted.length && !relevantName) continue;
+              const jobLines = jobs.length ? jobs.map(job => {
+                const labels = (job.labels || []).join(', ') || 'bez štítků';
+                return `  - job \`${job.id}\` ${job.name}: ${job.status}/${job.conclusion || 'bez závěru'}, runner=${job.runner_name || 'nepřidělen'}, labels=${labels}`;
+              }) : ['  - joby zatím nejsou přidělené'];
+              blocks.push([
+                `- run \`${run.id}\`, #${run.run_number} **${run.name}** — ${run.status}`,
+                `  - vytvořeno: ${run.created_at}`,
+                `  - ${run.html_url}`,
+                ...jobLines
+              ].join('\n'));
+            }
+            const body = ['## Běhy relevantní pro self-hosted runner', '', ...(blocks.length ? blocks : ['- Žádný relevantní aktivní běh.'])].join('\n');
             await github.rest.issues.createComment({owner, repo, issue_number: context.issue.number, body});
