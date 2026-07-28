@@ -1,0 +1,164 @@
+name: Porovnat původní metriky z Nginx logů
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/check-nginx-metrics-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Spočítat anonymní varianty metrik Nginx
+        id: count
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/nginx-metrics.txt"
+          from __future__ import annotations
+
+          import datetime as dt
+          import glob
+          import gzip
+          import hashlib
+          import json
+          import re
+          import urllib.parse
+          from collections import defaultdict
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          TZ = ZoneInfo('Europe/Prague')
+          BOT = re.compile(
+              r'bot\b|crawler|spider|slurp|googleinspection|facebookexternalhit|facebot|'
+              r'twitterbot|linkedinbot|pinterestbot|whatsapp|telegrambot|discordbot|'
+              r'semrush|ahrefs|mj12|dotbot|blexbot|gptbot|chatgpt|claudebot|anthropic|'
+              r'perplexity|uptime|monitor|statuscake|pingdom|headless|lighthouse|pagespeed|'
+              r'curl/|wget/|python-requests|go-http-client|nasekadanstatsselftest', re.I)
+          STATIC = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt)$', re.I)
+
+          rows_all = []
+          rows_human = []
+          raw = parsed = 0
+          for name in sorted(glob.glob('/var/log/nginx/nasekadan.access.log*')):
+              path = Path(name)
+              if not path.is_file():
+                  continue
+              opener = gzip.open if path.suffix == '.gz' else open
+              try:
+                  handle = opener(path, 'rt', encoding='utf-8', errors='replace')
+              except OSError:
+                  continue
+              with handle:
+                  for line in handle:
+                      raw += 1
+                      try:
+                          data = json.loads(line)
+                          when = dt.datetime.fromisoformat(str(data.get('ts', '')).replace('Z', '+00:00'))
+                          if when.tzinfo is None:
+                              when = when.replace(tzinfo=TZ)
+                          when = when.astimezone(TZ)
+                          method = str(data.get('method', '')).upper()
+                          ip = str(data.get('ip', ''))
+                          ua = str(data.get('ua', ''))
+                          target = str(data.get('uri', '/'))
+                          status = int(data.get('status', 0))
+                      except (ValueError, TypeError, json.JSONDecodeError):
+                          continue
+                      parsed += 1
+                      if method not in {'GET', 'HEAD'} or not ip or ip in {'127.0.0.1', '::1'}:
+                          continue
+                      try:
+                          path_value = urllib.parse.urlsplit(target).path or '/'
+                      except ValueError:
+                          path_value = '/'
+                      decoded = urllib.parse.unquote(path_value, errors='replace')
+                      if decoded != '/':
+                          decoded = decoded.rstrip('/') or '/'
+                      if decoded == '/healthz' or decoded.startswith('/statistiky') or STATIC.search(decoded):
+                          continue
+                      if not (200 <= status < 300 or status == 304):
+                          continue
+                      ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:24]
+                      client_hash = hashlib.sha256(f'{ip}\0{ua}'.encode()).hexdigest()[:24]
+                      row = (when, ip_hash, client_hash, decoded)
+                      rows_all.append(row)
+                      if not BOT.search(ua):
+                          rows_human.append(row)
+
+          def sessions(rows, key_index):
+              grouped = defaultdict(list)
+              for row in rows:
+                  grouped[row[key_index]].append(row[0])
+              total = 0
+              for times in grouped.values():
+                  times.sort()
+                  previous = None
+                  for when in times:
+                      if previous is None or when - previous > dt.timedelta(minutes=30):
+                          total += 1
+                      previous = when
+              return total, len(grouped)
+
+          all_ip_sessions, all_ips = sessions(rows_all, 1)
+          all_client_sessions, all_clients = sessions(rows_all, 2)
+          human_ip_sessions, human_ips = sessions(rows_human, 1)
+          human_client_sessions, human_clients = sessions(rows_human, 2)
+
+          print(f'NGINX_RAW_LINES={raw}')
+          print(f'NGINX_PARSED_LINES={parsed}')
+          print(f'PAGEVIEWS_ALL_NONSTATIC={len(rows_all)}')
+          print(f'PAGEVIEWS_HUMAN={len(rows_human)}')
+          print(f'ALL_SESSIONS_BY_IP={all_ip_sessions}')
+          print(f'ALL_UNIQUE_IPS={all_ips}')
+          print(f'ALL_SESSIONS_BY_IP_UA={all_client_sessions}')
+          print(f'ALL_UNIQUE_IP_UA={all_clients}')
+          print(f'HUMAN_SESSIONS_BY_IP={human_ip_sessions}')
+          print(f'HUMAN_UNIQUE_IPS={human_ips}')
+          print(f'HUMAN_SESSIONS_BY_IP_UA={human_client_sessions}')
+          print(f'HUMAN_UNIQUE_IP_UA={human_clients}')
+          print(f'FIRST_ALL={min((r[0] for r in rows_all), default=None)}')
+          print(f'LAST_ALL={max((r[0] for r in rows_all), default=None)}')
+          PY
+
+      - name: Zapsat porovnání do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.count.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/nginx-metrics.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Porovnání původních Nginx metrik: ${process.env.OUTCOME}`,
+                '',
+                '- Pouze anonymní agregované počty.',
+                '',
+                '```text', log.slice(-5000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.count.outcome }}
+        run: test "$OUTCOME" = success
