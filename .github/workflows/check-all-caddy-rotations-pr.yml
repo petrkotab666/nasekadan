@@ -36,6 +36,7 @@ jobs:
           import hashlib
           import json
           import re
+          import runpy
           import urllib.parse
           from collections import defaultdict
           from pathlib import Path
@@ -47,17 +48,15 @@ jobs:
           TARGET = (2553, 1032, 915)
           TARGET_TODAY = (1104, 439, 389)
 
-          static = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt|pdf|mp4|webm|avif|zip|gz)$', re.I)
-          old_bot = re.compile(
-              r'(?:bot\b|crawler|spider|slurp|bingpreview|googleinspectiontool|'
-              r'facebookexternalhit|facebot|twitterbot|linkedinbot|pinterestbot|'
-              r'whatsapp|telegrambot|discordbot|applebot|yandex|baiduspider|petalbot|'
-              r'semrush|ahrefs|mj12bot|dotbot|rogerbot|blexbot|serpstat|dataforseo|'
-              r'bytespider|gptbot|chatgpt-user|claudebot|anthropic-ai|perplexitybot|'
-              r'uptimerobot|statuscake|pingdom|healthcheck|monitoring|headless|lighthouse|'
-              r'pagespeed|curl/|wget/|python-requests|go-http-client)', re.I)
+          original = runpy.run_path('/usr/local/lib/nasekadan-stats/generate.py')
+          original_bot = original['BOT_RE']
+          original_static = original['STATIC_RE']
+          print('ORIGINAL_BOT_PATTERN=' + original_bot.pattern)
+          print('ORIGINAL_STATIC_PATTERN=' + original_static.pattern)
+
+          extended_static = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt|pdf|mp4|webm|avif|zip|gz)$', re.I)
           aggressive_bot = re.compile(
-              old_bot.pattern + r'|preview|scanner|scan\b|zgrab|masscan|nmap|nikto|sqlmap|'
+              original_bot.pattern + r'|preview|scanner|scan\b|zgrab|masscan|nmap|nikto|sqlmap|'
               r'libwww|httpclient|okhttp|java/|apache-httpclient|node-fetch|axios|postman|'
               r'phantomjs|selenium|puppeteer|playwright|scrapy|feedfetcher|validator|archive', re.I)
 
@@ -105,12 +104,14 @@ jobs:
                       decoded = urllib.parse.unquote(path_value, errors='replace')
                       if decoded != '/':
                           decoded = decoded.rstrip('/') or '/'
-                      if decoded == '/healthz' or decoded.startswith(('/statistiky', '/api/', '/nahled')) or static.search(decoded):
+                      if decoded == '/healthz' or decoded.startswith(('/statistiky', '/api/', '/nahled')):
                           continue
                       ip_key = hashlib.sha256(ip.encode('utf-8', 'replace')).hexdigest()[:24]
                       ua_key = hashlib.sha256(f'{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
+                      day_key = hashlib.sha256(f'{when.date().isoformat()}\0{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
                       ua_family = re.sub(r'\d+(?:[._]\d+)+', '#', ua.lower())
                       family_key = hashlib.sha256(f'{ip}\0{ua_family}'.encode('utf-8', 'replace')).hexdigest()[:24]
+                      family_day_key = hashlib.sha256(f'{when.date().isoformat()}\0{ip}\0{ua_family}'.encode('utf-8', 'replace')).hexdigest()[:24]
                       page_shape = decoded == '/' or decoded.endswith('.html') or decoded.endswith('/') or not re.search(r'\.[a-z0-9]{1,8}$', decoded, re.I)
                       rows.append({
                           'when': when, 'path': decoded, 'method': method, 'ua': ua,
@@ -118,37 +119,35 @@ jobs:
                           'dest_doc': dest in {'document', 'iframe'},
                           'mode_nav': mode == 'navigate',
                           'mozilla': 'mozilla/' in ua.lower(),
-                          'old_human': not old_bot.search(ua),
+                          'original_human': not original_bot.search(ua),
                           'aggressive_human': not aggressive_bot.search(ua),
+                          'original_nonstatic': not original_static.search(decoded),
+                          'extended_nonstatic': not extended_static.search(decoded),
                           'page_shape': page_shape,
-                          'ip': ip_key, 'ip_ua': ua_key, 'ip_family': family_key,
+                          'ip': ip_key, 'ip_ua': ua_key, 'ip_ua_day': day_key,
+                          'ip_family': family_key, 'ip_family_day': family_day_key,
                       })
 
           print(f'FILES_LOADED={len(files)}')
-          print(f'BASE_ROWS_TO_CUTOFF={len(rows)}')
-          print(f'FIRST_BASE={min((r["when"] for r in rows), default=None)}')
-          print(f'LAST_BASE={max((r["when"] for r in rows), default=None)}')
+          print(f'RAW_ELIGIBLE_ROWS_TO_CUTOFF={len(rows)}')
+          print(f'FIRST_RAW={min((r["when"] for r in rows), default=None)}')
+          print(f'LAST_RAW={max((r["when"] for r in rows), default=None)}')
 
           predicates = {
-              'all': lambda r: True,
-              'oldbot': lambda r: r['old_human'],
-              'aggbot': lambda r: r['aggressive_human'],
-              'mozilla_oldbot': lambda r: r['mozilla'] and r['old_human'],
-              'mozilla_aggbot': lambda r: r['mozilla'] and r['aggressive_human'],
-              'html_oldbot': lambda r: r['accept_html'] and r['old_human'],
-              'html_aggbot': lambda r: r['accept_html'] and r['aggressive_human'],
-              'doc_oldbot': lambda r: r['dest_doc'] and r['old_human'],
-              'doc_aggbot': lambda r: r['dest_doc'] and r['aggressive_human'],
-              'nav_oldbot': lambda r: r['mode_nav'] and r['old_human'],
-              'nav_aggbot': lambda r: r['mode_nav'] and r['aggressive_human'],
-              'doc_html_oldbot': lambda r: r['dest_doc'] and r['accept_html'] and r['old_human'],
-              'doc_html_aggbot': lambda r: r['dest_doc'] and r['accept_html'] and r['aggressive_human'],
-              'nav_html_oldbot': lambda r: r['mode_nav'] and r['accept_html'] and r['old_human'],
-              'nav_html_aggbot': lambda r: r['mode_nav'] and r['accept_html'] and r['aggressive_human'],
-              'shape_oldbot': lambda r: r['page_shape'] and r['old_human'],
-              'shape_aggbot': lambda r: r['page_shape'] and r['aggressive_human'],
-              'shape_html_oldbot': lambda r: r['page_shape'] and r['accept_html'] and r['old_human'],
-              'shape_html_aggbot': lambda r: r['page_shape'] and r['accept_html'] and r['aggressive_human'],
+              'original_exact': lambda r: r['original_nonstatic'] and r['original_human'],
+              'extended_exact': lambda r: r['extended_nonstatic'] and r['original_human'],
+              'original_aggbot': lambda r: r['original_nonstatic'] and r['aggressive_human'],
+              'extended_aggbot': lambda r: r['extended_nonstatic'] and r['aggressive_human'],
+              'shape_original': lambda r: r['extended_nonstatic'] and r['page_shape'] and r['original_human'],
+              'shape_aggbot': lambda r: r['extended_nonstatic'] and r['page_shape'] and r['aggressive_human'],
+              'html_original': lambda r: r['extended_nonstatic'] and r['accept_html'] and r['original_human'],
+              'html_aggbot': lambda r: r['extended_nonstatic'] and r['accept_html'] and r['aggressive_human'],
+              'doc_original': lambda r: r['extended_nonstatic'] and r['dest_doc'] and r['original_human'],
+              'doc_aggbot': lambda r: r['extended_nonstatic'] and r['dest_doc'] and r['aggressive_human'],
+              'nav_original': lambda r: r['extended_nonstatic'] and r['mode_nav'] and r['original_human'],
+              'nav_aggbot': lambda r: r['extended_nonstatic'] and r['mode_nav'] and r['aggressive_human'],
+              'mozilla_original': lambda r: r['extended_nonstatic'] and r['mozilla'] and r['original_human'],
+              'mozilla_aggbot': lambda r: r['extended_nonstatic'] and r['mozilla'] and r['aggressive_human'],
           }
 
           def deduplicate(selected, seconds, key_name):
@@ -165,11 +164,12 @@ jobs:
                   output.append(row)
               return output
 
-          def metrics(selected, key_name, gap_minutes):
+          def metrics(selected, identity, session_identity, gap_minutes):
               selected = sorted(selected, key=lambda r: r['when'])
+              visitor_keys = {r[identity] for r in selected}
               grouped = defaultdict(list)
               for row in selected:
-                  grouped[row[key_name]].append(row['when'])
+                  grouped[row[session_identity]].append(row['when'])
               sessions = 0
               gap = dt.timedelta(minutes=gap_minutes)
               for times in grouped.values():
@@ -178,35 +178,44 @@ jobs:
                       if previous is None or when - previous > gap:
                           sessions += 1
                       previous = when
-              return len(selected), sessions, len(grouped)
+              return len(selected), sessions, len(visitor_keys)
+
+          print('PREDICATE_COUNTS_BEGIN')
+          for name, pred in predicates.items():
+              selected = [r for r in rows if pred(r)]
+              total_day_unique = len({r['ip_ua_day'] for r in selected})
+              today_rows = [r for r in selected if r['when'].date() == TODAY]
+              print(f'{name}|views={len(selected)}|day_visitors={total_day_unique}|today_views={len(today_rows)}|today_visitors={len({r["ip_ua_day"] for r in today_rows})}')
+          print('PREDICATE_COUNTS_END')
 
           candidates = []
           for pred_name, pred in predicates.items():
               base = [r for r in rows if pred(r)]
               for method_only_get in (False, True):
                   selected0 = [r for r in base if not method_only_get or r['method'] == 'GET']
-                  for key_name in ('ip', 'ip_ua', 'ip_family'):
-                      for dedup_seconds in (0, 1, 2, 3, 5, 10, 20, 30):
-                          selected = deduplicate(selected0, dedup_seconds, key_name)
-                          today_rows = [r for r in selected if r['when'].date() == TODAY]
-                          for gap_minutes in (5, 10, 15, 20, 25, 30, 45, 60):
-                              total = metrics(selected, key_name, gap_minutes)
-                              today = metrics(today_rows, key_name, gap_minutes)
-                              score = (
-                                  abs(total[0] - TARGET[0]) * 3 +
-                                  abs(total[1] - TARGET[1]) * 4 +
-                                  abs(total[2] - TARGET[2]) * 4 +
-                                  abs(today[0] - TARGET_TODAY[0]) * 2 +
-                                  abs(today[1] - TARGET_TODAY[1]) * 3 +
-                                  abs(today[2] - TARGET_TODAY[2]) * 3
-                              )
-                              candidates.append((score, pred_name, method_only_get, key_name, dedup_seconds, gap_minutes, total, today))
+                  for visitor_identity in ('ip', 'ip_ua', 'ip_ua_day', 'ip_family', 'ip_family_day'):
+                      for session_identity in ('ip', 'ip_ua', 'ip_ua_day', 'ip_family', 'ip_family_day'):
+                          for dedup_seconds in (0, 1, 2, 3, 5, 10, 20, 30):
+                              selected = deduplicate(selected0, dedup_seconds, session_identity)
+                              today_rows = [r for r in selected if r['when'].date() == TODAY]
+                              for gap_minutes in (5, 7, 8, 9, 10, 11, 12, 15, 20, 30, 45, 60):
+                                  total = metrics(selected, visitor_identity, session_identity, gap_minutes)
+                                  today = metrics(today_rows, visitor_identity, session_identity, gap_minutes)
+                                  score = (
+                                      abs(total[0] - TARGET[0]) * 3 +
+                                      abs(total[1] - TARGET[1]) * 5 +
+                                      abs(total[2] - TARGET[2]) * 5 +
+                                      abs(today[0] - TARGET_TODAY[0]) * 3 +
+                                      abs(today[1] - TARGET_TODAY[1]) * 4 +
+                                      abs(today[2] - TARGET_TODAY[2]) * 4
+                                  )
+                                  candidates.append((score, pred_name, method_only_get, visitor_identity, session_identity, dedup_seconds, gap_minutes, total, today))
 
           print('CLOSEST_VARIANTS_BEGIN')
-          for item in sorted(candidates)[:40]:
-              score, pred, get_only, key, dedup_s, gap_m, total, today = item
+          for item in sorted(candidates)[:60]:
+              score, pred, get_only, visitor_id, session_id, dedup_s, gap_m, total, today = item
               print(
-                  f'score={score}|filter={pred}|get_only={get_only}|identity={key}|'
+                  f'score={score}|filter={pred}|get_only={get_only}|visitor_id={visitor_id}|session_id={session_id}|'
                   f'dedup_s={dedup_s}|session_min={gap_m}|'
                   f'total_views={total[0]}|total_visits={total[1]}|total_visitors={total[2]}|'
                   f'today_views={today[0]}|today_visits={today[1]}|today_visitors={today[2]}'
@@ -234,7 +243,7 @@ jobs:
                 '- Cílové uložené hodnoty: celkem 2 553 / 1 032 / 915; dnešek 1 104 / 439 / 389.',
                 '- Výstup obsahuje pouze agregované varianty, žádné údaje jednotlivých návštěv.',
                 '',
-                '```text', log.slice(-50000).replace(/```/g, '---'), '```'
+                '```text', log.slice(-60000).replace(/```/g, '---'), '```'
               ].join('\n')
             });
 
