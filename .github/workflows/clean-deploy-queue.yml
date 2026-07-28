@@ -10,14 +10,15 @@ on:
 permissions:
   actions: write
   contents: read
+  issues: write
   pull-requests: write
 
 jobs:
-  clean-and-dispatch:
+  clean-deploy-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
-      - name: Zrušit staré běhy a spustit jediné nouzové nasazení
+      - name: Vyčistit frontu, nasadit a ověřit reset statistik
         uses: actions/github-script@v7
         with:
           script: |
@@ -26,13 +27,15 @@ jobs:
             const targets = new Set([
               'Nasadit Naše Kadaň na OVH',
               'Nouzově nasadit Naše Kadaň na OVH',
-              'Chránit soukromé náhledy Naše Kadaň'
+              'Chránit soukromé náhledy Naše Kadaň',
+              'Opravit SMTP newsletteru',
+              'Nasadit obnovu hesla statistik'
             ]);
+            const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
             const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
               owner, repo, branch: 'main', per_page: 100
             });
-
             const cancelled = [];
             for (const run of runs) {
               if (!targets.has(run.name)) continue;
@@ -45,19 +48,111 @@ jobs:
               }
             }
 
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await sleep(5000);
+            const dispatchedAt = Date.now();
             await github.rest.actions.createWorkflowDispatch({
               owner, repo, workflow_id: 'emergency-deploy-ovh.yml', ref: 'main'
             });
 
+            let deploy = null;
+            for (let lookup = 0; lookup < 24 && !deploy; lookup++) {
+              const response = await github.rest.actions.listWorkflowRuns({
+                owner, repo, workflow_id: 'emergency-deploy-ovh.yml', branch: 'main', event: 'workflow_dispatch', per_page: 10
+              });
+              deploy = response.data.workflow_runs
+                .filter(item => new Date(item.created_at).getTime() >= dispatchedAt - 5000)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+              if (!deploy) await sleep(5000);
+            }
+            if (!deploy) throw new Error('Po dispatchi nebyl nalezen nový nouzový deploy.');
+
+            for (let attempt = 0; attempt < 64; attempt++) {
+              const response = await github.rest.actions.getWorkflowRun({owner, repo, run_id: deploy.id});
+              deploy = response.data;
+              if (deploy.status === 'completed') break;
+              await sleep(15000);
+            }
+
+            let loginOk = false;
+            let healthOk = false;
+            let emailAccepted = false;
+            let loginStatus = 0;
+            let healthStatus = 0;
+            let resetStatus = 0;
+            try {
+              const login = await fetch(`https://nasekadan.cz/statistiky/?verify=${context.runId}`, {
+                headers: {'Cache-Control': 'no-cache'}, redirect: 'follow'
+              });
+              loginStatus = login.status;
+              const text = await login.text();
+              loginOk = login.ok && text.includes('Zapomenuté heslo') && text.includes('Přihlášení ke statistikám');
+            } catch (error) {
+              core.warning(`Kontrola loginu: ${error.message}`);
+            }
+            try {
+              const health = await fetch(`https://nasekadan.cz/statistiky/healthz?verify=${context.runId}`, {
+                headers: {'Cache-Control': 'no-cache'}, redirect: 'follow'
+              });
+              healthStatus = health.status;
+              const data = await health.json().catch(() => ({}));
+              healthOk = health.ok && data.ok === true && data.auth === 'application' && data.smtpConfigured === true;
+            } catch (error) {
+              core.warning(`Kontrola health: ${error.message}`);
+            }
+            if (loginOk && healthOk) {
+              try {
+                const reset = await fetch('https://nasekadan.cz/statistiky/zapomenute-heslo', {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                  body: '',
+                  redirect: 'follow'
+                });
+                resetStatus = reset.status;
+                const text = await reset.text();
+                emailAccepted = reset.ok && /Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)/.test(text);
+              } catch (error) {
+                core.warning(`Test resetovacího e-mailu: ${error.message}`);
+              }
+            }
+
+            let jobs = [];
+            try {
+              const response = await github.rest.actions.listJobsForWorkflowRun({owner, repo, run_id: deploy.id, per_page: 100});
+              jobs = response.data.jobs.map(job => `- ${job.name}: ${job.status}/${job.conclusion || 'bez závěru'}`);
+            } catch (error) {
+              jobs = [`- Stav úloh se nepodařilo načíst: ${error.message}`];
+            }
+
+            const deployOk = deploy.status === 'completed' && deploy.conclusion === 'success';
+            const allOk = deployOk && loginOk && healthOk && emailAccepted;
             const body = [
-              '## Vyčištění fronty nasazení',
+              `## ${allOk ? 'Obnova hesla je nasazená a ověřená' : 'Obnova hesla zatím neprošla ověřením'}`,
               '',
               cancelled.length ? `Zrušené běhy:\n- ${cancelled.join('\n- ')}` : 'Nebyl nalezen žádný starý aktivní běh.',
               '',
-              'Spuštěno nové samostatné nouzové nasazení z větve `main`.'
+              `- Nouzový deploy: ${deploy.status}/${deploy.conclusion || 'bez závěru'}`,
+              `- Běh: ${deploy.html_url}`,
+              `- Přihlašovací stránka: ${loginOk ? 'OK' : `NE (${loginStatus || 'bez odpovědi'})`}`,
+              `- Health a SMTP: ${healthOk ? 'OK' : `NE (${healthStatus || 'bez odpovědi'})`}`,
+              `- Přijetí resetovacího e-mailu: ${emailAccepted ? 'OK' : `NE (${resetStatus || 'nezkoušeno'})`}`,
+              '',
+              '### Úlohy deploye',
+              ...jobs
             ].join('\n');
 
             if (context.issue.number) {
               await github.rest.issues.createComment({owner, repo, issue_number: context.issue.number, body});
             }
+
+            const markerTitle = '[OVĚŘENÍ STATISTIK] Obnova hesla přes e-mail';
+            const issues = await github.paginate(github.rest.issues.listForRepo, {owner, repo, state: 'all', per_page: 100});
+            const marker = issues.find(item => !item.pull_request && item.title === markerTitle);
+            if (marker) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: marker.number,
+                body: `${body}\n\n- Ověřovací běh: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                state: allOk ? 'closed' : 'open'
+              });
+            }
+
+            if (!allOk) throw new Error('Deploy nebo živá obnova hesla neprošly úplným ověřením.');
