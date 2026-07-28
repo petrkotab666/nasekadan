@@ -1,0 +1,54 @@
+name: Publikovat článek o tropických dnech
+
+on:
+  push:
+    branches:
+      - publish/heat-article-20260728
+    paths:
+      - .github/workflows/publish-heat-article-now.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Načíst repozitář
+        uses: actions/checkout@v4
+        with:
+          ref: publish/heat-article-20260728
+          fetch-depth: 0
+
+      - name: Sestavit fotografie
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p obrazky
+          cat .github/image-payloads/heat-main.part* | base64 --decode > obrazky/koupaliste-kadan-budova-2026.jpg
+          cat .github/image-payloads/heat-sign.part* | base64 --decode > obrazky/koupaliste-kadan-oteviraci-doba-2026.jpg
+          file obrazky/koupaliste-kadan-budova-2026.jpg
+          file obrazky/koupaliste-kadan-oteviraci-doba-2026.jpg
+          test -s obrazky/koupaliste-kadan-budova-2026.jpg
+          test -s obrazky/koupaliste-kadan-oteviraci-doba-2026.jpg
+
+      - name: Doplnit titulní stránku, archiv, RSS a sitemapu
+        run: python .github/scripts/publish_heat_article.py
+
+      - name: Uklidit jednorázové pomocné soubory
+        shell: bash
+        run: |
+          rm -rf .github/image-payloads
+          rm -f .github/scripts/publish_heat_article.py
+          rm -f .github/workflows/publish-heat-article-now.yml
+
+      - name: Zapsat hotové vydání
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Publikovat článek o tropických dnech v Kadani"
+          git push origin HEAD:publish/heat-article-20260728
