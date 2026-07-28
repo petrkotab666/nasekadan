@@ -28,6 +28,12 @@ RUN python scripts/normalize_footers.py --write --check
 # a následná kontrola zastaví build, pokud by některý článek pravidlo porušil.
 RUN python scripts/normalize_articles.py --write --check
 
+# Sezónní feed pro horké dny se vkládá do všech veřejných HTML stránek při každém
+# produkčním sestavení. Tím nemůže zmizet při další publikaci nebo opravě článků.
+RUN python scripts/enable_heat_feed.py
+RUN grep -Fq '/horko-feed.js' /site/index.html \
+ && grep -Fq 'Ventilátory a mobilní klimatizace' /site/horko-feed.js
+
 # Každý článek dostane vlastní Facebook/OG obrázek s novou URL odvozenou
 # z názvu a metadat. Generický social-card.png se u článků nepoužívá.
 RUN python scripts/generate_social_cards.py --write --check
