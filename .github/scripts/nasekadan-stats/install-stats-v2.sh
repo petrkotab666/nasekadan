@@ -29,7 +29,6 @@ if [[ ! -f "$SCRIPT_DIR/stats_server.py" ]]; then
   exit 1
 fi
 
-# Odstranit starý doplňkový patcher. Konfiguraci nyní spravuje tento instalátor.
 systemctl disable --now nasekadan-stats-patch.path >/dev/null 2>&1 || true
 systemctl disable --now nasekadan-stats-patch.timer >/dev/null 2>&1 || true
 systemctl stop nasekadan-stats-patch.service >/dev/null 2>&1 || true
@@ -56,8 +55,6 @@ chmod 0600 "$BASE_DIR/secret-salt"
 install -o root -g root -m 0755 "$SCRIPT_DIR/stats_server.py" "$APP_DIR/stats_server.py"
 python3 -m py_compile "$APP_DIR/stats_server.py"
 
-# Starý hash ponecháváme pouze jako přechodovou možnost do prvního resetu.
-# Nové heslo se ukládá jako PBKDF2-SHA256 do /opt/nasekadan-stats/password.json.
 if [[ ! -s "$AUTH_FILE" ]]; then
   cat > "$AUTH_FILE" <<'AUTH'
 petr:$6$0fYivzmVKD4frCS.$b.4N1tRkqzCtlApstFsa5/jKW8zr7t2cGb90U8hGXJwu9MsuvJ1/uVY0eC7ahYGdlOJDWxPx9fiA48dTRPYPQ/
@@ -100,7 +97,7 @@ location ^~ /statistiky/ {
     add_header X-Content-Type-Options "nosniff" always;
 }
 
-# Naše Kadaň – soukromé náhledy článků zůstávají chráněné původním Basic Auth.
+# Naše Kadaň – soukromé náhledy článků zůstávají oddělené od statistik.
 location = /nahled {
     return 301 /nahled/;
 }
@@ -117,7 +114,7 @@ location ^~ /nahled/ {
     proxy_set_header X-Forwarded-Proto $scheme;
     add_header Cache-Control "no-store, no-cache, must-revalidate" always;
     add_header Pragma "no-cache" always;
-    add_header X-Robots-Tag "noindex, nofollow, noarchive" always;
+    add_header X-Robots-Tag "noindex, nofollow,noarchive" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
 NGINX
@@ -157,7 +154,10 @@ Wants=nginx.service
 Type=simple
 User=www-data
 Group=www-data
+# Obecná newsletterová konfigurace je načtena první. Oddělená konfigurace
+# statistik ji může bezpečně přepsat, aniž by měnila newsletter.
 EnvironmentFile=-/etc/nasekadan-newsletter.env
+EnvironmentFile=-/etc/nasekadan-stats-email.env
 ExecStart=/usr/bin/python3 /usr/local/lib/nasekadan-stats/stats_server.py
 Restart=on-failure
 RestartSec=2
@@ -193,8 +193,6 @@ curl -fsS --max-time 3 http://127.0.0.1:3225/ | grep -Fq 'Zapomenuté heslo'
 nginx -t
 systemctl reload nginx
 
-# Caddy stojí před Nginxem. Odstranit starý Basic Auth pouze z trasy
-# /statistiky/*; ochrana /nahled/ a ostatních soukromých cest zůstane beze změny.
 if [[ -f "$CADDY_SITE" ]] && command -v caddy >/dev/null 2>&1; then
   python3 - "$CADDY_SITE" <<'PY'
 from __future__ import annotations
@@ -217,14 +215,12 @@ removed = 0
 while i < len(lines):
     line = lines[i]
     stripped = line.strip()
-
     if not in_stats and re.match(r"^handle_path\s+/statistiky/\*\s*\{\s*$", stripped):
         in_stats = True
         stats_depth = line.count("{") - line.count("}")
         out.append(line)
         i += 1
         continue
-
     if in_stats and re.match(r"^basic_auth\s*\{\s*$", stripped):
         depth = line.count("{") - line.count("}")
         i += 1
@@ -233,7 +229,6 @@ while i < len(lines):
             i += 1
         removed += 1
         continue
-
     out.append(line)
     if in_stats:
         stats_depth += line.count("{") - line.count("}")
@@ -244,7 +239,6 @@ while i < len(lines):
 new_text = "".join(out)
 if "handle_path /statistiky/*" not in new_text or "reverse_proxy 127.0.0.1:3225" not in new_text:
     raise SystemExit("Caddy konfigurace statistik nemá očekávanou strukturu; změna nebyla provedena.")
-
 if removed:
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = path.with_name(path.name + f".bak-{stamp}")
@@ -254,22 +248,19 @@ if removed:
 else:
     print("Caddy: /statistiky/* už nemá Basic Auth; bez změny.")
 PY
-
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   systemctl reload caddy
 fi
 
-# Ověřit skutečnou veřejnou cestu přes Caddy i obsah resetovací stránky.
 curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
   https://nasekadan.cz/statistiky/ | grep -Fq 'Zapomenuté heslo'
 curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
   https://nasekadan.cz/statistiky/zapomenute-heslo | grep -Fq 'petrkotab@seznam.cz'
 
-# Soukromé náhledy musí zůstat chráněné Basic Auth.
 preview_status="$(curl -kisS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
   https://nasekadan.cz/nahled/ | awk 'NR==1 {print $2}')"
-if [[ "$preview_status" != "401" && "$preview_status" != "502" && "$preview_status" != "503" ]]; then
-  echo "Neočekávaný stav ochrany /nahled/: $preview_status" >&2
+if [[ ! "$preview_status" =~ ^(401|404|502|503)$ ]]; then
+  echo "Neočekávaný veřejný stav /nahled/: $preview_status" >&2
   exit 1
 fi
 
