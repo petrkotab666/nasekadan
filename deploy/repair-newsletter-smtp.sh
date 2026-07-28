@@ -6,10 +6,8 @@ SERVICE=nasekadan-newsletter.service
 
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Newsletter SMTP: $ENV_FILE neexistuje, oprava se přeskakuje."
-  exit 0
-fi
-
-sudo python3 - "$ENV_FILE" <<'PY'
+else
+  sudo python3 - "$ENV_FILE" <<'PY'
 from __future__ import annotations
 
 import os
@@ -61,10 +59,19 @@ print("Newsletter SMTP: host=smtp.seznam.cz port=465 tls=ssl user=info@nasekadan
 print(f"Newsletter SMTP: heslo_nastaveno={'ano' if password_present else 'ne'}")
 PY
 
-if systemctl list-unit-files "$SERVICE" --no-legend 2>/dev/null | grep -q '^nasekadan-newsletter.service'; then
-  sudo systemctl restart "$SERVICE"
-  sudo systemctl is-active --quiet "$SERVICE"
-  echo "Newsletter SMTP: služba byla restartována a je aktivní."
+  if systemctl list-unit-files "$SERVICE" --no-legend 2>/dev/null | grep -q '^nasekadan-newsletter.service'; then
+    sudo systemctl restart "$SERVICE"
+    sudo systemctl is-active --quiet "$SERVICE"
+    echo "Newsletter SMTP: služba byla restartována a je aktivní."
+  else
+    echo "Newsletter SMTP: služba $SERVICE není nainstalována, restart se přeskakuje."
+  fi
+fi
+
+STATS_INSTALLER="${GITHUB_WORKSPACE:-$(pwd)}/.github/scripts/nasekadan-stats/install-stats.sh"
+if [[ -f "$STATS_INSTALLER" ]]; then
+  echo "Statistiky: instaluji vlastní přihlášení a obnovu hesla přes e-mail."
+  sudo bash "$STATS_INSTALLER"
 else
-  echo "Newsletter SMTP: služba $SERVICE není nainstalována, restart se přeskakuje."
+  echo "Statistiky: instalátor $STATS_INSTALLER nebyl nalezen, krok se přeskakuje."
 fi
