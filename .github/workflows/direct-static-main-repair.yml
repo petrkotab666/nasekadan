@@ -1,0 +1,98 @@
+name: Přímá oprava živé titulní stránky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/direct-static-main-repair.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-direct-static-main-repair
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit a ověřit zdroj
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Kadaň čekají tropické dny. Ve čtvrtek může být až 35 stupňů' index.html
+          grep -Fq '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html' index.html
+          test -s clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/normalize_footers.py --write --check
+          python3 scripts/enable_heat_feed.py
+          grep -Fq '/horko-feed.js?v=20260728-heat-2' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html
+
+      - name: Přímé atomické nasazení aktuálního main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          tar --exclude='.git' --exclude='.github' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' --exclude='deploy' --exclude='tools' --exclude='docker-entrypoint.d' -czf "$RUNNER_TEMP/site.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/site.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-main-repair.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "SOURCE_SHA='$SOURCE_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          STAGE="/var/www/nasekadan.direct-$SOURCE_SHA"
+          PREV="/var/www/nasekadan.previous-direct-$SOURCE_SHA"
+          sudo rm -rf "$STAGE" "$PREV"
+          sudo mkdir -p "$STAGE"
+          sudo tar -xzf /tmp/nasekadan-main-repair.tgz -C "$STAGE"
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-static-main-repair\n' "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
+          sudo chmod -R a+rX "$STAGE"
+          grep -Fq 'Kadaň čekají tropické dny. Ve čtvrtek může být až 35 stupňů' "$STAGE/index.html"
+          grep -Fq '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html' "$STAGE/index.html"
+          test -s "$STAGE/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html"
+          if [ -d /var/www/nasekadan ]; then sudo mv /var/www/nasekadan "$PREV"; fi
+          sudo mv "$STAGE" /var/www/nasekadan
+          sudo rm -rf "$PREV" /tmp/nasekadan-main-repair.tgz
+          REMOTE
+
+      - name: Veřejně ověřit správný hlavní článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=0
+          for attempt in $(seq 1 20); do
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?repair=$stamp-$attempt" -o /tmp/home.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html?repair=$stamp-$attempt" -o /tmp/article.html || true
+            if grep -Fq 'Kadaň čekají tropické dny. Ve čtvrtek může být až 35 stupňů' /tmp/home.html \
+              && grep -Fq '/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html' /tmp/home.html \
+              && grep -Fq 'Nová skluzavka může být během největšího horka uzavřena' /tmp/article.html \
+              && grep -Fq '/horko-feed.js?v=20260728-heat-2' /tmp/article.html; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+
+      - name: Uklidit jednorázový workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/direct-static-main-repair.yml
+          git config user.name 'Naše Kadaň oprava'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Uklidit přímou opravu titulní stránky [skip ci]' || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
