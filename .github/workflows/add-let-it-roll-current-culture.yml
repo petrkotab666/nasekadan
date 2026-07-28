@@ -1,0 +1,69 @@
+name: Doplnit Let It Roll do kulturního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/add_let_it_roll_to_current_culture.py'
+      - '.github/workflows/add-let-it-roll-current-culture.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: let-it-roll-current-culture
+  cancel-in-progress: true
+
+jobs:
+  update:
+    name: Opravit článek a navazující přehledy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Načíst aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit Let It Roll
+        run: python3 scripts/add_let_it_roll_to_current_culture.py
+
+      - name: Aktualizovat navazující výpisy
+        run: python3 scripts/publish_weekly_events.py
+
+      - name: Ověřit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTICLE='clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
+          grep -q 'data-let-it-roll-2026' "$ARTICLE"
+          grep -q 'https://letitroll.cz/akce/let-it-roll-2026/' "$ARTICLE"
+          grep -q 'Původní formulace, že jsme v Mostě nenašli velkou akci, byla chybná' "$ARTICLE"
+          grep -q 'Chase &amp; Status' "$ARTICLE"
+          grep -q 'Pendulum v živém provedení' "$ARTICLE"
+          if grep -q 'Prověřili jsme také Most, Litvínov a další větší regionální kalendáře, ale pro tento týden jsme v nich nenašli mimořádnou velkou událost' "$ARTICLE"; then
+            echo 'V článku zůstalo nepravdivé tvrzení o Mostu a Litvínovu.' >&2
+            exit 1
+          fi
+          grep -q 'Let It Roll' index.html
+          grep -q 'Let It Roll' clanky/index.html
+          grep -q 'Let It Roll' rss.xml
+
+      - name: Uložit opravený článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html \
+            index.html clanky/index.html rss.xml sitemap.xml
+          if git diff --cached --quiet; then
+            echo 'Kulturní přehled už opravu obsahuje.'
+            exit 0
+          fi
+          git commit -m 'Doplnit Let It Roll 2026 do kulturního přehledu'
+          git pull --rebase origin main
+          git push origin HEAD:main
