@@ -1,0 +1,151 @@
+name: Porovnat původní metriky z Caddy logu
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/check-caddy-metrics-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Spočítat anonymní agregace Caddy
+        id: count
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/caddy-metrics.txt"
+          from __future__ import annotations
+
+          import datetime as dt
+          import glob
+          import gzip
+          import hashlib
+          import json
+          import re
+          import urllib.parse
+          from collections import defaultdict
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          TZ = ZoneInfo('Europe/Prague')
+          BOT = re.compile(
+              r'bot\b|crawler|spider|slurp|googleinspection|facebookexternalhit|facebot|'
+              r'twitterbot|linkedinbot|pinterestbot|whatsapp|telegrambot|discordbot|'
+              r'semrush|ahrefs|mj12|dotbot|blexbot|gptbot|chatgpt|claudebot|anthropic|'
+              r'perplexity|uptime|monitor|statuscake|pingdom|headless|lighthouse|pagespeed|'
+              r'curl/|wget/|python-requests|go-http-client|nasekadanstatsselftest', re.I)
+          STATIC = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt)$', re.I)
+
+          records = []
+          raw = parsed = eligible_with_bots = 0
+          for name in sorted(glob.glob('/var/log/caddy/nasekadan.access.log*')):
+              path = Path(name)
+              if not path.is_file():
+                  continue
+              opener = gzip.open if path.suffix == '.gz' else open
+              try:
+                  handle = opener(path, 'rt', encoding='utf-8', errors='replace')
+              except OSError:
+                  continue
+              with handle:
+                  for line in handle:
+                      raw += 1
+                      try:
+                          data = json.loads(line)
+                          req = data.get('request') or {}
+                          method = str(req.get('method', '')).upper()
+                          target = str(req.get('uri', '/'))
+                          status = int(data.get('status', 0))
+                          ip = str(req.get('client_ip') or req.get('remote_ip') or '')
+                          headers = req.get('headers') or {}
+                          ua_value = headers.get('User-Agent') or headers.get('user-agent') or ''
+                          ua = ua_value[0] if isinstance(ua_value, list) and ua_value else str(ua_value)
+                          stamp = data.get('ts')
+                          when = dt.datetime.fromtimestamp(float(stamp), dt.timezone.utc).astimezone(TZ)
+                      except (ValueError, TypeError, json.JSONDecodeError, OverflowError):
+                          continue
+                      parsed += 1
+                      if method not in {'GET', 'HEAD'} or not ip or ip in {'127.0.0.1', '::1'}:
+                          continue
+                      try:
+                          path_value = urllib.parse.urlsplit(target).path or '/'
+                      except ValueError:
+                          path_value = '/'
+                      decoded = urllib.parse.unquote(path_value, errors='replace')
+                      if decoded != '/':
+                          decoded = decoded.rstrip('/') or '/'
+                      if decoded == '/healthz' or decoded.startswith('/statistiky') or STATIC.search(decoded):
+                          continue
+                      if not (200 <= status < 300 or status == 304):
+                          continue
+                      eligible_with_bots += 1
+                      if BOT.search(ua):
+                          continue
+                      visitor = hashlib.sha256(f'{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
+                      records.append((when, visitor, decoded))
+
+          records.sort(key=lambda row: row[0])
+          by_visitor = defaultdict(list)
+          for when, visitor, path in records:
+              by_visitor[visitor].append(when)
+
+          sessions = 0
+          for times in by_visitor.values():
+              previous = None
+              for when in times:
+                  if previous is None or when - previous > dt.timedelta(minutes=30):
+                      sessions += 1
+                  previous = when
+
+          print(f'CADDY_RAW_LINES={raw}')
+          print(f'CADDY_PARSED_LINES={parsed}')
+          print(f'PAGEVIEWS_WITH_BOTS={eligible_with_bots}')
+          print(f'PAGEVIEWS_HUMAN={len(records)}')
+          print(f'SESSIONS_30_MIN={sessions}')
+          print(f'UNIQUE_VISITORS={len(by_visitor)}')
+          print(f'FIRST_RECORD={records[0][0].isoformat() if records else "none"}')
+          print(f'LAST_RECORD={records[-1][0].isoformat() if records else "none"}')
+          PY
+
+      - name: Zapsat porovnání do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.count.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/caddy-metrics.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Porovnání původního Caddy měření: ${process.env.OUTCOME}`,
+                '',
+                '- Pouze agregace; žádné IP adresy, user-agenty ani konkrétní návštěvy.',
+                '',
+                '```text', log.slice(-5000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.count.outcome }}
+        run: test "$OUTCOME" = success
