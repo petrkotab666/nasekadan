@@ -1,0 +1,61 @@
+name: Opravit pořadí titulní stránky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-homepage-order-now.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fix-homepage-order-now
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Opravit a nasadit titulní stránku
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 scripts/enforce_homepage_latest_order.py
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          REMOTE
+
+      - name: Ověřit živé pořadí
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            page="$(curl -fsS --max-time 20 "https://nasekadan.cz/index.html?order=${GITHUB_SHA}-${attempt}" || true)"
+            arc="$(grep -bo 'arc-med-nemocnice-kadan.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
+            fire="$(grep -bo 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
+            beds="$(grep -bo 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
+            culture="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
+            if [[ -n "$arc" && -n "$fire" && -n "$beds" && -n "$culture" && "$arc" -lt "$fire" && "$fire" -lt "$beds" && "$beds" -lt "$culture" ]]; then
+              echo 'Pořadí je správně: ARC-MED, hasiči, 82 lůžek, kultura.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Živé pořadí stále není správné.' >&2
+          exit 1
