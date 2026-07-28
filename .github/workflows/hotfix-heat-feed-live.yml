@@ -28,7 +28,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit pouze sezónní feed
+      - name: Nasadit viditelný sezónní feed
         id: deploy
         run: |
           set -euo pipefail
@@ -43,21 +43,23 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
           test -f horko-feed.js
+          test -f scripts/inject_heat_feed_static.py
           grep -Fq 'desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html' horko-feed.js
           grep -Fq 'desturl=https%3A%2F%2Fwww.biano.cz%2Fprodukty%2Frolety' horko-feed.js
           grep -Fq 'desturl=https%3A%2F%2Fwww.proalergiky.cz%2Feshop%2Fcisticky-vzduchu' horko-feed.js
           sudo cp horko-feed.js /var/www/nasekadan/horko-feed.js
+          sudo python3 scripts/inject_heat_feed_static.py /var/www/nasekadan
           sudo find /var/www/nasekadan -type f -name '*.html' ! -path '*/nahled/*' ! -path '*/sdilet/*' -print0 | while IFS= read -r -d '' file; do
             if grep -Fq '/horko-feed.js' "$file"; then
-              sudo sed -i 's#horko-feed.js?v=[^"'"'"']*#horko-feed.js?v=20260728-heat-deeplink-2#g' "$file"
+              sudo sed -i 's#horko-feed.js?v=[^"'"'"']*#horko-feed.js?v=20260728-heat-static-3#g' "$file"
             else
-              sudo sed -i 's#</body>#<script src="/horko-feed.js?v=20260728-heat-deeplink-2"></script></body>#' "$file"
+              sudo sed -i 's#</body>#<script src="/horko-feed.js?v=20260728-heat-static-3"></script></body>#' "$file"
             fi
           done
-          grep -Fq '/horko-feed.js' /var/www/nasekadan/index.html
-          grep -Fq 'Ventilátory Concept' /var/www/nasekadan/horko-feed.js
-          grep -Fq 'data-final-target' /var/www/nasekadan/horko-feed.js
-          grep -Fq '/horko-feed.js' /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          grep -Fq 'data-heat-affiliate-feed="1"' /var/www/nasekadan/index.html
+          grep -Fq 'Ventilátory Concept' /var/www/nasekadan/index.html
+          grep -Fq 'concept.cz/ventilatory' /var/www/nasekadan/index.html
+          grep -Fq 'data-heat-affiliate-feed="1"' /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
           REMOTE
 
       - name: Ověřit veřejný web
@@ -66,14 +68,13 @@ jobs:
           set -euo pipefail
           for attempt in $(seq 1 18); do
             home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/?heat=${GITHUB_SHA}-${attempt}" || true)"
-            script="$(curl -kfsS --max-time 20 "https://nasekadan.cz/horko-feed.js?heat=${GITHUB_SHA}-${attempt}" || true)"
             article="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?heat=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq '/horko-feed.js' <<<"$home" \
-              && grep -Fq 'Ventilátory Concept' <<<"$script" \
-              && grep -Fq 'desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html' <<<"$script" \
-              && grep -Fq 'desturl=https%3A%2F%2Fwww.biano.cz%2Fprodukty%2Frolety' <<<"$script" \
-              && grep -Fq 'desturl=https%3A%2F%2Fwww.proalergiky.cz%2Feshop%2Fcisticky-vzduchu' <<<"$script" \
-              && grep -Fq '/horko-feed.js' <<<"$article"; then
+            if grep -Fq 'data-heat-affiliate-feed="1"' <<<"$home" \
+              && grep -Fq 'Ventilátory Concept' <<<"$home" \
+              && grep -Fq 'concept.cz/ventilatory' <<<"$home" \
+              && grep -Fq 'biano.cz/produkty/rolety' <<<"$home" \
+              && grep -Fq 'proalergiky.cz/eshop/cisticky-vzduchu' <<<"$home" \
+              && grep -Fq 'data-heat-affiliate-feed="1"' <<<"$article"; then
               exit 0
             fi
             sleep 10
