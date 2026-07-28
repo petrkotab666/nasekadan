@@ -1,0 +1,81 @@
+name: Nouzově publikovat ARC-MED
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/emergency-publish-arc-med-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emergency-publish-arc-med
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit veřejný článek ARC-MED
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/drafts/arc-med-nemocnice-kadan.html clanky/arc-med-nemocnice-kadan.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('clanky/arc-med-nemocnice-kadan.html')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          t=t.replace('../../','../').replace('PŘIPRAVOVANÝ ČLÁNEK','28. ČERVENCE 2026')
+          t=re.sub(r'<div class="sidebox"><h3>Pracovní verze</h3>.*?</div>','',t,count=1,flags=re.S)
+          published='2026-07-28T05:00:00+02:00'
+          if 'article:published_time' not in t:
+              t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
+          if '"datePublished"' in t:
+              t=re.sub(r'("datePublished"\s*:\s*")([^"]*)',r'\g<1>'+published,t)
+              t=re.sub(r'("dateModified"\s*:\s*")([^"]*)',r'\g<1>'+published,t)
+          else:
+              t=t.replace('"isAccessibleForFree":true','"isAccessibleForFree":true,"datePublished":"'+published+'","dateModified":"'+published+'"')
+          t=t.replace('<article>','<article class="article">',1)
+          p.write_text(t,encoding='utf-8',newline='\n')
+          PY
+          python3 scripts/embed_static_article_ads.py
+          python3 scripts/link_hospital_series.py || true
+          python3 scripts/prepare_discovery.py
+          python3 scripts/finalize_launch.py
+          python3 scripts/normalize_search_snippets.py
+
+      - name: Ověřit přítomnost obou článků a chronologii
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s clanky/arc-med-nemocnice-kadan.html
+          test -s clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
+          grep -Fq 'arc-med-nemocnice-kadan.html' index.html
+          grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' index.html
+          grep -Fq 'arc-med-nemocnice-kadan.html' clanky/index.html
+          grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' clanky/index.html
+          grep -Fq 'arc-med-nemocnice-kadan.html' rss.xml
+          grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' rss.xml
+          grep -Fq 'arc-med-nemocnice-kadan.html' sitemap.xml
+          grep -Fq 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' sitemap.xml
+
+      - name: Uložit veřejnou verzi
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň nouzová publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add -A
+          git commit -m 'Publikovat ARC-MED a obnovit hasiče v přehledech'
+          git pull --rebase origin main
+          git push origin main
