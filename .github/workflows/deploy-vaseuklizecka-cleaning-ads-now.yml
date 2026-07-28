@@ -1,0 +1,173 @@
+name: Okamžitě nasadit reklamy Vaše uklízečka
+run-name: Nasazení bannerů čištění koberců a čalounění
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-vaseuklizecka-cleaning-ads-now.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-vaseuklizecka-ads-install
+  cancel-in-progress: false
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WIDE_BLOB: 7cb71e58e9de0c6b43bb66a5666afb226e4f566b
+      TOWER_BLOB: 9ec919c6188aa82ae5415362a1a3a994edfbeb7d
+      TARGET_URL: https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/
+    steps:
+      - name: Načíst hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat bannery a zapojit je do rotace
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          download_blob() {
+            local sha="$1"
+            local target="$2"
+            curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/git/blobs/$sha" \
+              | jq -r '.content' | tr -d '\n' | base64 -d > "$target"
+            test -s "$target"
+          }
+
+          apply_changes() {
+            mkdir -p assets/reklamy
+            download_blob "$WIDE_BLOB" assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp
+            download_blob "$TOWER_BLOB" assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp
+
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('reklamy.js')
+          text = path.read_text(encoding='utf-8')
+
+          generic = "  {id:'uklizecka',title:'Vaše uklízečka',text:'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',url:'https://vaseuklizecka.cz',tag:'Místní služba',contexts:['home','sidebar','local','general']},"
+          cleaning = "  {id:'uklizecka-cisteni',title:'Čištění koberců, sedaček a čalounění',text:'Hloubkové čištění koberců, sedaček a čalounění na Kadaňsku. Objednávky na telefonu 603 206 308.',url:'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',banner:'/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp',wideBanner:'/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp',tag:'Místní služba',contexts:['home','sidebar','local','general'],weight:4},"
+          if "id:'uklizecka-cisteni'" not in text:
+              if generic not in text:
+                  raise SystemExit('Nenalezena kotva obecné reklamy Vaše uklízečka.')
+              text = text.replace(generic, generic + '\n' + cleaning, 1)
+
+          if "id:'uklizecka-cisteni-tower'" not in text:
+              marker = "];\n\nconst usedPromoIds"
+              pos = text.find(marker)
+              if pos < 0:
+                  raise SystemExit('Nenalezena kotva towerCreativeItems.')
+              tower = """  ,{
+              id:'uklizecka-cisteni-tower',
+              title:'Čištění koberců, sedaček a čalounění',
+              url:'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',
+              image:'/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp',
+              width:300,
+              height:600,
+              contexts:['general','home','local','health','sidebar'],
+              weight:4
+            }
+          """
+              text = text[:pos] + tower + text[pos:]
+
+          old = """function pickPromos(context,count,offset){
+            const exact=promoItems.filter(item=>item.contexts.includes(context));
+            const fallback=promoItems.filter(item=>!exact.includes(item));
+            const pool=[...exact,...fallback];"""
+          new = """function pickPromos(context,count,offset){
+            const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);
+            const exact=promoItems.filter(item=>item.contexts.includes(context)).flatMap(expand);
+            const exactIds=new Set(exact.map(item=>item.id));
+            const fallback=promoItems.filter(item=>!exactIds.has(item.id)).flatMap(expand);
+            const pool=[...exact,...fallback];"""
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);' not in text:
+              raise SystemExit('Nenalezena kotva pickPromos.')
+
+          old_banner = """function renderBannerCard(item){
+            const title=escapeHtml(item.title);
+            const banner=safeHttpUrl(item.banner);"""
+          new_banner = """function renderBannerCard(item){
+            const title=escapeHtml(item.title);
+            const banner=safeHttpUrl(item.wideBanner||item.banner);"""
+          if old_banner in text:
+              text = text.replace(old_banner, new_banner, 1)
+
+          old_tower = """function pickTowerCreative(context,offset=0){
+            const pool=[
+              ...towerCreativeItems.filter(item=>item.contexts.includes(context)),
+              ...towerCreativeItems.filter(item=>!item.contexts.includes(context))
+            ];"""
+          new_tower = """function pickTowerCreative(context,offset=0){
+            const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);
+            const exact=towerCreativeItems.filter(item=>item.contexts.includes(context)).flatMap(expand);
+            const exactIds=new Set(exact.map(item=>item.id));
+            const pool=[
+              ...exact,
+              ...towerCreativeItems.filter(item=>!exactIds.has(item.id)).flatMap(expand)
+            ];"""
+          if old_tower in text:
+              text = text.replace(old_tower, new_tower, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+            python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          checks = {
+              'assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp': (1200, 400),
+              'assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp': (300, 600),
+          }
+          for name, expected in checks.items():
+              with Image.open(name) as image:
+                  if image.size != expected:
+                      raise SystemExit(f'{name}: očekáváno {expected}, nalezeno {image.size}')
+          js = Path('reklamy.js').read_text(encoding='utf-8')
+          required = [
+              "id:'uklizecka-cisteni'",
+              "id:'uklizecka-cisteni-tower'",
+              '603 206 308',
+              'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',
+              '/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp',
+              '/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp',
+          ]
+          missing = [value for value in required if value not in js]
+          if missing:
+              raise SystemExit('Chybějící prvky v reklamním systému: ' + ', '.join(missing))
+          PY
+
+            rm -f .github/workflows/deploy-vaseuklizecka-cleaning-ads-now.yml
+            printf '%s\n' "$(date -u +%FT%TZ) — Okamžitě kanonicky nasadit bannery Vaše uklízečka: čištění koberců, sedaček a čalounění. Ověřit reklamy.js, oba obrázky a cílový odkaz." > emergency-deploy-trigger.txt
+          }
+
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            apply_changes
+            git add reklamy.js assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp emergency-deploy-trigger.txt .github/workflows/deploy-vaseuklizecka-cleaning-ads-now.yml
+            git commit -m 'Nasadit reklamy na čištění koberců a čalounění'
+            if git push origin HEAD:main; then
+              echo 'Bannery jsou zapsané v main a kanonický deploy byl spuštěn.'
+              exit 0
+            fi
+            echo "Push se střetl s novější změnou, opakuji pokus $attempt/3."
+            sleep 5
+          done
+          exit 1
