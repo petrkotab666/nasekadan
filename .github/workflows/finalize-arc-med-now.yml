@@ -1,0 +1,85 @@
+name: Dokončit ARC-MED okamžitě
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/finalize-arc-med-now.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Odemknout článek a obnovit přehledy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root=Path('.')
+          article=root/'clanky/arc-med-nemocnice-kadan.html'
+          text=article.read_text(encoding='utf-8')
+          text=text.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          text=text.replace('../../','../').replace('PŘIPRAVOVANÝ ČLÁNEK','28. ČERVENCE 2026')
+          published='2026-07-28T05:00:00+02:00'
+          if 'article:published_time' not in text:
+              text=text.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
+          if '"datePublished"' not in text:
+              text=text.replace('"isAccessibleForFree":true','"isAccessibleForFree":true,"datePublished":"'+published+'","dateModified":"'+published+'"',1)
+          article.write_text(text,encoding='utf-8',newline='\n')
+
+          card='''<article class="article-card hospital" data-arc-med-card><div class="visual" style="background:linear-gradient(135deg,#132630,#3f6576 58%,#a9232b)"><strong>ARC-MED za 16 milionů</strong></div><div class="article-body"><span class="meta">28. 7. 2026 · 5:00 · Zdravotnictví a veřejné peníze</span><h3>Dva posudky, nejasné schválení a spor o dvanáct milionů</h3><p>Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.</p><a class="read-more" href="/clanky/arc-med-nemocnice-kadan.html">Přečíst analýzu →</a></div></article>'''
+          home=Path('index.html')
+          h=home.read_text(encoding='utf-8')
+          h=re.sub(r'<article class="article-card hospital" data-arc-med-card>.*?</article>','',h,flags=re.S)
+          marker='<div class="article-list">'
+          h=h.replace(marker,marker+card,1)
+          home.write_text(h,encoding='utf-8',newline='\n')
+
+          archive=Path('clanky/index.html')
+          a=archive.read_text(encoding='utf-8')
+          archive_card='''<article class="archive-item hospital" data-arc-med-card><div class="archive-visual"><strong>ARC-MED za 16 milionů</strong></div><div class="archive-body"><span class="archive-meta">28. července 2026 v 5:00 · Zdravotnictví a veřejné peníze</span><h2>Dva posudky, nejasné schválení a spor o dvanáct milionů</h2><p>Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.</p><a href="/clanky/arc-med-nemocnice-kadan.html">Přečíst analýzu →</a></div></article>'''
+          a=re.sub(r'<article class="archive-item hospital" data-arc-med-card>.*?</article>','',a,flags=re.S)
+          marker='<section class="archive-list" aria-label="Chronologický přehled článků">'
+          a=a.replace(marker,marker+archive_card,1)
+          archive.write_text(a,encoding='utf-8',newline='\n')
+
+          rss=Path('rss.xml')
+          r=rss.read_text(encoding='utf-8')
+          url='https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html'
+          if url not in r:
+              item=f'''    <item><title>ARC-MED za 16 milionů: dva posudky, nejasné schválení a spor o dvanáct milionů</title><description><![CDATA[Co nemocnice skutečně koupila, proč se ocenění rozcházejí a co zatím nelze doložit.]]></description><link>{url}</link><guid isPermaLink="true">{url}</guid><pubDate>Tue, 28 Jul 2026 05:00:00 +0200</pubDate><category>Nemocnice Kadaň</category></item>\n'''
+              r=r.replace('<item>',item+'<item>',1)
+              rss.write_text(r,encoding='utf-8',newline='\n')
+
+          sitemap=Path('sitemap.xml')
+          s=sitemap.read_text(encoding='utf-8')
+          if url not in s:
+              s=s.replace('</urlset>',f'  <url><loc>{url}</loc><lastmod>2026-07-28</lastmod></url>\n</urlset>',1)
+              sitemap.write_text(s,encoding='utf-8',newline='\n')
+          PY
+          python3 scripts/embed_static_article_ads.py
+
+      - name: Uložit změny
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň oprava'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/arc-med-nemocnice-kadan.html index.html clanky/index.html rss.xml sitemap.xml
+          git diff --cached --quiet && exit 0
+          git commit -m 'Publikovat ARC-MED a obnovit pořadí článků'
+          git pull --rebase origin main
+          git push origin main
