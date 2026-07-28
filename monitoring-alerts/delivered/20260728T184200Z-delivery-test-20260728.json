@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "fingerprint": "delivery-test-20260728",
+  "title": "Test záložního doručení monitoringu",
+  "summary": "První test byl nahrazen druhým ověřeným testem záložního kanálu.",
+  "facts": [
+    "Záložní kanál byl následně ověřen vytvořením přiřazeného GitHub Issue.",
+    "Aktivní ověřovací issue je #82."
+  ],
+  "sources": [
+    {
+      "name": "GitHub Issue #82",
+      "url": "https://github.com/petrkotab666/nasekadan/issues/82"
+    }
+  ],
+  "observed_at": "2026-07-28T20:42:00+02:00",
+  "severity": "test",
+  "recommended_action": "Žádný zásah.",
+  "delivery": {
+    "status": "superseded",
+    "delivered_at": "2026-07-28T20:50:40+02:00",
+    "issue_number": 82,
+    "issue_url": "https://github.com/petrkotab666/nasekadan/issues/82",
+    "delivery_channel": "github-issue-direct-fallback"
+  }
+}
