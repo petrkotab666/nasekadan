@@ -7,6 +7,7 @@ on:
       - '.github/direct-server-fix-arc-med.txt'
       - '.github/workflows/direct-server-fix-arc-med.yml'
       - 'scripts/enforce_homepage_latest_order.py'
+      - 'reklamy.js'
   workflow_dispatch:
 
 jobs:
@@ -41,34 +42,37 @@ jobs:
           t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
           t=t.replace('../../','../').replace('PŘIPRAVOVANÝ ČLÁNEK','28. ČERVENCE 2026')
           t=t.replace('<article>','<article class="article">',1)
-          t=t.replace('<div data-promos data-context="sidebar"></div>','')
-          t=re.sub(r'<div class="sidebox"><h3>Pracovní verze</h3><p>.*?</p></div>', '<div class="sidebox"><h3>Publikováno</h3><p>28. července 2026 v 5:00.</p></div>', t, count=1, flags=re.S)
-          t=t.replace('Pracovní text odděluje ověřitelné dokumenty od tvrzení jednotlivých stran.', 'Článek odděluje ověřitelné dokumenty od tvrzení jednotlivých stran.')
-          t=re.sub(r'\s*Před zveřejněním doporučujeme zaslat dotazy nemocnici, městu, Petru Hossnerovi a bývalým vlastníkům ARC-MED\.', '', t)
+          t=t.replace('<div class="sidebox"><h3>Pracovní verze</h3><p>Článek je připraven pro publikaci 28. července 2026 v 5:00.</p></div>','<div class="sidebox"><h3>Publikováno</h3><p>28. července 2026 v 5:00.</p></div>')
+          t=t.replace('Před zveřejněním doporučujeme zaslat dotazy nemocnici, městu, Petru Hossnerovi a bývalým vlastníkům ARC-MED.','')
+
+          # Odstranit chybný pevný reklamní systém a jeho CSS.
+          t=re.sub(r'<style id="static-article-ads-style">.*?</style>\s*','',t,flags=re.S)
+          t=re.sub(r'<div class="static-article-ads".*?</div>','',t,flags=re.S)
+          t=re.sub(r'<div class="article-aside-tower".*?</div>','',t,flags=re.S)
+
+          # Obnovit standardní dynamickou reklamní pozici v pravém sloupci.
+          if '<div data-promos data-context="sidebar"></div>' not in t:
+              t=t.replace('</aside>','  <div data-promos data-context="sidebar"></div>\n</aside>',1)
+
           published='2026-07-28T05:00:00+02:00'
           if 'article:published_time' not in t:
               t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
-          if 'Pracovní verze' in t or 'PŘIPRAVOVANÝ ČLÁNEK' in t or 'Před zveřejněním doporučujeme' in t:
-              raise SystemExit('V článku zůstala návrhová formulace.')
+          if 'Pracovní verze' in t or 'PŘIPRAVOVANÝ ČLÁNEK' in t or 'static-article-ads' in t:
+              raise SystemExit('ARC-MED stále obsahuje návrhový nebo statický reklamní systém.')
           article.write_text(t,encoding='utf-8',newline='\n')
           PY
           python3 scripts/enforce_homepage_latest_order.py
-          python3 scripts/embed_static_article_ads.py
-          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
           sudo install -m 0644 index.html /var/www/nasekadan/index.html
           sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo install -m 0644 clanky/arc-med-nemocnice-kadan.html /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           sudo install -m 0644 clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html /var/www/nasekadan/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
-          sudo install -m 0644 assets/reklamy/*.svg /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
           sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
           sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
           grep -Fq 'data-arc-med-hero' /var/www/nasekadan/index.html
-          ! grep -Fq 'Pracovní verze' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
-          python3 - <<'PY'
-          from pathlib import Path
-          h=Path('/var/www/nasekadan/index.html').read_text(encoding='utf-8')
-          assert h.index('data-arc-med-hero') < h.index('data-nechranice-card') < h.index('data-beds-card') < h.index('data-weekly-events-card')
-          PY
+          grep -Fq 'data-promos data-context="sidebar"' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          ! grep -Fq 'static-article-ads' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           REMOTE
 
       - name: Ověřit živý web
@@ -78,8 +82,11 @@ jobs:
           for i in $(seq 1 12); do
             home=$(curl -fsS "https://nasekadan.cz/?fix=$GITHUB_SHA-$i" || true)
             arc=$(curl -fsS "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html?fix=$GITHUB_SHA-$i" || true)
-            if grep -Fq 'data-arc-med-hero' <<<"$home" && grep -Fq 'index,follow' <<<"$arc" && ! grep -Fq 'Pracovní verze' <<<"$arc"; then
-              echo 'ARC-MED je hlavní článek, veřejná stránka funguje a návrhové texty jsou odstraněné.'
+            if grep -Fq 'data-arc-med-hero' <<<"$home" \
+              && grep -Fq 'index,follow' <<<"$arc" \
+              && grep -Fq 'data-promos data-context="sidebar"' <<<"$arc" \
+              && ! grep -Fq 'static-article-ads' <<<"$arc"; then
+              echo 'ARC-MED používá dynamický reklamní systém.'
               exit 0
             fi
             sleep 5
