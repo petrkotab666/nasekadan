@@ -1,0 +1,56 @@
+name: Sjednotit reklamní systém ARC-MED
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hotfix-arc-med-ads-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Sjednotit ARC-MED a nasadit pouze související soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 scripts/normalize_arc_med_article.py
+          python3 scripts/embed_static_article_ads.py
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 clanky/arc-med-nemocnice-kadan.html /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          sudo install -m 0644 footer.css /var/www/nasekadan/footer.css
+          sudo install -m 0644 assets/reklamy/*.svg /var/www/nasekadan/assets/reklamy/
+          REMOTE
+
+      - name: Ověřit jednotný reklamní systém
+        shell: bash
+        run: |
+          set -euo pipefail
+          article="$(curl -fsS --max-time 25 'https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html?ads-hotfix=1')"
+          [[ "$(grep -o 'class="static-article-ad"' <<<"$article" | wc -l | tr -d ' ')" == '4' ]]
+          grep -Fq 'data-static-ads="locked-v1"' <<<"$article"
+          grep -Fq 'class="article"' <<<"$article"
+          ! grep -Fq 'data-promos' <<<"$article"
+          ! grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK' <<<"$article"
+          for banner in pojistime vaseuklizecka vyklidime realitykadan; do
+            curl -fsS --max-time 25 "https://nasekadan.cz/assets/reklamy/${banner}-300x600.svg?ads-hotfix=1" | grep -Fq '<svg'
+          done
