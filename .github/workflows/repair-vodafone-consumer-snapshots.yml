@@ -1,0 +1,332 @@
+name: Opravit Vodafone snapshoty spotřebitelů
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-vodafone-consumer-snapshots.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: repair-vodafone-consumer-snapshots
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.title, 'Repair Vodafone consumer snapshots')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      T_GH_PAT: ${{ secrets.GH_PAT }}
+      T_GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+      T_PAT: ${{ secrets.PAT }}
+      T_PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      T_PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      T_CROSS_REPO_TOKEN: ${{ secrets.CROSS_REPO_TOKEN }}
+      T_REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
+      T_PRIVATE_REPO_TOKEN: ${{ secrets.PRIVATE_REPO_TOKEN }}
+      T_DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      T_AUTOMATION_PAT: ${{ secrets.AUTOMATION_PAT }}
+      T_BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      T_ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+      T_GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_ACCESS_TOKEN }}
+      T_CENTRAL_REPO_TOKEN: ${{ secrets.CENTRAL_REPO_TOKEN }}
+      T_SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Najít token s právem zápisu do všech spotřebitelů
+        id: token
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGETS=(
+            petrkotab666/nakupvakci
+            petrkotab666/testywebu
+            petrkotab666/lastminuteslevy
+            petrkotab666/nasekadan
+          )
+          mkdir -p "$RUNNER_TEMP/vodafone-snapshot-repair"
+          : > "$RUNNER_TEMP/vodafone-snapshot-repair/token-report.txt"
+          selected=''
+          for name in T_GH_PAT T_GITHUB_PAT T_PAT T_PAT_TOKEN T_PERSONAL_ACCESS_TOKEN T_CROSS_REPO_TOKEN T_REPO_TOKEN T_PRIVATE_REPO_TOKEN T_DEPLOY_TOKEN T_AUTOMATION_PAT T_BOT_TOKEN T_ACCESS_TOKEN T_GITHUB_ACCESS_TOKEN T_CENTRAL_REPO_TOKEN T_SYNC_TOKEN; do
+            value="${!name:-}"
+            [ -n "$value" ] || continue
+            all_ok=1
+            for repo in "${TARGETS[@]}"; do
+              code=$(curl -sS -o "$RUNNER_TEMP/vodafone-snapshot-repair/repo.json" -w '%{http_code}' \
+                -H "Authorization: Bearer $value" \
+                -H 'Accept: application/vnd.github+json' \
+                -H 'X-GitHub-Api-Version: 2022-11-28' \
+                "https://api.github.com/repos/$repo" || true)
+              push=false
+              if [ "$code" = 200 ]; then
+                push=$(jq -r '.permissions.push // false' "$RUNNER_TEMP/vodafone-snapshot-repair/repo.json")
+              fi
+              echo "$name $repo HTTP=$code push=$push" >> "$RUNNER_TEMP/vodafone-snapshot-repair/token-report.txt"
+              if [ "$code" != 200 ] || [ "$push" != true ]; then all_ok=0; break; fi
+            done
+            if [ "$all_ok" = 1 ]; then
+              printf '%s' "$value" > "$RUNNER_TEMP/vodafone-snapshot-repair/token"
+              chmod 600 "$RUNNER_TEMP/vodafone-snapshot-repair/token"
+              selected="$name"
+              break
+            fi
+          done
+          if [ -z "$selected" ]; then
+            echo 'Nenalezen jeden token s právem zápisu do všech čtyř repozitářů.' >> "$RUNNER_TEMP/vodafone-snapshot-repair/token-report.txt"
+            echo 'available=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Vybraný secret: $selected" >> "$RUNNER_TEMP/vodafone-snapshot-repair/token-report.txt"
+          echo 'available=true' >> "$GITHUB_OUTPUT"
+          echo "name=$selected" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit centrální zdroje a generátor
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/vodafone-snapshot-repair"
+          BUSTER="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s%N)"
+          curl -fsSL --max-time 90 -H 'Cache-Control: no-cache, no-store' \
+            "https://pojistime.to/assets/affiliate-database.json?repair=$BUSTER" -o "$ROOT/affiliate-database.json"
+          curl -fsSL --max-time 90 -H 'Cache-Control: no-cache, no-store' \
+            "https://pojistime.to/assets/ehub-partner-assets/brainmarket.json?repair=$BUSTER" -o "$ROOT/brainmarket.json"
+          python3 -m json.tool "$ROOT/affiliate-database.json" >/dev/null
+          python3 -m json.tool "$ROOT/brainmarket.json" >/dev/null
+          test "$(python3 -c "import json; print(json.load(open('$ROOT/affiliate-database.json')).get('updatedAt',''))")" = '2026-07-28'
+
+          cat > "$ROOT/generate_snapshot.py" <<'PY'
+          from __future__ import annotations
+          import datetime, hashlib, json, re, sys, unicodedata
+          from pathlib import Path
+
+          repo = Path(sys.argv[1])
+          central_path = Path(sys.argv[2])
+          overlay_path = Path(sys.argv[3])
+          config_path = repo / 'assets' / 'affiliate-site-config.json'
+          override_path = repo / 'assets' / 'direct-affiliate-overrides.json'
+          config_raw = config_path.read_bytes()
+          config = json.loads(config_raw)
+          override_raw = override_path.read_bytes() if override_path.exists() else b'{}'
+          overrides = json.loads(override_raw)
+          raw = central_path.read_bytes()
+          overlay_raw = overlay_path.read_bytes()
+          db = json.loads(raw)
+          overlay = json.loads(overlay_raw)
+          central_hash = hashlib.sha256(raw + b'\0' + overlay_raw).hexdigest()
+          config_hash = hashlib.sha256(config_raw + (b'\0' + override_raw if override_path.exists() else b'')).hexdigest()
+
+          def norm(value):
+              value = unicodedata.normalize('NFKD', str(value or '')).encode('ascii','ignore').decode('ascii').lower()
+              return re.sub(r'[^a-z0-9]+','-',value).strip('-')
+
+          direct = db.get('partners') or []
+          inventory_obj = db.get('ehubProgramInventory') or {}
+          inventory = inventory_obj.get('programs') or []
+          local_overrides = overrides.get('partners') or []
+          records = []
+          for source, items in [('partners', direct), ('inventory', inventory), ('local_override', local_overrides)]:
+              for item in items:
+                  if isinstance(item, dict):
+                      row = dict(item); row['_centralLayer'] = source; records.append(row)
+
+          overlay_sources = []
+          program = overlay.get('program') or {}
+          links = overlay.get('links') or []
+          default_link_id = str(program.get('defaultLinkId') or '')
+          default_link = next((item for item in links if str(item.get('id')) == default_link_id), links[0] if links else {})
+          if program.get('name') and default_link_id and default_link.get('clickUrl'):
+              records.append({
+                  'order':81,'id':f"ehub-{default_link_id.lower()}",'name':program.get('name'),'network':'eHUB',
+                  'programStatus':program.get('status') or 'active','programCode':program.get('programCode') or '',
+                  'defaultLinkId':default_link_id,'baseClickUrl':default_link.get('clickUrl'),
+                  'defaultTargetUrl':program.get('defaultTargetUrl') or default_link.get('targetUrl') or '',
+                  'linkPolicy':'default_available','assetsUpdatedAt':overlay.get('updatedAt'),'links':links,
+                  'banners':overlay.get('banners') or [],'feeds':overlay.get('feeds') or [],'actions':overlay.get('actions') or [],
+                  'recommendedUse':overlay.get('recommendedUse') or [],'sourceNotes':overlay.get('sourceNotes') or [],
+                  'approval':overlay.get('approval') or {},'manager':overlay.get('manager') or {},
+                  'categories':overlay.get('categories') or [],'role':overlay.get('role'),
+                  'commercialTerms':overlay.get('commercialTerms') or {},'restrictions':overlay.get('restrictions') or [],
+                  '_centralLayer':'partner-overlay','_overlaySource':'https://pojistime.to/assets/ehub-partner-assets/brainmarket.json',
+              })
+              overlay_sources.append('https://pojistime.to/assets/ehub-partner-assets/brainmarket.json')
+
+          aliases = [norm(x) for x in config.get('aliases', [])]
+          allowed_ids = {norm(x) for x in config.get('allowedPartnerIds', [])}
+          blocked_ids = {norm(x) for x in config.get('blockedPartnerIds', [])}
+          allowed_categories = {norm(x) for x in config.get('allowedCategories', [])}
+          mode = config.get('mode','filtered')
+          site_name = norm(config.get('site'))
+
+          def identifiers(row):
+              return {norm(row.get('id')), norm(row.get('defaultLinkId')), norm(row.get('name'))}
+
+          def is_blocked(row):
+              values = {value for value in identifiers(row) if value}
+              return any(blocked and any(blocked == value or blocked in value or value in blocked for value in values) for blocked in blocked_ids)
+
+          def is_active(row):
+              status = norm(row.get('programStatus') or row.get('status') or 'active')
+              if status in {'disabled','inactive','rejected','closed','paused','not-approved','pending'}: return False
+              approval = row.get('approval') or {}
+              approved_sites = {norm(x) for x in (approval.get('approvedPublicationSites') or [])}
+              if approved_sites and site_name not in approved_sites: return False
+              approved_domains = {norm(x) for x in (row.get('approvedDomains') or [])}
+              if approved_domains and site_name not in approved_domains and norm('www.' + config.get('site','')) not in approved_domains: return False
+              return bool(row.get('baseClickUrl') or row.get('trackingUrl') or row.get('links'))
+
+          def matches(row):
+              if not is_active(row) or is_blocked(row): return False
+              if row.get('_centralLayer') == 'local_override': return True
+              if mode == 'all_active': return True
+              rid = norm(row.get('id') or row.get('defaultLinkId')); name = norm(row.get('name'))
+              if any(token and (token == rid or token == name or token in rid or token in name) for token in allowed_ids): return True
+              categories = {norm(x) for x in (row.get('categories') or [])}
+              if any(allowed and category and (allowed == category or allowed in category or category in allowed) for allowed in allowed_categories for category in categories): return True
+              recommended = norm(' '.join(str(x) for x in (row.get('recommendedUse') or [])))
+              return any(alias and alias in recommended for alias in aliases)
+
+          selected = {}
+          for row in records:
+              if not matches(row): continue
+              key = norm(row.get('name')) or norm(row.get('defaultLinkId') or row.get('id'))
+              if not key: continue
+              old = selected.get(key)
+              if row.get('_centralLayer') == 'local_override': selected[key] = row; continue
+              if old and old.get('_centralLayer') == 'local_override': continue
+              score = len(row.get('feeds') or [])*5 + len(row.get('banners') or [])*2 + len(row.get('links') or [])*2 + len(row.keys())
+              old_score = -1 if old is None else len(old.get('feeds') or [])*5 + len(old.get('banners') or [])*2 + len(old.get('links') or [])*2 + len(old.keys())
+              if score >= old_score: selected[key] = row
+
+          partners = sorted(selected.values(), key=lambda x: str(x.get('name') or '').lower())
+          payload = {
+              'schemaVersion':2,'site':config.get('site'),'mode':mode,
+              'centralSource':'https://pojistime.to/assets/affiliate-database.json','overlaySources':overlay_sources,
+              'centralUpdatedAt':db.get('updatedAt'),'centralSha256':central_hash,'configSha256':config_hash,
+              'generatedAt':datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+              'sourceProgramCount':len(direct)+int(inventory_obj.get('programCount') or 0)+len(local_overrides),
+              'localOverrideCount':len(local_overrides),'partnerCount':len(partners),
+              'feedCount':sum(len(x.get('feeds') or []) for x in partners),
+              'bannerCount':sum(len(x.get('banners') or []) for x in partners),
+              'autoPublish':bool(config.get('autoPublish',False)),'partners':partners,
+          }
+          assets = repo / 'assets'; assets.mkdir(parents=True, exist_ok=True)
+          (assets / 'affiliate-site-snapshot.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          (assets / 'affiliate-site-snapshot.js').write_text('export const affiliateSnapshot='+json.dumps(payload,ensure_ascii=False,separators=(',',':'))+';\n',encoding='utf-8')
+
+          vf = next((x for x in partners if str(x.get('defaultLinkId','')).lower() == 'aface625' or norm(x.get('name')) == 'vodafone-cz'), None)
+          expected = config.get('site') in {'nakupvakci.cz','testywebu.cz'}
+          if expected:
+              assert vf is not None, 'Vodafone chybí v povoleném snapshotu'
+              assert len(vf.get('campaigns') or []) == 3, 'Vodafone nemá tři kampaně'
+              public = json.dumps(vf, ensure_ascii=False)
+              assert '20000' not in public and '20 000' not in public, 'Interní soutěž unikla do snapshotu'
+          else:
+              assert vf is None, 'Vodafone zůstal v blokovaném snapshotu'
+          assert payload['centralUpdatedAt'] == '2026-07-28'
+          print(json.dumps({'site':config.get('site'),'centralSha256':central_hash,'partnerCount':len(partners),'vodafone':bool(vf)},ensure_ascii=False))
+          PY
+
+      - name: Přegenerovat, ověřit a zapsat všechny spotřebitele
+        id: repair
+        if: steps.token.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/vodafone-snapshot-repair"
+          TOKEN=$(cat "$ROOT/token")
+          cat > "$ROOT/askpass.sh" <<'SH'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' x-access-token ;;
+            *) cat "$RUNNER_TEMP/vodafone-snapshot-repair/token" ;;
+          esac
+          SH
+          chmod 700 "$ROOT/askpass.sh"
+          export GIT_ASKPASS="$ROOT/askpass.sh"
+          export GIT_TERMINAL_PROMPT=0
+          : > "$ROOT/final-report.txt"
+
+          for repo in nakupvakci testywebu lastminuteslevy nasekadan; do
+            dir="$ROOT/$repo"
+            git clone --depth 1 --branch main "https://github.com/petrkotab666/$repo.git" "$dir"
+            python3 "$ROOT/generate_snapshot.py" "$dir" "$ROOT/affiliate-database.json" "$ROOT/brainmarket.json" | tee -a "$ROOT/final-report.txt"
+
+            if [ "$repo" = nasekadan ]; then
+              python3 - "$dir" <<'PY'
+          from pathlib import Path
+          import re, sys
+          root=Path(sys.argv[1])
+          for name in ('reklamy.js','obsah-doplnky.js'):
+              path=root/name
+              text=path.read_text(encoding='utf-8')
+              text=re.sub(r"^\s*\{id:'vodafone'.*?\},\s*\n",'',text,flags=re.M)
+              text=re.sub(r"^\s*vodafone:'[^']*',?\s*\n",'',text,flags=re.M)
+              if 'aface625' in text or "id:'vodafone'" in text or 'Vodafone.cz' in text:
+                  raise SystemExit(f'{name}: zůstal pevně zapsaný Vodafone')
+              path.write_text(text,encoding='utf-8',newline='\n')
+          PY
+              node --check "$dir/reklamy.js"
+              node --check "$dir/obsah-doplnky.js"
+              rm -f "$dir/.github/workflows/remove-vodafone-hardcoded-now.yml"
+            fi
+
+            cd "$dir"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            if git diff --cached --quiet; then
+              echo "$repo: beze změny" >> "$ROOT/final-report.txt"
+            else
+              git commit -m 'Synchronizovat Vodafone affiliate pravidla a snapshot [skip ci]'
+              for attempt in 1 2 3 4; do
+                if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+                git rebase --abort 2>/dev/null || true
+                if [ "$attempt" = 4 ]; then exit 1; fi
+                sleep $((attempt * 3))
+              done
+              echo "$repo: zapsáno $(git rev-parse HEAD)" >> "$ROOT/final-report.txt"
+            fi
+            cd "$GITHUB_WORKSPACE"
+          done
+          echo 'success=true' >> "$GITHUB_OUTPUT"
+
+      - name: Přiložit diagnostiku
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vodafone-consumer-snapshot-repair
+          path: |
+            ${{ runner.temp }}/vodafone-snapshot-repair/token-report.txt
+            ${{ runner.temp }}/vodafone-snapshot-repair/final-report.txt
+          retention-days: 5
+
+      - name: Zapsat výsledek do PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const root = process.env.RUNNER_TEMP + '/vodafone-snapshot-repair';
+            let body = '## Oprava Vodafone spotřebitelských snapshotů\n\n';
+            if ('${{ steps.token.outputs.available }}' !== 'true') {
+              body += '- **Blokace:** není dostupný jeden PAT s právem zápisu do všech čtyř repozitářů.\n';
+            } else if (fs.existsSync(root + '/final-report.txt')) {
+              body += '```text\n' + fs.readFileSync(root + '/final-report.txt','utf8') + '\n```\n';
+            } else {
+              body += '- Opravný běh nevytvořil závěrečný report.\n';
+            }
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+
+      - name: Vyžadovat úspěšnou opravu
+        run: |
+          test '${{ steps.token.outputs.available }}' = true
+          test '${{ steps.repair.outputs.success }}' = true
