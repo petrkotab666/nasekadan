@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from publish_gp_august_limits import main as publish_gp_august
 from sort_articles_chronologically import main as sort_all
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,6 +103,7 @@ def main() -> int:
     RSS.write_text(rss, encoding="utf-8", newline="\n")
 
     sort_all()
+    publish_gp_august()
     print("Nejnovější schválené články jsou přítomné a chronologicky zařazené.")
     return 0
 
