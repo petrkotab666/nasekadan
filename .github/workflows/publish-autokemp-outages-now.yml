@@ -1,0 +1,103 @@
+name: Zveřejnit odstávky Autokempu Prunéřov
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/autokemp-outages-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-autokemp-outages-publication
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit článek a aktualizovat kulturní přehled
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --quiet Pillow
+          python3 scripts/publish_autokemp_outages_article.py
+          python3 scripts/generate_social_cards.py --write --check
+
+      - name: Ověřit obsah před publikací
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Odstávky elektřiny omezí v srpnu provoz restaurace' clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html
+          grep -Fq 'data-autokemp-outages-hero' index.html
+          grep -Fq 'data-autokemp-outages-card' clanky/index.html
+          grep -Fq 'data-autokemp-outages-note' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' rss.xml sitemap.xml news-sitemap.xml
+
+      - name: Uložit publikaci do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html \
+            clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
+            app.js production-content-manifest.json social/ \
+            scripts/enforce_homepage_latest_order.py \
+            scripts/enforce_current_article_order.py \
+            scripts/ensure_kolobezky_order.py \
+            scripts/enforce_production_article_order.py
+          if git diff --cached --quiet; then
+            echo 'Publikace už je v repozitáři.'
+          else
+            git commit -m 'Zveřejnit omezení Autokempu Prunéřov a doplnit kulturní přehled'
+          fi
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+      - name: Kanonicky nasadit na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --prune origin main
+          git reset --hard origin/main
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Veřejně ověřit článek i kulturní přehled
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 18); do
+            article="$(curl -fsS --max-time 25 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?v=$stamp-$attempt" || true)"
+            home="$(curl -fsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
+            archive="$(curl -fsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" || true)"
+            culture="$(curl -fsS --max-time 25 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?v=$stamp-$attempt" || true)"
+            if grep -Fq 'Odstávky elektřiny omezí v srpnu provoz restaurace' <<<"$article" \
+              && grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$home" \
+              && grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$archive" \
+              && grep -Fq 'data-autokemp-outages-note' <<<"$culture"; then
+              echo 'Článek, titulní stránka, archiv i kulturní přehled jsou veřejně aktuální.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Veřejná kontrola publikace neprošla.' >&2
+          exit 1
