@@ -1,0 +1,198 @@
+name: Dočasně vygenerovat opravné affiliate snapshoty
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.event.issue.title == '[affiliate-generate-snapshots] trigger'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vygenerovat snapshoty podle produkční logiky
+        env:
+          CENTRAL_URL: https://pojistime.to/assets/affiliate-database.json
+          OVERLAY_URL: https://pojistime.to/assets/ehub-partner-assets/brainmarket.json
+        run: |
+          python - <<'PY'
+          import datetime, hashlib, json, os, re, shutil, time, unicodedata, urllib.request
+          from pathlib import Path
+
+          def download(url, required=True):
+              req = urllib.request.Request(url, headers={'User-Agent':'Affiliate-repair-generator/1.0','Cache-Control':'no-cache','Pragma':'no-cache'})
+              last = None
+              for attempt in range(1, 4):
+                  try:
+                      with urllib.request.urlopen(req, timeout=90) as response:
+                          return response.read()
+                  except Exception as exc:
+                      last = exc
+                      if attempt < 3: time.sleep(attempt * 5)
+              if required: raise SystemExit(f'Nelze stáhnout {url}: {last}')
+              return b''
+
+          def norm(value):
+              value = unicodedata.normalize('NFKD', str(value or '')).encode('ascii','ignore').decode('ascii').lower()
+              return re.sub(r'[^a-z0-9]+','-',value).strip('-')
+
+          central_url = os.environ['CENTRAL_URL']
+          overlay_url = os.environ['OVERLAY_URL']
+          raw = download(central_url)
+          overlay_raw = download(overlay_url, required=False)
+          db = json.loads(raw)
+          manifest = json.loads(Path('tmp/affiliate-repair-inputs.json').read_text(encoding='utf-8'))
+          out = Path('tmp/generated-affiliate-snapshots')
+          shutil.rmtree(out, ignore_errors=True)
+          out.mkdir(parents=True)
+          generated = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+          standard_hash = hashlib.sha256(raw + b'\0' + overlay_raw).hexdigest()
+          raw_hash = hashlib.sha256(raw).hexdigest()
+
+          direct = db.get('partners') or []
+          inventory_obj = db.get('ehubProgramInventory') or {}
+          inventory = inventory_obj.get('programs') or []
+          base_records = []
+          for source, items in [('partners', direct), ('inventory', inventory)]:
+              for item in items:
+                  if isinstance(item, dict):
+                      row = dict(item); row['_centralLayer'] = source; base_records.append(row)
+
+          overlay_record = None
+          overlay_sources = []
+          if overlay_raw:
+              overlay = json.loads(overlay_raw)
+              program = overlay.get('program') or {}
+              links = overlay.get('links') or []
+              default_link_id = str(program.get('defaultLinkId') or '')
+              default_link = next((item for item in links if str(item.get('id')) == default_link_id), links[0] if links else {})
+              if program.get('name') and default_link_id and default_link.get('clickUrl'):
+                  overlay_record = {
+                    'order':81,'id':f"ehub-{default_link_id.lower()}",'name':program.get('name'),'network':'eHUB',
+                    'programStatus':program.get('status') or 'active','programCode':program.get('programCode') or '',
+                    'defaultLinkId':default_link_id,'baseClickUrl':default_link.get('clickUrl'),
+                    'defaultTargetUrl':program.get('defaultTargetUrl') or default_link.get('targetUrl') or '',
+                    'linkPolicy':'default_available','assetsUpdatedAt':overlay.get('updatedAt'),'links':links,
+                    'banners':overlay.get('banners') or [],'feeds':overlay.get('feeds') or [],'actions':overlay.get('actions') or [],
+                    'recommendedUse':overlay.get('recommendedUse') or [],'sourceNotes':overlay.get('sourceNotes') or [],
+                    'approval':overlay.get('approval') or {},'manager':overlay.get('manager') or {},
+                    'categories':overlay.get('categories') or [],'role':overlay.get('role'),
+                    'commercialTerms':overlay.get('commercialTerms') or {},'restrictions':overlay.get('restrictions') or [],
+                    '_centralLayer':'partner-overlay','_overlaySource':overlay_url,
+                  }
+                  overlay_sources.append(overlay_url)
+
+          report = {'generatedAt':generated,'centralUpdatedAt':db.get('updatedAt'),'standardCentralSha256':standard_hash,
+                    'lastMinuteCentralSha256':raw_hash,'targets':[],'runId':os.environ.get('GITHUB_RUN_ID')}
+
+          for target in manifest['targets']:
+              config_raw = target['configText'].encode('utf-8')
+              config = json.loads(config_raw)
+              aliases = [norm(x) for x in config.get('aliases', [])]
+              allowed_ids = {norm(x) for x in config.get('allowedPartnerIds', [])}
+              allowed_categories = {norm(x) for x in config.get('allowedCategories', [])}
+              mode = config.get('mode','filtered')
+              site_name = norm(config.get('site'))
+              kind = target.get('kind','standard')
+              records = [dict(x) for x in base_records]
+              config_hash = hashlib.sha256(config_raw).hexdigest()
+              central_hash = standard_hash
+
+              if kind == 'standard':
+                  if overlay_record: records.append(dict(overlay_record))
+                  def is_active(row):
+                      status = norm(row.get('programStatus') or row.get('status') or 'active')
+                      if status in {'disabled','inactive','rejected','closed','paused','not-approved'}: return False
+                      approval = row.get('approval') or {}
+                      approved_sites = {norm(x) for x in (approval.get('approvedPublicationSites') or [])}
+                      if approved_sites and site_name not in approved_sites: return False
+                      return bool(row.get('baseClickUrl') or row.get('links'))
+              else:
+                  override_raw = target.get('overrideText','{}').encode('utf-8')
+                  overrides = json.loads(override_raw)
+                  local_overrides = overrides.get('partners') or []
+                  for item in local_overrides:
+                      if isinstance(item, dict):
+                          row = dict(item); row['_centralLayer'] = 'local_override'; records.append(row)
+                  central_hash = raw_hash
+                  config_hash = hashlib.sha256(config_raw + b'\0' + override_raw).hexdigest()
+                  def is_active(row):
+                      status = norm(row.get('programStatus') or row.get('status') or 'active')
+                      return status not in {'disabled','inactive','rejected','closed','paused','not-approved','pending'} and bool(row.get('baseClickUrl') or row.get('trackingUrl') or row.get('links'))
+
+              def matches(row):
+                  if not is_active(row): return False
+                  if mode == 'all_active': return True
+                  rid = norm(row.get('id') or row.get('defaultLinkId')); name = norm(row.get('name'))
+                  if any(token and (token == rid or token == name or token in rid or token in name) for token in allowed_ids): return True
+                  categories = {norm(x) for x in (row.get('categories') or [])}
+                  if any(allowed and category and (allowed == category or allowed in category or category in allowed) for allowed in allowed_categories for category in categories): return True
+                  recommended = norm(' '.join(str(x) for x in (row.get('recommendedUse') or [])))
+                  return any(alias and alias in recommended for alias in aliases)
+
+              selected = {}
+              for row in records:
+                  if not matches(row): continue
+                  key = norm(row.get('name')) or norm(row.get('defaultLinkId') or row.get('id'))
+                  if not key: continue
+                  old = selected.get(key)
+                  if kind != 'standard' and row.get('_centralLayer') == 'local_override':
+                      selected[key] = row; continue
+                  if kind != 'standard' and old and old.get('_centralLayer') == 'local_override': continue
+                  score = len(row.get('feeds') or [])*5 + len(row.get('banners') or [])*2 + len(row.get('links') or [])*2 + len(row.keys())
+                  old_score = -1 if old is None else len(old.get('feeds') or [])*5 + len(old.get('banners') or [])*2 + len(old.get('links') or [])*2 + len(old.keys())
+                  if score >= old_score: selected[key] = row
+
+              partners = sorted(selected.values(), key=lambda x: str(x.get('name') or '').lower())
+              payload = {
+                'schemaVersion':2,'site':config.get('site'),'mode':mode,'centralSource':central_url,
+                'centralUpdatedAt':db.get('updatedAt'),'centralSha256':central_hash,'configSha256':config_hash,
+                'generatedAt':generated,
+              }
+              if kind == 'standard':
+                  payload['overlaySources'] = overlay_sources
+                  payload['sourceProgramCount'] = inventory_obj.get('programCount')
+              else:
+                  payload['sourceProgramCount'] = len(direct) + int(inventory_obj.get('programCount') or 0) + len(json.loads(target.get('overrideText','{}')).get('partners') or [])
+                  payload['localOverrideCount'] = len(json.loads(target.get('overrideText','{}')).get('partners') or [])
+              payload.update({
+                'partnerCount':len(partners),'feedCount':sum(len(x.get('feeds') or []) for x in partners),
+                'bannerCount':sum(len(x.get('banners') or []) for x in partners),'autoPublish':bool(config.get('autoPublish',False)),
+                'partners':partners,
+              })
+              slug = target['repo'].split('/',1)[1].replace('/','__')
+              folder = out / slug
+              folder.mkdir(parents=True)
+              json_text = json.dumps(payload,ensure_ascii=False,indent=2) + '\n'
+              js_text = 'export const affiliateSnapshot=' + json.dumps(payload,ensure_ascii=False,separators=(',',':')) + ';\n'
+              (folder/'affiliate-site-snapshot.json').write_text(json_text,encoding='utf-8')
+              (folder/'affiliate-site-snapshot.js').write_text(js_text,encoding='utf-8')
+              report['targets'].append({'repo':target['repo'],'site':payload['site'],'kind':kind,'partnerCount':payload['partnerCount'],
+                                        'feedCount':payload['feedCount'],'bannerCount':payload['bannerCount'],
+                                        'centralSha256':central_hash,'configSha256':config_hash,
+                                        'jsonSha256':hashlib.sha256(json_text.encode()).hexdigest(),'jsonBytes':len(json_text.encode()),
+                                        'jsSha256':hashlib.sha256(js_text.encode()).hexdigest(),'jsBytes':len(js_text.encode())})
+
+          Path('reports').mkdir(exist_ok=True)
+          Path('reports/affiliate-snapshot-generation.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Nahrát vygenerované snapshoty
+        uses: actions/upload-artifact@v4
+        with:
+          name: affiliate-repair-snapshots
+          path: tmp/generated-affiliate-snapshots
+          retention-days: 1
+
+      - name: Uložit generační report
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/affiliate-snapshot-generation.json
+          git commit -m "Uložit report generování affiliate snapshotů" || exit 0
+          git push
