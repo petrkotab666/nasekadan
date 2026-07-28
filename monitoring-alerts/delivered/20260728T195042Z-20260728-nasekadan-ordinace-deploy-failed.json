@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "fingerprint": "20260728-nasekadan-ordinace-deploy-failed",
+  "title": "Nasazení přehledu ordinací selhalo",
+  "summary": "Aktualizovaný zdravotnický přehled je uložen v hlavní větvi, ale přímé produkční nasazení nebo následná veřejná kontrola selhaly. Veřejná titulní stránka a archiv stále zobrazovaly starší obsah.",
+  "facts": [
+    "Článek v repozitáři obsahoval neurologii, ORL, ordinaci MUDr. Kuraková, očkovací centrum a gynekologii v Klášterci.",
+    "Kanonický i přímý opravný postup byly vyvolány.",
+    "Workflow nasazení vytvořilo issue #88 se stavem failure.",
+    "Následná oprava byla dokončena a issue #90 bylo uzavřeno jako vyřešené."
+  ],
+  "sources": [
+    {"name": "GitHub issue #88 – výsledek nasazení", "url": "https://github.com/petrkotab666/nasekadan/issues/88"},
+    {"name": "GitHub issue #90 – vyřešení závady", "url": "https://github.com/petrkotab666/nasekadan/issues/90"},
+    {"name": "Veřejný článek Naše Kadaň", "url": "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html"}
+  ],
+  "observed_at": "2026-07-28T21:50:42+02:00",
+  "severity": "high",
+  "recommended_action": "Závada byla vyřešena; nadále hlídat, aby starý publikační generátor rozšířený článek znovu nepřepsal.",
+  "delivery": {
+    "status": "delivered",
+    "delivered_at": "2026-07-28T22:46:36+02:00",
+    "channel": "github_issue_existing",
+    "issue_number": 90,
+    "note": "Issue se stejným fingerprintem již existovalo; nový issue nebyl vytvořen."
+  }
+}
