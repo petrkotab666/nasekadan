@@ -18,11 +18,11 @@ concurrency:
 jobs:
   reconstruct:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Najít přesný filtr podle uloženého přehledu
+      - name: Porovnat původní pravidla s uloženými souhrny
         id: reconstruct
         shell: bash
         run: |
@@ -34,13 +34,13 @@ jobs:
             -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/reconstruction.txt"
           from __future__ import annotations
 
+          import ast
           import datetime as dt
           import glob
           import gzip
           import hashlib
           import json
           import re
-          import runpy
           import urllib.parse
           from collections import defaultdict
           from pathlib import Path
@@ -49,104 +49,82 @@ jobs:
           TZ = ZoneInfo('Europe/Prague')
           TARGET = (2553, 1032, 915)
           TARGET_TODAY = (1104, 439, 389)
-          MAX_CUTOFF = dt.datetime(2026, 7, 25, 22, 5, tzinfo=TZ)
-          DAY = dt.date(2026, 7, 25)
+          MAX_CUTOFF = dt.datetime(2026, 7, 25, 22, 5, 59, tzinfo=TZ)
+          TODAY = dt.date(2026, 7, 25)
 
-          original = runpy.run_path('/usr/local/lib/nasekadan-stats/generate.py')
-          original_bot = original['BOT_RE']
-          original_static = original['STATIC_RE']
-          print('ORIGINAL_BOT_PATTERN=' + original_bot.pattern)
-          print('ORIGINAL_STATIC_PATTERN=' + original_static.pattern)
+          def string_expr(node):
+              if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                  return node.value
+              if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+                  return string_expr(node.left) + string_expr(node.right)
+              if isinstance(node, ast.JoinedStr):
+                  raise ValueError('neočekávaný f-string')
+              raise ValueError(f'nepodporovaný řetězcový uzel {type(node).__name__}')
 
-          extended_static = re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt|pdf|mp4|webm|avif|zip|gz)$', re.I)
-          aggressive_bot = re.compile(
-              original_bot.pattern + r'|preview|scanner|scan\b|zgrab|masscan|nmap|nikto|sqlmap|'
-              r'libwww|httpclient|okhttp|java/|apache-httpclient|node-fetch|axios|postman|'
-              r'phantomjs|selenium|puppeteer|playwright|scrapy|feedfetcher|validator|archive', re.I)
-
-          def hv(headers, name):
-              value = headers.get(name) or headers.get(name.lower()) or headers.get(name.title()) or ''
-              return ','.join(map(str, value)) if isinstance(value, list) else str(value)
+          source = Path('/usr/local/lib/nasekadan-stats/generate.py').read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          patterns = {}
+          for node in tree.body:
+              if not isinstance(node, ast.Assign) or len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+                  continue
+              name = node.targets[0].id
+              if name not in {'BOT_RE', 'STATIC_RE'} or not isinstance(node.value, ast.Call) or not node.value.args:
+                  continue
+              patterns[name] = string_expr(node.value.args[0])
+          if set(patterns) != {'BOT_RE', 'STATIC_RE'}:
+              raise SystemExit(f'Původní pravidla nebyla kompletně nalezena: {sorted(patterns)}')
+          bot_re = re.compile(patterns['BOT_RE'], re.I)
+          static_re = re.compile(patterns['STATIC_RE'], re.I)
+          print('BOT_PATTERN=' + patterns['BOT_RE'])
+          print('STATIC_PATTERN=' + patterns['STATIC_RE'])
 
           rows = []
           files = [Path(name) for name in sorted(set(glob.glob('/var/log/caddy/nasekadan.access*'))) if Path(name).is_file()]
           for path in files:
               opener = gzip.open if path.suffix == '.gz' else open
-              try:
-                  handle = opener(path, 'rt', encoding='utf-8', errors='replace')
-              except OSError:
-                  continue
-              with handle:
+              with opener(path, 'rt', encoding='utf-8', errors='replace') as handle:
                   for line in handle:
                       try:
                           data = json.loads(line)
-                          req = data.get('request') or {}
+                          request = data.get('request') or {}
                           when = dt.datetime.fromtimestamp(float(data.get('ts')), dt.timezone.utc).astimezone(TZ)
                           if when > MAX_CUTOFF:
                               continue
-                          method = str(req.get('method', '')).upper()
-                          target = str(req.get('uri', '/'))
+                          method = str(request.get('method', '')).upper()
                           status = int(data.get('status', 0))
-                          ip = str(req.get('client_ip') or req.get('remote_ip') or '')
-                          headers = req.get('headers') or {}
-                          ua = hv(headers, 'User-Agent')
-                          accept = hv(headers, 'Accept').lower()
-                          dest = hv(headers, 'Sec-Fetch-Dest').lower()
-                          mode = hv(headers, 'Sec-Fetch-Mode').lower()
+                          ip = str(request.get('client_ip') or request.get('remote_ip') or '')
+                          headers = request.get('headers') or {}
+                          ua_value = headers.get('User-Agent') or headers.get('user-agent') or ''
+                          ua = ua_value[0] if isinstance(ua_value, list) and ua_value else str(ua_value)
+                          raw_uri = str(request.get('uri', '/'))
                       except (ValueError, TypeError, json.JSONDecodeError, OverflowError):
                           continue
                       if method not in {'GET', 'HEAD'} or not ip or ip in {'127.0.0.1', '::1'}:
                           continue
-                      if not (200 <= status < 300 or status == 304):
+                      if not (200 <= status < 300 or status == 304) or bot_re.search(ua):
                           continue
                       try:
-                          decoded = urllib.parse.unquote(urllib.parse.urlsplit(target).path or '/', errors='replace')
+                          page = urllib.parse.unquote(urllib.parse.urlsplit(raw_uri).path or '/', errors='replace')
                       except ValueError:
-                          decoded = '/'
-                      if decoded != '/':
-                          decoded = decoded.rstrip('/') or '/'
-                      if decoded == '/healthz' or decoded.startswith(('/statistiky', '/api/', '/nahled')):
+                          page = '/'
+                      if page != '/':
+                          page = page.rstrip('/') or '/'
+                      if page == '/healthz' or page.startswith(('/statistiky', '/api/', '/nahled')) or static_re.search(page):
                           continue
                       stable = hashlib.sha256(f'{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
                       daily = hashlib.sha256(f'{when.date()}\0{ip}\0{ua}'.encode('utf-8', 'replace')).hexdigest()[:24]
-                      page_shape = decoded == '/' or decoded.endswith('.html') or decoded.endswith('/') or not re.search(r'\.[a-z0-9]{1,8}$', decoded, re.I)
-                      rows.append({
-                          'when': when, 'path': decoded, 'method': method, 'stable': stable, 'daily': daily,
-                          'original_human': not original_bot.search(ua),
-                          'aggressive_human': not aggressive_bot.search(ua),
-                          'original_nonstatic': not original_static.search(decoded),
-                          'extended_nonstatic': not extended_static.search(decoded),
-                          'page_shape': page_shape,
-                          'html': 'text/html' in accept or 'application/xhtml+xml' in accept,
-                          'doc': dest in {'document', 'iframe'},
-                          'nav': mode == 'navigate',
-                          'mozilla': 'mozilla/' in ua.lower(),
-                      })
+                      rows.append((when, method, stable, daily, page))
 
-          filters = {
-              'original_exact': lambda r: r['original_human'] and r['original_nonstatic'],
-              'extended_exact': lambda r: r['original_human'] and r['extended_nonstatic'],
-              'original_aggressive': lambda r: r['aggressive_human'] and r['original_nonstatic'],
-              'extended_aggressive': lambda r: r['aggressive_human'] and r['extended_nonstatic'],
-              'shape_original': lambda r: r['original_human'] and r['extended_nonstatic'] and r['page_shape'],
-              'shape_aggressive': lambda r: r['aggressive_human'] and r['extended_nonstatic'] and r['page_shape'],
-              'html_original': lambda r: r['original_human'] and r['extended_nonstatic'] and r['html'],
-              'html_aggressive': lambda r: r['aggressive_human'] and r['extended_nonstatic'] and r['html'],
-              'doc_original': lambda r: r['original_human'] and r['extended_nonstatic'] and r['doc'],
-              'nav_original': lambda r: r['original_human'] and r['extended_nonstatic'] and r['nav'],
-              'mozilla_original': lambda r: r['original_human'] and r['extended_nonstatic'] and r['mozilla'],
-          }
-
-          def stats(selected, gap_minutes, session_daily):
-              selected = sorted(selected, key=lambda row: row['when'])
-              visitors = len({row['daily'] for row in selected})
-              grouped = defaultdict(list)
-              key_name = 'daily' if session_daily else 'stable'
+          def aggregate(selected, gap_minutes, daily_sessions):
+              selected = sorted(selected)
+              visitors = len({row[3] for row in selected})
+              groups = defaultdict(list)
+              key_index = 3 if daily_sessions else 2
               for row in selected:
-                  grouped[row[key_name]].append(row['when'])
+                  groups[row[key_index]].append(row[0])
               sessions = 0
               gap = dt.timedelta(minutes=gap_minutes)
-              for stamps in grouped.values():
+              for stamps in groups.values():
                   previous = None
                   for stamp in stamps:
                       if previous is None or stamp - previous > gap:
@@ -154,41 +132,32 @@ jobs:
                       previous = stamp
               return len(selected), sessions, visitors
 
-          candidates = []
           print(f'FILES_LOADED={len(files)}')
-          print(f'ROWS_TO_MAX_CUTOFF={len(rows)}')
-          for cutoff_minute in range(45, 66):
-              hour = 21 + cutoff_minute // 60
-              minute = cutoff_minute % 60
-              cutoff = dt.datetime(2026, 7, 25, hour, minute, 59, tzinfo=TZ)
-              available = [r for r in rows if r['when'] <= cutoff]
-              for filter_name, predicate in filters.items():
-                  base = [r for r in available if predicate(r)]
-                  for get_only in (False, True):
-                      selected = [r for r in base if not get_only or r['method'] == 'GET']
-                      today_rows = [r for r in selected if r['when'].date() == DAY]
-                      for gap in range(5, 21):
-                          for session_daily in (False, True):
-                              total = stats(selected, gap, session_daily)
-                              today = stats(today_rows, gap, session_daily)
-                              score = sum((
-                                  abs(total[0]-TARGET[0])*4,
-                                  abs(total[1]-TARGET[1])*5,
-                                  abs(total[2]-TARGET[2])*5,
-                                  abs(today[0]-TARGET_TODAY[0])*4,
-                                  abs(today[1]-TARGET_TODAY[1])*5,
-                                  abs(today[2]-TARGET_TODAY[2])*5,
-                              ))
-                              candidates.append((score, cutoff, filter_name, get_only, gap, session_daily, total, today))
+          print(f'FILTERED_ROWS_TO_MAX={len(rows)}')
+          print(f'FIRST={min((row[0] for row in rows), default=None)}')
+          results = []
+          for minute_index in range(45, 66):
+              cutoff = dt.datetime(2026, 7, 25, 21 + minute_index // 60, minute_index % 60, 59, tzinfo=TZ)
+              for get_only in (False, True):
+                  selected = [row for row in rows if row[0] <= cutoff and (not get_only or row[1] == 'GET')]
+                  today_rows = [row for row in selected if row[0].date() == TODAY]
+                  for gap in range(5, 21):
+                      for daily_sessions in (False, True):
+                          total = aggregate(selected, gap, daily_sessions)
+                          today = aggregate(today_rows, gap, daily_sessions)
+                          score = (
+                              abs(total[0]-TARGET[0])*5 + abs(total[1]-TARGET[1])*6 + abs(total[2]-TARGET[2])*6 +
+                              abs(today[0]-TARGET_TODAY[0])*5 + abs(today[1]-TARGET_TODAY[1])*6 + abs(today[2]-TARGET_TODAY[2])*6
+                          )
+                          results.append((score, cutoff, get_only, gap, daily_sessions, total, today))
 
-          print('CLOSEST_VARIANTS_BEGIN')
-          for score, cutoff, filter_name, get_only, gap, session_daily, total, today in sorted(candidates)[:80]:
+          print('CLOSEST_BEGIN')
+          for score, cutoff, get_only, gap, daily_sessions, total, today in sorted(results)[:50]:
               print(
-                  f'score={score}|cutoff={cutoff.isoformat()}|filter={filter_name}|get_only={get_only}|'
-                  f'session_min={gap}|session_daily={session_daily}|'
+                  f'score={score}|cutoff={cutoff.isoformat()}|get_only={get_only}|gap={gap}|daily_sessions={daily_sessions}|'
                   f'total={total[0]}/{total[1]}/{total[2]}|today={today[0]}/{today[1]}/{today[2]}'
               )
-          print('CLOSEST_VARIANTS_END')
+          print('CLOSEST_END')
           PY
 
       - name: Zapsat výsledek do PR
@@ -206,11 +175,11 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: [
-                `## Úzká rekonstrukce původní metodiky: ${process.env.OUTCOME}`,
+                `## Přesná rekonstrukce původní metodiky: ${process.env.OUTCOME}`,
                 '',
-                '- Cíl: celkem 2 553 / 1 032 / 915; dnešek 1 104 / 439 / 389.',
+                '- Kontrolní stav: celkem 2 553 / 1 032 / 915; dnešek 1 104 / 439 / 389.',
                 '',
-                '```text', log.slice(-60000).replace(/```/g, '---'), '```'
+                '```text', log.slice(-30000).replace(/```/g, '---'), '```'
               ].join('\n')
             });
 
