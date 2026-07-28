@@ -10,6 +10,7 @@ SNIPPET="/etc/nginx/snippets/nasekadan-statistiky-server.conf"
 AUTH_FILE="/etc/nginx/.nasekadan-stats.htpasswd"
 SERVICE_FILE="/etc/systemd/system/nasekadan-stats-web.service"
 LOGROTATE_CONF="/etc/logrotate.d/nasekadan-statistiky"
+CADDY_SITE="/etc/caddy/sites-enabled/nasekadan.caddy"
 
 if [[ $(id -u) -ne 0 ]]; then
   echo "Instalace statistik musí běžet přes sudo/root." >&2
@@ -191,5 +192,85 @@ curl -fsS --max-time 3 http://127.0.0.1:3225/ | grep -Fq 'Zapomenuté heslo'
 
 nginx -t
 systemctl reload nginx
+
+# Caddy stojí před Nginxem. Odstranit starý Basic Auth pouze z trasy
+# /statistiky/*; ochrana /nahled/ a ostatních soukromých cest zůstane beze změny.
+if [[ -f "$CADDY_SITE" ]] && command -v caddy >/dev/null 2>&1; then
+  python3 - "$CADDY_SITE" <<'PY'
+from __future__ import annotations
+
+import datetime as dt
+import re
+import shutil
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+lines = text.splitlines(keepends=True)
+out: list[str] = []
+i = 0
+in_stats = False
+stats_depth = 0
+removed = 0
+
+while i < len(lines):
+    line = lines[i]
+    stripped = line.strip()
+
+    if not in_stats and re.match(r"^handle_path\s+/statistiky/\*\s*\{\s*$", stripped):
+        in_stats = True
+        stats_depth = line.count("{") - line.count("}")
+        out.append(line)
+        i += 1
+        continue
+
+    if in_stats and re.match(r"^basic_auth\s*\{\s*$", stripped):
+        depth = line.count("{") - line.count("}")
+        i += 1
+        while i < len(lines) and depth > 0:
+            depth += lines[i].count("{") - lines[i].count("}")
+            i += 1
+        removed += 1
+        continue
+
+    out.append(line)
+    if in_stats:
+        stats_depth += line.count("{") - line.count("}")
+        if stats_depth <= 0:
+            in_stats = False
+    i += 1
+
+new_text = "".join(out)
+if "handle_path /statistiky/*" not in new_text or "reverse_proxy 127.0.0.1:3225" not in new_text:
+    raise SystemExit("Caddy konfigurace statistik nemá očekávanou strukturu; změna nebyla provedena.")
+
+if removed:
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup = path.with_name(path.name + f".bak-{stamp}")
+    shutil.copy2(path, backup)
+    path.write_text(new_text, encoding="utf-8")
+    print(f"Caddy: odstraněn Basic Auth z /statistiky/*, záloha {backup}")
+else:
+    print("Caddy: /statistiky/* už nemá Basic Auth; bez změny.")
+PY
+
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+  systemctl reload caddy
+fi
+
+# Ověřit skutečnou veřejnou cestu přes Caddy i obsah resetovací stránky.
+curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+  https://nasekadan.cz/statistiky/ | grep -Fq 'Zapomenuté heslo'
+curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+  https://nasekadan.cz/statistiky/zapomenute-heslo | grep -Fq 'petrkotab@seznam.cz'
+
+# Soukromé náhledy musí zůstat chráněné Basic Auth.
+preview_status="$(curl -kisS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+  https://nasekadan.cz/nahled/ | awk 'NR==1 {print $2}')"
+if [[ "$preview_status" != "401" && "$preview_status" != "502" && "$preview_status" != "503" ]]; then
+  echo "Neočekávaný stav ochrany /nahled/: $preview_status" >&2
+  exit 1
+fi
 
 echo "HOTOVO: statistiky mají vlastní přihlášení a reset hesla pouze přes petrkotab@seznam.cz."
