@@ -6,6 +6,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+# LATEST_GP_AUGUST_GUARD: staré pořadí nesmí přepsat novější praktickou zprávu.
+if (ROOT / "clanky" / "prakticti-lekari-nemocnice-kadan-srpen-2026.html").exists():
+    print("Novější praktická zpráva o srpnovém provozu ambulancí je publikována; staré pořadí se nepoužije.")
+    raise SystemExit(0)
 # LATEST_AUTOKEMP_GUARD: staré opravné skripty nesmějí přepsat novější titulní článek.
 if (ROOT / "clanky" / "odstavky-elektriny-autokemp-prunerov-srpen-2026.html").exists():
     print("Novější článek o odstávkách Autokempu Prunéřov je již publikován; staré pořadí se nepoužije.")
