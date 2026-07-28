@@ -1,4 +1,4 @@
-name: Diagnostikovat veřejnou ochranu statistik přes GitHub cloud
+name: Diagnostikovat Caddy ochranu statistik přes GitHub cloud
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  diagnose:
+  diagnose-caddy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -31,52 +31,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ovh-diagnostic"
-          : > "$RUNNER_TEMP/ovh-diagnostic/result.txt"
+          mkdir -p "$RUNNER_TEMP/caddy-diagnostic"
+          : > "$RUNNER_TEMP/caddy-diagnostic/result.txt"
           selected=''
           for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
             value="${!name:-}"
             if [ -n "$value" ]; then
-              printf '%s\n' "$value" > "$RUNNER_TEMP/ovh-diagnostic/id_key"
+              printf '%s\n' "$value" > "$RUNNER_TEMP/caddy-diagnostic/id_key"
               selected="$name"
               break
             fi
           done
           test -n "$selected"
-          chmod 600 "$RUNNER_TEMP/ovh-diagnostic/id_key"
+          chmod 600 "$RUNNER_TEMP/caddy-diagnostic/id_key"
           echo "selected=$selected" >> "$GITHUB_OUTPUT"
 
-      - name: Vypsat aktivní konfiguraci statistik
+      - name: Vypsat aktivní Caddy konfiguraci statistik
         id: inspect
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh-diagnostic/id_key" \
+          ssh -i "$RUNNER_TEMP/caddy-diagnostic/id_key" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/ovh-diagnostic/result.txt"
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/caddy-diagnostic/result.txt"
           set -euo pipefail
-          echo '=== HOST A SLUŽBA ==='
-          hostname
-          systemctl is-active nasekadan-stats-web.service || true
-          curl -fsS http://127.0.0.1:3225/healthz || true
-          echo
-          echo '=== SOUBORY OBSAHUJÍCÍ STATISTIKY / AUTH_BASIC / 3225 ==='
-          sudo grep -RniE 'statistiky|auth_basic|3225|nasekadan-stats' \
-            /etc/nginx/sites-enabled /etc/nginx/sites-available /etc/nginx/conf.d /etc/nginx/snippets 2>/dev/null \
-            | head -n 240 || true
-          echo '=== AKTIVNÍ NGINX KONFIGURACE ==='
-          sudo nginx -T 2>&1 \
-            | grep -n -C 8 -E 'location.*statistiky|auth_basic|3225|nasekadan-statistiky' \
-            | head -n 300 || true
-          echo '=== ODPOVĚĎ PŘES LOKÁLNÍ NGINX ==='
-          curl -kisS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 \
-            https://nasekadan.cz/statistiky/ \
-            | head -n 80 || true
-          echo '=== ODPOVĚĎ Z VEŘEJNÉ DOMÉNY ==='
-          curl -kisS --max-time 15 https://nasekadan.cz/statistiky/ \
-            | head -n 80 || true
+          echo '=== CADDY SLUŽBA ==='
+          systemctl is-active caddy || true
+          sudo systemctl cat caddy | sed -n '1,180p' || true
+          echo '=== CADDY SOUBORY ==='
+          sudo find /etc/caddy /usr/local/etc/caddy /opt -maxdepth 5 -type f 2>/dev/null \
+            | sort | head -n 300 || true
+          echo '=== VÝSKYT STATISTIK / RESTRICTED / BASIC_AUTH ==='
+          sudo grep -RniE 'statistiky|restricted|basic_auth|basicauth|forward_auth|3225' \
+            /etc/caddy /usr/local/etc/caddy /opt 2>/dev/null \
+            | head -n 400 || true
+          echo '=== HLAVNÍ CADDYFILE ==='
+          sudo sed -n '1,320p' /etc/caddy/Caddyfile 2>/dev/null || true
+          echo '=== VEŘEJNÁ ODPOVĚĎ ==='
+          curl -kisS --max-time 15 https://nasekadan.cz/statistiky/ | head -n 50 || true
           REMOTE
 
       - name: Zapsat diagnostiku do PR
@@ -89,9 +83,9 @@ jobs:
           script: |
             const fs = require('fs');
             let log = '';
-            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/ovh-diagnostic/result.txt`, 'utf8'); } catch {}
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/caddy-diagnostic/result.txt`, 'utf8'); } catch {}
             const body = [
-              '## Diagnostika veřejné ochrany statistik',
+              '## Diagnostika Caddy ochrany statistik',
               '',
               `- SSH secret: \`${process.env.KEY_NAME || 'žádný'}\``,
               `- Výsledek: **${process.env.INSPECT_OUTCOME || 'neprovedeno'}**`,
