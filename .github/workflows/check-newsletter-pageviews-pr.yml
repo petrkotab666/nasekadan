@@ -1,0 +1,121 @@
+name: Ověřit uloženou databázi návštěvnosti
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/check-newsletter-pageviews-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Spočítat pouze anonymní agregace z databáze pageviews
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/pageviews-db.txt"
+          from __future__ import annotations
+
+          import datetime as dt
+          import sqlite3
+          from collections import defaultdict
+          from pathlib import Path
+
+          candidates = [
+              Path('/var/lib/nasekadan-newsletter/newsletter.sqlite3'),
+              Path('/var/lib/nasekadan-newsletter/newsletter.db'),
+              Path('/var/lib/nasekadan/newsletter.sqlite3'),
+          ]
+          db = next((p for p in candidates if p.exists()), None)
+          if db is None:
+              raise SystemExit('Databáze newsletteru nebyla nalezena v očekávaných cestách.')
+
+          con = sqlite3.connect(f'file:{db}?mode=ro', uri=True)
+          tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+          print(f'DB_PATH={db}')
+          print(f'DB_BYTES={db.stat().st_size}')
+          print('TABLES=' + ','.join(tables))
+          if 'pageviews' not in tables:
+              raise SystemExit('Tabulka pageviews v databázi chybí.')
+
+          columns = [r[1] for r in con.execute('PRAGMA table_info(pageviews)')]
+          print('PAGEVIEW_COLUMNS=' + ','.join(columns))
+          total = con.execute('SELECT COUNT(*) FROM pageviews').fetchone()[0]
+          unique = con.execute("SELECT COUNT(DISTINCT visitor_hash) FROM pageviews WHERE visitor_hash IS NOT NULL AND visitor_hash <> ''").fetchone()[0]
+          first, last = con.execute('SELECT MIN(created_at), MAX(created_at) FROM pageviews').fetchone()
+          days = con.execute('SELECT COUNT(DISTINCT day) FROM pageviews').fetchone()[0]
+          print(f'PAGEVIEWS_TOTAL={total}')
+          print(f'UNIQUE_VISITORS={unique}')
+          print(f'FIRST_CREATED_AT={first}')
+          print(f'LAST_CREATED_AT={last}')
+          print(f'DISTINCT_DAYS={days}')
+
+          rows = con.execute("SELECT visitor_hash, created_at FROM pageviews WHERE visitor_hash IS NOT NULL AND visitor_hash <> '' AND created_at IS NOT NULL ORDER BY visitor_hash, created_at").fetchall()
+          grouped = defaultdict(list)
+          for visitor, created in rows:
+              try:
+                  stamp = dt.datetime.fromisoformat(str(created).replace('Z', '+00:00'))
+              except ValueError:
+                  continue
+              grouped[str(visitor)].append(stamp)
+          for minutes in (15, 30, 60):
+              sessions = 0
+              gap = dt.timedelta(minutes=minutes)
+              for stamps in grouped.values():
+                  previous = None
+                  for stamp in stamps:
+                      if previous is None or stamp - previous > gap:
+                          sessions += 1
+                      previous = stamp
+              print(f'SESSIONS_{minutes}_MIN={sessions}')
+
+          today_rows = con.execute("SELECT day, COUNT(*), COUNT(DISTINCT visitor_hash) FROM pageviews GROUP BY day ORDER BY day").fetchall()
+          print('DAILY_AGGREGATES_BEGIN')
+          for day, views, visitors in today_rows:
+              print(f'{day}|views={views}|visitors={visitors}')
+          print('DAILY_AGGREGATES_END')
+          con.close()
+          PY
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/pageviews-db.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Uložená databáze návštěvnosti: ${process.env.OUTCOME}`,
+                '',
+                '- Výstup obsahuje pouze agregované počty a dny, žádné identifikátory návštěvníků ani konkrétní návštěvy.',
+                '',
+                '```text', log.slice(-20000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        run: test "$OUTCOME" = success
