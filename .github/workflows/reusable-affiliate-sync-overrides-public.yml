@@ -1,0 +1,174 @@
+name: Veřejná affiliate synchronizace s lokálními override
+
+on:
+  workflow_call:
+    inputs:
+      runs_on:
+        required: true
+        type: string
+
+jobs:
+  sync:
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Vytvořit ověřený snapshot
+        env:
+          CENTRAL_URL: https://pojistime.to/assets/affiliate-database.json
+          BRAINMARKET_OVERLAY_URL: https://pojistime.to/assets/ehub-partner-assets/brainmarket.json
+        run: |
+          python - <<'PY'
+          import datetime, hashlib, json, os, re, time, unicodedata, urllib.request
+          from pathlib import Path
+
+          root = Path('.')
+          config_path = root / 'assets' / 'affiliate-site-config.json'
+          override_path = root / 'assets' / 'direct-affiliate-overrides.json'
+          if not config_path.exists():
+              raise SystemExit('Chybí assets/affiliate-site-config.json')
+          config_raw = config_path.read_bytes()
+          config = json.loads(config_raw)
+          override_raw = override_path.read_bytes() if override_path.exists() else b'{}'
+          overrides = json.loads(override_raw)
+
+          def download(url, required=True):
+              last_error = None
+              for attempt in range(1, 4):
+                  separator = '&' if '?' in url else '?'
+                  request = urllib.request.Request(
+                      f'{url}{separator}ts={int(time.time())}-{attempt}',
+                      headers={'User-Agent':'Pojistime-affiliate-sync-overrides/2.1','Cache-Control':'no-cache, no-store','Pragma':'no-cache'},
+                  )
+                  try:
+                      with urllib.request.urlopen(request, timeout=90) as response:
+                          return response.read()
+                  except Exception as exc:
+                      last_error = exc
+                      print(f'{url}: pokus {attempt}/3 selhal: {exc}')
+                      if attempt < 3: time.sleep(attempt * 5)
+              if required: raise SystemExit(f'Zdroj se nepodařilo stáhnout: {url}: {last_error}')
+              return b''
+
+          raw = download(os.environ['CENTRAL_URL'])
+          overlay_raw = download(os.environ['BRAINMARKET_OVERLAY_URL'], required=False)
+          db = json.loads(raw)
+          central_hash = hashlib.sha256(raw + b'\0' + overlay_raw).hexdigest()
+          config_hash = hashlib.sha256(config_raw + b'\0' + override_raw).hexdigest()
+          snapshot_path = root / 'assets' / 'affiliate-site-snapshot.json'
+          if snapshot_path.exists():
+              try:
+                  previous = json.loads(snapshot_path.read_text(encoding='utf-8'))
+                  if previous.get('schemaVersion') == 2 and previous.get('centralSha256') == central_hash and previous.get('configSha256') == config_hash:
+                      print('Centrální data, overlay, konfigurace ani override se nezměnily.')
+                      raise SystemExit(0)
+              except json.JSONDecodeError:
+                  pass
+
+          def norm(value):
+              value = unicodedata.normalize('NFKD', str(value or '')).encode('ascii','ignore').decode('ascii').lower()
+              return re.sub(r'[^a-z0-9]+','-',value).strip('-')
+
+          direct = db.get('partners') or []
+          inventory_obj = db.get('ehubProgramInventory') or {}
+          inventory = inventory_obj.get('programs') or []
+          local_overrides = overrides.get('partners') or []
+          records = []
+          for source, items in [('partners',direct),('inventory',inventory),('local_override',local_overrides)]:
+              for item in items:
+                  if isinstance(item, dict):
+                      row = dict(item); row['_centralLayer'] = source; records.append(row)
+
+          overlay_sources = []
+          if overlay_raw:
+              overlay = json.loads(overlay_raw)
+              program = overlay.get('program') or {}
+              links = overlay.get('links') or []
+              default_link_id = str(program.get('defaultLinkId') or '')
+              default_link = next((item for item in links if str(item.get('id')) == default_link_id), links[0] if links else {})
+              if program.get('name') and default_link_id and default_link.get('clickUrl'):
+                  records.append({
+                      'order':81,'id':f"ehub-{default_link_id.lower()}",'name':program.get('name'),'network':'eHUB',
+                      'programStatus':program.get('status') or 'active','programCode':program.get('programCode') or '',
+                      'defaultLinkId':default_link_id,'baseClickUrl':default_link.get('clickUrl'),
+                      'defaultTargetUrl':program.get('defaultTargetUrl') or default_link.get('targetUrl') or '',
+                      'linkPolicy':'default_available','assetsUpdatedAt':overlay.get('updatedAt'),'links':links,
+                      'banners':overlay.get('banners') or [],'feeds':overlay.get('feeds') or [],'actions':overlay.get('actions') or [],
+                      'recommendedUse':overlay.get('recommendedUse') or [],'sourceNotes':overlay.get('sourceNotes') or [],
+                      'approval':overlay.get('approval') or {},'manager':overlay.get('manager') or {},
+                      'categories':overlay.get('categories') or [],'role':overlay.get('role'),
+                      'commercialTerms':overlay.get('commercialTerms') or {},'restrictions':overlay.get('restrictions') or [],
+                      '_centralLayer':'partner-overlay','_overlaySource':os.environ['BRAINMARKET_OVERLAY_URL'],
+                  })
+                  overlay_sources.append(os.environ['BRAINMARKET_OVERLAY_URL'])
+
+          aliases = [norm(x) for x in config.get('aliases', [])]
+          allowed_ids = {norm(x) for x in config.get('allowedPartnerIds', [])}
+          allowed_categories = {norm(x) for x in config.get('allowedCategories', [])}
+          blocked_ids = {norm(x) for x in config.get('blockedPartnerIds', [])}
+          mode = config.get('mode','filtered')
+          site_name = norm(config.get('site'))
+
+          def is_active(row):
+              status = norm(row.get('programStatus') or row.get('status') or 'active')
+              if status in {'disabled','inactive','rejected','closed','paused','not-approved','pending'}: return False
+              approval = row.get('approval') or {}
+              approved_sites = {norm(x) for x in (approval.get('approvedPublicationSites') or [])}
+              if approved_sites and site_name not in approved_sites: return False
+              approved_domains = {norm(x) for x in (row.get('approvedDomains') or [])}
+              if approved_domains and site_name not in approved_domains and norm('www.' + config.get('site','')) not in approved_domains: return False
+              return bool(row.get('baseClickUrl') or row.get('trackingUrl') or row.get('links'))
+
+          def matches(row):
+              if not is_active(row): return False
+              identifiers = {norm(row.get('id')),norm(row.get('defaultLinkId')),norm(row.get('name'))}
+              if any(blocked and any(blocked == identifier or blocked in identifier for identifier in identifiers if identifier) for blocked in blocked_ids): return False
+              if row.get('_centralLayer') == 'local_override': return True
+              if mode == 'all_active': return True
+              rid = norm(row.get('id') or row.get('defaultLinkId')); name = norm(row.get('name'))
+              if any(token and (token == rid or token == name or token in rid or token in name) for token in allowed_ids): return True
+              categories = {norm(x) for x in (row.get('categories') or [])}
+              if any(allowed and category and (allowed == category or allowed in category or category in allowed) for allowed in allowed_categories for category in categories): return True
+              recommended = norm(' '.join(str(x) for x in (row.get('recommendedUse') or [])))
+              return any(alias and alias in recommended for alias in aliases)
+
+          selected = {}
+          for row in records:
+              if not matches(row): continue
+              key = norm(row.get('name')) or norm(row.get('defaultLinkId') or row.get('id'))
+              if not key: continue
+              old = selected.get(key)
+              if row.get('_centralLayer') == 'local_override': selected[key] = row; continue
+              if old and old.get('_centralLayer') == 'local_override': continue
+              score = len(row.get('feeds') or [])*5 + len(row.get('banners') or [])*2 + len(row.get('links') or [])*2 + len(row.keys())
+              old_score = -1 if old is None else len(old.get('feeds') or [])*5 + len(old.get('banners') or [])*2 + len(old.get('links') or [])*2 + len(old.keys())
+              if score >= old_score: selected[key] = row
+
+          partners = sorted(selected.values(), key=lambda x: str(x.get('name') or '').lower())
+          payload = {
+              'schemaVersion':2,'site':config.get('site'),'mode':mode,'centralSource':os.environ['CENTRAL_URL'],
+              'overlaySources':overlay_sources,'centralUpdatedAt':db.get('updatedAt'),'centralSha256':central_hash,
+              'configSha256':config_hash,'generatedAt':datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+              'sourceProgramCount':len(direct)+int(inventory_obj.get('programCount') or 0)+len(local_overrides),
+              'localOverrideCount':len(local_overrides),'partnerCount':len(partners),
+              'feedCount':sum(len(x.get('feeds') or []) for x in partners),
+              'bannerCount':sum(len(x.get('banners') or []) for x in partners),
+              'autoPublish':bool(config.get('autoPublish',False)),'partners':partners,
+          }
+          assets = root / 'assets'; assets.mkdir(parents=True,exist_ok=True)
+          snapshot_path.write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          (assets/'affiliate-site-snapshot.js').write_text('export const affiliateSnapshot='+json.dumps(payload,ensure_ascii=False,separators=(',',':'))+';\n',encoding='utf-8')
+          print(f"{config.get('site')}: {len(partners)} partnerů, {len(local_overrides)} lokálních override")
+          PY
+
+      - name: Uložit změny
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/affiliate-site-snapshot.json assets/affiliate-site-snapshot.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Automatická synchronizace affiliate databáze"
+          git push origin "HEAD:${{ github.head_ref || github.ref_name }}"
