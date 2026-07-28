@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -20,6 +21,13 @@ RSS_MAX_AGE_DAYS = 120
 
 TRAIN_PATH = "/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html"
 TRAIN_URL = f"https://{SITE_HOST}{TRAIN_PATH}"
+AD_MARKER = 'data-static-article-ads="locked-v1"'
+AD_IMAGES = (
+    "/assets/reklamy/pojistime-300x600.svg",
+    "/assets/reklamy/vaseuklizecka-300x600.svg",
+    "/assets/reklamy/vyklidime-300x600.svg",
+    "/assets/reklamy/realitykadan-300x600.svg",
+)
 
 
 @dataclass(frozen=True)
@@ -113,7 +121,36 @@ def present(text: str, article: Article) -> bool:
     return article.relative_url in text or article.canonical in text
 
 
+def ensure_locked_ads() -> None:
+    script = ROOT / "scripts" / "embed_static_article_ads.py"
+    subprocess.run([sys.executable, str(script)], cwd=ROOT, check=True)
+
+
+def validate_article_ads(path: Path, html: str, errors: list[str]) -> None:
+    if '<main class="wrap article-shell"' not in html or '<aside class="sticky"' not in html:
+        return
+    label = path.relative_to(ROOT)
+    if AD_MARKER not in html:
+        errors.append(f"{label}: chybí uzamčený pravý reklamní sloupec.")
+    count = html.count('class="static-article-ad"')
+    if count != 4:
+        errors.append(f"{label}: očekávány 4 grafické reklamy, nalezeno {count}.")
+    for image in AD_IMAGES:
+        if image not in html:
+            errors.append(f"{label}: chybí grafický banner {image}.")
+    required_css = (
+        "width:300px!important;min-width:300px!important;max-width:300px!important",
+        "height:600px!important;min-height:600px!important;max-height:600px!important",
+        ".article-ad-auto,article.article>[data-promos]{display:none!important}",
+    )
+    for rule in required_css:
+        if rule not in html:
+            errors.append(f"{label}: chybí ochranné CSS reklam: {rule}")
+
+
 def main() -> int:
+    ensure_locked_ads()
+
     now = datetime.now(timezone.utc)
     home = read(HOME)
     archive = read(ARCHIVE)
@@ -127,6 +164,8 @@ def main() -> int:
 
     for article in articles:
         label = article.path.relative_to(ROOT)
+        html = read(article.path)
+        validate_article_ads(article.path, html, errors)
         if not present(archive, article):
             errors.append(f"{label}: článek chybí v archivu /clanky/.")
         if article.canonical not in sitemap:
@@ -159,14 +198,14 @@ def main() -> int:
             errors.append(f"Článek o nočních výlukách chybí v {location}.")
 
     if errors:
-        print("KONTROLA PUBLIKOVANÝCH ČLÁNKŮ SELHALA", file=sys.stderr)
+        print("KONTROLA PUBLIKOVANÝCH ČLÁNKŮ A REKLAM SELHALA", file=sys.stderr)
         for error in errors:
             print(f"- {error}", file=sys.stderr)
         return 1
 
     print(
         f"Kontrola publikace je v pořádku: {len(articles)} veřejných článků, "
-        f"{min(HOME_RECENT_LIMIT, len(dated))} nejnovějších ověřeno na titulní stránce."
+        f"{min(HOME_RECENT_LIMIT, len(dated))} nejnovějších ověřeno a reklamy jsou uzamčené."
     )
     return 0
 
