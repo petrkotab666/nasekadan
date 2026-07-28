@@ -4,27 +4,30 @@
   const ITEMS=[
     {
       id:'horko-concept',
-      title:'Ventilátory a mobilní klimatizace',
-      text:'Výběr domácích spotřebičů pro ochlazení bytu, kanceláře nebo ložnice během horkých dnů.',
-      tag:'Ochlazení domácnosti',
-      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5',
-      image:'https://doc.ehub.cz/b/035e8afb/e737c1f9.jpg'
+      title:'Ventilátory Concept',
+      text:'Přímý výběr stolních, stojanových a sloupových ventilátorů pro ochlazení bytu, kanceláře nebo ložnice.',
+      tag:'Ventilátory',
+      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&data1=nasekadan&data2=horko-concept&desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html',
+      target:'concept.cz/ventilatory',
+      icon:'🌬️'
     },
     {
       id:'horko-biano',
-      title:'Stínění a vybavení proti přehřívání',
-      text:'Rolety, závěsy, venkovní stínění a další vybavení, které pomáhá omezit přehřívání interiéru.',
-      tag:'Stínění a bydlení',
-      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=da726a9e',
-      image:'https://doc.ehub.cz/b/80610cd6/82a1c42b.png'
+      title:'Rolety a žaluzie na Biano',
+      text:'Přímý výpis rolet, žaluzií a zatemňovacího stínění, které pomáhá omezit přehřívání interiéru.',
+      tag:'Stínění',
+      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=da726a9e&data1=nasekadan&data2=horko-biano&desturl=https%3A%2F%2Fwww.biano.cz%2Fprodukty%2Frolety',
+      target:'biano.cz/produkty/rolety',
+      icon:'🪟'
     },
     {
       id:'horko-proalergiky',
-      title:'Čistší vzduch i během vedra',
-      text:'Čističky a další vybavení pro příjemnější prostředí v domácnosti při větrání, pylu a letním horku.',
-      tag:'Vzduch v domácnosti',
-      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=abc25217',
-      image:'https://doc.ehub.cz/b/cbee71d3/017d5633.jpg'
+      title:'Čističky vzduchu ProAlergiky',
+      text:'Přímý výběr čističek vzduchu pro zachytávání pylu, prachu, kouře a dalších nečistot v domácnosti.',
+      tag:'Čistší vzduch',
+      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=abc25217&data1=nasekadan&data2=horko-pro&desturl=https%3A%2F%2Fwww.proalergiky.cz%2Feshop%2Fcisticky-vzduchu',
+      target:'proalergiky.cz/eshop/cisticky-vzduchu',
+      icon:'🍃'
     }
   ];
 
@@ -45,27 +48,27 @@
       .nk-horko-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
       .nk-horko-card{display:flex;flex-direction:column;min-width:0;background:#fff;border:1px solid #dde4e7;border-radius:16px;overflow:hidden;color:#14232d!important;text-decoration:none!important;box-shadow:0 8px 24px rgba(18,35,45,.07);transition:transform .2s,box-shadow .2s}
       .nk-horko-card:hover{transform:translateY(-3px);box-shadow:0 14px 32px rgba(18,35,45,.12)}
-      .nk-horko-image{display:flex;align-items:center;justify-content:center;height:130px;background:#fff;border-bottom:1px solid #e4e8ea}
-      .nk-horko-image img{display:block;width:100%;height:100%;object-fit:contain;padding:10px}
+      .nk-horko-image{display:flex;align-items:center;justify-content:center;height:112px;background:linear-gradient(135deg,#eef7fb,#fff7e9);border-bottom:1px solid #e4e8ea;font-size:48px}
       .nk-horko-copy{display:flex;flex-direction:column;flex:1;padding:17px}
       .nk-horko-copy small{color:#a9232b;font-weight:850;text-transform:uppercase;letter-spacing:.05em}
       .nk-horko-copy strong{font:800 22px/1.17 Georgia,serif;margin:7px 0}
       .nk-horko-copy span{color:#53616a;line-height:1.45;flex:1}
+      .nk-horko-target{display:block;margin-top:10px;color:#6d777d!important;font-size:11px;word-break:break-all}
       .nk-horko-copy b{color:#a9232b;margin-top:13px}
-      @media(max-width:850px){.nk-horko-grid{grid-template-columns:1fr}.nk-horko-image{height:115px}.nk-horko-feed-head{align-items:start;flex-direction:column}}
+      @media(max-width:850px){.nk-horko-grid{grid-template-columns:1fr}.nk-horko-image{height:96px}.nk-horko-feed-head{align-items:start;flex-direction:column}}
     `;
     document.head.appendChild(style);
   }
 
   function card(item){
-    return `<a class="nk-horko-card" href="${esc(item.url)}" target="_blank" rel="nofollow sponsored noopener noreferrer"><span class="nk-horko-image"><img src="${esc(item.image)}" alt="${esc(item.title)}" loading="lazy" decoding="async"></span><span class="nk-horko-copy"><small>${esc(item.tag)}</small><strong>${esc(item.title)}</strong><span>${esc(item.text)}</span><b>Prohlédnout nabídku →</b></span></a>`;
+    return `<a class="nk-horko-card" href="${esc(item.url)}" target="_blank" rel="nofollow sponsored noopener noreferrer" data-final-target="${esc(item.target)}"><span class="nk-horko-image" aria-hidden="true">${esc(item.icon)}</span><span class="nk-horko-copy"><small>${esc(item.tag)}</small><strong>${esc(item.title)}</strong><span>${esc(item.text)}</span><em class="nk-horko-target">Cíl: ${esc(item.target)}</em><b>Prohlédnout konkrétní nabídku →</b></span></a>`;
   }
 
   function block(){
     const section=document.createElement('section');
     section.className='nk-horko-feed';
     section.dataset.heatAffiliateFeed='1';
-    section.innerHTML=`<div class="nk-horko-feed-head"><div><small>REKLAMA · SEZÓNNÍ VÝBĚR</small><strong>Jak zvládnout horké dny doma</strong></div><span>Partnerské nabídky</span></div><div class="nk-horko-grid">${ITEMS.map(card).join('')}</div>`;
+    section.innerHTML=`<div class="nk-horko-feed-head"><div><small>REKLAMA · SEZÓNNÍ VÝBĚR</small><strong>Jak zvládnout horké dny doma</strong></div><span>Přímé odkazy do kategorií</span></div><div class="nk-horko-grid">${ITEMS.map(card).join('')}</div>`;
     return section;
   }
 
