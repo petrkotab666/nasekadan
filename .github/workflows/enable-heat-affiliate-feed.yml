@@ -1,0 +1,47 @@
+name: Nasadit sezónní feed pro horké dny
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/heat-feed-trigger.txt'
+      - 'horko-feed.js'
+      - 'scripts/enable_heat_feed.py'
+      - '.github/workflows/enable-heat-affiliate-feed.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-heat-feed
+  cancel-in-progress: true
+
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit sezónní feed do veřejných stránek
+        run: |
+          set -euo pipefail
+          python3 scripts/enable_heat_feed.py
+          git config user.name "Naše Kadaň automat"
+          git config user.email "actions@users.noreply.github.com"
+          git add '*.html' 'clanky/**/*.html' 'prakticke/**/*.html' 'pruvodce/**/*.html' 'organizace/**/*.html' 'doprava/**/*.html' 'o-webu/**/*.html' 'zapojte-se/**/*.html' 'inzerce/**/*.html' 'ochrana-osobnich-udaju/**/*.html' 'prehled-zdroju/**/*.html' 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Zapnout sezónní feed ventilátorů a klimatizací"
+            git push origin main
+          fi
+
+      - name: Ověřit připravené soubory
+        run: |
+          set -euo pipefail
+          grep -Fq '/horko-feed.js' index.html
+          grep -Fq 'Ventilátory a mobilní klimatizace' horko-feed.js
+          grep -Fq 'rel="nofollow sponsored noopener noreferrer"' horko-feed.js
