@@ -50,8 +50,7 @@ jobs:
                   continue
               valid.append(str(path))
 
-          output = os.environ['GITHUB_OUTPUT']
-          with open(output, 'a', encoding='utf-8') as fh:
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
               fh.write('count=%d\n' % len(valid))
               fh.write('files<<EOF\n')
               fh.write('\n'.join(valid))
@@ -77,8 +76,7 @@ jobs:
           import json, os, shlex
           from pathlib import Path
 
-          path = Path(os.environ['ALERT_FILE'])
-          data = json.loads(path.read_text(encoding='utf-8'))
+          data = json.loads(Path(os.environ['ALERT_FILE']).read_text(encoding='utf-8'))
           fingerprint = str(data['fingerprint']).strip()
           title = str(data['title']).strip()
           summary = str(data['summary']).strip()
@@ -111,7 +109,7 @@ jobs:
                       body.append(f'- {item}')
           if action:
               body += ['', '### Doporučený další krok', action]
-          body += ['', '_Toto upozornění vytvořil záložní doručovací kanál GitHub Actions. Nevychází pouze ze stavového souboru; podklad musí být před vložením ověřen monitoringem._']
+          body += ['', '_Toto upozornění vytvořil záložní doručovací kanál GitHub Actions. Podklad musí být před vložením ověřen monitoringem._']
 
           body_path = Path('/tmp/monitoring-alert-body.md')
           body_path.write_text('\n'.join(body) + '\n', encoding='utf-8')
@@ -131,6 +129,7 @@ jobs:
               issue_number="${issue_url##*/}"
               echo "Vytvořeno issue #$issue_number: $issue_url"
             fi
+            export issue_number issue_url
 
             python3 - <<'PY'
           import json, os
