@@ -36,22 +36,21 @@ jobs:
           import json, os
           from pathlib import Path
 
-          files = sorted(Path('monitoring-alerts/pending').glob('*.json'))
           valid = []
-          for path in files:
+          for path in sorted(Path('monitoring-alerts/pending').glob('*.json')):
               try:
                   data = json.loads(path.read_text(encoding='utf-8'))
               except Exception as exc:
                   print(f'Neplatný JSON {path}: {exc}')
                   continue
               required = ('fingerprint', 'title', 'summary', 'observed_at')
-              if not all(str(data.get(key, '')).strip() for key in required):
+              if all(str(data.get(key, '')).strip() for key in required):
+                  valid.append(str(path))
+              else:
                   print(f'Přeskakuji neúplný soubor {path}')
-                  continue
-              valid.append(str(path))
 
           with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
-              fh.write('count=%d\n' % len(valid))
+              fh.write(f'count={len(valid)}\n')
               fh.write('files<<EOF\n')
               fh.write('\n'.join(valid))
               fh.write('\nEOF\n')
@@ -61,7 +60,7 @@ jobs:
       - name: Doručit upozornění jako GitHub Issue
         if: steps.pending.outputs.count != '0'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           ALERT_FILES: ${{ steps.pending.outputs.files }}
         shell: bash
         run: |
@@ -88,16 +87,13 @@ jobs:
 
           body = [
               '## Automatické upozornění monitoringu Naše Kadaň',
-              '',
-              summary,
-              '',
+              '', summary, '',
               f'**Zachyceno:** {observed}',
               f'**Závažnost:** {severity}',
               f'**Fingerprint:** `{fingerprint}`',
           ]
           if facts:
-              body += ['', '### Ověřená zjištění']
-              body += [f'- {item}' for item in facts]
+              body += ['', '### Ověřená zjištění'] + [f'- {item}' for item in facts]
           if sources:
               body += ['', '### Zdroje']
               for item in sources:
@@ -109,7 +105,7 @@ jobs:
                       body.append(f'- {item}')
           if action:
               body += ['', '### Doporučený další krok', action]
-          body += ['', '_Toto upozornění vytvořil záložní doručovací kanál GitHub Actions. Podklad musí být před vložením ověřen monitoringem._']
+          body += ['', '_Záložní doručovací kanál GitHub Actions. Podklad byl před vložením ověřen monitoringem._']
 
           body_path = Path('/tmp/monitoring-alert-body.md')
           body_path.write_text('\n'.join(body) + '\n', encoding='utf-8')
@@ -119,30 +115,26 @@ jobs:
           PY
           )"
 
-            existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --search "$FINGERPRINT in:title" --json number,url --limit 1 --jq '.[0].number // empty')"
-            if [ -n "$existing" ]; then
-              issue_number="$existing"
-              issue_url="$(gh issue view "$issue_number" --repo "$GITHUB_REPOSITORY" --json url --jq .url)"
-              echo "Upozornění $FINGERPRINT již bylo doručeno jako issue #$issue_number."
-            else
-              issue_url="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --body-file "$BODY_PATH" --assignee petrkotab666)"
-              issue_number="${issue_url##*/}"
-              echo "Vytvořeno issue #$issue_number: $issue_url"
-            fi
-            export issue_number issue_url
+            result="$(python3 scripts/upsert_github_issue.py \
+              --fingerprint "$FINGERPRINT" \
+              --title "$ISSUE_TITLE" \
+              --body-file "$BODY_PATH" \
+              --assignee petrkotab666)"
+            export DELIVERY_RESULT="$result"
 
             python3 - <<'PY'
           import json, os
           from datetime import datetime, timezone
           from pathlib import Path
 
+          delivered = json.loads(os.environ['DELIVERY_RESULT'])
           source = Path(os.environ['ALERT_FILE'])
           data = json.loads(source.read_text(encoding='utf-8'))
           data['delivery'] = {
               'status': 'delivered',
               'delivered_at': datetime.now(timezone.utc).isoformat(),
-              'issue_number': int(os.environ['issue_number']),
-              'issue_url': os.environ['issue_url'],
+              'issue_number': int(delivered['number']),
+              'issue_url': delivered['url'],
               'workflow_run_id': os.environ.get('GITHUB_RUN_ID', ''),
           }
           target = Path('monitoring-alerts/delivered') / source.name
@@ -151,8 +143,8 @@ jobs:
           Path('monitoring-alert-channel-status.json').write_text(json.dumps({
               'status': 'success',
               'last_fingerprint': data['fingerprint'],
-              'last_issue_number': int(os.environ['issue_number']),
-              'last_issue_url': os.environ['issue_url'],
+              'last_issue_number': int(delivered['number']),
+              'last_issue_url': delivered['url'],
               'checked_at_utc': datetime.now(timezone.utc).isoformat(),
               'workflow_run_id': os.environ.get('GITHUB_RUN_ID', ''),
               'delivery_channel': 'github-issues',
