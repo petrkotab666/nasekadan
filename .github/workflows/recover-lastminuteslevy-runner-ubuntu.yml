@@ -64,97 +64,94 @@ jobs:
             \( -iname '*.env' -o -iname '*.env.*' -o -iname '*smtp*' -o -iname '*newsletter*' -o -iname '*mail*config*' -o -iname '*credentials*' \) \
             2>/dev/null | sort -u > "$work/candidates.txt"
 
-          # Přidat systemd jednotky a drop-iny, které mohou obsahovat Environment/EnvironmentFile.
           sudo grep -RIlE 'SMTP_(HOST|PORT|USER|PASSWORD|TLS)|MAIL_(HOST|USER|PASSWORD)|RESEND_API_KEY|SENDGRID_API_KEY|MAILGUN' \
             /etc/systemd /etc/default /etc/sysconfig /opt 2>/dev/null \
             | head -n 300 >> "$work/candidates.txt" || true
           sort -u "$work/candidates.txt" -o "$work/candidates.txt"
 
-          echo '=== NALEZENÉ SOUBORY S E-MAILOVOU KONFIGURACÍ ==='
           sudo python3 - "$work/candidates.txt" <<'PY'
-from pathlib import Path
-import sys
-for raw in Path(sys.argv[1]).read_text().splitlines():
-    p = Path(raw)
-    try:
-        text = p.read_text(encoding='utf-8', errors='ignore')
-    except Exception:
-        continue
-    if any(k in text for k in ('SMTP_PASSWORD', 'SMTP_HOST', 'RESEND_API_KEY', 'SENDGRID_API_KEY', 'MAILGUN')):
-        print(p)
-PY
+          from __future__ import annotations
 
-          echo '=== TEST SMTP KANDIDÁTŮ (BEZ ZOBRAZENÍ HESEL) ==='
-          sudo python3 - "$work/candidates.txt" <<'PY'
-from __future__ import annotations
-import os
-import shlex
-import smtplib
-import ssl
-import sys
-from pathlib import Path
+          import shlex
+          import smtplib
+          import ssl
+          import sys
+          from pathlib import Path
 
 
-def parse_env(path: Path) -> dict[str, str]:
-    data: dict[str, str] = {}
-    try:
-        lines = path.read_text(encoding='utf-8', errors='ignore').splitlines()
-    except Exception:
-        return data
-    for line in lines:
-        s = line.strip()
-        if not s or s.startswith('#') or '=' not in s:
-            continue
-        if s.startswith('export '):
-            s = s[7:].lstrip()
-        key, value = s.split('=', 1)
-        key = key.strip()
-        if not key.replace('_', '').isalnum():
-            continue
-        value = value.strip()
-        try:
-            parts = shlex.split(value, posix=True)
-            value = parts[0] if len(parts) == 1 else value
-        except Exception:
-            value = value.strip('"\'')
-        data[key] = value
-    return data
+          def parse_env(path: Path) -> dict[str, str]:
+              data: dict[str, str] = {}
+              try:
+                  lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+              except Exception:
+                  return data
+              for line in lines:
+                  value_line = line.strip()
+                  if not value_line or value_line.startswith("#") or "=" not in value_line:
+                      continue
+                  if value_line.startswith("export "):
+                      value_line = value_line[7:].lstrip()
+                  key, value = value_line.split("=", 1)
+                  key = key.strip()
+                  if not key.replace("_", "").isalnum():
+                      continue
+                  value = value.strip()
+                  try:
+                      parts = shlex.split(value, posix=True)
+                      value = parts[0] if len(parts) == 1 else value
+                  except Exception:
+                      value = value.strip().strip('"').strip("'")
+                  data[key] = value
+              return data
 
-paths = []
-for raw in Path(sys.argv[1]).read_text().splitlines():
-    p = Path(raw)
-    if p not in paths:
-        paths.append(p)
 
-seen = set()
-for path in paths:
-    env = parse_env(path)
-    host = env.get('SMTP_HOST') or env.get('MAIL_HOST')
-    user = env.get('SMTP_USER') or env.get('SMTP_USERNAME') or env.get('MAIL_USER')
-    password = env.get('SMTP_PASSWORD') or env.get('SMTP_PASS') or env.get('MAIL_PASSWORD')
-    if not (host and user and password):
-        continue
-    port = int(env.get('SMTP_PORT') or env.get('MAIL_PORT') or ('465' if 'seznam' in host else '587'))
-    mode = (env.get('SMTP_TLS') or env.get('SMTP_SECURITY') or '').lower()
-    fingerprint = (host, port, user, password)
-    if fingerprint in seen:
-        continue
-    seen.add(fingerprint)
-    try:
-        if mode == 'ssl' or port == 465:
-            client = smtplib.SMTP_SSL(host, port, timeout=15, context=ssl.create_default_context())
-        else:
-            client = smtplib.SMTP(host, port, timeout=15)
-            client.ehlo()
-            if mode in {'starttls', 'tls', 'true', '1'} or port == 587:
-                client.starttls(context=ssl.create_default_context())
-                client.ehlo()
-        client.login(user, password)
-        client.quit()
-        print(f'SUCCESS file={path} host={host} port={port} user={user}')
-    except Exception as exc:
-        print(f'FAIL file={path} host={host} port={port} user={user} error={type(exc).__name__}')
-PY
+          paths: list[Path] = []
+          for raw in Path(sys.argv[1]).read_text().splitlines():
+              path = Path(raw)
+              if path not in paths:
+                  paths.append(path)
+
+          print("=== NALEZENÉ SOUBORY S E-MAILOVOU KONFIGURACÍ ===")
+          relevant: list[Path] = []
+          for path in paths:
+              try:
+                  text = path.read_text(encoding="utf-8", errors="ignore")
+              except Exception:
+                  continue
+              if any(key in text for key in ("SMTP_PASSWORD", "SMTP_HOST", "RESEND_API_KEY", "SENDGRID_API_KEY", "MAILGUN")):
+                  relevant.append(path)
+                  print(path)
+
+          print("=== TEST SMTP KANDIDÁTŮ (BEZ ZOBRAZENÍ HESEL) ===")
+          seen: set[tuple[str, int, str, str]] = set()
+          for path in relevant:
+              env = parse_env(path)
+              host = env.get("SMTP_HOST") or env.get("MAIL_HOST")
+              user = env.get("SMTP_USER") or env.get("SMTP_USERNAME") or env.get("MAIL_USER")
+              password = env.get("SMTP_PASSWORD") or env.get("SMTP_PASS") or env.get("MAIL_PASSWORD")
+              if not (host and user and password):
+                  continue
+              port = int(env.get("SMTP_PORT") or env.get("MAIL_PORT") or ("465" if "seznam" in host else "587"))
+              mode = (env.get("SMTP_TLS") or env.get("SMTP_SECURITY") or "").lower()
+              fingerprint = (host, port, user, password)
+              if fingerprint in seen:
+                  continue
+              seen.add(fingerprint)
+              try:
+                  if mode == "ssl" or port == 465:
+                      client = smtplib.SMTP_SSL(host, port, timeout=15, context=ssl.create_default_context())
+                  else:
+                      client = smtplib.SMTP(host, port, timeout=15)
+                      client.ehlo()
+                      if mode in {"starttls", "tls", "true", "1"} or port == 587:
+                          client.starttls(context=ssl.create_default_context())
+                          client.ehlo()
+                  client.login(user, password)
+                  client.quit()
+                  print(f"SUCCESS file={path} host={host} port={port} user={user}")
+              except Exception as exc:
+                  print(f"FAIL file={path} host={host} port={port} user={user} error={type(exc).__name__}")
+          PY
 
           echo '=== LOKÁLNÍ ODESÍLACÍ SLUŽBY ==='
           for cmd in sendmail msmtp mailx mail; do
