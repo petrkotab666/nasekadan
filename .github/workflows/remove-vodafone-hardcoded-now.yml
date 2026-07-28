@@ -1,0 +1,64 @@
+name: Odstranit Vodafone z reklam Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/remove-vodafone-hardcoded-now.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-remove-vodafone
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Odstranit pevně zapsaný Vodafone
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          paths = [Path('reklamy.js'), Path('obsah-doplnky.js')]
+          for path in paths:
+              text = path.read_text(encoding='utf-8')
+              text = re.sub(r"^\s*\{id:'vodafone'.*?\},\s*\n", '', text, flags=re.M)
+              text = re.sub(r"^\s*vodafone:'[^']*',?\s*\n", '', text, flags=re.M)
+              if 'aface625' in text or "id:'vodafone'" in text or 'Vodafone.cz' in text:
+                  raise SystemExit(f'{path}: zůstal pevně zapsaný Vodafone.')
+              path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+          node --check reklamy.js
+          node --check obsah-doplnky.js
+          grep -Fq 'blockedPartnerIds' assets/affiliate-site-config.json
+          ! grep -Fq 'aface625' reklamy.js
+          ! grep -Fq 'aface625' obsah-doplnky.js
+
+      - name: Zapsat opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/remove-vodafone-hardcoded-now.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Odstranit Vodafone z reklam Naše Kadaň'
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
