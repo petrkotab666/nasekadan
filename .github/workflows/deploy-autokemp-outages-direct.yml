@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nasekadan-autokemp-direct-deploy
@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
@@ -26,13 +26,28 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Nasadit aktualizované soubory přímo do aktivního webu
+      - name: Nasadit, ověřit a zaznamenat výsledek
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
+          STATUS=failed
+          REASON='nezahájeno'
+          DEPLOY_SHA=''
+          ARTICLE_OK=false
+          HOME_OK=false
+          ARCHIVE_OK=false
+          CULTURE_OK=false
+          RSS_OK=false
+          SITEMAP_OK=false
+          HEALTH_OK=false
+          GENERATED="$(date -u +%FT%TZ)"
+
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+
+          if [[ -z "$SSH_KEY" ]]; then
+            REASON='chybí SSH klíč KEY_OVH_SSH_PRIVATE_KEY'
+          elif ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /opt/nasekadan
           git fetch --prune origin main
@@ -54,22 +69,76 @@ jobs:
           curl -kfsS --max-time 20 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/clanky/?deploy=$SHA" | grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html'
           curl -kfsS --max-time 20 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?deploy=$SHA" | grep -Fq 'data-autokemp-outages-note'
           REMOTE
+          then
+            REASON='serverový zápis dokončen, čeká se na vnější ověření'
+            DEPLOY_SHA="$(git rev-parse HEAD)"
+            stamp="$(date +%s)"
+            for attempt in $(seq 1 18); do
+              article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?v=$stamp-$attempt" || true)"
+              home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
+              archive="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" || true)"
+              culture="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?v=$stamp-$attempt" || true)"
+              rss="$(curl -fsS --max-time 20 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" || true)"
+              sitemap="$(curl -fsS --max-time 20 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" || true)"
+              health="$(curl -fsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" || true)"
 
-      - name: Ověřit veřejnou produkci zvenčí
-        shell: bash
-        run: |
-          set -euo pipefail
-          stamp="$(date +%s)"
-          for attempt in $(seq 1 12); do
-            article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?v=$stamp-$attempt" || true)"
-            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
-            culture="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?v=$stamp-$attempt" || true)"
-            if grep -Fq 'Odstávky elektřiny omezí v srpnu provoz restaurace' <<<"$article" \
-              && grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$home" \
-              && grep -Fq 'data-autokemp-outages-note' <<<"$culture"; then
-              echo 'Veřejná produkce je aktuální.'
-              exit 0
+              grep -Fq 'Odstávky elektřiny omezí v srpnu provoz restaurace' <<<"$article" && ARTICLE_OK=true || ARTICLE_OK=false
+              grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$home" && HOME_OK=true || HOME_OK=false
+              grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$archive" && ARCHIVE_OK=true || ARCHIVE_OK=false
+              grep -Fq 'data-autokemp-outages-note' <<<"$culture" && CULTURE_OK=true || CULTURE_OK=false
+              grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$rss" && RSS_OK=true || RSS_OK=false
+              grep -Fq 'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' <<<"$sitemap" && SITEMAP_OK=true || SITEMAP_OK=false
+              grep -Fq 'mode=targeted-direct' <<<"$health" && HEALTH_OK=true || HEALTH_OK=false
+
+              if $ARTICLE_OK && $HOME_OK && $ARCHIVE_OK && $CULTURE_OK && $RSS_OK && $SITEMAP_OK && $HEALTH_OK; then
+                STATUS=passed
+                REASON='článek, titulní stránka, archiv, kulturní přehled, RSS, sitemap a deployment-health jsou veřejně ověřené'
+                break
+              fi
+              sleep 5
+            done
+            if [[ "$STATUS" != passed ]]; then
+              REASON='vnější kontrola po serverovém zápisu neprošla ve všech bodech'
             fi
-            sleep 5
+          else
+            REASON='SSH nasazení nebo vnitřní kontrola na OVH selhala'
+          fi
+
+          export STATUS REASON DEPLOY_SHA GENERATED ARTICLE_OK HOME_OK ARCHIVE_OK CULTURE_OK RSS_OK SITEMAP_OK HEALTH_OK
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          def b(name): return os.environ.get(name, 'false').lower() == 'true'
+          payload = {
+              'status': os.environ.get('STATUS', 'failed'),
+              'generatedAt': os.environ.get('GENERATED', ''),
+              'source': os.environ.get('DEPLOY_SHA', ''),
+              'reason': os.environ.get('REASON', ''),
+              'checks': {
+                  'article': b('ARTICLE_OK'),
+                  'homepage': b('HOME_OK'),
+                  'archive': b('ARCHIVE_OK'),
+                  'culturalOverview': b('CULTURE_OK'),
+                  'rss': b('RSS_OK'),
+                  'sitemap': b('SITEMAP_OK'),
+                  'deploymentHealth': b('HEALTH_OK'),
+              },
+          }
+          Path('.github/autokemp-direct-deploy-status.json').write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+          )
+          PY
+
+          git config user.name 'Naše Kadaň deploy kontrola'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/autokemp-direct-deploy-status.json
+          git commit -m "Zapsat výsledek nasazení Autokempu: $STATUS" || true
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
           done
-          exit 1
+
+          [[ "$STATUS" == passed ]]
