@@ -1,0 +1,104 @@
+name: Ověřit načtení historických dat statistik
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/check-stats-data-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst agregované hodnoty přímo ze serverových logů
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'sudo -u www-data python3 -' <<'PY' | tee "$RUNNER_TEMP/stats-data.txt"
+          from __future__ import annotations
+
+          import re
+          import runpy
+          from pathlib import Path
+
+          source = Path('/usr/local/lib/nasekadan-stats/stats_server.py')
+          ns = runpy.run_path(str(source))
+          loader = ns.get('load_records')
+
+          if callable(loader):
+              result = loader()
+              visits = result[0]
+              errors = result[1] if len(result) > 1 else []
+              unique = len({row[1] for row in visits}) if visits else 0
+              first = min((row[0] for row in visits), default=None)
+              last = max((row[0] for row in visits), default=None)
+              print(f'PARSED_VISITS={len(visits)}')
+              print(f'PARSED_UNIQUE_VISITORS={unique}')
+              print(f'PARSED_ERRORS={len(errors)}')
+              print(f'FIRST_RECORD={first.isoformat() if first else "none"}')
+              print(f'LAST_RECORD={last.isoformat() if last else "none"}')
+          else:
+              renderer = ns.get('render') or ns.get('dashboard')
+              if not callable(renderer):
+                  raise SystemExit('Aplikace neposkytuje bezpečnou diagnostickou funkci.')
+              body = renderer()
+              if isinstance(body, bytes):
+                  body = body.decode('utf-8', 'replace')
+              labels = ('Celkem návštěvníků', 'Celkem zobrazení', 'Měření od')
+              found = 0
+              for label in labels:
+                  match = re.search(re.escape(label) + r'.{0,300}?<strong[^>]*>(.*?)</strong>', body, re.S | re.I)
+                  if match:
+                      value = re.sub(r'<[^>]+>', '', match.group(1)).strip()
+                      print(f'{label.upper().replace(" ", "_")}={value}')
+                      found += 1
+              if not found:
+                  raise SystemExit('Dashboard se vykreslil, ale agregované hodnoty nebyly nalezeny.')
+          PY
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/stats-data.txt`, 'utf8'); } catch {}
+            const ok = process.env.OUTCOME === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## ${ok ? 'Historická data se načítají' : 'Načtení historických dat selhalo'}`,
+                '',
+                `- Výsledek: **${process.env.OUTCOME || 'neprovedeno'}**`,
+                '- Výstup obsahuje pouze agregované počty a časové rozpětí, žádné IP adresy ani návštěvní údaje.',
+                '',
+                '```text',
+                log.slice(-5000).replace(/```/g, '---'),
+                '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        run: test "$OUTCOME" = success
