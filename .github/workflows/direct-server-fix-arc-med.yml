@@ -1,4 +1,4 @@
-name: Přímá oprava ARC-MED a hasičů
+name: Přímá oprava ARC-MED a AVIES
 
 on:
   push:
@@ -8,19 +8,50 @@ on:
       - '.github/workflows/direct-server-fix-arc-med.yml'
       - 'scripts/enforce_homepage_latest_order.py'
       - 'scripts/normalize_arc_med_article.py'
+      - 'scripts/update_avies_oswald_context.py'
       - 'reklamy.js'
       - 'reklamy-sidebar.js'
       - 'reklamy-sidebar.css'
       - 'site.js'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: direct-server-fix-arc-med
+  cancel-in-progress: true
+
 jobs:
   fix:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Trvale normalizovat zdrojové články
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/normalize_arc_med_article.py
+          python3 scripts/update_avies_oswald_context.py
+          python3 scripts/enforce_homepage_latest_order.py
+
+          git config user.name 'nasekadan-publication-bot'
+          git config user.email 'nasekadan-publication-bot@users.noreply.github.com'
+          git add clanky/arc-med-nemocnice-kadan.html clanky/avies-nemocnice-kadan.html index.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Trvale sjednotit ARC-MED, reklamy a kontext AVIES'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
       - name: Připravit SSH klíč
         shell: bash
         run: |
@@ -38,14 +69,15 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
 
-          # Jediná normalizace článku: veřejná verze a dynamický proud různých nabídek.
           python3 scripts/normalize_arc_med_article.py
+          python3 scripts/update_avies_oswald_context.py
           python3 scripts/enforce_homepage_latest_order.py
 
           sudo install -d -m 0755 /var/www/nasekadan/clanky
           sudo install -m 0644 index.html /var/www/nasekadan/index.html
           sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo install -m 0644 clanky/arc-med-nemocnice-kadan.html /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          sudo install -m 0644 clanky/avies-nemocnice-kadan.html /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
           sudo install -m 0644 clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html /var/www/nasekadan/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html
           sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
           sudo install -m 0644 reklamy-sidebar.js /var/www/nasekadan/reklamy-sidebar.js
@@ -57,26 +89,31 @@ jobs:
           grep -Fq 'data-arc-med-hero' /var/www/nasekadan/index.html
           grep -Fq 'data-promos data-context="sidebar"' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           grep -Fq '/reklamy-sidebar.js?' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          grep -Fq 'data-oswald-avies-context' /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
           ! grep -Fq 'static-article-ads' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           ! grep -Fq 'Pracovní verze' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          ! grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           REMOTE
 
       - name: Ověřit živý web
         shell: bash
         run: |
           set -euo pipefail
-          for i in $(seq 1 12); do
+          for i in $(seq 1 18); do
             home=$(curl -fsS "https://nasekadan.cz/?fix=$GITHUB_SHA-$i" || true)
             arc=$(curl -fsS "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html?fix=$GITHUB_SHA-$i" || true)
+            avies=$(curl -fsS "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html?fix=$GITHUB_SHA-$i" || true)
             sidebar=$(curl -fsS "https://nasekadan.cz/reklamy-sidebar.js?fix=$GITHUB_SHA-$i" || true)
             if grep -Fq 'data-arc-med-hero' <<<"$home" \
               && grep -Fq 'index,follow' <<<"$arc" \
               && grep -Fq 'data-promos data-context="sidebar"' <<<"$arc" \
               && grep -Fq '/reklamy-sidebar.js?' <<<"$arc" \
               && grep -Fq 'selectVariedAds' <<<"$sidebar" \
+              && grep -Fq 'data-oswald-avies-context' <<<"$avies" \
               && ! grep -Fq 'static-article-ads' <<<"$arc" \
-              && ! grep -Fq 'Pracovní verze' <<<"$arc"; then
-              echo 'ARC-MED používá střídající se dynamické reklamy stejně jako ostatní články.'
+              && ! grep -Fq 'Pracovní verze' <<<"$arc" \
+              && ! grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK' <<<"$arc"; then
+              echo 'ARC-MED je veřejný, reklamy se střídají a AVIES obsahuje vazbu na Radka Oswalda.'
               exit 0
             fi
             sleep 5
