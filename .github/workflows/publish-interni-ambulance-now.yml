@@ -1,4 +1,4 @@
-name: Zveřejnit omezení interní ambulance
+name: Ověřit existující článek interní ambulance
 
 on:
   push:
@@ -8,135 +8,44 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: nasekadan-interni-ambulance-publication
   cancel-in-progress: true
 
 jobs:
-  publish:
+  verify-existing:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
-
-      - name: Připravit článek a všechny veřejné přehledy
+      - name: Potvrdit, že nevznikne duplicitní článek
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --quiet Pillow
-          python3 scripts/publish_interni_ambulance_closure.py
-          python3 scripts/normalize_footers.py --write --check
-          python3 scripts/normalize_articles.py --write --check
-          python3 scripts/generate_social_cards.py --write --check
-
-      - name: Ověřit obsah před publikací
+          existing='clanky/interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html'
+          duplicate='clanky/interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html'
+          test -f "$existing"
+          test ! -f "$duplicate"
+          grep -Fq 'Interní ambulance Nemocnice Kadaň bude tři týdny uzavřená' "$existing"
+      - name: Ověřit existující článek na veřejném webu
         shell: bash
         run: |
           set -euo pipefail
-          slug='interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html'
-          grep -Fq 'Interní ambulance v Kadani je do 14. srpna uzavřená' "clanky/$slug"
-          grep -Fq 'data-interni-ambulance-hero' index.html
-          grep -Fq 'data-interni-ambulance-card' index.html
-          grep -Fq 'data-interni-ambulance-card' clanky/index.html
-          grep -Fq "$slug" rss.xml sitemap.xml news-sitemap.xml
-          grep -Fq '/reklamy.js' "clanky/$slug"
-          grep -Fq '/horko-feed.js' "clanky/$slug"
-
-      - name: Uložit publikaci do main
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'Naše Kadaň automat'
-          git config user.email 'actions@users.noreply.github.com'
-          git add \
-            clanky/interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html \
-            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
-            production-content-manifest.json scripts/enforce_homepage_latest_order.py social/
-          if git diff --cached --quiet; then
-            echo 'Publikace už je v repozitáři.'
-          else
-            git commit -m 'Zveřejnit omezení interní ambulance Nemocnice Kadaň'
-          fi
-          for attempt in 1 2 3; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+          slug='interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html'
+          for attempt in $(seq 1 12); do
+            article="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/$slug?v=${GITHUB_SHA}-$attempt" || true)"
+            home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/?v=${GITHUB_SHA}-$attempt" || true)"
+            archive="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/?v=${GITHUB_SHA}-$attempt" || true)"
+            if grep -Fq 'Interní ambulance Nemocnice Kadaň bude tři týdny uzavřená' <<<"$article" \
+              && grep -Fq "$slug" <<<"$home" \
+              && grep -Fq "$slug" <<<"$archive"; then
+              echo 'Existující praktická zpráva je veřejně dostupná; nový článek se nevytváří.'
               exit 0
             fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt * 5))
+            sleep 5
           done
-          exit 1
-
-      - name: Bezpečně doplnit živý web bez přepsání ostatního obsahu
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$SSH_KEY"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-          ssh -i "$RUNNER_TEMP/ovh_key" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo -n true
-          cd /opt/nasekadan
-          git fetch --prune origin main
-          git reset --hard origin/main
-          test -f clanky/interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html
-          test -d /var/www/nasekadan
-
-          # Upravit současný živý index a přehledy přímo na místě, aby zůstaly
-          # zachované ostatní hotfixy, reklamy i pořadí starších článků.
-          sudo env NASEKADAN_ROOT=/var/www/nasekadan \
-            python3 scripts/publish_interni_ambulance_closure.py
-
-          # Přepsat pouze nový článek jeho přesnou normalizovanou verzí s vlastním
-          # sociálním obrázkem a doplnit vygenerované OG obrázky.
-          sudo cp clanky/interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html \
-            /var/www/nasekadan/clanky/interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html
-          sudo mkdir -p /var/www/nasekadan/social
-          sudo cp -a social/. /var/www/nasekadan/social/
-          sudo chmod -R a+rX /var/www/nasekadan/clanky /var/www/nasekadan/social
-
-          grep -Fq 'Interní ambulance v Kadani je do 14. srpna uzavřená' \
-            /var/www/nasekadan/clanky/interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html
-          grep -Fq 'data-interni-ambulance-hero' /var/www/nasekadan/index.html
-          grep -Fq 'data-interni-ambulance-card' /var/www/nasekadan/clanky/index.html
-          grep -Fq 'interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html' \
-            /var/www/nasekadan/rss.xml /var/www/nasekadan/sitemap.xml /var/www/nasekadan/news-sitemap.xml
-          REMOTE
-
-      - name: Veřejně ověřit článek, titulku, archiv, sitemap a RSS
-        shell: bash
-        run: |
-          set -euo pipefail
-          stamp="$(date +%s)"
-          slug='interni-ambulance-kadan-uzavrena-do-14-srpna-2026.html'
-          for attempt in $(seq 1 18); do
-            article="$(curl -kfsS --max-time 25 "https://nasekadan.cz/clanky/$slug?v=$stamp-$attempt" || true)"
-            home="$(curl -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
-            archive="$(curl -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" || true)"
-            rss="$(curl -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" || true)"
-            sitemap="$(curl -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" || true)"
-            news="$(curl -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=$stamp-$attempt" || true)"
-            if grep -Fq 'Interní ambulance v Kadani je do 14. srpna uzavřená' <<<"$article" \
-              && grep -Fq 'data-interni-ambulance-hero' <<<"$home" \
-              && grep -Fq "$slug" <<<"$archive" \
-              && grep -Fq "$slug" <<<"$rss" \
-              && grep -Fq "$slug" <<<"$sitemap" \
-              && grep -Fq "$slug" <<<"$news"; then
-              echo 'Nový článek a všechny veřejné přehledy jsou ověřené.'
-              exit 0
-            fi
-            sleep 10
-          done
-          echo 'Veřejná kontrola publikace neprošla.' >&2
           exit 1
