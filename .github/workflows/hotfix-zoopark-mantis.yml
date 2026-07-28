@@ -1,0 +1,65 @@
+name: Doplnit výstavu kudlanek do kulturního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/zoopark-mantis-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Doplnit článek
+        run: |
+          set -euo pipefail
+          python3 scripts/add_zoopark_mantis_event.py
+          grep -Fq 'data-zoopark-kudlanky' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit výstavu kudlanek do aktuálního kulturního přehledu'
+            git pull --rebase origin main
+            git push origin main
+          fi
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+      - name: Nasadit pouze aktualizovaný článek
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html \
+            ubuntu@57.129.43.215:/tmp/kulturni-kudlanky.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo cp /tmp/kulturni-kudlanky.html /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          sudo chmod 644 /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          grep -Fq 'Historicky první výstava kudlanek v Česku' /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          REMOTE
+      - name: Ověřit veřejný článek
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 18); do
+            body="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?kudlanky=${GITHUB_SHA}-${i}" || true)"
+            if grep -Fq 'Historicky první výstava kudlanek v Česku' <<<"$body" \
+              && grep -Fq '50 druhů živých kudlanek' <<<"$body"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
