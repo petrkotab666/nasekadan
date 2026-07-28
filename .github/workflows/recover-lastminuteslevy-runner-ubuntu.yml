@@ -1,4 +1,4 @@
-name: Obnovit runner LastMinuteSlevy přes GitHub cloud
+name: Obnovit runner a přímo nasadit statistiky přes GitHub cloud
 
 on:
   pull_request:
@@ -12,9 +12,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  recover:
+  recover-and-install:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
       KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
@@ -31,24 +31,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/lms-recovery"
-          : > "$RUNNER_TEMP/lms-recovery/result.txt"
+          mkdir -p "$RUNNER_TEMP/ovh-recovery"
+          : > "$RUNNER_TEMP/ovh-recovery/result.txt"
           selected=''
           for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
             value="${!name:-}"
             if [ -n "$value" ]; then
-              printf '%s\n' "$value" > "$RUNNER_TEMP/lms-recovery/id_key"
+              printf '%s\n' "$value" > "$RUNNER_TEMP/ovh-recovery/id_key"
               selected="$name"
               break
             fi
           done
           if [ -z "$selected" ]; then
-            echo 'NO_SSH_KEY' | tee "$RUNNER_TEMP/lms-recovery/result.txt"
+            echo 'NO_SSH_KEY' | tee "$RUNNER_TEMP/ovh-recovery/result.txt"
             echo 'available=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          chmod 600 "$RUNNER_TEMP/lms-recovery/id_key"
-          echo "Použitelný SSH secret: $selected" | tee "$RUNNER_TEMP/lms-recovery/result.txt"
+          chmod 600 "$RUNNER_TEMP/ovh-recovery/id_key"
+          echo "Použitelný SSH secret: $selected" | tee "$RUNNER_TEMP/ovh-recovery/result.txt"
           echo 'available=true' >> "$GITHUB_OUTPUT"
           echo "selected=$selected" >> "$GITHUB_OUTPUT"
 
@@ -59,13 +59,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/lms-recovery/id_key" \
+          ssh -i "$RUNNER_TEMP/ovh-recovery/id_key" \
             -o BatchMode=yes \
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 \
             -o ServerAliveInterval=10 \
             -o ServerAliveCountMax=2 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee -a "$RUNNER_TEMP/lms-recovery/result.txt"
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee -a "$RUNNER_TEMP/ovh-recovery/result.txt"
           set -euo pipefail
           echo "Host: $(hostname), čas: $(date -Is)"
           sudo -n true
@@ -79,22 +79,78 @@ jobs:
                 done \
               | sort -u
           )
-          if [ "${#services[@]}" -eq 0 ]; then
-            echo 'Runner service nebyla nalezena.' >&2
-            systemctl list-unit-files --type=service --no-legend 'actions.runner*' || true
-            exit 31
+          if [ "${#services[@]}" -gt 0 ]; then
+            printf 'Restartované služby:\n%s\n' "${services[*]}"
+            for service in "${services[@]}"; do
+              sudo systemctl reset-failed "$service" || true
+              sudo systemctl restart "$service"
+            done
+            sleep 8
+            for service in "${services[@]}"; do
+              systemctl is-active "$service"
+            done
+          else
+            echo 'Runner service nebyla nalezena; přímá instalace statistik bude pokračovat.'
           fi
-          printf 'Restartované služby:\n%s\n' "${services[*]}"
-          for service in "${services[@]}"; do
-            sudo systemctl reset-failed "$service" || true
-            sudo systemctl restart "$service"
-          done
-          sleep 10
-          for service in "${services[@]}"; do
-            systemctl is-active "$service"
-            sudo systemctl --no-pager --full status "$service" | sed -n '1,24p' || true
-          done
           REMOTE
+
+      - name: Přímo nainstalovat obnovu hesla statistik na OVH
+        id: install
+        if: steps.key.outputs.available == 'true'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh-recovery/id_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee -a "$RUNNER_TEMP/ovh-recovery/result.txt"
+          set -euo pipefail
+          sudo -n true
+          work="$(mktemp -d)"
+          trap 'rm -rf "$work"' EXIT
+          git clone --depth 1 https://github.com/petrkotab666/nasekadan.git "$work/repo"
+          sudo bash "$work/repo/.github/scripts/nasekadan-stats/install-stats.sh"
+          echo 'Lokální health:'
+          curl -fsS http://127.0.0.1:3225/healthz
+          echo
+          echo 'Veřejná přihlašovací stránka:'
+          curl -kfsS --resolve nasekadan.cz:443:127.0.0.1 \
+            'https://nasekadan.cz/statistiky/' | grep -F 'Zapomenuté heslo'
+          REMOTE
+
+      - name: Ověřit živou stránku a vyžádat testovací reset
+        id: verify
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          login="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' \
+            'https://nasekadan.cz/statistiky/?verify-cloud='"$GITHUB_RUN_ID")"
+          grep -Fq 'Přihlášení ke statistikám' <<<"$login"
+          grep -Fq 'Zapomenuté heslo' <<<"$login"
+
+          health="$(curl -fsS --max-time 20 -H 'Cache-Control: no-cache' \
+            'https://nasekadan.cz/statistiky/healthz?verify-cloud='"$GITHUB_RUN_ID")"
+          python3 - "$health" <<'PY'
+          import json, sys
+          data = json.loads(sys.argv[1])
+          assert data.get('ok') is True
+          assert data.get('auth') == 'application'
+          assert data.get('smtpConfigured') is True
+          PY
+
+          reset="$(curl -fsS --max-time 30 \
+            -X POST \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data '' \
+            'https://nasekadan.cz/statistiky/zapomenute-heslo')"
+          grep -Eq 'Obnovovací odkaz (byl odeslán|už byl nedávno odeslán)' <<<"$reset"
+          echo 'Veřejný login, SMTP i přijetí resetovacího e-mailu byly ověřeny.' | tee -a "$RUNNER_TEMP/ovh-recovery/result.txt"
 
       - name: Zapsat výsledek do PR
         if: always() && github.event_name == 'pull_request'
@@ -103,17 +159,22 @@ jobs:
           KEY_AVAILABLE: ${{ steps.key.outputs.available }}
           KEY_NAME: ${{ steps.key.outputs.selected }}
           RESTART_OUTCOME: ${{ steps.restart.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         with:
           script: |
             const fs = require('fs');
             let log = '';
-            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/lms-recovery/result.txt`, 'utf8'); } catch {}
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/ovh-recovery/result.txt`, 'utf8'); } catch {}
+            const ok = process.env.INSTALL_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
             const body = [
-              '## Obnova runneru LastMinuteSlevy přes GitHub cloud',
+              `## ${ok ? 'Obnova hesla statistik je nasazená a ověřená' : 'Nasazení obnovy hesla statistik selhalo'}`,
               '',
               `- SSH klíč dostupný: **${process.env.KEY_AVAILABLE || 'false'}**`,
               `- Použitý název secretu: \`${process.env.KEY_NAME || 'žádný'}\``,
-              `- Výsledek restartu: **${process.env.RESTART_OUTCOME || 'neprovedeno'}**`,
+              `- Restart runneru: **${process.env.RESTART_OUTCOME || 'neprovedeno'}**`,
+              `- Přímá instalace na OVH: **${process.env.INSTALL_OUTCOME || 'neprovedeno'}**`,
+              `- Veřejný login, SMTP a reset: **${process.env.VERIFY_OUTCOME || 'neprovedeno'}**`,
               '',
               '```text',
               log.slice(-30000),
@@ -126,7 +187,9 @@ jobs:
         shell: bash
         env:
           AVAILABLE: ${{ steps.key.outputs.available }}
-          RESTART: ${{ steps.restart.outcome }}
+          INSTALL: ${{ steps.install.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
         run: |
           test "$AVAILABLE" = true
-          test "$RESTART" = success
+          test "$INSTALL" = success
+          test "$VERIFY" = success
