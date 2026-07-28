@@ -1,0 +1,116 @@
+name: Najít všechny databáze pageviews na serveru
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/ubuntu-recover-lastminuteslevy-trigger.txt'
+      - '.github/workflows/find-all-pageview-databases-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  find-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Najít SQLite soubory a anonymní agregace
+        id: find
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY' | tee "$RUNNER_TEMP/all-pageview-dbs.txt"
+          from __future__ import annotations
+
+          import os
+          import sqlite3
+          from pathlib import Path
+
+          print('SERVICE_ENV_PATHS_BEGIN')
+          for env_path in (Path('/etc/nasekadan-newsletter.env'), Path('/etc/nasekadan-stats-email.env')):
+              if not env_path.exists():
+                  continue
+              for raw in env_path.read_text(encoding='utf-8', errors='replace').splitlines():
+                  line = raw.strip()
+                  if line.startswith('NEWSLETTER_DB='):
+                      value = line.split('=', 1)[1].strip().strip('"').strip("'")
+                      print(f'{env_path}:NEWSLETTER_DB={value}')
+          print('SERVICE_ENV_PATHS_END')
+
+          candidates = []
+          skip_prefixes = ('/proc/', '/sys/', '/dev/', '/run/containerd/', '/var/lib/docker/', '/var/lib/snapd/')
+          for base, dirs, files in os.walk('/'):
+              if any(base.startswith(prefix.rstrip('/')) for prefix in skip_prefixes):
+                  dirs[:] = []
+                  continue
+              dirs[:] = [d for d in dirs if not any((Path(base) / d).as_posix().startswith(prefix.rstrip('/')) for prefix in skip_prefixes)]
+              for name in files:
+                  low = name.lower()
+                  if not (low.endswith(('.db', '.sqlite', '.sqlite3')) or 'newsletter' in low or 'pageview' in low or 'analytics' in low):
+                      continue
+                  path = Path(base) / name
+                  try:
+                      stat = path.stat()
+                  except OSError:
+                      continue
+                  if stat.st_size < 100 or stat.st_size > 2_000_000_000:
+                      continue
+                  candidates.append((stat.st_mtime, path, stat.st_size))
+
+          print('SQLITE_PAGEVIEW_DATABASES_BEGIN')
+          for mtime, path, size in sorted(candidates, reverse=True):
+              try:
+                  con = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+                  tables = [row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+                  if 'pageviews' not in tables:
+                      con.close()
+                      continue
+                  columns = [row[1] for row in con.execute('PRAGMA table_info(pageviews)')]
+                  total = con.execute('SELECT COUNT(*) FROM pageviews').fetchone()[0]
+                  unique = con.execute("SELECT COUNT(DISTINCT visitor_hash) FROM pageviews WHERE visitor_hash IS NOT NULL AND visitor_hash <> ''").fetchone()[0] if 'visitor_hash' in columns else 'n/a'
+                  first = last = None
+                  if 'created_at' in columns:
+                      first, last = con.execute('SELECT MIN(created_at), MAX(created_at) FROM pageviews').fetchone()
+                  con.close()
+                  print(f'{path}|bytes={size}|mtime={mtime:.0f}|rows={total}|unique={unique}|first={first}|last={last}|columns={columns}')
+              except Exception:
+                  continue
+          print('SQLITE_PAGEVIEW_DATABASES_END')
+          PY
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.find.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/all-pageview-dbs.txt`, 'utf8'); } catch {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## Všechny databáze pageviews: ${process.env.OUTCOME}`,
+                '',
+                '- Jen cesty, struktura a agregované počty; žádná data jednotlivých návštěv.',
+                '',
+                '```text', log.slice(-30000).replace(/```/g, '---'), '```'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.find.outcome }}
+        run: test "$OUTCOME" = success
