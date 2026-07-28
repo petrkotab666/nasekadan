@@ -1,0 +1,241 @@
+name: Opravit a nasadit rozšířený přehled ordinací
+run-name: Změnit titulek, odstranit přepisování starou verzí a nasadit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - fix-doctor-overview-title.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-doctor-overview-fix
+  cancel-in-progress: true
+
+jobs:
+  fix-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SLUG: prakticti-lekari-nemocnice-kadan-srpen-2026
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Opravit titulek a zdroje, které vracely starou verzi
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          root = Path('.')
+          slug = 'prakticti-lekari-nemocnice-kadan-srpen-2026'
+          url = f'https://nasekadan.cz/clanky/{slug}.html'
+          old_full = 'Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz. Pět pracovních dnů se překryjí dovolené'
+          old_short = 'Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz'
+          new_full = 'V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů'
+          new_short = 'V srpnu omezí provoz více ordinací v Kadani a okolí'
+          modified = '2026-07-28T22:20:00+02:00'
+
+          article = root / 'clanky' / f'{slug}.html'
+          text = article.read_text(encoding='utf-8')
+          replacements = {
+              f'<title>{old_short} | Naše Kadaň</title>': f'<title>{new_short} | Naše Kadaň</title>',
+              f'<meta property="og:title" content="{old_short}">': f'<meta property="og:title" content="{new_short}">',
+              f'"headline":"{old_full}"': f'"headline":"{new_full}"',
+              f'<h1>{old_full}</h1>': f'<h1>{new_full}</h1>',
+              '<meta property="article:modified_time" content="2026-07-28T21:47:00+02:00">': f'<meta property="article:modified_time" content="{modified}">',
+              '"dateModified":"2026-07-28T21:47:00+02:00"': f'"dateModified":"{modified}"',
+          }
+          for old, new in replacements.items():
+              text = text.replace(old, new)
+          if new_full not in text or 'Další potvrzená omezení' not in text:
+              raise SystemExit('Článek po úpravě neobsahuje nový titulek nebo rozšířenou část')
+          article.write_text(text, encoding='utf-8', newline='\n')
+
+          text_replacements = {
+              old_full: new_full,
+              old_short: new_short,
+              'Praktičtí lékaři v srpnu omezí provoz. Pět dní se překryjí dovolené': new_short,
+              'Praktičtí lékaři v srpnu': 'Omezení ordinací v srpnu',
+              'Pět pracovních dnů se překryjí dovolené dvou praktických lékařů': 'Srpnová omezení se týkají více ordinací a ambulancí',
+              'Ambulance MUDr. Suchecké bude zavřená od 3. do 14. srpna a MUDr. Šindelář má dovolenou od 10. do 21. srpna.': 'Přehled zahrnuje praktické lékaře, neurologii, ORL, očkovací centrum, internu a související regionální omezení.',
+          }
+          for rel in ('index.html', 'clanky/index.html', 'rss.xml', 'news-sitemap.xml', 'llms.txt'):
+              path = root / rel
+              if not path.exists():
+                  continue
+              t = path.read_text(encoding='utf-8')
+              for old, new in text_replacements.items():
+                  t = t.replace(old, new)
+              path.write_text(t, encoding='utf-8', newline='\n')
+
+          manifest = root / 'production-content-manifest.json'
+          if manifest.exists():
+              data = json.loads(manifest.read_text(encoding='utf-8'))
+              for item in data.get('required_articles', []):
+                  if item.get('path') == f'clanky/{slug}.html':
+                      item['needle'] = new_short
+              manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          # Původní generátor zůstává kvůli historii, ale už nesmí přepsat
+          # existující rozšířenou redakční verzi článku.
+          publisher = root / 'scripts' / 'publish_gp_august_limits.py'
+          p = publisher.read_text(encoding='utf-8')
+          for old, new in text_replacements.items():
+              p = p.replace(old, new)
+          p = p.replace(
+              '    ARTICLE_PATH.write_text(ARTICLE, encoding="utf-8", newline="\\n")',
+              '    if not ARTICLE_PATH.exists():\n'
+              '        ARTICLE_PATH.write_text(ARTICLE, encoding="utf-8", newline="\\n")\n'
+              '    else:\n'
+              '        print("Existující rozšířená redakční verze článku se zachovává.")'
+          )
+          if 'Existující rozšířená redakční verze článku se zachovává.' not in p:
+              raise SystemExit('Nepodařilo se zabezpečit starý generátor proti přepsání článku')
+          publisher.write_text(p, encoding='utf-8', newline='\n')
+
+          enforcer = root / 'scripts' / 'enforce_homepage_latest_order.py'
+          if enforcer.exists():
+              e = enforcer.read_text(encoding='utf-8')
+              for old, new in text_replacements.items():
+                  e = e.replace(old, new)
+              enforcer.write_text(e, encoding='utf-8', newline='\n')
+
+          # Kontrolní pojistky.
+          assert new_full in article.read_text(encoding='utf-8')
+          assert 'Další potvrzená omezení' in article.read_text(encoding='utf-8')
+          assert new_short in (root / 'clanky/index.html').read_text(encoding='utf-8')
+          assert new_short in (root / 'rss.xml').read_text(encoding='utf-8')
+          PY
+
+          python -m pip install --quiet Pillow
+          python scripts/generate_social_cards.py --write --check
+
+      - name: Uložit trvalou opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html \
+            index.html clanky/index.html rss.xml news-sitemap.xml sitemap.xml llms.txt \
+            production-content-manifest.json scripts/publish_gp_august_limits.py \
+            scripts/enforce_homepage_latest_order.py social 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Rozšířit titulek přehledu ordinací a zabránit návratu staré verze'
+            git pull --rebase origin main
+            git push origin main
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit opravenou verzi na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+          SHA="$(git rev-parse HEAD)"
+          sudo install -d -m 0755 /var/www/nasekadan
+          sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar \
+            --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
+            --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
+            --exclude='deploy' -C /opt/nasekadan -cf - . \
+            | sudo tar -C /var/www/nasekadan -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=static-main\n' \
+            "$SHA" "$(date -u +%FT%TZ)" \
+            | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+          sudo chmod -R a+rX /var/www/nasekadan
+          page="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?deploy=$SHA")"
+          grep -Fq 'V srpnu omezí provoz více ordinací v Kadani a okolí' <<<"$page"
+          grep -Fq 'Další potvrzená omezení' <<<"$page"
+          grep -Fq 'Očkovací centrum' <<<"$page"
+          REMOTE
+
+      - name: Veřejně ověřit článek, archiv a kanály
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/clanky/${SLUG}.html?v=$stamp-$attempt" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            if grep -Fq 'V srpnu omezí provoz více ordinací v Kadani a okolí' <<<"$article" \
+              && grep -Fq 'Další potvrzená omezení' <<<"$article" \
+              && grep -Fq 'V srpnu omezí provoz více ordinací v Kadani a okolí' <<<"$archive" \
+              && grep -Fq 'V srpnu omezí provoz více ordinací v Kadani a okolí' <<<"$rss"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat výsledek opravy
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const title = '[OPRAVA ČLÁNKU] Rozšířený přehled ordinací a nový titulek';
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const body = [
+              `## ${ok ? 'ÚSPĚCH' : 'NEÚSPĚCH'}`,
+              '',
+              `- Deploy: ${process.env.DEPLOY || 'skipped'}`,
+              `- Veřejné ověření: ${process.env.VERIFY || 'skipped'}`,
+              `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              ok
+                ? 'Živý článek obsahuje nový širší titulek a rozšířený přehled ordinací. Starý generátor už existující článek nepřepíše.'
+                : 'Oprava nebo veřejné ověření selhaly; je třeba otevřít log běhu.'
+            ].join('\n');
+            const all = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo, state: 'all', per_page: 100
+            });
+            const existing = all.find(i => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body, state: ok ? 'closed' : 'open'});
+            } else {
+              const created = await github.rest.issues.create({owner: context.repo.owner, repo: context.repo.repo, title, body});
+              if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: created.data.number, state: 'closed'});
+            }
