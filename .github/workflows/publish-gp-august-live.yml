@@ -1,4 +1,5 @@
-name: Zveřejnit srpnové omezení praktických lékařů
+name: Nasadit aktuální přehled srpnových omezení ordinací
+run-name: Nasadit redakční verzi přehledu ordinací bez regenerování starého článku
 
 on:
   push:
@@ -8,142 +9,139 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  issues: write
 
 concurrency:
-  group: nasekadan-gp-august-live
+  group: nasekadan-canonical-production
   cancel-in-progress: true
 
 jobs:
-  publish:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       SLUG: prakticti-lekari-nemocnice-kadan-srpen-2026
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Připravit článek a sociální kartu
-        run: |
-          set -euo pipefail
-          python -m pip install --quiet Pillow
-          python scripts/publish_gp_august_limits.py
-          python scripts/normalize_footers.py --write --check
-          python scripts/normalize_articles.py --write --check
-          python scripts/enable_heat_feed.py
-          python scripts/generate_social_cards.py --write --check
-          grep -Fq 'Praktičtí lékaři v Nemocnici Kadaň omezí v srpnu provoz' "clanky/${SLUG}.html"
-          grep -Fq "/clanky/${SLUG}.html" index.html
-          grep -Fq "/clanky/${SLUG}.html" clanky/index.html
-          grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" rss.xml
-          grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" sitemap.xml
-
-      - name: Uložit vygenerovaný veřejný obsah
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "clanky/${SLUG}.html" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml production-content-manifest.json social scripts/enforce_homepage_latest_order.py scripts/ensure_kolobezky_order.py scripts/enforce_production_article_order.py 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m 'Zveřejnit omezení praktických lékařů v srpnu'
-            git push origin HEAD:main
-          fi
-
       - name: Připravit SSH klíč
+        shell: bash
         run: |
           set -euo pipefail
           test -n "$SSH_KEY"
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit článek bez přepsání ostatního živého obsahu
+      - name: Nasadit přesnou verzi z main
         id: deploy
+        shell: bash
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          test -f scripts/publish_gp_august_limits.py
-          sudo env NASEKADAN_ROOT=/var/www/nasekadan python3 scripts/publish_gp_august_limits.py
-          sudo cp "clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html" "/var/www/nasekadan/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html"
-          sudo mkdir -p /var/www/nasekadan/social
-          sudo cp -a social/. /var/www/nasekadan/social/
+          sudo find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+          SHA="$(git rev-parse HEAD)"
+
+          # Nasazuje se výhradně hotová redakční verze z main. Starý generátor
+          # publish_gp_august_limits.py se zde záměrně nespouští.
+          sudo install -d -m 0755 /var/www/nasekadan
+          sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar \
+            --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
+            --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
+            --exclude='deploy' -C /opt/nasekadan -cf - . \
+            | sudo tar -C /var/www/nasekadan -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=static-main\n' \
+            "$SHA" "$(date -u +%FT%TZ)" \
+            | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
           sudo chmod -R a+rX /var/www/nasekadan
-          grep -Fq 'Pět pracovních dnů se překryjí dovolené' /var/www/nasekadan/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
-          grep -Fq '/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html' /var/www/nasekadan/index.html
-          grep -Fq '/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html' /var/www/nasekadan/clanky/index.html
-          grep -Fq 'https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html' /var/www/nasekadan/rss.xml
-          grep -Fq 'https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html' /var/www/nasekadan/sitemap.xml
+
+          page="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?deploy=$SHA")"
+          grep -Fq 'Další potvrzená omezení' <<<"$page"
+          grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$page"
+          grep -Fq 'Očkovací centrum' <<<"$page"
           REMOTE
 
-      - name: Ověřit veřejný web
+      - name: Veřejně ověřit aktuální článek
         id: verify
+        shell: bash
         run: |
           set -euo pipefail
-          article_url='https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html'
-          for attempt in $(seq 1 18); do
-            suffix="?gp=${GITHUB_SHA}-${attempt}"
-            home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/${suffix}" || true)"
-            article="$(curl -kfsS --max-time 20 "${article_url}${suffix}" || true)"
-            archive="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/${suffix}" || true)"
-            rss="$(curl -kfsS --max-time 20 "https://nasekadan.cz/rss.xml${suffix}" || true)"
-            sitemap="$(curl -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml${suffix}" || true)"
-            if grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$home" \
-              && grep -Fq 'Pět pracovních dnů se překryjí dovolené' <<<"$article" \
-              && grep -Fq '10.–14. 8.' <<<"$article" \
-              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$archive" \
-              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$rss" \
-              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$sitemap"; then
-              image="$(grep -oE 'https://nasekadan.cz/social/[^\" ]+\.png' <<<"$article" | head -n1 || true)"
-              test -n "$image"
-              curl -kfsS --max-time 20 "${image}?gp=${GITHUB_SHA}" -o /dev/null
+          SHA="$(git rev-parse HEAD)"
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/clanky/${SLUG}.html?v=$stamp-$attempt" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            health="$(curl -4 -kfsS --max-time 25 \
+              "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" 2>/dev/null || true)"
+            if grep -Fq 'Další potvrzená omezení' <<<"$article" \
+              && grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$article" \
+              && grep -Fq 'Očkovací centrum' <<<"$article" \
+              && grep -Fq "${SLUG}.html" <<<"$archive" \
+              && grep -Fq "${SLUG}.html" <<<"$rss" \
+              && grep -Fq "${SLUG}.html" <<<"$sitemap" \
+              && grep -Fq "source=$SHA" <<<"$health"; then
               exit 0
             fi
-            sleep 10
+            sleep 5
           done
-          exit 30
+          exit 1
 
-      - name: Zapsat výsledek publikace
+      - name: Zapsat výsledek
         if: always()
         uses: actions/github-script@v7
         env:
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
         with:
           script: |
-            const path = 'gp-august-status.json';
-            const status = {
-              status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
-              checked_at_utc: new Date().toISOString(),
-              trigger_commit: context.sha,
-              run_id: context.runId,
-              server_deploy: process.env.DEPLOY_OUTCOME || 'skipped',
-              public_verification: process.env.VERIFY_OUTCOME || 'skipped'
-            };
-            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
-            let sha;
-            try {
-              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
-              if (!Array.isArray(current.data)) sha = current.data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              path,
-              branch: 'main',
-              message: `Zapsat stav publikace ambulancí: ${status.status}`,
-              content,
-              ...(sha ? { sha } : {})
+            const title = '[NASAZENÍ ORDINACÍ] Aktuální rozšířený přehled';
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const body = [
+              `## ${ok ? 'ÚSPĚCH' : 'NEÚSPĚCH'}`,
+              '',
+              `- Serverový deploy: ${process.env.DEPLOY || 'skipped'}`,
+              `- Veřejné ověření: ${process.env.VERIFY || 'skipped'}`,
+              `- Commit: \`${context.sha}\``,
+              `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              ok ? 'Živý článek obsahuje rozšířený přehled více ordinací.' : 'Nasazení nebo veřejná kontrola neprošly.'
+            ].join('\n');
+            const all = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner, repo: context.repo.repo, state: 'all', per_page: 100
             });
+            const existing = all.find(i => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.number, body, state: ok ? 'closed' : 'open'
+              });
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo, title, body
+              });
+              if (ok) await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: created.data.number, state: 'closed'
+              });
+            }
