@@ -52,8 +52,10 @@ jobs:
           set -euo pipefail
           sudo -n true
           cd /opt/nasekadan
-          git fetch --prune origin main
-          git reset --hard origin/main
+          git update-ref -d refs/remotes/origin/main || true
+          rm -f .git/refs/remotes/origin/main.lock
+          git fetch --force origin main:refs/remotes/origin/main
+          git reset --hard refs/remotes/origin/main
           sudo install -d -m 0755 /var/www/nasekadan/clanky
           sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
           sudo cp index.html /var/www/nasekadan/index.html
