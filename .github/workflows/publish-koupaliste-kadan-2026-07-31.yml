@@ -39,15 +39,24 @@ jobs:
           python3 scripts/patch_koupaliste_final_council.py
           cp .github/drafts/koupaliste-kadan-skluzavka-niagara.html clanky/koupaliste-kadan-skluzavka-niagara.html
           python3 - <<'PY'
+          from datetime import datetime
           from pathlib import Path
+          from zoneinfo import ZoneInfo
           import re
 
           p = Path('clanky/koupaliste-kadan-skluzavka-niagara.html')
           t = p.read_text(encoding='utf-8')
+          now = datetime.now(ZoneInfo('Europe/Prague')).replace(microsecond=0)
+          published = now.isoformat()
+          label = f'{now.day}. {now.month}. {now.year}'
           t = t.replace('noindex,nofollow', 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
           t = t.replace('../../', '../')
-          t = t.replace('PŘIPRAVOVANÝ ČLÁNEK', 'ČLÁNEK')
+          t = t.replace('PŘIPRAVOVANÝ ČLÁNEK', label)
           t = re.sub(r'<div class="sidebox preview-note">.*?</div>', '', t, count=1, flags=re.S)
+          if 'article:published_time' not in t:
+              t = t.replace('</head>', f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>', 1)
+          t = re.sub(r'("datePublished"\s*:\s*")([^"]*)', r'\g<1>' + published, t)
+          t = re.sub(r'("dateModified"\s*:\s*")([^"]*)', r'\g<1>' + published, t)
           p.write_text(t, encoding='utf-8', newline='\n')
           PY
           python3 -m pip install --disable-pip-version-check --quiet Pillow
