@@ -35,10 +35,14 @@ jobs:
           import re
           from pathlib import Path
           href='/clanky/avies-nemocnice-kadan.html'
-          for path, token in ((Path('index.html'),'article-card'),(Path('clanky/index.html'),'archive-item')):
+          checks=(
+              (Path('index.html'),('article-card',)),
+              (Path('clanky/index.html'),('archive-item','article-card')),
+          )
+          for path, tokens in checks:
               text=path.read_text(encoding='utf-8')
               blocks=re.findall(r'<article\b[^>]*>.*?</article>',text,re.I|re.S)
-              count=sum(token in block.split('>',1)[0] and href in block for block in blocks)
+              count=sum(any(token in block.split('>',1)[0] for token in tokens) and href in block for block in blocks)
               if count != 1:
                   raise SystemExit(f'{path}: AVIES karta je {count}×')
           print('Zdrojová titulka i archiv obsahují právě jednu kartu AVIES.')
@@ -87,10 +91,13 @@ jobs:
           from pathlib import Path
           href='/clanky/avies-nemocnice-kadan.html'
           checks=[]
-          for path, token in ((Path('/tmp/home.html'),'article-card'),(Path('/tmp/archive.html'),'archive-item')):
+          for path, tokens in (
+              (Path('/tmp/home.html'),('article-card',)),
+              (Path('/tmp/archive.html'),('archive-item','article-card')),
+          ):
               text=path.read_text(encoding='utf-8',errors='replace') if path.exists() else ''
               blocks=re.findall(r'<article\b[^>]*>.*?</article>',text,re.I|re.S)
-              checks.append(sum(token in block.split('>',1)[0] and href in block for block in blocks))
+              checks.append(sum(any(token in block.split('>',1)[0] for token in tokens) and href in block for block in blocks))
           raise SystemExit(0 if checks == [1,1] else 1)
           PY
             then
