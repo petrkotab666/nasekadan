@@ -1,0 +1,91 @@
+name: Aktualizovat přehled veřejných zdrojů
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+  push:
+    branches: [main]
+    paths:
+      - data/city-sources.json
+      - city-news.js
+      - scripts/update_city_news.py
+      - .github/workflows/update-city-news.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-city-news
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    steps:
+      - name: Načíst aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Aktualizovat veřejné zdroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/update_city_news.py
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('data/city-news.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          items = data.get('items')
+          if not isinstance(items, list) or len(items) < 3:
+              raise SystemExit('Přehled neobsahuje nejméně tři bezpečné položky.')
+          for item in items:
+              if not item.get('title') or not str(item.get('source', '')).startswith('http'):
+                  raise SystemExit('Přehled obsahuje neplatnou položku.')
+          print(f'Ověřeno {len(items)} položek veřejných zdrojů.')
+          PY
+
+      - name: Uložit změnu dat
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/city-news.json; then
+            echo 'Přehled je beze změny.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add data/city-news.json
+            git commit -m 'Automaticky aktualizovat veřejné zdroje'
+            git push origin HEAD:main
+          fi
+
+      - name: Nasadit aktuální main na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Ověřit živý přehled
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl -kfsS --max-time 30 "https://nasekadan.cz/data/city-news.json?check=${token}" -o /tmp/city-news-live.json
+          python3 - <<'PY'
+          import json
+          data = json.load(open('/tmp/city-news-live.json', encoding='utf-8'))
+          items = data.get('items')
+          if not isinstance(items, list) or len(items) < 3:
+              raise SystemExit('Živý datový přehled neobsahuje dost položek.')
+          print(f'Živý datový přehled obsahuje {len(items)} položek.')
+          PY
+          curl -kfsS --max-time 30 "https://nasekadan.cz/prehled-zdroju/?check=${token}" | grep -Fq 'Přehled veřejných zdrojů'
+          curl -kfsS --max-time 30 "https://nasekadan.cz/city-news.js?check=${token}" | grep -Fq 'cityNewsFallback'
+          echo 'HOTOVO: živý přehled veřejných zdrojů i záložní režim jsou funkční.'
