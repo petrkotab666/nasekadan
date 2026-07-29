@@ -1,0 +1,134 @@
+name: Vrátit původní bannery čištění
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/restore-original-cleaning-banners-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: restore-original-cleaning-banners
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      WIDE_BLOB: 7cb71e58e9de0c6b43bb66a5666afb226e4f566b
+      TOWER_BLOB: 9ec919c6188aa82ae5415362a1a3a994edfbeb7d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Obnovit přesně původní grafické soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/reklamy
+          download_blob() {
+            local sha="$1"
+            local output="$2"
+            curl -fsSL \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/git/blobs/$sha" \
+              | jq -r '.content' | tr -d '\n' | base64 -d > "$output"
+            test -s "$output"
+            test "$(git hash-object "$output")" = "$sha"
+          }
+          download_blob "$WIDE_BLOB" assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp
+          download_blob "$TOWER_BLOB" assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp \
+                  assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp
+          git commit -m 'Vrátit původní grafické bannery čištění' || true
+
+          pushed=false
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then
+              pushed=true
+              break
+            fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          test "$pushed" = true
+          echo "RESTORE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Nasadit původní bannery na veřejný server
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp /var/www/nasekadan/assets/reklamy/
+          REMOTE
+
+      - name: Ověřit, že veřejný web vrací původní soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          verified=false
+          for attempt in $(seq 1 18); do
+            curl -fsS --max-time 20 \
+              "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp?v=$stamp-$attempt" \
+              -o /tmp/public-wide.webp || true
+            curl -fsS --max-time 20 \
+              "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp?v=$stamp-$attempt" \
+              -o /tmp/public-tower.webp || true
+            if [ -s /tmp/public-wide.webp ] && [ -s /tmp/public-tower.webp ] \
+              && [ "$(git hash-object /tmp/public-wide.webp)" = "$WIDE_BLOB" ] \
+              && [ "$(git hash-object /tmp/public-tower.webp)" = "$TOWER_BLOB" ]; then
+              verified=true
+              break
+            fi
+            sleep 10
+          done
+          test "$verified" = true
+
+          cat > cleaning-banners-original-restore-status.json <<JSON
+          {
+            "status": "success",
+            "checked_at_utc": "$(date -u +%FT%TZ)",
+            "restore_commit": "$RESTORE_COMMIT",
+            "wide_git_blob": "$WIDE_BLOB",
+            "tower_git_blob": "$TOWER_BLOB",
+            "public_verification": true
+          }
+          JSON
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add cleaning-banners-original-restore-status.json
+          git commit -m 'Potvrdit návrat původních bannerů čištění'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
