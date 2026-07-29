@@ -1,0 +1,73 @@
+name: Ověřit ostrý banner čištění v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/verify-sharp-cleaning-banner-v3-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit veřejný SVG a zapojení do stránky
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          status=failed
+          detail='Veřejný banner nebo reklamy.js neodpovídají očekávané verzi.'
+          for attempt in $(seq 1 18); do
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg?v=$stamp-$attempt" -o /tmp/banner.svg || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/reklamy.js?v=$stamp-$attempt" -o /tmp/reklamy.js || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/index.html?v=$stamp-$attempt" -o /tmp/index.html || true
+            if [ -s /tmp/banner.svg ] && [ -s /tmp/reklamy.js ] && [ -s /tmp/index.html ] \
+              && grep -Fq '<svg' /tmp/banner.svg \
+              && grep -Fq 'width="1200" height="576"' /tmp/banner.svg \
+              && grep -Fq 'ČIŠTĚNÍ' /tmp/banner.svg \
+              && grep -Fq '603 206 308' /tmp/banner.svg \
+              && grep -Fq 'vaseuklizecka-cisteni-wide-sharp-v3.svg' /tmp/reklamy.js \
+              && grep -Fq 'reklamy.js' /tmp/index.html; then
+              python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('/tmp/banner.svg')
+          PY
+              status=success
+              detail='Veřejný web používá ostrý vektorový banner 1200 × 576 a reklamy.js na něj odkazuje.'
+              break
+            fi
+            sleep 10
+          done
+
+          cat > sharp-cleaning-banner-v3-public-status.json <<JSON
+          {
+            "status": "$status",
+            "checked_at_utc": "$(date -u +%FT%TZ)",
+            "banner": "/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg",
+            "dimensions": "1200x576",
+            "public_verification": $([ "$status" = success ] && echo true || echo false),
+            "detail": "$detail"
+          }
+          JSON
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add sharp-cleaning-banner-v3-public-status.json
+          git commit -m "Zapsat veřejné ověření ostrého banneru: $status"
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          test "$status" = success
