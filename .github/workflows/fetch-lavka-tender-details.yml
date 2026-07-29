@@ -1,0 +1,52 @@
+name: Stáhnout podrobnosti zakázek lávky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fetch-lavka-tender-details-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Fetch detail from public tender mirrors and source profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/research/lavka-tenders
+          python3 - <<'PY'
+          import json,requests,time
+          from pathlib import Path
+          ids=['b0e39d2422904383998cb6a591781fe1','aa81c27ebdce4e34b6f1c7553f10314c']
+          s=requests.Session();s.headers['User-Agent']='NaseKadan research'
+          out=[]
+          for i in ids:
+            item={'id':i}
+            for kind,url in [
+              ('api',f'https://api.hlidacstatu.cz/api/v2/verejnezakazky/{i}'),
+              ('web',f'https://www.hlidacstatu.cz/verejnezakazky/zakazka/{i}')]:
+              try:
+                r=s.get(url,timeout=45);item[kind+'_status']=r.status_code;item[kind+'_headers']=dict(r.headers);item[kind+'_body']=r.text[:200000]
+                Path(f'.github/research/lavka-tenders/{i}-{kind}.txt').write_text(r.text,encoding='utf-8',errors='ignore')
+              except Exception as e:item[kind+'_error']=repr(e)
+            out.append(item)
+          Path('.github/research/lavka-tenders/status.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/lavka-tenders
+          git commit -m 'Stáhnout detaily obou zadávacích řízení lávky' || true
+          for i in 1 2 3 4; do git push origin HEAD:main && exit 0; git pull --rebase origin main; sleep 3; done
+          exit 1
