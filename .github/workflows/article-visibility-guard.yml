@@ -1,0 +1,95 @@
+name: Trvalá viditelnost článků Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/*.html'
+      - 'scripts/enforce_article_visibility.py'
+      - '.github/article-visibility-trigger.txt'
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-article-visibility
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vynutit hlavní článek a zachovat všechny články
+        run: |
+          set -euo pipefail
+          python3 scripts/enforce_article_visibility.py
+          git config user.name 'Naše Kadaň pojistka článků'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html
+          git commit -m 'Automaticky zachovat všechny články a nejnovější titulku' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit titulku a archiv přímo přes SCP
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 index.html ubuntu@57.129.43.215:/tmp/nk-index.html
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 clanky/index.html ubuntu@57.129.43.215:/tmp/nk-clanky-index.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/nk-index.html /var/www/nasekadan/index.html
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 /tmp/nk-clanky-index.html /var/www/nasekadan/clanky/index.html
+          rm -f /tmp/nk-index.html /tmp/nk-clanky-index.html
+          REMOTE
+
+      - name: Veřejně ověřit pravidlo
+        run: |
+          set -euo pipefail
+          newest="$(python3 - <<'PY'
+          from pathlib import Path
+          import re
+          from datetime import datetime
+          best=None
+          for p in Path('clanky').glob('*.html'):
+              if p.name=='index.html': continue
+              t=p.read_text(encoding='utf-8',errors='replace')
+              if 'noindex' in t.lower(): continue
+              m=re.search(r'article:published_time[^>]+content=["\']([^"\']+)',t,re.I) or re.search(r'"datePublished"\s*:\s*"([^"]+)"',t)
+              if not m: continue
+              try: d=datetime.fromisoformat(m.group(1).replace('Z','+00:00'))
+              except: continue
+              if best is None or d>best[0]: best=(d,p.name)
+          print(best[1] if best else '')
+          PY
+          )"
+          test -n "$newest"
+          for attempt in $(seq 1 24); do
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?visibility=${GITHUB_SHA}-${attempt}" || true)"
+            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?visibility=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq "data-auto-latest-hero=\"1\"" <<<"$home" \
+              && grep -Fq "/clanky/$newest" <<<"$home" \
+              && grep -Fq "/clanky/$newest" <<<"$archive"; then
+              exit 0
+            fi
+            sleep 8
+          done
+          exit 1
