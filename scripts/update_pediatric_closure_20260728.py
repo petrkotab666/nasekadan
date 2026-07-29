@@ -9,6 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTICLE = ROOT / "clanky" / "prakticti-lekari-nemocnice-kadan-srpen-2026.html"
 RSS = ROOT / "rss.xml"
 MODIFIED = "2026-07-28T22:48:00+02:00"
+CORRECTED_LEAD = (
+    "Dětská ordinace MUDr. Mirky Doškové v Klášterci je uzavřena od 27. do 31. července; "
+    "další uzavření je naplánováno od 10. do 14. srpna a na 1. září."
+)
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -21,6 +25,12 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def update_article() -> None:
     text = ARTICLE.read_text(encoding="utf-8")
+
+    # Tento jednorázový skript už článek jednou doplnil. Jakmile je v článku
+    # redakčně zpřesněná formulace s přesnými termíny, nesmí ji pozdější
+    # opakované spuštění přepsat starší větou „je nyní uzavřená“.
+    if CORRECTED_LEAD in text:
+        return
 
     text = replace_once(
         text,
@@ -63,7 +73,9 @@ def update_article() -> None:
     text = replace_once(
         text,
         "Přehled jsme doplnili také o další potvrzená omezení zdravotních služeb v Kadani a okolí.</strong></p>",
-        "Přehled jsme doplnili také o další potvrzená omezení zdravotních služeb v Kadani a okolí. Dětská ordinace MUDr. Mirky Doškové v Klášterci je nyní uzavřená a další dovolenou má od 10. do 14. srpna.</strong></p>",
+        "Přehled jsme doplnili také o další potvrzená omezení zdravotních služeb v Kadani a okolí. "
+        + CORRECTED_LEAD
+        + "</strong></p>",
         "lead",
     )
 
@@ -83,7 +95,10 @@ def update_article() -> None:
         "notice count",
     )
 
-    pediatric_section = '''\n  <h3>Dětská ordinace MUDr. Mirky Doškové v Klášterci nad Ohří</h3>\n  <p>Ordinace praktického lékaře pro děti a dorost v Sadové 528 je uzavřená od 27. do 31. července, dále od 10. do 14. srpna a také 1. září. Nemocnice jako zástup uvádí MUDr. Kadlecovou z Ordinace u sluníčka na stejné adrese, a to v jejích ordinačních hodinách. Kontakt na ordinaci MUDr. Doškové je 474 376 341 a <a href="mailto:plddklasterec@nemkadan.cz">plddklasterec@nemkadan.cz</a>.</p>\n'''
+    pediatric_section = '''
+  <h3>Dětská ordinace MUDr. Mirky Doškové v Klášterci nad Ohří</h3>
+  <p>Ordinace praktického lékaře pro děti a dorost v Sadové 528 je uzavřená od 27. do 31. července, dále od 10. do 14. srpna a také 1. září. Nemocnice jako zástup uvádí MUDr. Kadlecovou z Ordinace u sluníčka na stejné adrese, a to v jejích ordinačních hodinách. Kontakt na ordinaci MUDr. Doškové je 474 376 341 a <a href="mailto:plddklasterec@nemkadan.cz">plddklasterec@nemkadan.cz</a>.</p>
+'''
     marker = '  <h2>Kontakty na ambulance MUDr. Suchecké a MUDr. Šindeláře</h2>'
     if pediatric_section.strip() not in text:
         if marker not in text:
