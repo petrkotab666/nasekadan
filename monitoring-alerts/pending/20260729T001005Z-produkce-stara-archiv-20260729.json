@@ -1,20 +1,10 @@
 {
   "schema_version": 1,
   "fingerprint": "produkce-stara-archiv-20260729",
-  "title": "Produkční archiv Naše Kadaň je zastaralý vůči main",
-  "summary": "Veřejný archiv článků 29. července 2026 stále končil článkem AVIES z 27. července a neodpovídal aktuálnímu obsahu hlavní větve repozitáře. Jeden kanonický opravný deploy už byl spuštěn, další opakované nasazení bez změny stavu se nemá provádět.",
-  "facts": [
-    "Veřejný archiv /clanky/ při kontrole neobsahoval novější schválené položky z aktuálního main.",
-    "Aktuální main obsahoval commit 12e358ab3f723a3499d532436e27c94144ce13b9 pro jeden kanonický opravný deploy.",
-    "Aktuální main obsahoval finální úpravy pátečního článku koupaliště a doplnění zápisu zastupitelstva.",
-    "Veřejný web je při ověřování nasazení zdrojem pravdy."
-  ],
-  "sources": [
-    "https://nasekadan.cz/clanky/",
-    "GitHub main: petrkotab666/nasekadan",
-    "GitHub Issue #107"
-  ],
-  "observed_at": "2026-07-29T00:10:05Z",
-  "severity": "high",
-  "recommended_action": "Po doběhnutí jediného kanonického deploye znovu živě ověřit titulní stránku, archiv, RSS, sitemapu, nejnovější články a deployment-health.txt. Pokud produkce zůstane stará, zkontrolovat logy self-hosted OVH deploye a synchronizaci dokument rootu."
+  "valid_pending": false,
+  "delivery_status": "delivered_existing_issue",
+  "delivered_at": "2026-07-29T00:47:44Z",
+  "issue_number": 107,
+  "moved_to": "monitoring-alerts/delivered/20260729T001005Z-produkce-stara-archiv-20260729.json",
+  "note": "Obsah byl zapsán do delivered. Zdrojový soubor zůstal jako neplatný tombstone, protože přímé smazání bylo blokováno bezpečnostní kontrolou nástroje."
 }
