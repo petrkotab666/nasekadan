@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/kos-sharp-trigger.txt'
+      - '.github/workflows/fix-kos-images-sharp.yml'
   workflow_dispatch:
 
 permissions:
@@ -30,7 +31,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Připravit ostré obrazové soubory a upravit článek
+      - name: Vytvořit ostré WebP obrázky přímo z uložených výřezů
         shell: bash
         run: |
           set -euo pipefail
@@ -40,98 +41,88 @@ jobs:
           from io import BytesIO
           from datetime import datetime
           from zoneinfo import ZoneInfo
-          import base64, html, re, urllib.request
-          from PIL import Image, ImageFilter, ImageOps
+          import base64, re
+          from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
-          chunks = Path('.github/kos-sharp-assets')
-          out = Path('images/clanky')
+          root = Path('.')
+          out = root / 'images' / 'clanky'
           out.mkdir(parents=True, exist_ok=True)
 
-          def rebuild(prefix: str, target: Path) -> None:
-              parts = sorted(chunks.glob(f'{prefix}-*.txt'))
-              if not parts:
-                  raise RuntimeError(f'Chybí datové části pro {prefix}')
-              encoded = ''.join(p.read_text(encoding='ascii').strip() for p in parts)
-              target.write_bytes(base64.b64decode(encoded))
+          def extract_embedded_image(svg_path: Path) -> Image.Image:
+              svg = svg_path.read_text(encoding='utf-8')
+              match = re.search(
+                  r'data:image/(?:jpeg|jpg|png|webp);base64,([^"\']+)',
+                  svg,
+                  re.I,
+              )
+              if not match:
+                  raise RuntimeError(f'V {svg_path} chybí vložený obrazový obsah')
+              raw = base64.b64decode(match.group(1))
+              with Image.open(BytesIO(raw)) as source:
+                  return ImageOps.exif_transpose(source).convert('RGB')
+
+          def build(source_name: str, target_name: str, size: tuple[int, int]) -> None:
+              image = extract_embedded_image(out / source_name)
+              image = ImageOps.fit(
+                  image,
+                  size,
+                  method=Image.Resampling.LANCZOS,
+                  centering=(0.5, 0.5),
+              )
+              image = ImageEnhance.Contrast(image).enhance(1.05)
+              image = ImageEnhance.Sharpness(image).enhance(1.35)
+              image = image.filter(ImageFilter.UnsharpMask(radius=1.1, percent=165, threshold=2))
+              target = out / target_name
+              image.save(target, 'WEBP', quality=92, method=6)
               if target.stat().st_size < 5000:
                   raise RuntimeError(f'Výsledný obrázek {target} je podezřele malý')
 
-          post_target = out / 'kadan-forum-petra-pokorna-prispevek-ostry.webp'
-          jan_target = out / 'jan-losenicky-komentar-facebook-ostry.webp'
-          main_target = out / 'kadan-pretekajici-kos-facebook-ostry.webp'
-          rebuild('post', post_target)
-          rebuild('jan', jan_target)
+          build(
+              'kadan-pretekajici-kos-facebook-real.svg',
+              'kadan-pretekajici-kos-facebook-ostry.webp',
+              (720, 1276),
+          )
+          build(
+              'kadan-forum-petra-pokorna-prispevek-real.svg',
+              'kadan-forum-petra-pokorna-prispevek-ostry.webp',
+              (960, 870),
+          )
+          build(
+              'jan-losenicky-komentar-facebook-real.svg',
+              'jan-losenicky-komentar-facebook-ostry.webp',
+              (1080, 390),
+          )
 
-          photo_id = '10243275472011444'
-          photo_url = 'https://www.facebook.com/photo?fbid=10243275472011444&set=gm.1557730802517994&idorvanity=442280287396390'
-          ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
-
-          def get(url: str):
-              request = urllib.request.Request(url, headers={'User-Agent': ua, 'Accept': '*/*'})
-              with urllib.request.urlopen(request, timeout=45) as response:
-                  return response.read(), response.headers.get('Content-Type', '')
-
-          data = None
-          for url in (
-              f'https://graph.facebook.com/{photo_id}/picture?type=large&redirect=true',
-              f'https://graph.facebook.com/{photo_id}/picture?redirect=true',
-          ):
-              try:
-                  body, ctype = get(url)
-                  if ctype.lower().startswith('image/') and len(body) > 5000:
-                      data = body
-                      break
-              except Exception as exc:
-                  print(f'Facebook image endpoint failed: {url}: {exc}')
-
-          if data is None:
-              try:
-                  page, _ = get(photo_url)
-                  page = page.decode('utf-8', 'ignore')
-                  match = (
-                      re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)', page, re.I)
-                      or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', page, re.I)
-                  )
-                  if match:
-                      candidate = html.unescape(match.group(1)).replace('\\/', '/')
-                      body, ctype = get(candidate)
-                      if ctype.lower().startswith('image/') and len(body) > 5000:
-                          data = body
-              except Exception as exc:
-                  print(f'Facebook OG image fallback failed: {exc}')
-
-          if data is None:
-              svg = (out / 'kadan-pretekajici-kos-facebook-real.svg').read_text(encoding='utf-8')
-              match = re.search(r'data:image/(?:jpeg|jpg|png);base64,([^"\']+)', svg, re.I)
-              if not match:
-                  raise RuntimeError('Nelze načíst ani záložní fotografii ze SVG')
-              data = base64.b64decode(match.group(1))
-
-          with Image.open(BytesIO(data)) as source:
-              image = ImageOps.exif_transpose(source).convert('RGB')
-              image = ImageOps.fit(image, (720, 1277), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
-              image = image.filter(ImageFilter.UnsharpMask(radius=1.15, percent=125, threshold=2))
-              image.save(main_target, 'WEBP', quality=88, method=6)
-
-          article = Path('clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html')
+          article = root / 'clanky' / 'pretekajici-kose-kadan-technicke-sluzby-ridici.html'
           text = article.read_text(encoding='utf-8')
           replacements = {
               '../images/clanky/kadan-pretekajici-kos-facebook-real.svg': '../images/clanky/kadan-pretekajici-kos-facebook-ostry.webp',
               '../images/clanky/kadan-forum-petra-pokorna-prispevek-real.svg': '../images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp',
               '../images/clanky/jan-losenicky-komentar-facebook-real.svg': '../images/clanky/jan-losenicky-komentar-facebook-ostry.webp',
-              'width="220" height="390" loading="eager"': 'width="720" height="1277" loading="eager"',
-              'width="320" height="290" loading="lazy"': 'width="525" height="475" loading="lazy"',
-              'width="360" height="130" loading="lazy"': 'width="620" height="391" loading="lazy"',
+              'width="220" height="390" loading="eager"': 'width="720" height="1276" loading="eager"',
+              'width="320" height="290" loading="lazy"': 'width="960" height="870" loading="lazy"',
+              'width="360" height="130" loading="lazy"': 'width="1080" height="390" loading="lazy"',
               'data-fb-photo-evidence="v2"': 'data-fb-photo-evidence="v3-sharp"',
           }
           for old, new in replacements.items():
-              if old not in text:
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
                   raise RuntimeError(f'V článku chybí očekávaný text: {old}')
-              text = text.replace(old, new, 1)
 
           modified = datetime.now(ZoneInfo('Europe/Prague')).replace(microsecond=0).isoformat()
-          text = re.sub(r'(<meta property="article:modified_time" content=")[^"]+(">)', rf'\g<1>{modified}\g<2>', text, count=1)
-          text = re.sub(r'("dateModified":")[^"]+(")', rf'\g<1>{modified}\g<2>', text, count=1)
+          text = re.sub(
+              r'(<meta property="article:modified_time" content=")[^"]+(">)',
+              rf'\g<1>{modified}\g<2>',
+              text,
+              count=1,
+          )
+          text = re.sub(
+              r'("dateModified":")[^"]+(")',
+              rf'\g<1>{modified}\g<2>',
+              text,
+              count=1,
+          )
           article.write_text(text, encoding='utf-8')
           PY
 
@@ -140,7 +131,7 @@ jobs:
           file images/clanky/jan-losenicky-komentar-facebook-ostry.webp
           grep -Fq 'data-fb-photo-evidence="v3-sharp"' clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html
 
-      - name: Uložit opravu do main
+      - name: Uložit ostré obrázky do main
         shell: bash
         run: |
           set -euo pipefail
@@ -150,13 +141,18 @@ jobs:
             images/clanky/kadan-pretekajici-kos-facebook-ostry.webp \
             images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp \
             images/clanky/jan-losenicky-komentar-facebook-ostry.webp
-          git commit -m 'Opravit a zaostřit obrázky v článku o koších'
-          for attempt in 1 2 3; do
-            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt * 4))
-          done
-          exit 1
+          if git diff --cached --quiet; then
+            echo 'V repozitáři už jsou stejné ostré obrázky.'
+          else
+            git commit -m 'Opravit chybějící a rozmazané obrázky u článku o koších'
+            for attempt in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt * 4))
+            done
+          fi
 
       - name: Nasadit článek a obrázky přímo na OVH
         shell: bash
@@ -174,13 +170,10 @@ jobs:
           ssh -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky
-          sudo cp /tmp/pretekajici-kose-kadan-technicke-sluzby-ridici.html /var/www/nasekadan/clanky/
-          sudo cp /tmp/kadan-pretekajici-kos-facebook-ostry.webp \
-            /tmp/kadan-forum-petra-pokorna-prispevek-ostry.webp \
-            /tmp/jan-losenicky-komentar-facebook-ostry.webp \
-            /var/www/nasekadan/images/clanky/
-          sudo chmod 644 /var/www/nasekadan/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html \
-            /var/www/nasekadan/images/clanky/*-ostry.webp
+          sudo install -m 0644 /tmp/pretekajici-kose-kadan-technicke-sluzby-ridici.html /var/www/nasekadan/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html
+          sudo install -m 0644 /tmp/kadan-pretekajici-kos-facebook-ostry.webp /var/www/nasekadan/images/clanky/kadan-pretekajici-kos-facebook-ostry.webp
+          sudo install -m 0644 /tmp/kadan-forum-petra-pokorna-prispevek-ostry.webp /var/www/nasekadan/images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp
+          sudo install -m 0644 /tmp/jan-losenicky-komentar-facebook-ostry.webp /var/www/nasekadan/images/clanky/jan-losenicky-komentar-facebook-ostry.webp
           grep -Fq 'data-fb-photo-evidence="v3-sharp"' /var/www/nasekadan/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html
           REMOTE
 
