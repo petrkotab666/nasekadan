@@ -1,0 +1,100 @@
+name: Nasadit správné žluto-modré bannery čištění
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deploy-yellow-cleaning-banners-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-yellow-cleaning-banners
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      WIDE: vaseuklizecka-cisteni-yellow-wide-400x192.webp
+      TOWER: vaseuklizecka-cisteni-yellow-tower-160x237.webp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přepnout reklamní systém na schválenou žluto-modrou grafiku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('reklamy.js')
+          s=p.read_text(encoding='utf-8')
+          s=s.replace('/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp','/assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp')
+          s=s.replace('/assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp','/assets/reklamy/vaseuklizecka-cisteni-yellow-tower-160x237.webp')
+          s=s.replace('.featured-cleaning-ad>a{display:block;overflow:hidden;border:1px solid #d8e0e4;border-radius:16px;background:#fff;box-shadow:0 12px 32px rgba(18,35,45,.12)}', '.featured-cleaning-ad>a{display:block;overflow:hidden;max-width:900px;margin:0 auto;border:1px solid #d8e0e4;border-radius:16px;background:#fff;box-shadow:0 12px 32px rgba(18,35,45,.12)}')
+          s=s.replace('.featured-cleaning-ad img{display:block;width:100%;height:auto;aspect-ratio:3/1;object-fit:contain;background:#fff}', '.featured-cleaning-ad img{display:block;width:100%;height:auto;object-fit:contain;background:#fff}')
+          p.write_text(s,encoding='utf-8')
+          PY
+          grep -Fq "$WIDE" reklamy.js
+          grep -Fq "$TOWER" reklamy.js
+          ! grep -Fq 'vaseuklizecka-cisteni-wide-1200x400.webp' reklamy.js
+          ! grep -Fq 'vaseuklizecka-cisteni-tower-300x600.webp' reklamy.js
+          file "assets/reklamy/$WIDE" | grep -Fq 'Web/P image'
+          file "assets/reklamy/$TOWER" | grep -Fq 'Web/P image'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reklamy.js
+          git commit -m 'Přepnout reklamy na správné žluto-modré bannery' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+
+      - name: Nasadit na veřejný server
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-yellow-tower-160x237.webp /var/www/nasekadan/assets/reklamy/
+          REMOTE
+
+      - name: Ověřit skutečnou grafiku na veřejném webu
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 18); do
+            js="$(curl -fsS --max-time 20 "https://nasekadan.cz/reklamy.js?v=$stamp-$attempt" || true)"
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/$WIDE?v=$stamp-$attempt" -o /tmp/wide.webp || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/$TOWER?v=$stamp-$attempt" -o /tmp/tower.webp || true
+            if grep -Fq "$WIDE" <<<"$js" \
+              && grep -Fq "$TOWER" <<<"$js" \
+              && file /tmp/wide.webp | grep -Fq 'Web/P image' \
+              && file /tmp/wide.webp | grep -Fq '400x192' \
+              && file /tmp/tower.webp | grep -Fq 'Web/P image' \
+              && file /tmp/tower.webp | grep -Fq '160x237'; then
+              echo 'Správné žluto-modré bannery jsou veřejně nasazené.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Veřejná kontrola správných bannerů selhala.' >&2
+          exit 1
