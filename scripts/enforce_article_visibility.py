@@ -105,21 +105,29 @@ def main():
     if not articles:
         raise SystemExit('Nenalezen žádný publikovaný článek')
 
-    cards = '\n'.join(card(a) for a in articles)
+    # První článek je velký hlavní blok a druhý článek je vedlejší blok. V běžném
+    # seznamu se proto nesmějí opakovat; v archivu naopak musí zůstat všechny.
+    featured = articles[:2]
+    home_cards = '\n'.join(card(a) for a in articles[2:])
+    archive_cards = '\n'.join(card(a) for a in articles)
+
     h = HOME.read_text(encoding='utf-8')
-    h = re.sub(r'  <section class="wrap hero" id="clanky".*?</section>', hero(articles[0], articles[1] if len(articles)>1 else None), h, count=1, flags=re.S)
-    h = replace_between(h, '<div class="article-list">', '<p class="archive-note">', cards)
+    h = re.sub(r'  <section class="wrap hero" id="clanky".*?</section>', hero(articles[0], articles[1] if len(articles) > 1 else None), h, count=1, flags=re.S)
+    h = replace_between(h, '<div class="article-list">', '<p class="archive-note">', home_cards)
     HOME.write_text(h, encoding='utf-8', newline='\n')
 
     atext = ARCHIVE.read_text(encoding='utf-8')
-    atext = replace_between(atext, '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>', cards)
+    atext = replace_between(atext, '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>', archive_cards)
     ARCHIVE.write_text(atext, encoding='utf-8', newline='\n')
 
-    newest = articles[0]['href']
-    assert newest in HOME.read_text(encoding='utf-8')
-    assert all(x['href'] in HOME.read_text(encoding='utf-8') for x in articles)
-    assert all(x['href'] in ARCHIVE.read_text(encoding='utf-8') for x in articles)
-    print(f'Viditelnost zajištěna pro {len(articles)} článků. Nejnovější: {newest}')
+    home_text = HOME.read_text(encoding='utf-8')
+    archive_text = ARCHIVE.read_text(encoding='utf-8')
+    article_list = home_text.split('<div class="article-list">', 1)[-1].split('<p class="archive-note">', 1)[0]
+    assert all(x['href'] in home_text for x in articles)
+    assert all(x['href'] in archive_text for x in articles)
+    assert all(x['href'] not in article_list for x in featured)
+    print(f'Viditelnost zajištěna pro {len(articles)} článků. Nejnovější dva se na titulce neopakují: {articles[0]["href"]}')
+
 
 if __name__ == '__main__':
     main()
