@@ -17,10 +17,26 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit veřejný článek a trvale ho uložit
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_hospital_profile_direct.py
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nemocnice-kadan-profil-sluzby-budoucnost.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt
+          git commit -m 'Trvale zveřejnit závěrečný profil Nemocnice Kadaň' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
       - name: Připravit SSH klíč
         run: |
           set -euo pipefail
@@ -28,7 +44,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Okamžitě vydat profil nemocnice
+      - name: Nasadit stejnou verzi přímo na živý web
         id: deploy
         run: |
           set -euo pipefail
@@ -38,19 +54,14 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          sudo chown -R ubuntu:ubuntu /opt/nasekadan
-          python3 scripts/publish_hospital_profile_direct.py
-          python3 scripts/feature_hospital_profile_home.py
-
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
           sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
           sudo cp index.html /var/www/nasekadan/index.html
           sudo cp clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt /var/www/nasekadan/
           sudo chmod -R a+rX /var/www/nasekadan
-
           grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-          grep -Fq 'data-hospital-profile-hero' /var/www/nasekadan/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/clanky/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/rss.xml
@@ -69,8 +80,7 @@ jobs:
             sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
               && grep -Fq 'data-next-syringe-article' <<<"$article" \
-              && grep -Fq 'data-hospital-profile-hero' <<<"$home" \
-              && grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$home" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$home" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
