@@ -21,8 +21,10 @@ concurrency:
 
 jobs:
   update-and-deploy:
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Načíst aktuální hlavní větev
         uses: actions/checkout@v4
@@ -49,35 +51,52 @@ jobs:
           print(f'Ověřeno {len(items)} položek veřejných zdrojů.')
           PY
 
-      - name: Uložit změnu dat
+      - name: Uložit změnu dat do hlavní větve
         shell: bash
         run: |
           set -euo pipefail
           if git diff --quiet -- data/city-news.json; then
-            echo 'Přehled je beze změny.'
+            echo 'Přehled je obsahově beze změny.'
           else
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add data/city-news.json
             git commit -m 'Automaticky aktualizovat veřejné zdroje'
+            git pull --rebase origin main
             git push origin HEAD:main
           fi
 
-      - name: Nasadit aktuální main na OVH
+      - name: Připravit SSH klíč
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main
-          git reset --hard origin/main
-          chmod +x deploy/sync-production.sh
-          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit přehled přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/city-news.json city-news.js ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/city-news.json /var/www/nasekadan/data/city-news.json
+          sudo install -m 0644 /tmp/city-news.js /var/www/nasekadan/city-news.js
+          rm -f /tmp/city-news.json /tmp/city-news.js
+          REMOTE
 
       - name: Ověřit živý přehled
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
           token="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          curl -kfsS --max-time 30 "https://nasekadan.cz/data/city-news.json?check=${token}" -o /tmp/city-news-live.json
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/data/city-news.json?check=${token}" -o /tmp/city-news-live.json
           python3 - <<'PY'
           import json
           data = json.load(open('/tmp/city-news-live.json', encoding='utf-8'))
@@ -86,6 +105,39 @@ jobs:
               raise SystemExit('Živý datový přehled neobsahuje dost položek.')
           print(f'Živý datový přehled obsahuje {len(items)} položek.')
           PY
-          curl -kfsS --max-time 30 "https://nasekadan.cz/prehled-zdroju/?check=${token}" | grep -Fq 'Přehled veřejných zdrojů'
-          curl -kfsS --max-time 30 "https://nasekadan.cz/city-news.js?check=${token}" | grep -Fq 'cityNewsFallback'
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/prehled-zdroju/?check=${token}" | grep -Fq 'Přehled veřejných zdrojů'
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/city-news.js?check=${token}" | grep -Fq 'cityNewsFallback'
           echo 'HOTOVO: živý přehled veřejných zdrojů i záložní režim jsou funkční.'
+
+      - name: Zapsat stav aktualizace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'city-news-update-status.json';
+            const status = {
+              status: process.env.VERIFY === 'success' ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat stav aktualizace veřejných zdrojů: ${status.status}`,
+              content,
+              ...(sha ? { sha } : {})
+            });
