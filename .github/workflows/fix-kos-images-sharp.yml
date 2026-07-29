@@ -1,0 +1,145 @@
+name: Opravit a zaostřit obrázky v článku o koších
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/kos-sharp-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-kos-sharp-images
+  cancel-in-progress: false
+
+jobs:
+  rebuild-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Složit ostré obrazové soubory a upravit článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import base64, re
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          chunks = Path('.github/kos-sharp-assets')
+          outputs = {
+              'main': Path('images/clanky/kadan-pretekajici-kos-facebook-ostry.webp'),
+              'post': Path('images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp'),
+              'jan': Path('images/clanky/jan-losenicky-komentar-facebook-ostry.webp'),
+          }
+          for prefix, target in outputs.items():
+              parts = sorted(chunks.glob(f'{prefix}-*.txt'))
+              if not parts:
+                  raise RuntimeError(f'Chybí datové části pro {prefix}')
+              encoded = ''.join(p.read_text(encoding='ascii').strip() for p in parts)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(base64.b64decode(encoded))
+              if target.stat().st_size < 5000:
+                  raise RuntimeError(f'Výsledný obrázek {target} je podezřele malý')
+
+          article = Path('clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html')
+          text = article.read_text(encoding='utf-8')
+          replacements = {
+              '../images/clanky/kadan-pretekajici-kos-facebook-real.svg': '../images/clanky/kadan-pretekajici-kos-facebook-ostry.webp',
+              '../images/clanky/kadan-forum-petra-pokorna-prispevek-real.svg': '../images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp',
+              '../images/clanky/jan-losenicky-komentar-facebook-real.svg': '../images/clanky/jan-losenicky-komentar-facebook-ostry.webp',
+              'width="220" height="390" loading="eager"': 'width="560" height="993" loading="eager"',
+              'width="320" height="290" loading="lazy"': 'width="525" height="475" loading="lazy"',
+              'width="360" height="130" loading="lazy"': 'width="620" height="391" loading="lazy"',
+              'data-fb-photo-evidence="v2"': 'data-fb-photo-evidence="v3-sharp"',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise RuntimeError(f'V článku chybí očekávaný text: {old}')
+              text = text.replace(old, new, 1)
+
+          modified = datetime.now(ZoneInfo('Europe/Prague')).replace(microsecond=0).isoformat()
+          text = re.sub(r'(<meta property="article:modified_time" content=")[^"]+(">)', rf'\g<1>{modified}\g<2>', text, count=1)
+          text = re.sub(r'("dateModified":")[^"]+(")', rf'\g<1>{modified}\g<2>', text, count=1)
+          article.write_text(text, encoding='utf-8')
+          PY
+
+          file images/clanky/kadan-pretekajici-kos-facebook-ostry.webp
+          file images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp
+          file images/clanky/jan-losenicky-komentar-facebook-ostry.webp
+          grep -Fq 'data-fb-photo-evidence="v3-sharp"' clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – obrazová oprava'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html \
+            images/clanky/kadan-pretekajici-kos-facebook-ostry.webp \
+            images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp \
+            images/clanky/jan-losenicky-komentar-facebook-ostry.webp
+          git commit -m 'Opravit a zaostřit obrázky v článku o koších'
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
+
+      - name: Nasadit článek a obrázky přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+          chmod 600 "$RUNNER_TEMP/nasekadan_key"
+          scp -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html \
+            images/clanky/kadan-pretekajici-kos-facebook-ostry.webp \
+            images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp \
+            images/clanky/jan-losenicky-komentar-facebook-ostry.webp \
+            ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky
+          sudo cp /tmp/pretekajici-kose-kadan-technicke-sluzby-ridici.html /var/www/nasekadan/clanky/
+          sudo cp /tmp/kadan-pretekajici-kos-facebook-ostry.webp \
+            /tmp/kadan-forum-petra-pokorna-prispevek-ostry.webp \
+            /tmp/jan-losenicky-komentar-facebook-ostry.webp \
+            /var/www/nasekadan/images/clanky/
+          sudo chmod 644 /var/www/nasekadan/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html \
+            /var/www/nasekadan/images/clanky/*-ostry.webp
+          grep -Fq 'data-fb-photo-evidence="v3-sharp"' /var/www/nasekadan/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html
+          REMOTE
+
+      - name: Ověřit veřejné obrázky
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for attempt in $(seq 1 18); do
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html?sharp=$stamp-$attempt" -o /tmp/article.html || true
+            ok=1
+            grep -Fq 'data-fb-photo-evidence="v3-sharp"' /tmp/article.html || ok=0
+            for image in \
+              kadan-pretekajici-kos-facebook-ostry.webp \
+              kadan-forum-petra-pokorna-prispevek-ostry.webp \
+              jan-losenicky-komentar-facebook-ostry.webp; do
+              curl -4 -kfsS --max-time 20 "https://nasekadan.cz/images/clanky/$image?sharp=$stamp-$attempt" -o "/tmp/$image" || ok=0
+              test -s "/tmp/$image" || ok=0
+            done
+            if [ "$ok" = 1 ]; then exit 0; fi
+            sleep 5
+          done
+          exit 1
