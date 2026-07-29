@@ -1,0 +1,117 @@
+name: Ověřit a nasadit celé nadpisy Naše Kadaň
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/verify-headlines-live-trigger.txt'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: nasekadan-headlines-live
+  cancel-in-progress: true
+
+jobs:
+  deploy-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit zdrojové HTML
+        run: |
+          set -euo pipefail
+          grep -Fq '.article-card .visual{height:240px' index.html
+          ! grep -Fq '.article-card .visual{height:170px' index.html
+          grep -Fq '<strong>Starosta: Nemocnice to zvládne, na Béčku vyroste vyšší dům a na nepedagogy peníze budou</strong>' index.html
+          grep -Fq '<strong>Přetékající koše v Kadani budí kritiku. Město mluví o odchodu řidičů</strong>' index.html
+          grep -Fq '<strong>ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa</strong>' index.html
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit úvod a archiv přímo na OVH
+        id: deploy
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/headlines/clanky"
+          cp index.html "$RUNNER_TEMP/headlines/index.html"
+          cp clanky/index.html "$RUNNER_TEMP/headlines/clanky/index.html"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/headlines" ubuntu@57.129.43.215:/tmp/nk-headlines
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo cp /tmp/nk-headlines/index.html /var/www/nasekadan/index.html
+          sudo cp /tmp/nk-headlines/clanky/index.html /var/www/nasekadan/clanky/index.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-headlines/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/nk-headlines/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+          fi
+          local_home="$(curl -kfsS --max-time 20 --resolve nasekadan.cz:443:127.0.0.1 'https://nasekadan.cz/index.html?headline-check=local')"
+          grep -Fq '.article-card .visual{height:240px' <<<"$local_home"
+          grep -Fq '<strong>Starosta: Nemocnice to zvládne, na Béčku vyroste vyšší dům a na nepedagogy peníze budou</strong>' <<<"$local_home"
+          grep -Fq '<strong>Přetékající koše v Kadani budí kritiku. Město mluví o odchodu řidičů</strong>' <<<"$local_home"
+          grep -Fq '<strong>ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa</strong>' <<<"$local_home"
+          rm -rf /tmp/nk-headlines
+          REMOTE
+
+      - name: Ověřit veřejnou adresu mimo server
+        id: verify
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            home="$(curl -4 -kfsS --max-time 25 -H 'Cache-Control: no-cache' "https://nasekadan.cz/index.html?headline-check=${GITHUB_RUN_ID}-${attempt}" || true)"
+            if grep -Fq '.article-card .visual{height:240px' <<<"$home" \
+              && grep -Fq '<strong>Starosta: Nemocnice to zvládne, na Béčku vyroste vyšší dům a na nepedagogy peníze budou</strong>' <<<"$home" \
+              && grep -Fq '<strong>Přetékající koše v Kadani budí kritiku. Město mluví o odchodu řidičů</strong>' <<<"$home" \
+              && grep -Fq '<strong>ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa</strong>' <<<"$home"; then
+              echo 'Veřejný web vrací celé nadpisy a novou výšku karet.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                `## ${ok ? 'Celé nadpisy jsou živě nasazené' : 'Kontrola nadpisů selhala'}`,
+                '',
+                `- Přímé nasazení na OVH: **${process.env.DEPLOY || 'neprovedeno'}**`,
+                `- Veřejná kontrola bez cache: **${process.env.VERIFY || 'neprovedeno'}**`,
+                '- Ověřeny byly tři celé titulky z prvního řádku a výška horní plochy 240 px.'
+              ].join('\n')
+            });
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        run: |
+          test "$DEPLOY" = success
+          test "$VERIFY" = success
