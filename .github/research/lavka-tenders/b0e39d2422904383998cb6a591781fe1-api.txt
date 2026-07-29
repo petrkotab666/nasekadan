@@ -1,0 +1,671 @@
+
+
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>P&#x159;ihl&#xE1;&#x161;en&#xED; do Hl&#xED;da&#x10D;e st&#xE1;tu - Hl&#xED;da&#x10D; st&#xE1;tu.</title>
+    <link rel="canonical" href="https://www.hlidacstatu.cz/Identity/Account/Login" />
+    <meta name="description" content="Hl&#xED;da&#x10D; st&#xE1;tu - ve&#x159;ejn&#xE1; kontrola st&#xE1;tn&#xED;ch a ve&#x159;ejn&#xFD;ch instituc&#xED;. Ve&#x159;ejnoprosp&#x11B;&#x161;n&#xFD; projekt. Hl&#xED;da&#x10D; smluv a registr smluv. Hl&#xED;da&#x10D; Web&#x16F;." />
+    <meta name="author" content="Hlídač státu z.ú." />
+    <meta name="keywords" content="e-gov, e-government, efektivita státu, efektivní stát, Registr smluv, Hlídač státu, HlidacStatu, HlidacSmluv, Hlídač smluv, politici, smlouvy státu">
+
+
+    <link rel="shortcut icon" href="/content/icons/favicon.ico" type="image/x-icon" />
+    <link rel="apple-touch-icon" sizes="57x57" href="/content/icons/apple-touch-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/content/icons/apple-touch-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/content/icons/apple-touch-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/content/icons/apple-touch-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/content/icons/apple-touch-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/content/icons/apple-touch-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/content/icons/apple-touch-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/content/icons/apple-touch-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/content/icons/apple-touch-icon-180x180.png">
+    <link rel="icon" type="image/png" href="/content/icons/favicon-16x16.png" sizes="16x16">
+    <link rel="icon" type="image/png" href="/content/icons/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/content/icons/favicon-96x96.png" sizes="96x96">
+    <link rel="icon" type="image/png" href="/content/icons/android-chrome-192x192.png" sizes="192x192">
+    <meta name="msapplication-square70x70logo" content="/content/icons/smalltile.png" />
+    <meta name="msapplication-square150x150logo" content="/content/icons/mediumtile.png" />
+    <meta name="msapplication-wide310x150logo" content="/content/icons/widetile.png" />
+    <meta name="msapplication-square310x310logo" content="/content/icons/largetile.png" />
+
+    <meta name="twitter:site" content="HlidacStatu" />
+    <meta property="fb:app_id" content="803455203348459" />
+    <meta property="og:title" content="P&#x159;ihl&#xE1;&#x161;en&#xED; do Hl&#xED;da&#x10D;e st&#xE1;tu - Hl&#xED;da&#x10D; st&#xE1;tu." />
+    <meta property="og:url" content="https://www.hlidacstatu.cz/Identity/Account/Login" />
+    <meta property="og:site_name" content="Hlídač Státu" />
+    <meta property="og:type" content="website" />
+    <meta property="og:description" content="Hl&#xED;da&#x10D; st&#xE1;tu - ve&#x159;ejn&#xE1; kontrola st&#xE1;tn&#xED;ch a ve&#x159;ejn&#xFD;ch instituc&#xED;. Ve&#x159;ejnoprosp&#x11B;&#x161;n&#xFD; projekt. Hl&#xED;da&#x10D; smluv a registr smluv. Hl&#xED;da&#x10D; Web&#x16F;." />
+    <meta property="og:image" content="https://www.hlidacstatu.cz/content/icons/largetile.png" />
+    <meta name="twitter:image" content="https://www.hlidacstatu.cz/content/icons/largetile.png" />
+    <meta property="og:hlidac_html" content="" />
+    <meta property="og:hlidac_footer" content="" />
+    <meta property="og:hlidac_subfooter" content="" />
+    <meta property="og:hlidac_footerimg" content="https://www.hlidacstatu.cz/content/icons/largetile.png" />
+
+    
+
+    <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700&amp;subset=latin-ext" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css?family=Cabin:400,400i,600,700&amp;subset=latin-ext" rel="stylesheet" />
+
+
+    <link rel="stylesheet" href="/css/bootstrap.hlidac.min.css">
+    <link rel="stylesheet" href="/css/bootstrap.hlidac.override.css">
+    <link rel="stylesheet" href="/css/hlidac.css?v=20260521">
+    <link rel="stylesheet" href="/css/site.css?v=20260521">
+
+    <link rel="stylesheet" href="/Content/social-share-kit.css">
+
+
+
+
+    <script src="/js/bootstrap.bundle.min.js"></script>
+
+
+
+    <script src="https://kit.fontawesome.com/a0fc082c81.js" crossorigin="anonymous"></script>
+
+    <script src="/Scripts/jquery-1.11.3.min.js"></script>
+    <script src="/Scripts/respond.min.js"></script>
+    <script src="/Scripts/hlidac.v1.14.js"></script>
+    <script src="/Scripts/fuckadblock.min.js"></script>
+
+    <script src="/Scripts/modernizr-2.8.3.js"></script>
+
+    <script src="/scripts/autocomplete.1.0.0.js?upd=1.0.1"></script>
+
+    <!-- Matomo Tag Manager -->
+    <script>
+        var _mtm = window._mtm = window._mtm || [];
+        _mtm.push({ 'mtm.startTime': (new Date().getTime()), 'event': 'mtm.Start' });
+        var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
+        g.async = true; g.src = 'https://ma.hlidacstatu.cz/js/container_rZ3U6hIe.js'; s.parentNode.insertBefore(g, s);
+    </script>
+    <!-- End Matomo Tag Manager -->
+
+    <script>
+        function closeMegaMenu(el) {
+        var navItem = $(el).closest('.dropdown-menu.shadow').prev('a');
+        var dd = new bootstrap.Dropdown(navItem[0]);
+        dd.hide();
+        }
+
+    </script>
+    
+    
+
+    <script src="https://ajax.aspnetcdn.com/ajax/jquery.validate/1.17.0/jquery.validate.min.js" crossorigin="anonymous" integrity="sha384-rZfj/ogBloos6wzLGpPkkOr/gpkBNLZ6b6yLy4o+ok+t/SAKlL5mvXLr0OXNi1Hp">
+    </script>
+<script>(window.jQuery && window.jQuery.validator||document.write("\u003Cscript src=\u0022/Identity/lib/jquery-validation/dist/jquery.validate.min.js\u0022 crossorigin=\u0022anonymous\u0022 integrity=\u0022sha384-rZfj/ogBloos6wzLGpPkkOr/gpkBNLZ6b6yLy4o\u002Bok\u002Bt/SAKlL5mvXLr0OXNi1Hp\u0022\u003E\u003C/script\u003E"));</script>
+    <script src="https://ajax.aspnetcdn.com/ajax/jquery.validation.unobtrusive/3.2.9/jquery.validate.unobtrusive.min.js" crossorigin="anonymous" integrity="sha384-ifv0TYDWxBHzvAk2Z0n8R434FL1Rlv/Av18DXE43N/1rvHyOG4izKst0f2iSLdds">
+    </script>
+<script>(window.jQuery && window.jQuery.validator && window.jQuery.validator.unobtrusive||document.write("\u003Cscript src=\u0022/Identity/lib/jquery-validation-unobtrusive/jquery.validate.unobtrusive.min.js\u0022 crossorigin=\u0022anonymous\u0022 integrity=\u0022sha384-ifv0TYDWxBHzvAk2Z0n8R434FL1Rlv/Av18DXE43N/1rvHyOG4izKst0f2iSLdds\u0022\u003E\u003C/script\u003E"));</script>
+
+
+
+
+
+    <link href="/scripts/selectize/selectize.bootstrap5.css" rel="stylesheet" />
+    <script src="/scripts/selectize/selectize.min.js"></script>
+
+    <!-- clarity -->
+    <!-- /clarity -->
+
+    <link rel="stylesheet" href="/css/site.last.override.css" />
+
+    <base href="https://www.hlidacstatu.cz/Identity/Account/Login" />
+
+</head>
+<body class="new-body">
+
+
+
+    <!-- ##head## -->
+    <style>
+        .navbar.hlidac .nav-item {
+        line-height: 1.2em;
+        }
+
+    </style>
+
+    <header class="hs-navbar">
+        <div class="nav-inner">
+            <a href="/" class="logo">
+                <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="46px" height="46px" viewBox="0 0 46 46" version="1.1">
+                    <g id="Page-2" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+                        <g id="06-DOBRA" transform="translate(-31.000000, -18.000000)">
+                            <g id="Group" transform="translate(31.000000, 18.000000)">
+                                <path d="M34.7926176,43 L34.7926176,25.8136542 C34.7926176,19.2536826 29.4005716,14.55625 22.8156981,14.55625 L22.7226406,14.55625 C16.137767,14.55625 10.4707785,19.2536826 10.4707785,25.8136542 L10.4707785,43 L34.7926176,43 Z" id="Fill-1" fill="#25272D" />
+                                <path d="M30.6778527,27.9431372 C29.1549094,27.5784772 26.5447427,27.4633214 24.731801,27.9431372 C22.9188592,28.422953 22.6712952,30.9140119 24.731801,30.9140119 C26.7923068,30.9140119 32.200796,28.3077972 30.6778527,27.9431372 Z" id="Oval" fill="#266cae" />
+                                <path d="M21.7334082,27.9431372 C20.2104649,27.5784772 17.6002983,27.4633214 15.7873565,27.9431372 C13.9744148,28.422953 13.7268507,30.9140119 15.7873565,30.9140119 C17.8478623,30.9140119 23.2563515,28.3077972 21.7334082,27.9431372 Z" id="Oval" fill="#266cae" transform="translate(18.166667, 29.269506) scale(-1, 1) translate(-18.166667, -29.269506) " />
+                                <path d="M23.1340731,0.78903332 C22.7184471,0.423872614 22.0477586,0.424188294 21.6368425,0.78903332 L0.744673078,19.3388181 C0.333401493,19.7039788 0.245239258,20.3678589 0.557111502,20.8356673 L1.4428885,22.1643327 C1.75057268,22.625859 2.33675444,22.7031399 2.74956077,22.3392375 L22.3815156,5.03302363 L42.2405567,22.3392375 C42.6593161,22.7041666 43.2441756,22.6321411 43.5562369,22.1643327 L44.4425508,20.8356673 C44.7504215,20.374141 44.6627092,19.7036631 44.2474425,19.3388181 L23.1340731,0.78903332 Z" id="Combined-Shape" fill="#25272D" />
+                            </g>
+                        </g>
+                    </g>
+                </svg>
+                <div style="line-height: 1.2em;">
+                    <div>Hlídač</div><div><strong>státu</strong></div>
+                </div>
+            </a>
+
+            <nav class="nav-links">
+                <a href="/smlouvy" class="nav-link-item">Smlouvy</a>
+                <a href="/dotace" class="nav-link-item">Dotace</a>
+                <a href="https://platy.hlidacstatu.cz" class="nav-link-item">Platy</a>
+                <a href="/menupage/urady" class="nav-link-item">Úřady</a>
+                <a href="/verejnezakazky" class="nav-link-item">Zakázky</a>
+                <a href="/menupage/firmy" class="nav-link-item">Sponzoři & firmy</a>
+                <a href="https://texty.hlidacstatu.cz/jak-podporit-hlidac-statu-fungovani-ceska/" class="btn btn-xs btn-primary">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M10 17s-7-4.35-7-9a4 4 0 0 1 7-2.65A4 4 0 0 1 17 8c0 4.65-7 9-7 9z" fill="white" />
+                    </svg>
+                    Podpořte nás
+                </a>
+
+            </nav>
+
+            <div class="nav-actions">
+
+                        <a onclick="_my_event('send', 'event', 'loginBtn', 'click','/Identity/Account/Login'); return true;"
+                           href="/Identity/Account/Login?retUrl_2=/"
+                           class="btn btn-xs btn-outline-primary">Přihlásit se</a>
+                        <a onclick="_my_event('send', 'event', 'registerBtn', 'click','/Identity/Account/Login'); return true;"
+                           href="/Identity/Account/Register?retUrl_2=/" id="regLink"
+                           class="btn btn-xs btn-outline-primary d-none d-lg-inline-block">Registrace</a>
+
+                <!-- Mobile toggle -->
+                <button class="nav-toggle btn btn-link p-0 ms-auto text-dark" type="button"
+                        aria-label="Menu" data-bs-toggle="collapse" data-bs-target="#mobileNav">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M3 6h18M3 12h18M3 18h18" stroke="#28313B" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Mobile nav -->
+        <div class="collapse" id="mobileNav">
+            <div style="padding: 8px 40px 16px; border-top: 1px solid var(--hs-light); display:flex; flex-direction:column; gap:4px;">
+                <a href="/smlouvy" class="nav-link-item py-2">Smlouvy</a>
+                <a href="/dotace" class="nav-link-item py-2">Dotace</a>
+                <a href="https://platy.hlidacstatu.cz" class="nav-link-item py-2">Platy</a>
+                <a href="/menupage/urady" class="nav-link-item py-2">Úřady</a>
+                <a href="/verejnezakazky" class="nav-link-item py-2">Zakázky</a>
+                <a href="/menupage/firmy" class="nav-link-item py-2">Sponzoři & firmy</a>
+
+                <div style="display:flex; gap:12px; margin-top:12px; flex-wrap:wrap;">
+                    <a href="https://texty.hlidacstatu.cz/jak-podporit-hlidac-statu-fungovani-ceska/" class="btn btn-xs btn-primary">❤ Podpořte nás</a>
+
+                        <a onclick="_my_event('send', 'event', 'loginBtn', 'click','/Identity/Account/Login'); return true;"
+                           href="/Identity/Account/Login?retUrl_2=/"
+                           class="btn btn-xs btn-outline-primary">Přihlásit se</a>
+                        <a onclick="_my_event('send', 'event', 'registerBtn', 'click','/Identity/Account/Login'); return true;"
+                           href="/Identity/Account/Register?retUrl_2=/"
+                           class="btn btn-xs btn-outline-primary">Registrace</a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ##/head## -->
+        <section class="hs-subnav-search">
+            <div class="hs-wrap">
+                <div class="subnav-search-inner">
+                    <span class="subnav-search-label">Hledat v Hlídači státu</span>
+
+                    <form id="old-search-input" method="get" style="visibility:visible;display:none">
+                        <div class="hs-search">
+                            <div class="s-input-wrap">
+                                <input id="Q" name="Q" type="search" placeholder="Smluvní strana, Název instituce, Jméno osoby, IČO, téma smlouvy …">
+                                <input type="hidden" name="u" value="2" />
+                            </div>
+                            <button class="btn btn-hs btn-primary " formaction="/hledat">Hledat</button>
+                        </div>
+                    </form>
+                    <div id="new-search-input" class="new-search-input">
+                        
+
+<style>
+    .selectize-dropdown-content {
+        max-height: none !important; /* Disable max-height */
+        overflow: visible !important; /* Ensure overflow is visible */
+        background-color: white;
+    }
+
+    .hlidac-autocomplete {
+        /*border: 2px solid yellow;   */
+        position: relative;
+        padding: 0;
+        margin: 0;
+    }
+
+    .hs-avatar {
+        width: 50px;
+        height: auto;
+        color: #ccc;
+        font-size: 45px;
+    }
+
+        .hs-avatar.small {
+            font-size: 25px;
+        }
+
+        .hs-avatar img {
+            width: 50px;
+        }
+
+    .hs-autocomplete-description {
+        margin-left: 15px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+        .hs-autocomplete-description.small {
+            margin-top: 10px;
+        }
+
+    .selectize-control .selectize-input {
+        height: 100% !important;
+    }
+    
+    /*.selectize-control {*/
+    /*    width: 100% !important;*/
+    /*}*/
+
+        .selectize-control.multi .selectize-input > div {
+            background-color: var(--bs-primary-bg-subtle) !important;
+        }
+
+</style>
+
+<div>
+    <div class="hlidac-autocomplete row g-0 flex-wrap">
+        <div class="col-12 col-sm-10">
+            <select id="autocomplete"
+                    class="form-select w-100 h-100"
+                    autocomplete="off"
+                    placeholder='Začněte psát jméno úřadu, politika nebo co vás zajímá...'>
+            </select>
+        </div>
+        <div class="col-12 col-sm-2">
+            <button id="getValuesBtn"
+                    class="btn btn-hs btn-primary">
+                Hledat
+                <span id="searchSpiner"
+                      style="display: none"
+                      class="spinner-border spinner-border-sm text-light align-middle mb-1 ms-1"
+                      role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </span>
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<script>
+
+$(document).ready(function () {
+    const inputTagsJson = '[]';
+    const autocomplete1 = new AutocompleteManager('#autocomplete','/hledat',inputTagsJson, '#getValuesBtn');
+
+    // You can now initialize multiple instances with different selectors if needed
+    // const autocomplete2 = new AutocompleteManager('#anotherAutocomplete');
+});
+</script>
+
+
+                    </div>
+
+                    <div class="hs-tags">
+                        <button class="header__search__hint btn btn-link new-search-input" style="padding-top:2px;font-size:15px;text-decoration:none;">
+                            <i class="fa-solid fa-typewriter"></i> Přepnout na vyhledávání bez našeptávače
+                        </button>
+                        <button class="header__search__hint btn btn-link old-search-input" style="padding-top:2px;font-size:15px;text-decoration:none;">
+                            <i class="fa-solid fa-wand-sparkles"></i> Přepnout na vyhledávání s našeptávačem
+                        </button>
+                        <a target="_blank" class="header__search__hint" style="padding-top:2px;font-size:15px;text-decoration:none;" href="/napoveda">
+                            <i class="fa-regular fa-question-square" style=""></i> Nápověda jak vyhledávat
+                        </a>
+                        <a class="header__search__hint float-end" style="padding-top:2px;font-size:15px;text-decoration:none;" href="/snadnehledani">
+                            <i class="fa-regular fa-magnifying-glass"></i> Snadné hledání
+                        </a>
+
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+    <div class="container mt-4">
+
+
+    <ol class="breadcrumb">
+        <li>
+            <a href="/">Hlídač Státu</a>
+        </li>
+        <li>P&#x159;ihl&#xE1;&#x161;en&#xED; do Hl&#xED;da&#x10D;e st&#xE1;tu</li>
+    </ol>
+
+            <div class="row">
+                <div class="col-xs-12">
+                    <h1 class="new-title text-start">
+                            <a style="font-size:0.7em;vertical-align:top;" href="#" class="bookmark bookmarkOff" alt="Ulo&#x17E;it do z&#xE1;lo&#x17E;ek. V&#x161;echny ulo&#x17E;en&#xE9; polo&#x17E;ky najdete na jednom m&#xED;ste ve va&#x161;em profilu a hlavi&#x10D;ce." title="Ulo&#x17E;it do z&#xE1;lo&#x17E;ek. V&#x161;echny ulo&#x17E;en&#xE9; polo&#x17E;ky najdete na jednom m&#xED;ste ve va&#x161;em profilu a hlavi&#x10D;ce." data-toggle="modal" data-target="#bookmarkInfoAnon" onclick="return false;"><i class="fad fa-bookmark"></i></a>
+                        P&#x159;ihl&#xE1;&#x161;en&#xED; do Hl&#xED;da&#x10D;e st&#xE1;tu
+
+
+                    </h1>
+                </div>
+            </div>
+        
+
+
+<div class="row">
+    <div class="col-sm-12">
+
+    </div>
+        <hr class="bg-dark"/>
+    <div class="col-sm-12">
+        <h4>Přihlášení účtem jiné služby</h4>
+        <p>Nemusíte se bát, my se váš login a heslo k jiné službě nedozvíme. Jediné, co se dozvíme je váš email. Stejně jako při registraci níže.</p>
+        
+        <section>
+            <form id="external" method="post" action="/Identity/Account/ExternalLogin?retUrl_2=%2F">
+                <div>
+                        <button type="submit" class="btn btn-hs btn-link"
+                                name="provider" value="Google"
+                                title="Přihlásit pomocí Google účtu">
+                            <img src="/Content/Img/GoogleSignin.png" style="height:50px;width:auto" />
+                        </button>
+                        <button type="submit" class="btn btn-hs btn-link"
+                                name="provider" value="apple"
+                                title="Přihlásit pomocí OpenIdConnect účtu">
+                            <img src="/Content/Img/appleSignin.png" style="height:50px;width:auto" />
+                        </button>
+                        <button type="submit" class="btn btn-hs btn-link"
+                                name="provider" value="mojeid"
+                                title="Přihlásit pomocí OpenIdConnect účtu">
+                            <img src="/Content/Img/mojeidSignin.png" style="height:50px;width:auto" />
+                        </button>
+                </div>
+            <input name="__RequestVerificationToken" type="hidden" value="CfDJ8N-R7gujsBVKqQ0w5LzIdmFoWAQYiUpWxsYNVcD9jk8rQHbijxdP2IRPhLSKIZb_Ztm00OG51nDpk6pI35ZXT7oN6X_IDxlDsXkzyybtpiz43IN2MLupHvRErjXxAavEINTLFixmkQnQs6uZtr72RVg" /></form>
+        </section>
+        <hr class="bg-dark"/>
+    </div>
+    
+    <div class="col-sm-12">
+        <h4>Přihlášení pomocí účtu na Hlídači státu</h4>
+        <section>
+            <form id="account" method="post" class="form-horizontal">
+                <p>Pokud účet ještě nemáte, <a href="/Identity/Account/Register?retUrl_2=%2F">tady se snadno a zdarma zaregistrujete</a>.</p>
+                <hr/>
+                <div class="text-danger validation-summary-valid" data-valmsg-summary="true"><ul><li style="display:none"></li>
+</ul></div>
+                <div class="form-group">
+                    <label class="col-md-2 control-label" for="Input_Email">E-mail</label>
+                    <div class="col-sm-8">
+                        <input class="form-control" type="email" data-val="true" data-val-email="The Email field is not a valid e-mail address." data-val-required="The Email field is required." id="Input_Email" name="Input.Email" value="" />
+                        <span class="text-danger field-validation-valid" data-valmsg-for="Input.Email" data-valmsg-replace="true"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="col-md-2 control-label" for="Input_Password">Heslo</label>
+                    <div class="col-sm-8">
+                        <input class="form-control" type="password" data-val="true" data-val-required="The Password field is required." id="Input_Password" name="Input.Password" />
+                        <span class="text-danger field-validation-valid" data-valmsg-for="Input.Password" data-valmsg-replace="true"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="col-sm-offset-2 col-sm-8">
+                        <div class="checkbox">
+                            <label for="Input_RememberMe">
+                                <input type="checkbox" data-val="true" data-val-required="The Remember me? field is required." id="Input_RememberMe" name="Input.RememberMe" value="true" />
+                                Zapamatuj si mě
+                            </label>
+                            <div class="text-warning small">
+                                Nezaškrtávejte, pokud sdílíte počítač s více lidmi nebo jste u veřejného počítače.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="col-sm-offset-2 col-sm-8">
+                        <button type="submit" class="btn btn-hs btn-primary">Přihlásit se do Hlídače státu</button>
+                        <p>
+                            <a id="forgot-password" href="/Identity/Account/ForgotPassword">Zapomenuté heslo?</a>
+                        </p>
+                        <p>
+                            <a id="resend-confirmation" href="/Identity/Account/ResendEmailConfirmation">Odeslat potvrzení e-mailem</a>
+                        </p>
+                    </div>
+                </div>
+            <input name="__RequestVerificationToken" type="hidden" value="CfDJ8N-R7gujsBVKqQ0w5LzIdmFoWAQYiUpWxsYNVcD9jk8rQHbijxdP2IRPhLSKIZb_Ztm00OG51nDpk6pI35ZXT7oN6X_IDxlDsXkzyybtpiz43IN2MLupHvRErjXxAavEINTLFixmkQnQs6uZtr72RVg" /><input name="Input.RememberMe" type="hidden" value="false" /></form>
+        </section>
+    </div>
+</div>
+
+
+    </div>
+
+    <a id="back-to-top" href="#" class="btn btn-hs btn-primary back-to-top" role="button" title="Vrátit se na začátek stránky" data-bs-toggle="tooltip" data-placement="left"><i class="fas fa-chevron-up"></i></a>
+<div style="height: 32px"></div>
+
+<script>
+    $(document).ready(function () {
+        $(window).scroll(function () {
+            if ($(this).scrollTop() > 800) {
+                $('#back-to-top').fadeIn();
+                //$('#back-to-top').tooltip('show');
+            } else {
+                $('#back-to-top').tooltip('hide');
+                $('#back-to-top').fadeOut();
+            }
+        });
+        // scroll body to 0px on click
+        $('#back-to-top').click(function () {
+            $('#back-to-top').tooltip('hide');
+            $('body,html').animate({
+                scrollTop: 0
+            }, 800);
+            return false;
+        });
+
+
+    });
+</script>
+
+    <footer class="hs-footer">
+    <div class="hs-wrap">
+        <div class="footer-grid">
+
+            <!-- Logo + popis -->
+            <div class="footer-logo-col">
+                     
+                <div class="logo" style="margin-bottom:24px; display:block;float:none">
+                    <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="46px" height="46px" viewBox="0 0 46 46" version="1.1">
+                        <g id="Page-2" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+                            <g id="06-DOBRA" transform="translate(-31.000000, -18.000000)">
+                                <g id="Group" transform="translate(31.000000, 18.000000)">
+                                    <path d="M34.7926176,43 L34.7926176,25.8136542 C34.7926176,19.2536826 29.4005716,14.55625 22.8156981,14.55625 L22.7226406,14.55625 C16.137767,14.55625 10.4707785,19.2536826 10.4707785,25.8136542 L10.4707785,43 L34.7926176,43 Z" id="Fill-1" fill="#25272D" />
+                                    <path d="M30.6778527,27.9431372 C29.1549094,27.5784772 26.5447427,27.4633214 24.731801,27.9431372 C22.9188592,28.422953 22.6712952,30.9140119 24.731801,30.9140119 C26.7923068,30.9140119 32.200796,28.3077972 30.6778527,27.9431372 Z" id="Oval" fill="#266cae" />
+                                    <path d="M21.7334082,27.9431372 C20.2104649,27.5784772 17.6002983,27.4633214 15.7873565,27.9431372 C13.9744148,28.422953 13.7268507,30.9140119 15.7873565,30.9140119 C17.8478623,30.9140119 23.2563515,28.3077972 21.7334082,27.9431372 Z" id="Oval" fill="#266cae" transform="translate(18.166667, 29.269506) scale(-1, 1) translate(-18.166667, -29.269506) " />
+                                    <path d="M23.1340731,0.78903332 C22.7184471,0.423872614 22.0477586,0.424188294 21.6368425,0.78903332 L0.744673078,19.3388181 C0.333401493,19.7039788 0.245239258,20.3678589 0.557111502,20.8356673 L1.4428885,22.1643327 C1.75057268,22.625859 2.33675444,22.7031399 2.74956077,22.3392375 L22.3815156,5.03302363 L42.2405567,22.3392375 C42.6593161,22.7041666 43.2441756,22.6321411 43.5562369,22.1643327 L44.4425508,20.8356673 C44.7504215,20.374141 44.6627092,19.7036631 44.2474425,19.3388181 L23.1340731,0.78903332 Z" id="Combined-Shape" fill="#25272D" />
+                                </g>
+                            </g>
+                        </g>
+                    </svg>
+                    <div style="line-height: 1.2em;display:inline-block">
+                        <div>Hlídač <strong>státu</strong></div>
+                    </div>
+                </div>
+
+
+                <p class="hs-sm text-hs-black mb-0">
+                    10 let hlídáme český stát. Největší nezávislý watchdog v ČR. Financován výhradně dárci. Bez reklam. Bez státních dotací. 
+                </p>
+            </div>
+
+            <div class="footer-cols">
+
+                <!-- Databáze -->
+                <div class="footer-col">
+                    <p class="footer-col-head">Data, fakta, analýzy</p>
+                    <a href="https://www.hlidacstatu.cz/smlouvy">Smlouvy</a>
+                    <a href="https://www.hlidacstatu.cz/dotace">Dotace</a>
+                    <a href="https://www.hlidacstatu.cz/verejnezakazky">Veřejné zakázky</a>
+                    <a href="https://platy.hlidacstatu.cz/">Platy úředníků</a>
+                    <a href="https://platy.hlidacstatu.cz/politici">Platy politiků</a>
+                    <a href="https://www.hlidacstatu.cz/adresar">Firmy a úřady</a>
+                    <a href="https://www.hlidacstatu.cz/sponzori">Politický sponzoring</a>
+                    <a href="https://www.hlidacstatu.cz/kindex" alt="Index klíčových rizik" title="Index klíčových rizik">K-Index</a>
+                    <a href="https://www.hlidacstatu.cz/data" alt="Další databáze a unikátní data" title="Další databáze a unikátní data">Další databáze</a>
+                    <a href="https://www.hlidacstatu.cz/statniweby" alt="Státní weby" title="Státní weby">Státní weby</a>
+                </div>
+
+                <!-- O projektu -->
+                <div class="footer-col">
+                    <p class="footer-col-head">O projektu</p>
+                    <a href="https://www.hlidacstatu.cz/impact-report">Co jsme dokázali!</a>
+                    <a href="https://texty.hlidacstatu.cz/o-serveru">Kdo jsme</a>
+                    <a href="https://texty.hlidacstatu.cz/kodex">Etický kodex</a>
+                    <a href="https://api.hlidacstatu.cz/">API a data</a>
+                    <a href="https://mcp.api.hlidacstatu.cz/">AI a MCP server</a>
+                    <a href="https://texty.hlidacstatu.cz/pro-media">Pro média</a>
+                    <a href="https://texty.hlidacstatu.cz/jak-podporit-hlidac-statu-fungovani-ceska/">Podpořte nás</a>
+                    <a href="https://texty.hlidacstatu.cz/kontakt/">Kontakt</a>
+                </div>
+
+                <!-- Komunita -->
+                <div class="footer-col">
+                    <p class="footer-col-head">Komunita - Hlídač</p>
+                    <a href="https://x.com/hlidacstatu" class="social-link">
+                        <i class="fa-brands fa-x-twitter"></i>
+                        @HlidacStatu
+                    </a>
+                    <a href="https://www.facebook.com/HlidacStatu/" class="social-link">
+                        <i class="fa-brands fa-facebook"></i>
+                        Facebook
+                    </a>
+                    <a href="https://cz.linkedin.com/company/hlidacstatu" class="social-link">
+                        <i class="fa-brands fa-linkedin"></i>
+                        LinkedIn
+                    </a>
+
+                    <!-- MailerLite Universal -->
+                    <script>
+                                            (function(m,a,i,l,e,r){ m['MailerLiteObject']=e;function f(){
+                                            var c={ a:arguments,q:[]};var r=this.push(c);return "number"!=typeof r?r:f.bind(c.q);}
+                                            f.q=f.q||[];m[e]=m[e]||f.bind(f.q);m[e].q=m[e].q||f.q;r=a.createElement(i);
+                                            var _=a.getElementsByTagName(i)[0];r.async=1;r.src=l+'?v'+(~~(new Date().getTime()/1000000));
+                                            _.parentNode.insertBefore(r,_);})(window, document, 'script', 'https://static.mailerlite.com/js/universal.js', 'ml');
+
+                                            var ml_account = ml('accounts', '1727018', 'u8a0r9v8n8', 'load');
+                    </script>
+                    <!-- End MailerLite Universal -->
+                    <script>
+                                            var ml_webform_6077068 = ml_account('webforms', '6077068', 'u5g9s7', 'load');
+                                            ml_webform_6077068('animation', 'fadeIn');
+                    </script>
+
+                    <a href="javascript:;" onclick="ml_webform_6077068('show')" class="social-link">
+                        <i class="fa-solid fa-envelope"></i>
+                        Hlídačův pátek (newsletter)
+                    </a>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom bar -->
+        <div class="footer-bottom">
+            <span>© 2016–2026 Hlídač státu, z. ú.</span>
+            <div>
+                <a href="https://texty.hlidacstatu.cz/provoznipodminky/">Ochrana soukromí</a>
+                <a href="https://texty.hlidacstatu.cz/provoznipodminky/">Podmínky použití</a>
+                <a href="https://texty.hlidacstatu.cz/tym-hlidace-statu/">Team</a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+
+    
+    <!-- render-scripts -->
+    
+
+    
+<div id="dar-footer-msg-bookmark" class="ad-footer-msg">
+    <div id="ad1">
+        <div class="fund-list grey" style="display: block;">
+            <div class="container">
+                <div class="row">
+                    <div class="col-sm-10 col-xs-12">
+                        <p class="small">
+                            Pokud vás zaujme nějaký dokument, profil firmy, výsledek hledání či prakticky jakýkoliv údaj na Hlídači,
+                            <b>nemusíte si ho pamatovat</b>. Stačí si ho uložit do záložek a my si to zapamatujeme za vás.
+                        </p>
+                        <p class="small">
+                            Uložení záložky je snadné, stačí kliknout na ikonu  <a style="font-size:120%" href="#" class="bookmark bookmarkOff" onclick="javascript:return false;"></a>.
+                            Pokud už je konkrétní záložka vytvořená, pak je vybarvena červeně <a style="font-size:120%" href="#" class="bookmark bookmarkOn" onclick="javascript:return false;"></a>.
+                        </p>
+                    </div>
+                    <div class="col-sm-2 col-xs-12">
+                        <a style="margin-top:15px;" class="fund-daruj-btn float-end text-end" onclick="_my_event('send', 'event', 'darujAdFooter', 'daruj-btn', '1'); return false;" id="fund-daruj-btn" target="_blank" href="#">Chápu, díky!</a>
+                    </div>
+                    <div class="fund-zavri">
+                        <a id="fund-info-btn" onclick="_my_event('send', 'event', 'darujAdFooter', 'viceinfo', '1');" target="_blank" href="https://texty.hlidacstatu.cz/zalozky-si-za-vas-zapamatuji-vse-co-potrebujete/">Více informací</a>
+                        <a id="fund-zavri-btn" onclick="_my_event('send', 'event', 'darujAdFooter', 'zavri', '1');" style="margin-left:30px;color:#ff5900" href="#"><span class="fas fa-times"></span></a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <noscript>
+        <style>
+            #dar-footer-msg {
+                display: none;
+            }
+        </style>
+    </noscript>
+</div>
+
+
+
+
+        <div id="bookmarkInfoAnon" class="modal fade" tabindex="-1" role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <h4 class="modal-title">Záložky</h4>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            Pokud vás zaujme nějaký dokument, profil firmy, výsledek hledání či prakticky jakýkoliv údaj na Hlídači,
+                            <b>nemusíte si ho pamatovat</b>. Stačí si ho uložit do záložek a my si to zapamatujeme za vás.
+                        </p>
+                        <p>
+                            Uložení záložky je snadné, stačí kliknout na ikonu  <a style="font-size:120%" href="#" class="bookmark bookmarkOff" onclick="javascript:return false;"></a>.
+                            Pokud už je konkrétní záložka vytvořená, pak je vybarvena červeně <a style="font-size:120%" href="#" class="bookmark bookmarkOn" onclick="javascript:return false;"></a>.
+                        </p>
+                        <p>Abychom ale vědeli, komu jaké záložky patří, <a href="/Identity/Account/login" class="btn btn-hs btn-secondary">musíte se zalogovat</a>.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-hs btn-secondary" data-bs-dismiss="modal">Zavřít</button>
+                    </div>
+                </div><!-- /.modal-content -->
+            </div><!-- /.modal-dialog -->
+        </div>
+
+
+
+
+
+</body>
+</html>
