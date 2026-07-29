@@ -1,0 +1,33 @@
+name: Potvrdit živé ostré obrázky článku o koších
+
+on:
+  workflow_run:
+    workflows: ['Okamžitě opravit obrázky článku o koších']
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  confirm:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Zapsat produkční potvrzení
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-confirmations
+          printf 'article=/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html\nmarker=v4-sharp-live\nworkflow_run=%s\nverified=%s\n' \
+            '${{ github.event.workflow_run.id }}' "$(date -u +%FT%TZ)" \
+            > deployment-confirmations/bins-images-live.txt
+          git config user.name 'Naše Kadaň – produkční potvrzení'
+          git config user.email 'info@nasekadan.cz'
+          git add deployment-confirmations/bins-images-live.txt
+          git commit -m 'Potvrdit živé ostré obrázky článku o koších'
+          git pull --rebase origin main
+          git push origin HEAD:main
