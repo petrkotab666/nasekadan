@@ -1,0 +1,115 @@
+name: Vytěžit klíčové smlouvy lávky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-lavka-key-contracts-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces python3-bs4 python3-lxml file
+      - name: Stáhnout a vytěžit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-key-contracts
+          mkdir -p .github/research/lavka-key-contracts/{text,html,raw}
+          cat > /tmp/key.py <<'PY'
+          import hashlib,json,re,subprocess,time,unicodedata
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          R=Path('.github/research/lavka-key-contracts'); RAW=R/'raw'; TXT=R/'text'; HTML=R/'html'
+          S=requests.Session();S.headers['User-Agent']='NaseKadan research'
+          def get(u):
+            for i in range(5):
+              try:
+                r=S.get(u,timeout=60);r.raise_for_status();return r
+              except Exception:
+                if i==4: raise
+                time.sleep(2+i*2)
+          def norm(s): return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',s or '').encode('ascii','ignore').decode().lower()).strip()
+          def sh(cmd): return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          ids={'34471149','34491001','38341648'}
+          searches=[
+            'https://smlouvy.gov.cz/vyhledavani?party_idnum=62242105&publication_date%5Bfrom%5D=2026-06-01&publication_date%5Bto%5D=2026-06-30&searchResultList-limit=100',
+            'https://smlouvy.gov.cz/vyhledavani?party_idnum=04794621&publication_date%5Bfrom%5D=2026-07-01&publication_date%5Bto%5D=2026-07-31&searchResultList-limit=100',
+            'https://smlouvy.gov.cz/vyhledavani?party_idnum=04794621&publication_date%5Bfrom%5D=2025-10-01&publication_date%5Bto%5D=2025-10-31&searchResultList-limit=100'
+          ]
+          for i,u in enumerate(searches):
+            r=get(u);(HTML/f'search-{i}.html').write_bytes(r.content);s=BeautifulSoup(r.text,'lxml')
+            for a in s.find_all('a',href=True):
+              m=re.search(r'/smlouva/(\d+)',a['href'])
+              if not m: continue
+              row=a.find_parent('tr'); t=norm(' '.join(row.stripped_strings) if row else a.get_text(' ',strip=True))
+              if any(x in t for x in ['lavka','kopecek','silnici c. 568','silnice c.568']): ids.add(m.group(1))
+          recs=[]; files=[]
+          for vid in sorted(ids):
+            u=f'https://smlouvy.gov.cz/smlouva/{vid}';r=get(u);(HTML/f'{vid}.html').write_bytes(r.content);s=BeautifulSoup(r.text,'lxml')
+            rec={'id':vid,'url':u,'page':' '.join(s.stripped_strings),'attachments':[]}
+            for a in s.find_all('a',href=True):
+              if '/smlouva/soubor/' not in a['href']:continue
+              fu=urljoin(u,a['href']);name=a.get_text(' ',strip=True) or urlparse(fu).path.rsplit('/',1)[-1]
+              data=get(fu).content; p=RAW/f'{vid}-{len(rec["attachments"])+1:02d}' ;p.write_bytes(data)
+              item={'name':name,'url':fu,'raw':str(p),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()};rec['attachments'].append(item);files.append(item)
+            recs.append(rec)
+          (R/'records.json').write_text(json.dumps(recs,ensure_ascii=False,indent=2),encoding='utf-8')
+          ex=[]
+          for f in files:
+            p=Path(f['raw']);mime=sh(['file','-b','--mime-type',str(p)]).stdout.strip(); out=TXT/(p.name+'.txt');text='';method=''
+            if mime=='application/pdf':
+              tmp=Path('/tmp')/(p.name+'.txt');sh(['pdftotext','-layout',str(p),str(tmp)]);text=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else '';method='pdftotext'
+              if len(re.sub(r'\s+','',text))<500:
+                method='ocr'; d=Path('/tmp')/('ocr-'+p.name);d.mkdir(exist_ok=True);info=sh(['pdfinfo',str(p)]).stdout;m=re.search(r'^Pages:\s+(\d+)',info,re.M);pages=min(int(m.group(1)) if m else 30,100)
+                sh(['pdftoppm','-f','1','-l',str(pages),'-r','260','-jpeg',str(p),str(d/'page')]);chunks=[]
+                for im in sorted(d.glob('page-*.jpg')):chunks.append(sh(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+                text='\n\n'.join(chunks)
+            if text:out.write_text(text,encoding='utf-8')
+            ex.append({'raw':str(p),'name':f['name'],'url':f['url'],'mime':mime,'method':method,'text':str(out) if text else None,'chars':len(text)})
+          (R/'extracts.json').write_text(json.dumps(ex,ensure_ascii=False,indent=2),encoding='utf-8')
+          keys=['doba plneni','termin','dokonceni','predani','prevzeti','smluvni pokuta','prodleni','preruseni','zahajeni','staveniště','staveniste','harmonogram','zadrzne','vada','nedodelek','zaruka','registr smluv','ucinnost','dodatek','vyporadani','viceprace','meneprace','mikropilot','osvetleni','koren','31.05','15.07','31.08']
+          findings=[]
+          for e in ex:
+            if not e['text']:continue
+            n=norm(Path(e['text']).read_text(encoding='utf-8',errors='ignore'));hits=[]
+            for k in keys:
+              pos=0;c=0
+              while True:
+                j=n.find(k,pos)
+                if j<0 or c>=15:break
+                hits.append({'key':k,'snippet':n[max(0,j-900):j+2200]});pos=j+len(k);c+=1
+            findings.append({'name':e['name'],'url':e['url'],'method':e['method'],'hits':hits})
+          (R/'findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Klíčové smlouvy lávky – vytěžený text','',f'Zpracováno {time.strftime("%Y-%m-%d %H:%M:%S UTC",time.gmtime())}','']
+          for e in ex:md.append(f"## {e['name']}\n- {e['url']}\n- metoda: {e['method']}, znaků: {e['chars']}\n")
+          for f in findings:
+            md.append(f"### Nálezy: {f['name']}")
+            for h in f['hits']:md.append(f"- **{h['key']}**: {h['snippet'][:2200]}")
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/key.py
+      - name: Uložit
+        run: |
+          rm -rf .github/research/lavka-key-contracts/raw
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/lavka-key-contracts
+          git commit -m 'Vytěžit klíčové smlouvy a sankce lávky u Shellu' || true
+          for i in 1 2 3 4; do git push origin HEAD:main && exit 0; git pull --rebase origin main; sleep 3; done
+          exit 1
