@@ -1,0 +1,128 @@
+name: Vynutit živou statistickou službu v6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/force-stats-v6-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-force-stats-v6-live
+  cancel-in-progress: true
+
+jobs:
+  force-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Vynutit v6 a ověřit živý stav
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/force-v6.txt"
+          set -Eeuo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+
+          sudo install -d -o root -g root -m 0755 /usr/local/lib/nasekadan-stats
+          for file in stats_server.py stats_server_v5.py stats_metrics_v5.py stats_server_v6.py stats_metrics_v6.py; do
+            sudo install -o root -g root -m 0755 ".github/scripts/nasekadan-stats/$file" "/usr/local/lib/nasekadan-stats/$file"
+          done
+          sudo python3 -m py_compile \
+            /usr/local/lib/nasekadan-stats/stats_server.py \
+            /usr/local/lib/nasekadan-stats/stats_server_v5.py \
+            /usr/local/lib/nasekadan-stats/stats_metrics_v5.py \
+            /usr/local/lib/nasekadan-stats/stats_server_v6.py \
+            /usr/local/lib/nasekadan-stats/stats_metrics_v6.py
+
+          sudo install -d -o root -g root -m 0755 /etc/systemd/system/nasekadan-stats-web.service.d
+          sudo tee /etc/systemd/system/nasekadan-stats-web.service.d/30-force-v6.conf >/dev/null <<'UNIT'
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/python3 /usr/local/lib/nasekadan-stats/stats_server_v6.py
+          ReadWritePaths=/opt/nasekadan-stats
+          UNIT
+          sudo systemctl daemon-reload
+          sudo systemctl restart nasekadan-stats-web.service
+
+          for _ in $(seq 1 30); do
+            curl -fsS --max-time 3 http://127.0.0.1:3225/healthz >/dev/null 2>&1 && break
+            sleep 0.5
+          done
+          systemctl is-active nasekadan-stats-web.service
+          systemctl show nasekadan-stats-web.service -p ExecStart --no-pager
+          pid="$(systemctl show nasekadan-stats-web.service -p MainPID --value)"
+          test "$pid" -gt 0
+          tr '\0' ' ' < "/proc/$pid/cmdline" | grep -F 'stats_server_v6.py'
+
+          sudo /usr/local/sbin/nasekadan-stats-snapshot
+          sudo /usr/local/sbin/nasekadan-stats-backup
+          systemctl is-active nasekadan-stats-snapshot.timer
+          systemctl is-active nasekadan-stats-backup.timer
+          systemctl is-active nasekadan-stats-watchdog.timer
+
+          sudo -u www-data bash -lc 'cd /usr/local/lib/nasekadan-stats && python3 - <<"PY"
+          import json, sqlite3
+          import stats_metrics_v5, stats_metrics_v6, stats_server as base
+          stats_metrics_v5.install(base); stats_metrics_v6.install(base)
+          page=base.render_dashboard().decode("utf-8","replace")
+          for marker in ("Statistiky jednotlivých článků","SQLite záloha aktivní","Články v přehledu"):
+              assert marker in page, marker
+          con=sqlite3.connect("/opt/nasekadan-stats/stats-v6.sqlite3")
+          assert con.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+          totals=dict(con.execute("SELECT key,value FROM totals"))
+          articles=con.execute("SELECT COUNT(*) FROM counters WHERE category=\"pages\" AND label LIKE \"/clanky/%.html\"").fetchone()[0]
+          titles=con.execute("SELECT COUNT(*) FROM article_titles").fetchone()[0]
+          snapshots=con.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
+          con.close()
+          assert totals.get("views",0)>=7752, totals
+          assert articles>=20, articles
+          assert titles>=5, titles
+          assert snapshots>=2, snapshots
+          print(json.dumps({"ok":True,"totals":totals,"articles":articles,"titles":titles,"snapshots":snapshots},ensure_ascii=False))
+          PY'
+
+          curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+            https://nasekadan.cz/statistiky/ | grep -F 'Přihlášení ke statistikám'
+          curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+            https://nasekadan.cz/statistiky/zapomenute-heslo | grep -F 'petrkotab@seznam.cz'
+          echo 'ÚSPĚCH: živý proces používá stats_server_v6.py a celý trvalý statistický systém prošel ověřením.'
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const fs=require('fs'); let log='';
+            try {log=fs.readFileSync(`${process.env.RUNNER_TEMP}/force-v6.txt`,'utf8')} catch {}
+            const ok=process.env.OUTCOME==='success';
+            const title=`[STATISTIKY V6 LIVE] ${ok?'Ověřeno':'Selhalo'} ${new Date().toISOString()}`;
+            const body=[`- Commit: \`${process.env.SOURCE_SHA}\``,`- Výsledek: **${process.env.OUTCOME}**`,'','```text',log.slice(-30000).replace(/```/g,'---'),'```'].join('\n');
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Vyhodnotit
+        if: steps.verify.outcome != 'success'
+        run: exit 1
