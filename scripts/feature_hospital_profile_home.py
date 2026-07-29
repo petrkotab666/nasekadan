@@ -5,7 +5,7 @@ import re
 p = Path('index.html')
 t = p.read_text(encoding='utf-8')
 
-hero = '''  <section class="wrap hero" id="clanky">
+hero = '''  <section class="wrap hero" id="clanky" data-auto-latest-hero="1" data-latest-article-href="/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html">
     <article class="lead" data-hospital-profile-hero>
       <div class="photo" style="background:linear-gradient(135deg,#10242e,#22606b 55%,#9d222a)"><span>ZDRAVOTNICTVÍ · REGION</span><strong>254 LŮŽEK</strong></div>
       <div class="copy">
@@ -25,7 +25,13 @@ hero = '''  <section class="wrap hero" id="clanky">
     </aside>
   </section>'''
 
-t, n = re.subn(r'  <section class="wrap hero" id="clanky">.*?</section>', hero, t, count=1, flags=re.S)
+t, n = re.subn(
+    r'  <section\b[^>]*class=["\'][^"\']*\bwrap\b[^"\']*\bhero\b[^"\']*["\'][^>]*\bid=["\']clanky["\'][^>]*>.*?</section>',
+    hero,
+    t,
+    count=1,
+    flags=re.S | re.I,
+)
 if n != 1:
     raise SystemExit('Hero section not found')
 
