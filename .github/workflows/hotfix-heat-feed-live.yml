@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
@@ -28,7 +28,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Okamžitě vydat profil nemocnice a zachovat sezónní feed
+      - name: Okamžitě vydat profil nemocnice
         id: deploy
         run: |
           set -euo pipefail
@@ -39,44 +39,14 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
-
-          python3 scripts/update_hospital_profile_municipal_support.py
-          python3 scripts/add_syringe_teaser.py
-          cp .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          p=Path('clanky/nemocnice-kadan-profil-sluzby-budoucnost.html')
-          t=p.read_text(encoding='utf-8')
-          t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
-          t=t.replace('../../','../').replace('PŘIPRAVOVANÝ ZÁVĚREČNÝ DÍL','29. ČERVENCE 2026')
-          t=re.sub(r'<div class="sidebox preview-note">.*?</div>','',t,count=1,flags=re.S)
-          published='2026-07-29T05:00:00+02:00'
-          if 'article:published_time' not in t:
-              t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
-          if '"datePublished"' not in t:
-              t=t.replace('"isAccessibleForFree":true}',f'"isAccessibleForFree":true,"datePublished":"{published}","dateModified":"{published}"}}',1)
-          p.write_text(t,encoding='utf-8',newline='\n')
-          PY
-
-          python3 scripts/link_hospital_series.py
-          python3 scripts/normalize_articles.py --write --check
-          python3 scripts/finalize_launch.py
-          python3 scripts/prepare_discovery.py
-          python3 scripts/normalize_search_snippets.py
-          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/publish_hospital_profile_direct.py
 
           sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
           sudo cp index.html /var/www/nasekadan/index.html
           sudo cp clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt /var/www/nasekadan/
-
-          if [[ -f horko-feed.js && -f scripts/inject_heat_feed_static.py ]]; then
-            sudo cp horko-feed.js /var/www/nasekadan/horko-feed.js
-            sudo python3 scripts/inject_heat_feed_static.py /var/www/nasekadan
-          fi
-
           sudo chmod -R a+rX /var/www/nasekadan
+
           grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
@@ -103,9 +73,9 @@ jobs:
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
               exit 0
             fi
-            sleep 10
+            sleep 8
           done
-          exit 30
+          exit 1
 
       - name: Zapsat stav hotfixu
         if: always()
