@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from html import escape, unescape
 import re
 
@@ -37,6 +37,8 @@ def article_info(path: Path):
         dt = datetime.fromisoformat(dt_raw.replace('Z', '+00:00'))
     except ValueError:
         return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
     title = first([r'<h1[^>]*>(.*?)</h1>', r'<title>(.*?)</title>'], text, path.stem)
     title = re.sub(r'\s*\|\s*Naše Kadaň\s*$', '', title)
     desc = first([r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)', r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>'], text, '')
@@ -67,7 +69,7 @@ def hero(a, second):
       <a class="aside-button" href="{second['href']}">Přečíst článek →</a>
       <div class="aside-links"><a href="/clanky/">Všechny články podle data</a></div>
     </aside>'''
-    return f'''  <section class="wrap hero" id="clanky" data-auto-latest-hero="1">
+    return f'''  <section class="wrap hero" id="clanky" data-auto-latest-hero="1" data-latest-article-href="{escape(a['href'])}">
     <article class="lead">
       <div class="photo" style="background:linear-gradient(135deg,#10242e,#22606b 55%,#9d222a)"><span>{escape(a['tag'])}</span><strong>{d.day}. {d.month}. {d.year}</strong></div>
       <div class="copy">
