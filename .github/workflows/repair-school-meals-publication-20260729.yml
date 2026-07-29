@@ -1,0 +1,173 @@
+name: Opravit publikaci stravného ZŠ Chomutovská
+run-name: Přímé nasazení a veřejná kontrola článku o stravném
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/repair-school-meals-publication-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/zs-chomutovska-kadan-stravne-zari-2026.html
+      ARTICLE_PATH: /clanky/zs-chomutovska-kadan-stravne-zari-2026.html
+      EXPECTED_H1: ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit aktuální main
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$ARTICLE"
+          grep -Fq "<h1>$EXPECTED_H1</h1>" "$ARTICLE"
+          grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' index.html
+          grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' clanky/index.html
+          grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' rss.xml
+          grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' sitemap.xml
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Bezpečně opravit aktivní statický web i kontejner
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          ARTICLE='clanky/zs-chomutovska-kadan-stravne-zari-2026.html'
+          test -s "$ARTICLE"
+          grep -Fq '<h1>ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa</h1>' "$ARTICLE"
+
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 "$ARTICLE" /var/www/nasekadan/clanky/zs-chomutovska-kadan-stravne-zari-2026.html
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
+          test ! -f news-sitemap.xml || sudo install -m 0644 news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$ARTICLE" nasekadan-web:/usr/share/nginx/html/clanky/zs-chomutovska-kadan-stravne-zari-2026.html
+            sudo docker cp index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            test ! -f news-sitemap.xml || sudo docker cp news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+          fi
+
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=targeted-school-meals-repair\n' \
+            "$SHA" "$(date -u +%FT%TZ)" | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=targeted-school-meals-repair\n' \
+              "$SHA" "$(date -u +%FT%TZ)" > /tmp/deployment-health-school-meals.txt
+            sudo docker cp /tmp/deployment-health-school-meals.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo systemctl reload caddy 2>/dev/null || true
+
+          page="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/zs-chomutovska-kadan-stravne-zari-2026.html?repair=$SHA")"
+          grep -Fq '<h1>ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa</h1>' <<<"$page"
+          grep -Fq '700 Kč' <<<"$page"
+          grep -Fq '900 Kč' <<<"$page"
+          REMOTE
+
+      - name: Veřejně ověřit všechny povinné kanály
+        id: verify
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 30); do
+            code="$(curl -4 -k -L -sS -o "$RUNNER_TEMP/page.html" -w '%{http_code}' "https://nasekadan.cz${ARTICLE_PATH}?v=$stamp-$attempt" || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" 2>/dev/null || true)"
+            if [[ "$code" == '200' ]] \
+              && grep -Fq "<h1>$EXPECTED_H1</h1>" "$RUNNER_TEMP/page.html" \
+              && grep -Fq '700 Kč' "$RUNNER_TEMP/page.html" \
+              && grep -Fq '900 Kč' "$RUNNER_TEMP/page.html" \
+              && grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' <<<"$home" \
+              && grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' <<<"$archive" \
+              && grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' <<<"$rss" \
+              && grep -Fq 'zs-chomutovska-kadan-stravne-zari-2026.html' <<<"$sitemap" \
+              && grep -Fq "source=$EXPECTED_SHA" <<<"$health"; then
+              echo 'Veřejná oprava publikace byla ověřena.'
+              exit 0
+            fi
+            sleep 6
+          done
+          echo 'Veřejné ověření opravy neprošlo.' >&2
+          exit 1
+
+      - name: Zapsat skutečný stav
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
+            const body = [
+              ok ? '## ÚSPĚŠNĚ PUBLIKOVÁNO A VEŘEJNĚ OVĚŘENO' : '## PUBLIKACE STÁLE NENÍ PLNĚ OVĚŘENA',
+              '',
+              '- Nové ceny od 1. 9. 2026: 26, 29, 31 a 32 Kč podle věku.',
+              '- Limit inkasa od 15. 8. 2026: 700 Kč bez družiny, 900 Kč s družinou.',
+              `- Source commit: \`${process.env.SOURCE_SHA || context.sha}\``,
+              `- Opravný běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '- Článek: https://nasekadan.cz/clanky/zs-chomutovska-kadan-stravne-zari-2026.html',
+              '',
+              ok
+                ? 'Článek vrací HTTP 200 se správným H1; titulní stránka, archiv, RSS, sitemap a deployment-health.txt prošly přímou veřejnou HTTPS kontrolou.'
+                : 'Veřejný web je zdrojem pravdy. Zkontrolovat opravný běh; úspěch nelze tvrdit.'
+            ].join('\n');
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 119,
+              body,
+              state: ok ? 'closed' : 'open',
+              state_reason: ok ? 'completed' : undefined
+            });
