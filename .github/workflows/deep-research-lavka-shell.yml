@@ -1,0 +1,240 @@
+name: Hluboká rešerše lávky u Shellu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deep-research-lavka-shell-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deep-research-lavka-shell
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat nástroje pro PDF a OCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces python3-bs4 python3-lxml
+
+      - name: Stáhnout záznamy a vytěžit přílohy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/research/lavka-shell/files .github/research/lavka-shell/text .github/research/lavka-shell/html
+          cat > /tmp/deep_lavka.py <<'PY'
+          from __future__ import annotations
+          import hashlib, json, os, re, subprocess, sys, time, unicodedata
+          from pathlib import Path
+          from urllib.parse import urljoin, urlencode, urlparse
+          import requests
+          from bs4 import BeautifulSoup
+
+          ROOT = Path('.github/research/lavka-shell')
+          FILES = ROOT/'files'; TEXT = ROOT/'text'; HTML = ROOT/'html'
+          BASE = 'https://smlouvy.gov.cz'
+          session = requests.Session()
+          session.headers.update({'User-Agent':'NaseKadan-research/1.0 (+https://nasekadan.cz)'})
+
+          def get(url, **kwargs):
+              last=None
+              for i in range(5):
+                  try:
+                      r=session.get(url, timeout=60, **kwargs)
+                      r.raise_for_status(); return r
+                  except Exception as e:
+                      last=e; time.sleep(2+i*2)
+              raise last
+
+          def norm(s:str)->str:
+              s=unicodedata.normalize('NFKD',s or '').encode('ascii','ignore').decode().lower()
+              return re.sub(r'\s+',' ',s).strip()
+
+          def slug(s:str)->str:
+              s=norm(s); s=re.sub(r'[^a-z0-9]+','-',s).strip('-')
+              return s[:120] or 'file'
+
+          # Známé záznamy + cílená vyhledávání pro dosud neznámá ID.
+          detail_urls={
+              'main-contract': f'{BASE}/smlouva/34471149',
+              'original-tds': f'{BASE}/smlouva/34491001',
+              'lighting-upper': f'{BASE}/smlouva/38341648',
+          }
+
+          searches=[
+              # červnové záznamy SILNICE GROUP: 51 908 Kč a vypořádání
+              {'party_idnum':'62242105','publication_date[from]':'2026-06-01','publication_date[to]':'2026-06-30','searchResultList-limit':'100'},
+              # červencové TDS a BOZP
+              {'party_idnum':'04794621','publication_date[from]':'2026-07-01','publication_date[to]':'2026-07-31','searchResultList-limit':'100'},
+              # původní BOZP
+              {'party_idnum':'04794621','publication_date[from]':'2025-10-01','publication_date[to]':'2025-10-31','searchResultList-limit':'100'},
+              # projekt a AD MESSOR
+              {'party_idnum':'28738217','subject_idnum':'00261912','publication_date[from]':'2023-12-01','publication_date[to]':'2025-09-30','searchResultList-limit':'500'},
+              # vše města s názvem lávky v relevantním období
+              {'subject_box':'uaybdrx','publication_date[from]':'2023-01-01','publication_date[to]':'2026-07-31','contract_descr':'Lávka','searchResultList-limit':'500'},
+          ]
+
+          search_index=[]
+          for idx,params in enumerate(searches,1):
+              url=BASE+'/vyhledavani?'+urlencode(params)
+              try:
+                  r=get(url)
+              except Exception as e:
+                  search_index.append({'url':url,'error':repr(e)}); continue
+              (HTML/f'search-{idx}.html').write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'lxml')
+              found=[]
+              for a in soup.find_all('a',href=True):
+                  href=a['href']
+                  if re.fullmatch(r'/smlouva/\d+(?:\?.*)?',href):
+                      full=urljoin(BASE,href.split('?')[0])
+                      row=a.find_parent('tr')
+                      text=' '.join(row.stripped_strings) if row else a.get_text(' ',strip=True)
+                      n=norm(text)
+                      if any(k in n for k in ['lavka','svaty kopecek','silnice c. 568','silnici c. 568','51 908','technickeho dozoru','koordinatora bozp']):
+                          found.append({'url':full,'row':text})
+                          detail_urls.setdefault('search-'+full.rsplit('/',1)[-1],full)
+              search_index.append({'url':url,'matches':found})
+
+          (ROOT/'search-index.json').write_text(json.dumps(search_index,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          metadata=[]
+          attachment_seen=set()
+          for label,url in list(detail_urls.items()):
+              try:
+                  r=get(url)
+              except Exception as e:
+                  metadata.append({'label':label,'url':url,'error':repr(e)}); continue
+              vid=url.rstrip('/').rsplit('/',1)[-1]
+              (HTML/f'detail-{vid}.html').write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'lxml')
+              page_text='\n'.join(soup.stripped_strings)
+              record={'label':label,'url':url,'version_id':vid,'page_text':page_text[:15000],'attachments':[]}
+              for a in soup.find_all('a',href=True):
+                  href=a['href']
+                  if '/smlouva/soubor/' not in href:
+                      continue
+                  full=urljoin(BASE,href)
+                  key=full.split('?')[0]
+                  if key in attachment_seen: continue
+                  attachment_seen.add(key)
+                  title=a.get_text(' ',strip=True) or Path(urlparse(full).path).name
+                  ext=Path(urlparse(full).path).suffix.lower() or '.bin'
+                  out=FILES/f'{vid}-{slug(title)}{ext if not slug(title).endswith(ext.lstrip(".")) else ""}'
+                  try:
+                      rr=get(full)
+                      out.write_bytes(rr.content)
+                      sha=hashlib.sha256(rr.content).hexdigest()
+                      record['attachments'].append({'title':title,'url':full,'path':str(out),'bytes':len(rr.content),'sha256':sha})
+                  except Exception as e:
+                      record['attachments'].append({'title':title,'url':full,'error':repr(e)})
+              metadata.append(record)
+
+          (ROOT/'records.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          def run(cmd):
+              return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+
+          extracts=[]
+          for p in sorted(FILES.iterdir()):
+              if p.suffix.lower()!='.pdf': continue
+              out=TEXT/(p.name+'.txt')
+              pd=run(['pdftotext','-layout',str(p),str(out)])
+              txt=out.read_text(encoding='utf-8',errors='ignore') if out.exists() else ''
+              method='pdftotext'
+              # Naskenovaný dokument: OCR pouze jednou a maximálně prvních 40 stran.
+              if len(re.sub(r'\s+','',txt)) < 300:
+                  method='ocr'
+                  imgdir=Path('/tmp')/('ocr-'+slug(p.stem)); imgdir.mkdir(exist_ok=True)
+                  info=run(['pdfinfo',str(p)]).stdout
+                  m=re.search(r'^Pages:\s+(\d+)',info,re.M); pages=min(int(m.group(1)) if m else 20,40)
+                  run(['pdftoppm','-f','1','-l',str(pages),'-r','220','-jpeg',str(p),str(imgdir/'page')])
+                  chunks=[]
+                  for img in sorted(imgdir.glob('page-*.jpg')):
+                      rr=run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'])
+                      chunks.append(rr.stdout)
+                  txt='\n\n'.join(chunks); out.write_text(txt,encoding='utf-8')
+              extracts.append({'file':str(p),'text':str(out),'method':method,'chars':len(txt)})
+
+          (ROOT/'extracts.json').write_text(json.dumps(extracts,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          keywords=[
+              'termín','termin','dokončení','dokonceni','předání','predani','převzetí','prevzeti',
+              'smluvní pokuta','smluvni pokuta','prodlení','prodleni','přerušení','preruseni',
+              'harmonogram','mikropilot','kořen','koren','osvětlení','osvetleni','vypořádání','vyporadani',
+              'registru smluv','31. 5. 2026','31.05.2026','15. 7. 2026','15.07.2026','31. 8. 2026','31.08.2026',
+              'vícepráce','viceprace','méněpráce','meneprace','vada','nedodělek','nedodelek','zádržné','zadrzne',
+              'staveniště','staveniste','lhůta','lhuta','dodatek č. 1','dodatek č. 2','shell','mycí','myci'
+          ]
+          findings=[]
+          for e in extracts:
+              p=Path(e['text']); text=p.read_text(encoding='utf-8',errors='ignore')
+              flat=re.sub(r'[ \t]+',' ',text)
+              n=norm(flat)
+              hits=[]
+              for kw in keywords:
+                  nkw=norm(kw)
+                  start=0
+                  while True:
+                      pos=n.find(nkw,start)
+                      if pos<0: break
+                      # Map approximately by position ratio after normalization.
+                      ratio=pos/max(1,len(n)); rawpos=int(ratio*len(flat))
+                      snippet=flat[max(0,rawpos-500):min(len(flat),rawpos+900)].strip()
+                      hits.append({'keyword':kw,'snippet':snippet})
+                      start=pos+len(nkw)
+                      if sum(1 for h in hits if h['keyword']==kw)>=8: break
+              if hits: findings.append({'file':e['file'],'method':e['method'],'hits':hits})
+          (ROOT/'keyword-findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          md=['# Automatická hluboká rešerše – lávka u Shellu','',f'Zpracováno: {time.strftime("%Y-%m-%d %H:%M:%S UTC",time.gmtime())}','']
+          md.append(f'- Nalezeno detailů registru: **{len(metadata)}**')
+          md.append(f'- Staženo unikátních příloh: **{len(attachment_seen)}**')
+          md.append(f'- Zpracováno PDF: **{len(extracts)}**')
+          md += ['','## Záznamy a přílohy']
+          for rec in metadata:
+              md.append(f"### {rec.get('label')} – {rec.get('url')}")
+              if rec.get('error'): md.append(f"- CHYBA: `{rec['error']}`"); continue
+              for a in rec.get('attachments',[]):
+                  if a.get('error'): md.append(f"- {a.get('title')}: CHYBA `{a['error']}`")
+                  else: md.append(f"- `{a['path']}` – {a['bytes']} B, SHA-256 `{a['sha256']}`")
+          md += ['','## Nálezy podle klíčových slov']
+          for f in findings:
+              md.append(f"### {f['file']} ({f['method']})")
+              for h in f['hits']:
+                  sn=re.sub(r'\s+',' ',h['snippet'])
+                  md.append(f"- **{h['keyword']}**: {sn[:1200]}")
+          (ROOT/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/deep_lavka.py
+
+      - name: Uložit vytěžené výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # PDF přílohy mohou být velké; do repozitáře ukládáme jen text, metadata a HTML detailů.
+          rm -rf .github/research/lavka-shell/files
+          git add .github/research/lavka-shell
+          git commit -m 'Vytěžit neveřejně indexované přílohy k lávce u Shellu' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
