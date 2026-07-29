@@ -44,24 +44,26 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit stejnou verzi přímo na živý web
+      - name: Odeslat hotové soubory přímo na server
         id: deploy
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nk-upload/clanky"
+          cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html "$RUNNER_TEMP/nk-upload/clanky/"
+          cp index.html "$RUNNER_TEMP/nk-upload/index.html"
+          cp clanky/index.html "$RUNNER_TEMP/nk-upload/clanky/index.html"
+          cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$RUNNER_TEMP/nk-upload/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-upload" ubuntu@57.129.43.215:/tmp/nk-hospital-upload
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
-          cd /opt/nasekadan
-          git update-ref -d refs/remotes/origin/main || true
-          rm -f .git/refs/remotes/origin/main.lock
-          git fetch --force origin main:refs/remotes/origin/main
-          git reset --hard refs/remotes/origin/main
           sudo install -d -m 0755 /var/www/nasekadan/clanky
-          sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
-          sudo cp index.html /var/www/nasekadan/index.html
-          sudo cp clanky/index.html /var/www/nasekadan/clanky/index.html
-          sudo cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt /var/www/nasekadan/
+          sudo cp /tmp/nk-hospital-upload/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
+          sudo cp /tmp/nk-hospital-upload/index.html /var/www/nasekadan/index.html
+          sudo cp /tmp/nk-hospital-upload/clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo cp /tmp/nk-hospital-upload/rss.xml /tmp/nk-hospital-upload/sitemap.xml /tmp/nk-hospital-upload/news-sitemap.xml /tmp/nk-hospital-upload/llms.txt /tmp/nk-hospital-upload/robots.txt /var/www/nasekadan/
           sudo chmod -R a+rX /var/www/nasekadan
+          rm -rf /tmp/nk-hospital-upload
           grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
