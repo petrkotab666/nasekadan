@@ -23,3 +23,5 @@ jobs:
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/fix-kos-images-sharp.yml/dispatches" \
             -f ref=main
+
+# immediate-dispatch: 2026-07-29T21:58:00+02:00
