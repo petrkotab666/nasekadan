@@ -1,0 +1,135 @@
+name: Vytěžit červnové a červencové záznamy lávky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-lavka-open-data-june-july-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces file
+      - name: Parse official monthly dumps and attachments
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-open-data-2026-06-07
+          mkdir -p .github/research/lavka-open-data-2026-06-07/{raw,text}
+          cat > /tmp/parse_lavka_dump.py <<'PY'
+          from __future__ import annotations
+          import hashlib,json,re,subprocess,time,unicodedata
+          from pathlib import Path
+          from urllib.parse import urlparse
+          import xml.etree.ElementTree as ET
+          import requests
+
+          ROOT=Path('.github/research/lavka-open-data-2026-06-07');RAW=ROOT/'raw';TEXT=ROOT/'text'
+          S=requests.Session();S.headers['User-Agent']='NaseKadan research'
+          def get(u):
+              for i in range(5):
+                  try:
+                      r=S.get(u,timeout=120);r.raise_for_status();return r
+                  except Exception:
+                      if i==4: raise
+                      time.sleep(3+i*3)
+          def norm(x): return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+          def ln(t): return t.rsplit('}',1)[-1].lower()
+          def sh(c): return subprocess.run(c,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+
+          matches=[]
+          for month in ['2026_06','2026_07']:
+              url=f'https://data.smlouvy.gov.cz/dump_{month}.xml'; local=Path('/tmp')/f'{month}.xml'; local.write_bytes(get(url).content)
+              for ev,el in ET.iterparse(local,events=('end',)):
+                  if ln(el.tag)!='zaznam': continue
+                  text=' '.join(el.itertext()); n=norm(text)
+                  if ('00261912' in n and ('lavka pres silnici' in n or 'lavky u shell' in n or ('svaty kopecek' in n and any(x in n for x in ['dohled','bozp','silnice group','smlouva o vyporadani'])))):
+                      row={'month':month,'text':re.sub(r'\s+',' ',text).strip(),'fields':{},'urls':[],'xml':ET.tostring(el,encoding='unicode')}
+                      for node in el.iter():
+                          key=ln(node.tag); val=(node.text or '').strip()
+                          if val: row['fields'].setdefault(key,[]).append(val)
+                          if val.startswith('http') and ('odkaz' in key or 'link' in key or 'url' in key): row['urls'].append(val)
+                      matches.append(row)
+                  el.clear()
+              local.unlink(missing_ok=True)
+          ROOT.joinpath('matches.json').write_text(json.dumps(matches,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Gather any URL that looks like an attachment, plus detail URLs/version IDs from fields.
+          urls=[]
+          for m in matches:
+              for u in m['urls']:
+                  if u not in urls: urls.append(u)
+          downloads=[]
+          for idx,u in enumerate(urls,1):
+              try:
+                  data=get(u).content; p=RAW/f'{idx:03d}' ;p.write_bytes(data)
+                  downloads.append({'url':u,'path':str(p),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+              except Exception as e: downloads.append({'url':u,'error':repr(e)})
+          ROOT.joinpath('downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          ex=[]
+          for d in downloads:
+              if not d.get('path'): continue
+              p=Path(d['path']); mime=sh(['file','-b','--mime-type',str(p)]).stdout.strip(); out=TEXT/(p.name+'.txt'); txt='';method=''
+              if mime=='application/pdf':
+                  tmp=Path('/tmp')/(p.name+'.txt');sh(['pdftotext','-layout',str(p),str(tmp)]);txt=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else '';method='pdftotext'
+                  if len(re.sub(r'\s+','',txt))<400:
+                      method='ocr';dd=Path('/tmp')/('ocr-'+p.name);dd.mkdir(exist_ok=True);info=sh(['pdfinfo',str(p)]).stdout;mm=re.search(r'^Pages:\s+(\d+)',info,re.M);pages=min(int(mm.group(1)) if mm else 25,80)
+                      sh(['pdftoppm','-f','1','-l',str(pages),'-r','250','-jpeg',str(p),str(dd/'page')]);chunks=[]
+                      for im in sorted(dd.glob('page-*.jpg')):chunks.append(sh(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+                      txt='\n\n'.join(chunks)
+              elif mime.startswith('text/') or mime in ['application/xml','application/json']:
+                  txt=p.read_text(encoding='utf-8',errors='ignore');method='text'
+              if txt:out.write_text(txt,encoding='utf-8')
+              ex.append({'url':d['url'],'mime':mime,'method':method,'text':str(out) if txt else None,'chars':len(txt)})
+          ROOT.joinpath('extracts.json').write_text(json.dumps(ex,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          keys=['termin','31.05','15.07','31.08','doba plneni','prodlouzeni','smluvni pokuta','prodleni','vyporadani','dodatek','viceprace','meneprace','mikropilot','osvetleni','koren','predani','prevzeti','vada','nedodelek','preruseni','staveniste']
+          finds=[]
+          for e in ex:
+              if not e['text']:continue
+              n=norm(Path(e['text']).read_text(encoding='utf-8',errors='ignore'));hs=[]
+              for k in keys:
+                  start=0;count=0
+                  while True:
+                      p=n.find(k,start)
+                      if p<0 or count>=20:break
+                      hs.append({'key':k,'snippet':n[max(0,p-900):p+2400]});start=p+len(k);count+=1
+              finds.append({'url':e['url'],'method':e['method'],'hits':hs})
+          ROOT.joinpath('findings.json').write_text(json.dumps(finds,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          md=['# Lávka – otevřená data červen a červenec 2026','',f'Zpracováno {time.strftime("%Y-%m-%d %H:%M:%S UTC",time.gmtime())}','',f'- Relevantní záznamy: {len(matches)}',f'- Přílohy: {len(downloads)}','','## Záznamy']
+          for m in matches:
+              md.append('### '+m['month'])
+              md.append(m['text'][:2500])
+              md.append('')
+              md.append('Pole: `'+json.dumps(m['fields'],ensure_ascii=False)[:4000]+'`')
+          md+=['','## Přílohy a zásadní ustanovení']
+          for f in finds:
+              md.append('### '+f['url'])
+              for h in f['hits']:md.append(f"- **{h['key']}**: {h['snippet'][:2200]}")
+          ROOT.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/parse_lavka_dump.py
+      - name: Commit results
+        shell: bash
+        run: |
+          rm -rf .github/research/lavka-open-data-2026-06-07/raw
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/lavka-open-data-2026-06-07
+          git commit -m 'Vytěžit červnové a červencové přílohy lávky' || true
+          for i in 1 2 3 4; do git push origin HEAD:main && exit 0; git pull --rebase origin main; sleep 3; done
+          exit 1
