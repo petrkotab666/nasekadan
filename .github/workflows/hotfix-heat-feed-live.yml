@@ -30,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           test -f clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          python3 scripts/emphasize_revmatology_contacts.py
           python3 scripts/enforce_article_visibility.py
           python3 scripts/prepare_discovery.py
           python3 scripts/sort_articles_chronologically.py
@@ -38,7 +39,7 @@ jobs:
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
           git add -A
-          git commit -m 'Zveřejnit Revmatologii Kadaň na všech výstupech' || true
+          git commit -m 'Zvýraznit kontakty a zveřejnit Revmatologii Kadaň' || true
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -96,6 +97,9 @@ jobs:
             rss="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             if grep -Fq 'V Kadani se na podzim otevře nová revmatologická ambulance' <<<"$article" \
+              && grep -Fq 'data-revmatologie-contact' <<<"$article" \
+              && grep -Fq '739 359 468' <<<"$article" \
+              && grep -Fq 'revmakadan@centrum.cz' <<<"$article" \
               && grep -Fq "$slug" <<<"$home" \
               && grep -Fq "$slug" <<<"$archive" \
               && grep -Fq "$slug" <<<"$rss" \
