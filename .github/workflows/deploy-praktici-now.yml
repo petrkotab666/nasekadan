@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - deploy-praktici-now.txt
+      - clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
       - .github/workflows/deploy-praktici-now.yml
   workflow_dispatch:
 
@@ -76,7 +77,8 @@ jobs:
           grep -Fq 'V přehledu je sedm kadaňských pracovišť' <<<"$PAGE"
           grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$PAGE"
           grep -Fq 'Očkovací centrum' <<<"$PAGE"
-          grep -Fq '24. a 31. 8.' <<<"$PAGE"
+          grep -Fq 'Dětská ordinace MUDr. Mirky Doškové v Klášterci je uzavřena od 27. do 31. července' <<<"$PAGE"
+          ! grep -Fq 'je nyní uzavřená' <<<"$PAGE"
           REMOTE
 
       - name: Veřejně ověřit nasazení
@@ -98,6 +100,8 @@ jobs:
             if grep -Fq 'V přehledu je sedm kadaňských pracovišť' <<<"$page" \
               && grep -Fq 'Ordinace MUDr. Kuraková, s.r.o.' <<<"$page" \
               && grep -Fq 'Očkovací centrum' <<<"$page" \
+              && grep -Fq 'Dětská ordinace MUDr. Mirky Doškové v Klášterci je uzavřena od 27. do 31. července' <<<"$page" \
+              && ! grep -Fq 'je nyní uzavřená' <<<"$page" \
               && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$archive" \
               && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$rss" \
               && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$sitemap" \
@@ -128,7 +132,7 @@ jobs:
               `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               '',
               success
-                ? 'Veřejná stránka obsahuje sedm kadaňských pracovišť a jedno regionální omezení, včetně MUDr. Kuraková, neurologie, ORL a očkovacího centra.'
+                ? 'Veřejná stránka obsahuje přesné termíny uzavření ordinace MUDr. Doškové a neobsahuje nepřesnou formulaci „je nyní uzavřená“.'
                 : 'Přímé SSH nasazení nebo následné veřejné ověření selhalo. Je nutná kontrola logu běhu.'
             ].join('\n');
             const issues = await github.paginate(github.rest.issues.listForRepo, {
