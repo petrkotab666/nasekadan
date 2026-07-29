@@ -1,0 +1,155 @@
+name: Opravně publikovat vyjádření starosty
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/publish-mayor-statement-rescue-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-mayor-statement-rescue
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SLUG: starosta-losenicky-nemocnice-slovan-nepedagogove
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat finální veřejnou verzi
+        id: build
+        run: |
+          set -euo pipefail
+          python3 scripts/publish_mayor_statement_article.py
+          grep -Fq 'Starosta: Nemocnice to zvládne' "clanky/${SLUG}.html"
+          grep -Fq "/clanky/${SLUG}.html" index.html
+          grep -Fq "/clanky/${SLUG}.html" clanky/index.html
+
+      - name: Uložit všechny vygenerované změny
+        id: save
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add -A
+          git commit -m 'Publikovat vyjádření starosty o nemocnici, Slovanu a školách' || true
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 2))
+          done
+          exit 1
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit na document root i do kontejneru
+        id: deploy
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nk-mayor/clanky"
+          cp "clanky/${SLUG}.html" "$RUNNER_TEMP/nk-mayor/clanky/"
+          cp clanky/index.html "$RUNNER_TEMP/nk-mayor/clanky/index.html"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt production-content-manifest.json "$RUNNER_TEMP/nk-mayor/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-mayor" ubuntu@57.129.43.215:/tmp/nk-mayor-publication
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 /tmp/nk-mayor-publication/clanky/starosta-losenicky-nemocnice-slovan-nepedagogove.html "$root/clanky/"
+          sudo install -m 0644 /tmp/nk-mayor-publication/clanky/index.html "$root/clanky/index.html"
+          sudo install -m 0644 /tmp/nk-mayor-publication/index.html "$root/index.html"
+          for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt production-content-manifest.json; do
+            sudo install -m 0644 "/tmp/nk-mayor-publication/$f" "$root/$f"
+          done
+          sudo chmod -R a+rX "$root"
+          if docker ps --format '{{.Names}}' | grep -Fxq nasekadan-web; then
+            docker cp /tmp/nk-mayor-publication/clanky/starosta-losenicky-nemocnice-slovan-nepedagogove.html nasekadan-web:/usr/share/nginx/html/clanky/starosta-losenicky-nemocnice-slovan-nepedagogove.html
+            docker cp /tmp/nk-mayor-publication/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            docker cp /tmp/nk-mayor-publication/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
+              docker cp "/tmp/nk-mayor-publication/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+          fi
+          rm -rf /tmp/nk-mayor-publication
+          grep -Fq 'Starosta: Nemocnice to zvládne' "$root/clanky/starosta-losenicky-nemocnice-slovan-nepedagogove.html"
+          grep -Fq '/clanky/starosta-losenicky-nemocnice-slovan-nepedagogove.html' "$root/index.html"
+          REMOTE
+
+      - name: Veřejně ověřit úplnou publikaci
+        id: verify
+        run: |
+          set -euo pipefail
+          token="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s)"
+          for attempt in $(seq 1 30); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/${SLUG}.html?v=${token}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${token}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${token}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${token}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${token}-${attempt}" 2>/dev/null || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${token}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'Starosta: Nemocnice to zvládne' <<<"$article" \
+              && grep -Fq "/clanky/${SLUG}.html" <<<"$home" \
+              && grep -Fq "/clanky/${SLUG}.html" <<<"$archive" \
+              && grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" <<<"$rss" \
+              && grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" <<<"$sitemap" \
+              && grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" <<<"$news"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat stav opravné publikace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          SAVE: ${{ steps.save.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'mayor-statement-publication-status.json';
+            const ok = ['BUILD','SAVE','DEPLOY','VERIFY'].every(k => process.env[k] === 'success');
+            const status = {
+              status: ok ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              build: process.env.BUILD || 'skipped',
+              repository_save: process.env.SAVE || 'skipped',
+              server_deploy: process.env.DEPLOY || 'skipped',
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner, repo: context.repo.repo, path, branch: 'main',
+              message: `Zapsat stav publikace vyjádření starosty: ${status.status}`,
+              content, ...(sha ? { sha } : {})
+            });
