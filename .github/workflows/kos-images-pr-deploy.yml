@@ -1,0 +1,237 @@
+name: Okamžitě opravit obrázky článku o koších
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/kos-pr-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kos-images-pr-deploy
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytvořit ostré obrázky a opravit článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pillow
+          python - <<'PY'
+          from pathlib import Path
+          from io import BytesIO
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          import base64, html, re, textwrap, urllib.request
+          from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+
+          ROOT = Path('.')
+          OUT = ROOT / 'images' / 'clanky'
+          OUT.mkdir(parents=True, exist_ok=True)
+          ARTICLE = ROOT / 'clanky' / 'pretekajici-kose-kadan-technicke-sluzby-ridici.html'
+          UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
+
+          def font(size, bold=False):
+              path = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf' if bold else '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+              return ImageFont.truetype(path, size)
+
+          def download(url):
+              req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept': '*/*'})
+              with urllib.request.urlopen(req, timeout=35) as r:
+                  return r.read(), r.headers.get('Content-Type', '')
+
+          def embedded_fallback(svg_name):
+              svg = (OUT / svg_name).read_text(encoding='utf-8')
+              m = re.search(r'data:image/(?:jpeg|jpg|png|webp);base64,([^"\']+)', svg, re.I)
+              if not m:
+                  raise RuntimeError(f'Chybí vložený obrázek v {svg_name}')
+              return base64.b64decode(m.group(1))
+
+          def get_photo():
+              pid = '10243275472011444'
+              page_url = 'https://www.facebook.com/photo?fbid=10243275472011444&set=gm.1557730802517994&idorvanity=442280287396390'
+              for url in (
+                  f'https://graph.facebook.com/{pid}/picture?type=large&redirect=true',
+                  f'https://graph.facebook.com/{pid}/picture?redirect=true',
+              ):
+                  try:
+                      data, ctype = download(url)
+                      if ctype.lower().startswith('image/') and len(data) > 5000:
+                          return data
+                  except Exception as e:
+                      print('Graph fallback:', e)
+              try:
+                  page, _ = download(page_url)
+                  page = page.decode('utf-8', 'ignore')
+                  m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)', page, re.I) or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', page, re.I)
+                  if m:
+                      data, ctype = download(html.unescape(m.group(1)).replace('\\/', '/'))
+                      if ctype.lower().startswith('image/') and len(data) > 5000:
+                          return data
+              except Exception as e:
+                  print('OG fallback:', e)
+              return embedded_fallback('kadan-pretekajici-kos-facebook-real.svg')
+
+          def save_photo():
+              with Image.open(BytesIO(get_photo())) as src:
+                  im = ImageOps.exif_transpose(src).convert('RGB')
+              im = ImageOps.fit(im, (720, 1276), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+              im = ImageEnhance.Contrast(im).enhance(1.06)
+              im = ImageEnhance.Sharpness(im).enhance(1.35)
+              im = im.filter(ImageFilter.UnsharpMask(radius=1.2, percent=150, threshold=2))
+              im.save(OUT / 'kadan-pretekajici-kos-facebook-ostry.webp', 'WEBP', quality=92, method=6)
+
+          def wrap(draw, text, fnt, max_width):
+              words = text.split()
+              lines, line = [], ''
+              for word in words:
+                  trial = word if not line else line + ' ' + word
+                  if draw.textbbox((0,0), trial, font=fnt)[2] <= max_width:
+                      line = trial
+                  else:
+                      if line: lines.append(line)
+                      line = word
+              if line: lines.append(line)
+              return lines
+
+          def rounded_card(size):
+              im = Image.new('RGB', size, '#f5f6f7')
+              d = ImageDraw.Draw(im)
+              d.rounded_rectangle((18,18,size[0]-18,size[1]-18), radius=28, fill='white', outline='#d8dde3', width=2)
+              return im, d
+
+          def save_post():
+              im, d = rounded_card((1040, 970))
+              d.ellipse((46,42,126,122), fill='#2b77c5')
+              d.text((67,61), 'KF', font=font(27, True), fill='white')
+              d.text((150,40), 'KADAŇSKÉ FÓRUM', font=font(39, True), fill='#111820')
+              d.text((150,91), 'Veřejná skupina', font=font(24), fill='#66727c')
+              d.line((40,145,1000,145), fill='#d8dde3', width=2)
+              d.ellipse((48,176,128,256), fill='#b9c1c9')
+              d.text((65,197), 'PP', font=font(27, True), fill='white')
+              d.text((150,174), 'Petra Pokorná', font=font(38, True), fill='#111820')
+              d.text((150,221), '6 h · veřejný příspěvek', font=font(23), fill='#66727c')
+              body = (
+                  'Dobrý den, dnes zaměstnanci TS sekali trávu kolem zahrádkářské kolonie mezi Astrou a Shell, '
+                  'kde vede mj. i cyklostezka navazující na budoucí novou trasu na Svaťáku.\n\n'
+                  'Bohužel musím upozornit veřejně, že kolem odpadkového koše v tomto stavu chodím již 3 týdny '
+                  'a vysypaný jsem ho během této doby ještě neviděla.\n\n'
+                  'Nejsem sama, kdo se již pozastavuje a nechápe práci TS.'
+              )
+              f = font(31)
+              y = 300
+              for para in body.split('\n'):
+                  if not para:
+                      y += 22
+                      continue
+                  for line in wrap(d, para, f, 900):
+                      d.text((60,y), line, font=f, fill='#111820')
+                      y += 45
+              d.line((40,875,1000,875), fill='#d8dde3', width=2)
+              d.text((65,900), '👍 😟 😡  21     💬 40', font=font(25), fill='#4d5963')
+              im.save(OUT / 'kadan-forum-petra-pokorna-prispevek-ostry.webp', 'WEBP', quality=94, method=6)
+
+          def save_jan():
+              im, d = rounded_card((935, 590))
+              d.ellipse((48,70,142,164), fill='#5f6a72')
+              d.text((76,96), 'JL', font=font(30, True), fill='white')
+              d.text((175,70), 'Jan Losenický', font=font(40, True), fill='#111820')
+              d.text((175,119), '5 h', font=font(25), fill='#66727c')
+              d.rounded_rectangle((165,180,890,448), radius=28, fill='#f0f2f5')
+              text = 'Už jsem to psal. Přidali jsme 150 košů, den svozu a sváží se i v sobotu dopoledne. Bohužel odešli řidiči a nové ještě zaučujeme.'
+              f = font(34)
+              y = 215
+              for line in wrap(d, text, f, 660):
+                  d.text((205,y), line, font=f, fill='#111820')
+                  y += 50
+              d.text((180,485), 'To se mi líbí     Odpovědět     👍 21', font=font(24), fill='#59636d')
+              im.save(OUT / 'jan-losenicky-komentar-facebook-ostry.webp', 'WEBP', quality=94, method=6)
+
+          save_photo(); save_post(); save_jan()
+
+          text = ARTICLE.read_text(encoding='utf-8')
+          replacements = {
+              '../images/clanky/kadan-pretekajici-kos-facebook-real.svg': '../images/clanky/kadan-pretekajici-kos-facebook-ostry.webp?v=20260729-1',
+              '../images/clanky/kadan-forum-petra-pokorna-prispevek-real.svg': '../images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp?v=20260729-1',
+              '../images/clanky/jan-losenicky-komentar-facebook-real.svg': '../images/clanky/jan-losenicky-komentar-facebook-ostry.webp?v=20260729-1',
+              'width="220" height="390" loading="eager"': 'width="720" height="1276" loading="eager"',
+              'width="320" height="290" loading="lazy"': 'width="1040" height="970" loading="lazy"',
+              'width="360" height="130" loading="lazy"': 'width="935" height="590" loading="lazy"',
+              'data-fb-photo-evidence="v2"': 'data-fb-photo-evidence="v4-sharp-live"',
+          }
+          for old, new in replacements.items():
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise RuntimeError(f'Chybí očekávaný odkaz: {old}')
+          modified = datetime.now(ZoneInfo('Europe/Prague')).replace(microsecond=0).isoformat()
+          text = re.sub(r'(<meta property="article:modified_time" content=")[^"]+(">)', rf'\g<1>{modified}\g<2>', text, count=1)
+          text = re.sub(r'("dateModified":")[^"]+(")', rf'\g<1>{modified}\g<2>', text, count=1)
+          ARTICLE.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – ostré obrázky'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html images/clanky/*-ostry.webp
+          git commit -m 'Nasadit ostré obrázky do článku o koších'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Nahrát opravu přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html \
+            images/clanky/kadan-pretekajici-kos-facebook-ostry.webp \
+            images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp \
+            images/clanky/jan-losenicky-komentar-facebook-ostry.webp \
+            ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky
+          sudo install -m 0644 /tmp/pretekajici-kose-kadan-technicke-sluzby-ridici.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/kadan-pretekajici-kos-facebook-ostry.webp /tmp/kadan-forum-petra-pokorna-prispevek-ostry.webp /tmp/jan-losenicky-komentar-facebook-ostry.webp /var/www/nasekadan/images/clanky/
+          REMOTE
+
+      - name: Ověřit živý článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for n in $(seq 1 18); do
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html?fix=$stamp-$n" -o /tmp/article || true
+            if grep -Fq 'data-fb-photo-evidence="v4-sharp-live"' /tmp/article; then
+              for f in kadan-pretekajici-kos-facebook-ostry.webp kadan-forum-petra-pokorna-prispevek-ostry.webp jan-losenicky-komentar-facebook-ostry.webp; do
+                curl -4 -kfsS --max-time 20 "https://nasekadan.cz/images/clanky/$f?fix=$stamp-$n" -o "/tmp/$f"
+                test -s "/tmp/$f"
+              done
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
