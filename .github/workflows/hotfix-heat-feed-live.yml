@@ -38,6 +38,7 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
 
           python3 scripts/update_hospital_profile_municipal_support.py
           python3 scripts/add_syringe_teaser.py
@@ -89,11 +90,11 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 24); do
-            article="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            archive="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            rss="$(curl -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            sitemap="$(curl -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            rss="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
               && grep -Fq 'data-next-syringe-article' <<<"$article" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$home" \
