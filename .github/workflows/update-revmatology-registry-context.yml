@@ -1,0 +1,80 @@
+name: Doplnění registrů k revmatologii
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/revma-registry-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-revma-registry-context
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit ověřené registry
+        run: |
+          set -euo pipefail
+          python3 scripts/add_revmatology_registry_context.py
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          git commit -m 'Doplnit ověřené registry k revmatologii' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit článek na server i do kontejneru
+        id: deploy
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html \
+            ubuntu@57.129.43.215:/tmp/nk-revma-registry.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 /tmp/nk-revma-registry.html /var/www/nasekadan/clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-revma-registry.html nasekadan-web:/usr/share/nginx/html/clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          fi
+          rm -f /tmp/nk-revma-registry.html
+          REMOTE
+
+      - name: Veřejně ověřit doplnění
+        id: verify
+        run: |
+          set -euo pipefail
+          url='https://nasekadan.cz/clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html'
+          for attempt in $(seq 1 24); do
+            page="$(curl -4 -kfsS --max-time 20 "${url}?registry=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'data-revma-registry-context="1"' <<<"$page" \
+              && grep -Fq 'revmatologicka-spolecnost.cz/centra-biologicke-lecby/' <<<"$page" \
+              && grep -Fq 'akreditace.mzcr.cz/poskytovatele/view/42281' <<<"$page"; then
+              exit 0
+            fi
+            sleep 8
+          done
+          exit 1
