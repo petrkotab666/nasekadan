@@ -19,6 +19,11 @@ RUN python scripts/update_petition_verified_details.py
 # ve kterém následně běží generátor obrázků.
 RUN pip install --no-cache-dir Pillow
 
+# Původní facebookové SVG obálky obsahovaly malé rastrové náhledy a jeden z nich
+# některé prohlížeče vůbec nevykreslily. Při sestavení je proto převést na ostré,
+# samostatné WebP soubory a přepsat na ně odkazy v článku.
+RUN python scripts/prepare_kos_sharp_images.py
+
 # Každá veřejná stránka musí mít už ve statickém HTML stejnou patičku a stejný
 # footer.css. JavaScript je pouze druhá pojistka, ne podmínka správného vzhledu.
 RUN python scripts/normalize_footers.py --write --check
