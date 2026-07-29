@@ -1,0 +1,122 @@
+name: Nasadit a ověřit trvalé statistiky v6
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/nasekadan-stats/**'
+      - '.github/workflows/deploy-stats-v6-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-direct-stats-repair
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nasadit statistiky v6 přímo na OVH
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/stats-v6-deploy.txt"
+          set -Eeuo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo bash .github/scripts/nasekadan-stats/install-stats.sh
+
+          echo '=== ZÁVĚREČNÉ OVĚŘENÍ V6 ==='
+          systemctl is-active nasekadan-stats-web.service
+          grep -F 'ExecStart=/usr/bin/python3 /usr/local/lib/nasekadan-stats/stats_server_v6.py' \
+            /etc/systemd/system/nasekadan-stats-web.service
+          systemctl is-enabled nasekadan-stats-snapshot.timer
+          systemctl is-enabled nasekadan-stats-backup.timer
+          systemctl is-enabled nasekadan-stats-watchdog.timer
+          systemctl is-active nasekadan-stats-snapshot.timer
+          systemctl is-active nasekadan-stats-backup.timer
+          systemctl is-active nasekadan-stats-watchdog.timer
+
+          sudo -u www-data bash -lc 'cd /usr/local/lib/nasekadan-stats && python3 - <<"PY"
+          import json
+          import sqlite3
+          import stats_metrics_v5
+          import stats_metrics_v6
+          import stats_server as base
+
+          stats_metrics_v5.install(base)
+          stats_metrics_v6.install(base)
+          body=base.render_dashboard().decode("utf-8","replace")
+          current=stats_metrics_v5.aggregate(base)
+          required=("Statistiky jednotlivých článků","SQLite záloha aktivní","interni-ambulance-nemocnice-kadan-uzavrena-cervenec-srpen-2026.html")
+          for marker in required:
+              assert marker in body, marker
+          con=sqlite3.connect("/opt/nasekadan-stats/stats-v6.sqlite3")
+          assert con.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+          totals=dict(con.execute("SELECT key,value FROM totals"))
+          articles=con.execute("SELECT COUNT(*) FROM counters WHERE category=\"pages\" AND label LIKE \"/clanky/%.html\"").fetchone()[0]
+          days=con.execute("SELECT COUNT(*) FROM daily").fetchone()[0]
+          snapshots=con.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
+          con.close()
+          assert totals.get("views",0)>=7738, totals
+          assert articles>=5, articles
+          assert days>=6, days
+          assert snapshots>=1, snapshots
+          print(json.dumps({"ok":True,"totals":totals,"articles":articles,"days":days,"snapshots":snapshots,"current":current["total"]},ensure_ascii=False))
+          PY'
+
+          test -n "$(find /opt/nasekadan-stats/backups -maxdepth 1 -type f -name 'stats-v6-*.sqlite3' -print -quit)"
+          curl -fsS --max-time 5 http://127.0.0.1:3225/healthz
+          curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+            https://nasekadan.cz/statistiky/ | grep -F 'Přihlášení ke statistikám'
+          curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+            https://nasekadan.cz/statistiky/zapomenute-heslo | grep -F 'petrkotab@seznam.cz'
+          echo 'ÚSPĚCH: statistiky v6 jsou nasazené, databáze je čitelná, články jsou v přehledu, záloha existuje a samooprava je aktivní.'
+          REMOTE
+
+      - name: Zapsat ověřený výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log='';
+            try { log=fs.readFileSync(`${process.env.RUNNER_TEMP}/stats-v6-deploy.txt`,'utf8'); } catch {}
+            const ok=process.env.OUTCOME==='success';
+            const title=`[STATISTIKY V6] ${ok?'Úspěšně nasazeno':'Nasazení selhalo'} ${new Date().toISOString()}`;
+            const body=[
+              `- Commit: \`${process.env.SOURCE_SHA}\``,
+              `- Přímé nasazení a živé ověření: **${process.env.OUTCOME || 'unknown'}**`,
+              `- Kontrolováno: služba v6, SQLite integrita, článkový přehled, denní data, snímky, záloha, veřejná trasa, reset hesla a tři systemd timery.`,
+              '', '```text', log.slice(-30000).replace(/```/g,'---'), '```'
+            ].join('\n');
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
