@@ -1,0 +1,189 @@
+name: Opravit chybějící stránku ordinací
+run-name: Přímá oprava 404 a veřejné ověření článku ordinací
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/repair-missing-gp-page-trigger.txt'
+      - '.github/workflows/repair-missing-gp-page.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
+      PUBLIC_PATH: /clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
+      EXPECTED_H1: V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit zdrojový článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$ARTICLE"
+          grep -Fq "<h1>$EXPECTED_H1</h1>" "$ARTICLE"
+          grep -Fq 'Cévní ambulance: změna od 1. září' "$ARTICLE"
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Opravit aktivní web a záložní kontejner
+        id: remote
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          ARTICLE='clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html'
+          test -s "$ARTICLE"
+          grep -Fq '<h1>V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů</h1>' "$ARTICLE"
+
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 "$ARTICLE" \
+            /var/www/nasekadan/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$ARTICLE" \
+              nasekadan-web:/usr/share/nginx/html/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
+            sudo docker cp index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+          fi
+
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=targeted-404-repair\n' \
+            "$SHA" "$(date -u +%FT%TZ)" \
+            | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo systemctl reload caddy 2>/dev/null || true
+
+          local_page="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?repair=$SHA")"
+          grep -Fq '<h1>V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů</h1>' <<<"$local_page"
+          grep -Fq 'Cévní ambulance: změna od 1. září' <<<"$local_page"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            docker_page="$(curl -fsS --max-time 20 \
+              http://127.0.0.1:3224/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html)"
+            grep -Fq '<h1>V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů</h1>' <<<"$docker_page"
+          fi
+          echo "REMOTE_SHA=$SHA"
+          REMOTE
+
+      - name: Veřejně ověřit bez www i s www
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          ok=false
+          summary=''
+          for attempt in $(seq 1 24); do
+            apex_code="$(curl -k -L -sS -o "$RUNNER_TEMP/apex.html" -w '%{http_code}' \
+              "https://nasekadan.cz${PUBLIC_PATH}?v=$stamp-$attempt" || true)"
+            www_code="$(curl -k -L -sS -o "$RUNNER_TEMP/www.html" -w '%{http_code}' \
+              "https://www.nasekadan.cz${PUBLIC_PATH}?v=$stamp-$attempt" || true)"
+            apex_ok=false
+            www_ok=false
+            [[ "$apex_code" == '200' ]] && grep -Fq "<h1>$EXPECTED_H1</h1>" "$RUNNER_TEMP/apex.html" && apex_ok=true
+            [[ "$www_code" == '200' ]] && grep -Fq "<h1>$EXPECTED_H1</h1>" "$RUNNER_TEMP/www.html" && www_ok=true
+            summary="apex=$apex_code/$apex_ok, www=$www_code/$www_ok"
+            if [[ "$apex_ok" == true && "$www_ok" == true ]]; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+          [[ "$ok" == true ]]
+
+      - name: Zapsat skutečný výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          VERIFY_SUMMARY: ${{ steps.verify.outputs.summary }}
+        with:
+          script: |
+            const title = '[OPRAVA 404] Přehled omezení ordinací';
+            const ok = process.env.VERIFY_OUTCOME === 'success';
+            const body = [
+              `## ${ok ? 'VEŘEJNĚ OPRAVENO' : 'OPRAVA NENÍ VEŘEJNĚ POTVRZENA'}`,
+              '',
+              '- URL: https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html',
+              `- Kontrola: ${process.env.VERIFY_SUMMARY || 'bez výsledku'}`,
+              `- Commit běhu: \`${context.sha}\``,
+              `- GitHub Actions: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              ok
+                ? 'Stránka vrací HTTP 200 a správný H1 na doméně bez www i s www.'
+                : 'Stránku nelze označit za opravenou. Zkontrolovat log, DNS a aktivní document root.'
+            ].join('\n');
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100
+            });
+            const existing = issues.find(i => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+                state: ok ? 'closed' : 'open',
+                state_reason: ok ? 'completed' : undefined
+              });
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                assignees: ['petrkotab666']
+              });
+              if (ok) await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: created.data.number,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }
