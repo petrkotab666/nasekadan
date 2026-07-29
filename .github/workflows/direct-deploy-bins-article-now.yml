@@ -1,0 +1,111 @@
+name: Přímé nasazení článku o přeplněných koších
+run-name: Zveřejnit článek o přeplněných koších na nasekadan.cz
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/direct-deploy-bins-article-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-direct-bins-article
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nasadit aktuální main přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+          chmod 600 "$RUNNER_TEMP/nasekadan_key"
+
+          ssh -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          test -f clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html
+          grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' index.html
+          grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' clanky/index.html
+          sudo install -d -m 0755 /var/www/nasekadan
+          sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          tar --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
+              --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
+              --exclude='deploy' --exclude='tools' -cf - . \
+            | sudo tar -C /var/www/nasekadan -xf -
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-bins-article\n' \
+            "$SHA" "$(date -u +%FT%TZ)" \
+            | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+          sudo chmod -R a+rX /var/www/nasekadan
+          REMOTE
+
+      - name: Ověřit veřejný web bez mezipaměti
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=0
+          for attempt in $(seq 1 24); do
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?bins=$stamp-$attempt" -o /tmp/home.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?bins=$stamp-$attempt" -o /tmp/archive.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html?bins=$stamp-$attempt" -o /tmp/article.html || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?bins=$stamp-$attempt" -o /tmp/rss.xml || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?bins=$stamp-$attempt" -o /tmp/sitemap.xml || true
+            curl -4 -kfsS --max-time 20 "https://nasekadan.cz/deployment-health.txt?bins=$stamp-$attempt" -o /tmp/health.txt || true
+            if grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' /tmp/home.html \
+              && grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' /tmp/archive.html \
+              && grep -Fq 'Přetékající koše v Kadani budí kritiku' /tmp/article.html \
+              && grep -Fq 'pretekajici-kose-kadan-technicke-sluzby-ridici.html' /tmp/rss.xml \
+              && grep -Fq 'pretekajici-kose-kadan-technicke-sluzby-ridici.html' /tmp/sitemap.xml \
+              && grep -Fq 'mode=direct-bins-article' /tmp/health.txt; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+          cat /tmp/health.txt
+
+      - name: Zapsat potvrzení publikace
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p deployment-confirmations
+          SOURCE_SHA="$(sed -n 's/^source=//p' /tmp/health.txt | head -n1)"
+          GENERATED="$(sed -n 's/^generated=//p' /tmp/health.txt | head -n1)"
+          printf 'article=https://nasekadan.cz/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html\nsource=%s\ngenerated=%s\nverified=%s\nmode=direct-bins-article\n' \
+            "$SOURCE_SHA" "$GENERATED" "$(date -u +%FT%TZ)" > deployment-confirmations/bins-article.txt
+          git config user.name 'Naše Kadaň – produkční ověření'
+          git config user.email 'info@nasekadan.cz'
+          git add deployment-confirmations/bins-article.txt
+          git commit -m 'Potvrdit zveřejnění článku o přeplněných koších'
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
