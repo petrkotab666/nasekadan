@@ -3,10 +3,6 @@ name: Trvalá viditelnost článků Naše Kadaň
 on:
   push:
     branches: [main]
-    paths:
-      - 'clanky/*.html'
-      - 'scripts/enforce_article_visibility.py'
-      - '.github/article-visibility-trigger.txt'
   schedule:
     - cron: '7 * * * *'
   workflow_dispatch:
