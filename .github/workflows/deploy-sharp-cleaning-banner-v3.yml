@@ -1,0 +1,112 @@
+name: Nasadit ostrý banner čištění v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deploy-sharp-cleaning-banner-v3-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-sharp-cleaning-banner-v3
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      BANNER: vaseuklizecka-cisteni-wide-sharp-v3.svg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přepnout web na ostrý vektorový banner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          banner = Path('assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg')
+          ET.parse(banner)
+
+          p = Path('reklamy.js')
+          s = p.read_text(encoding='utf-8')
+          old_paths = [
+              '/assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp',
+              '/assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp',
+              '/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-1810x869.webp',
+              '/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-1400x672.webp',
+              '/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-1200x576.webp',
+          ]
+          new = '/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg'
+          for old in old_paths:
+              s = s.replace(old, new)
+          s = s.replace('width="1200" height="400" alt="Čištění koberců', 'width="1200" height="576" alt="Čištění koberců')
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          grep -Fq '/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg' reklamy.js
+          ! grep -Fq '/assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp' reklamy.js
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reklamy.js assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg
+          git commit -m 'Přepnout web na ostrý vektorový banner čištění' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+
+      - name: Nasadit přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
+          sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg /var/www/nasekadan/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg
+          REMOTE
+
+      - name: Ověřit veřejný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 18); do
+            js="$(curl -fsS --max-time 20 "https://nasekadan.cz/reklamy.js?v=$stamp-$attempt" || true)"
+            code="$(curl -sS -o /tmp/banner.svg -w '%{http_code}' --max-time 20 "https://nasekadan.cz/assets/reklamy/$BANNER?v=$stamp-$attempt" || true)"
+            type="$(curl -sSI --max-time 20 "https://nasekadan.cz/assets/reklamy/$BANNER?v=$stamp-$attempt" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2)}' | tail -1)"
+            if [ "$code" = 200 ] \
+              && grep -Fq "$BANNER" <<<"$js" \
+              && grep -Fq '<svg' /tmp/banner.svg \
+              && grep -Fq 'ČIŠTĚNÍ' /tmp/banner.svg \
+              && grep -Fq '603 206 308' /tmp/banner.svg \
+              && [[ "$type" == *svg* ]]; then
+              python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('/tmp/banner.svg')
+          PY
+              echo 'Ostrý vektorový banner je veřejně nasazený.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Veřejná kontrola ostrého banneru selhala.' >&2
+          exit 1
