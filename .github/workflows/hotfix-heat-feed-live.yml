@@ -30,10 +30,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/publish_hospital_profile_direct.py
+          python3 scripts/feature_hospital_profile_home.py
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
           git add clanky/nemocnice-kadan-profil-sluzby-budoucnost.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt
-          git commit -m 'Trvale zveřejnit závěrečný profil Nemocnice Kadaň' || true
+          git commit -m 'Trvale zveřejnit závěrečný profil Nemocnice Kadaň na titulce' || true
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -48,6 +49,7 @@ jobs:
         id: deploy
         run: |
           set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nk-upload"
           mkdir -p "$RUNNER_TEMP/nk-upload/clanky"
           cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html "$RUNNER_TEMP/nk-upload/clanky/"
           cp index.html "$RUNNER_TEMP/nk-upload/index.html"
@@ -66,7 +68,7 @@ jobs:
           rm -rf /tmp/nk-hospital-upload
           grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
+          grep -Fq 'data-hospital-profile-hero' /var/www/nasekadan/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/clanky/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/rss.xml
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/sitemap.xml
@@ -84,7 +86,7 @@ jobs:
             sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
               && grep -Fq 'data-next-syringe-article' <<<"$article" \
-              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$home" \
+              && grep -Fq 'data-hospital-profile-hero' <<<"$home" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
