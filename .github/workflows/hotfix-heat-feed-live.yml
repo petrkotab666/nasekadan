@@ -45,7 +45,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Odeslat hotové soubory přímo na server
+      - name: Odeslat hotové soubory přímo na server i do kontejneru
         id: deploy
         run: |
           set -euo pipefail
@@ -64,14 +64,25 @@ jobs:
           sudo cp /tmp/nk-hospital-upload/index.html /var/www/nasekadan/index.html
           sudo cp /tmp/nk-hospital-upload/clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo cp /tmp/nk-hospital-upload/rss.xml /tmp/nk-hospital-upload/sitemap.xml /tmp/nk-hospital-upload/news-sitemap.xml /tmp/nk-hospital-upload/llms.txt /tmp/nk-hospital-upload/robots.txt /var/www/nasekadan/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-hospital-upload/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/nk-hospital-upload/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp /tmp/nk-hospital-upload/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html nasekadan-web:/usr/share/nginx/html/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+            sudo docker cp /tmp/nk-hospital-upload/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/nk-hospital-upload/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp /tmp/nk-hospital-upload/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/nk-hospital-upload/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp /tmp/nk-hospital-upload/robots.txt nasekadan-web:/usr/share/nginx/html/robots.txt
+          fi
           sudo chmod -R a+rX /var/www/nasekadan
           rm -rf /tmp/nk-hospital-upload
           grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-hospital-profile-hero' /var/www/nasekadan/index.html
-          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/clanky/index.html
-          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/rss.xml
-          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/sitemap.xml
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web grep -Fq 'data-hospital-profile-hero' /usr/share/nginx/html/index.html
+            sudo docker exec nasekadan-web grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /usr/share/nginx/html/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          fi
           REMOTE
 
       - name: Ověřit veřejný web
@@ -81,12 +92,14 @@ jobs:
           for attempt in $(seq 1 24); do
             article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            indexhtml="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/index.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             rss="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
               && grep -Fq 'data-next-syringe-article' <<<"$article" \
               && grep -Fq 'data-hospital-profile-hero' <<<"$home" \
+              && grep -Fq 'data-hospital-profile-hero' <<<"$indexhtml" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
