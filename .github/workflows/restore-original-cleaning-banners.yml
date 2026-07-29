@@ -1,4 +1,4 @@
-name: Vrátit původní bannery čištění
+name: Nasadit validní bannery čištění
 
 on:
   push:
@@ -21,15 +21,15 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      WIDE_BLOB: 7cb71e58e9de0c6b43bb66a5666afb226e4f566b
-      TOWER_BLOB: 9ec919c6188aa82ae5415362a1a3a994edfbeb7d
+      WIDE_BLOB: d8b24bedee84417ebca9cf93071d6090f6284203
+      TOWER_BLOB: d5f1e2ade36c3ad165878dc6fcfb5a043b7a1517
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Obnovit přesně původní grafické soubory
+      - name: Obnovit validní grafické soubory
         shell: bash
         run: |
           set -euo pipefail
@@ -48,25 +48,24 @@ jobs:
           download_blob "$WIDE_BLOB" assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp
           download_blob "$TOWER_BLOB" assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp
 
+          file assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp | grep -Fq 'Web/P image'
+          file assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp | grep -Fq '600x200'
+          file assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp | grep -Fq 'Web/P image'
+          file assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp | grep -Fq '150x300'
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add assets/reklamy/vaseuklizecka-cisteni-wide-1200x400.webp \
                   assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp
-          git commit -m 'Vrátit původní grafické bannery čištění' || true
-
-          pushed=false
+          git commit -m 'Obnovit validní bannery čištění' || true
           for attempt in 1 2 3 4; do
-            if git push origin HEAD:main; then
-              pushed=true
-              break
-            fi
+            if git push origin HEAD:main; then break; fi
             git pull --rebase origin main
             sleep 3
           done
-          test "$pushed" = true
           echo "RESTORE_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Nasadit původní bannery na veřejný server
+      - name: Nasadit bannery na veřejný server
         shell: bash
         run: |
           set -euo pipefail
@@ -87,7 +86,7 @@ jobs:
           sudo install -m 0644 assets/reklamy/vaseuklizecka-cisteni-tower-300x600.webp /var/www/nasekadan/assets/reklamy/
           REMOTE
 
-      - name: Ověřit, že veřejný web vrací původní soubory
+      - name: Ověřit skutečný formát veřejných obrázků
         shell: bash
         run: |
           set -euo pipefail
@@ -102,7 +101,11 @@ jobs:
               -o /tmp/public-tower.webp || true
             if [ -s /tmp/public-wide.webp ] && [ -s /tmp/public-tower.webp ] \
               && [ "$(git hash-object /tmp/public-wide.webp)" = "$WIDE_BLOB" ] \
-              && [ "$(git hash-object /tmp/public-tower.webp)" = "$TOWER_BLOB" ]; then
+              && [ "$(git hash-object /tmp/public-tower.webp)" = "$TOWER_BLOB" ] \
+              && file /tmp/public-wide.webp | grep -Fq 'Web/P image' \
+              && file /tmp/public-wide.webp | grep -Fq '600x200' \
+              && file /tmp/public-tower.webp | grep -Fq 'Web/P image' \
+              && file /tmp/public-tower.webp | grep -Fq '150x300'; then
               verified=true
               break
             fi
@@ -117,6 +120,8 @@ jobs:
             "restore_commit": "$RESTORE_COMMIT",
             "wide_git_blob": "$WIDE_BLOB",
             "tower_git_blob": "$TOWER_BLOB",
+            "wide_format": "webp-600x200",
+            "tower_format": "webp-150x300",
             "public_verification": true
           }
           JSON
@@ -125,7 +130,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git pull --rebase origin main
           git add cleaning-banners-original-restore-status.json
-          git commit -m 'Potvrdit návrat původních bannerů čištění'
+          git commit -m 'Potvrdit skutečně čitelné bannery čištění'
           for attempt in 1 2 3 4; do
             if git push origin HEAD:main; then exit 0; fi
             git pull --rebase origin main
