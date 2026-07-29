@@ -26,15 +26,18 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Vytvořit veřejný článek a trvale ho uložit
+      - name: Připravit všechny veřejné výstupy
         run: |
           set -euo pipefail
-          python3 scripts/publish_hospital_profile_direct.py
-          python3 scripts/feature_hospital_profile_home.py
+          test -f clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/generate_social_cards.py --write --check
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
-          git add clanky/nemocnice-kadan-profil-sluzby-budoucnost.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt
-          git commit -m 'Trvale zveřejnit závěrečný profil Nemocnice Kadaň na titulce' || true
+          git add index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt social clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          git commit -m 'Zveřejnit Revmatologii Kadaň na všech výstupech' || true
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -50,59 +53,52 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/nk-upload"
-          mkdir -p "$RUNNER_TEMP/nk-upload/clanky"
-          cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html "$RUNNER_TEMP/nk-upload/clanky/"
+          mkdir -p "$RUNNER_TEMP/nk-upload/clanky" "$RUNNER_TEMP/nk-upload/social"
+          cp clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html "$RUNNER_TEMP/nk-upload/clanky/"
           cp index.html "$RUNNER_TEMP/nk-upload/index.html"
           cp clanky/index.html "$RUNNER_TEMP/nk-upload/clanky/index.html"
           cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$RUNNER_TEMP/nk-upload/"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-upload" ubuntu@57.129.43.215:/tmp/nk-hospital-upload
+          cp -a social/. "$RUNNER_TEMP/nk-upload/social/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-upload" ubuntu@57.129.43.215:/tmp/nk-revma-upload
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
-          sudo install -d -m 0755 /var/www/nasekadan/clanky
-          sudo cp /tmp/nk-hospital-upload/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
-          sudo cp /tmp/nk-hospital-upload/index.html /var/www/nasekadan/index.html
-          sudo cp /tmp/nk-hospital-upload/clanky/index.html /var/www/nasekadan/clanky/index.html
-          sudo cp /tmp/nk-hospital-upload/rss.xml /tmp/nk-hospital-upload/sitemap.xml /tmp/nk-hospital-upload/news-sitemap.xml /tmp/nk-hospital-upload/llms.txt /tmp/nk-hospital-upload/robots.txt /var/www/nasekadan/
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo cp /tmp/nk-revma-upload/clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html /var/www/nasekadan/clanky/
+          sudo cp /tmp/nk-revma-upload/index.html /var/www/nasekadan/index.html
+          sudo cp /tmp/nk-revma-upload/clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo cp /tmp/nk-revma-upload/rss.xml /tmp/nk-revma-upload/sitemap.xml /tmp/nk-revma-upload/news-sitemap.xml /tmp/nk-revma-upload/llms.txt /tmp/nk-revma-upload/robots.txt /var/www/nasekadan/
+          sudo cp -a /tmp/nk-revma-upload/social/. /var/www/nasekadan/social/
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp /tmp/nk-hospital-upload/index.html nasekadan-web:/usr/share/nginx/html/index.html
-            sudo docker cp /tmp/nk-hospital-upload/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
-            sudo docker cp /tmp/nk-hospital-upload/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html nasekadan-web:/usr/share/nginx/html/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-            sudo docker cp /tmp/nk-hospital-upload/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
-            sudo docker cp /tmp/nk-hospital-upload/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
-            sudo docker cp /tmp/nk-hospital-upload/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
-            sudo docker cp /tmp/nk-hospital-upload/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
-            sudo docker cp /tmp/nk-hospital-upload/robots.txt nasekadan-web:/usr/share/nginx/html/robots.txt
+            sudo docker cp /tmp/nk-revma-upload/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/nk-revma-upload/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp /tmp/nk-revma-upload/clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html nasekadan-web:/usr/share/nginx/html/clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+            sudo docker cp /tmp/nk-revma-upload/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/nk-revma-upload/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp /tmp/nk-revma-upload/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/nk-revma-upload/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp /tmp/nk-revma-upload/robots.txt nasekadan-web:/usr/share/nginx/html/robots.txt
+            sudo docker cp /tmp/nk-revma-upload/social/. nasekadan-web:/usr/share/nginx/html/social/
           fi
-          sudo chmod -R a+rX /var/www/nasekadan
-          rm -rf /tmp/nk-hospital-upload
-          grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-          grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-          grep -Fq 'data-hospital-profile-hero' /var/www/nasekadan/index.html
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web grep -Fq 'data-hospital-profile-hero' /usr/share/nginx/html/index.html
-            sudo docker exec nasekadan-web grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /usr/share/nginx/html/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
-          fi
+          rm -rf /tmp/nk-revma-upload
           REMOTE
 
       - name: Ověřit veřejný web
         id: verify
         run: |
           set -euo pipefail
+          slug='nova-revmatologicka-ambulance-kadan-podzim-2026.html'
           for attempt in $(seq 1 24); do
-            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/$slug?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            indexhtml="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/index.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             rss="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
-              && grep -Fq 'data-next-syringe-article' <<<"$article" \
-              && grep -Fq 'data-hospital-profile-hero' <<<"$home" \
-              && grep -Fq 'data-hospital-profile-hero' <<<"$indexhtml" \
-              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
-              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
-              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
+            if grep -Fq 'V Kadani se na podzim otevře nová revmatologická ambulance' <<<"$article" \
+              && grep -Fq "$slug" <<<"$home" \
+              && grep -Fq "$slug" <<<"$archive" \
+              && grep -Fq "$slug" <<<"$rss" \
+              && grep -Fq "$slug" <<<"$sitemap"; then
               exit 0
             fi
             sleep 8
@@ -117,7 +113,7 @@ jobs:
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         with:
           script: |
-            const path = 'hospital-profile-hotfix-status.json';
+            const path = 'revmatologie-hotfix-status.json';
             const status = {
               status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
               checked_at_utc: new Date().toISOString(),
@@ -139,7 +135,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat stav hotfixu profilu nemocnice: ${status.status}`,
+              message: `Zapsat stav hotfixu Revmatologie Kadaň: ${status.status}`,
               content,
               ...(sha ? { sha } : {})
             });
