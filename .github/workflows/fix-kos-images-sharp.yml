@@ -26,31 +26,92 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Složit ostré obrazové soubory a upravit článek
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Připravit ostré obrazové soubory a upravit článek
         shell: bash
         run: |
           set -euo pipefail
+          python -m pip install --quiet pillow
           python - <<'PY'
           from pathlib import Path
-          import base64, re
+          from io import BytesIO
           from datetime import datetime
           from zoneinfo import ZoneInfo
+          import base64, html, re, urllib.request
+          from PIL import Image, ImageFilter, ImageOps
 
           chunks = Path('.github/kos-sharp-assets')
-          outputs = {
-              'main': Path('images/clanky/kadan-pretekajici-kos-facebook-ostry.webp'),
-              'post': Path('images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp'),
-              'jan': Path('images/clanky/jan-losenicky-komentar-facebook-ostry.webp'),
-          }
-          for prefix, target in outputs.items():
+          out = Path('images/clanky')
+          out.mkdir(parents=True, exist_ok=True)
+
+          def rebuild(prefix: str, target: Path) -> None:
               parts = sorted(chunks.glob(f'{prefix}-*.txt'))
               if not parts:
                   raise RuntimeError(f'Chybí datové části pro {prefix}')
               encoded = ''.join(p.read_text(encoding='ascii').strip() for p in parts)
-              target.parent.mkdir(parents=True, exist_ok=True)
               target.write_bytes(base64.b64decode(encoded))
               if target.stat().st_size < 5000:
                   raise RuntimeError(f'Výsledný obrázek {target} je podezřele malý')
+
+          post_target = out / 'kadan-forum-petra-pokorna-prispevek-ostry.webp'
+          jan_target = out / 'jan-losenicky-komentar-facebook-ostry.webp'
+          main_target = out / 'kadan-pretekajici-kos-facebook-ostry.webp'
+          rebuild('post', post_target)
+          rebuild('jan', jan_target)
+
+          photo_id = '10243275472011444'
+          photo_url = 'https://www.facebook.com/photo?fbid=10243275472011444&set=gm.1557730802517994&idorvanity=442280287396390'
+          ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
+
+          def get(url: str):
+              request = urllib.request.Request(url, headers={'User-Agent': ua, 'Accept': '*/*'})
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  return response.read(), response.headers.get('Content-Type', '')
+
+          data = None
+          for url in (
+              f'https://graph.facebook.com/{photo_id}/picture?type=large&redirect=true',
+              f'https://graph.facebook.com/{photo_id}/picture?redirect=true',
+          ):
+              try:
+                  body, ctype = get(url)
+                  if ctype.lower().startswith('image/') and len(body) > 5000:
+                      data = body
+                      break
+              except Exception as exc:
+                  print(f'Facebook image endpoint failed: {url}: {exc}')
+
+          if data is None:
+              try:
+                  page, _ = get(photo_url)
+                  page = page.decode('utf-8', 'ignore')
+                  match = (
+                      re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)', page, re.I)
+                      or re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']', page, re.I)
+                  )
+                  if match:
+                      candidate = html.unescape(match.group(1)).replace('\\/', '/')
+                      body, ctype = get(candidate)
+                      if ctype.lower().startswith('image/') and len(body) > 5000:
+                          data = body
+              except Exception as exc:
+                  print(f'Facebook OG image fallback failed: {exc}')
+
+          if data is None:
+              svg = (out / 'kadan-pretekajici-kos-facebook-real.svg').read_text(encoding='utf-8')
+              match = re.search(r'data:image/(?:jpeg|jpg|png);base64,([^"\']+)', svg, re.I)
+              if not match:
+                  raise RuntimeError('Nelze načíst ani záložní fotografii ze SVG')
+              data = base64.b64decode(match.group(1))
+
+          with Image.open(BytesIO(data)) as source:
+              image = ImageOps.exif_transpose(source).convert('RGB')
+              image = ImageOps.fit(image, (720, 1277), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+              image = image.filter(ImageFilter.UnsharpMask(radius=1.15, percent=125, threshold=2))
+              image.save(main_target, 'WEBP', quality=88, method=6)
 
           article = Path('clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html')
           text = article.read_text(encoding='utf-8')
@@ -58,7 +119,7 @@ jobs:
               '../images/clanky/kadan-pretekajici-kos-facebook-real.svg': '../images/clanky/kadan-pretekajici-kos-facebook-ostry.webp',
               '../images/clanky/kadan-forum-petra-pokorna-prispevek-real.svg': '../images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp',
               '../images/clanky/jan-losenicky-komentar-facebook-real.svg': '../images/clanky/jan-losenicky-komentar-facebook-ostry.webp',
-              'width="220" height="390" loading="eager"': 'width="560" height="993" loading="eager"',
+              'width="220" height="390" loading="eager"': 'width="720" height="1277" loading="eager"',
               'width="320" height="290" loading="lazy"': 'width="525" height="475" loading="lazy"',
               'width="360" height="130" loading="lazy"': 'width="620" height="391" loading="lazy"',
               'data-fb-photo-evidence="v2"': 'data-fb-photo-evidence="v3-sharp"',
