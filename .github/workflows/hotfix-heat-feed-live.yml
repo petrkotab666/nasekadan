@@ -40,6 +40,7 @@ jobs:
           git reset --hard origin/main
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
           python3 scripts/publish_hospital_profile_direct.py
+          python3 scripts/feature_hospital_profile_home.py
 
           sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
           sudo cp index.html /var/www/nasekadan/index.html
@@ -49,6 +50,7 @@ jobs:
 
           grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
           grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          grep -Fq 'data-hospital-profile-hero' /var/www/nasekadan/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/clanky/index.html
           grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/rss.xml
@@ -67,7 +69,8 @@ jobs:
             sitemap="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
             if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
               && grep -Fq 'data-next-syringe-article' <<<"$article" \
-              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$home" \
+              && grep -Fq 'data-hospital-profile-hero' <<<"$home" \
+              && grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$home" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
               && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
