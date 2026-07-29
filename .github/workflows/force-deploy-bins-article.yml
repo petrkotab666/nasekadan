@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: force-deploy-bins-article
@@ -41,3 +41,19 @@ jobs:
           curl -kfsS --max-time 30 'https://nasekadan.cz/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' | grep -Fq 'Přetékající koše v Kadani budí kritiku'
           curl -kfsS --max-time 30 'https://nasekadan.cz/' | grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html'
           curl -kfsS --max-time 30 'https://nasekadan.cz/clanky/' | grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html'
+
+      - name: Zapsat potvrzení úspěšného nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-confirmations
+          SOURCE_SHA="$(curl -kfsS --max-time 30 'https://nasekadan.cz/deployment-health.txt' | sed -n 's/^source=//p' | head -n1)"
+          GENERATED="$(curl -kfsS --max-time 30 'https://nasekadan.cz/deployment-health.txt' | sed -n 's/^generated=//p' | head -n1)"
+          printf 'article=/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html\nsource=%s\ngenerated=%s\nverified=%s\n' \
+            "$SOURCE_SHA" "$GENERATED" "$(date -u +%FT%TZ)" > deployment-confirmations/bins-article.txt
+          git config user.name 'Naše Kadaň – produkční ověření'
+          git config user.email 'info@nasekadan.cz'
+          git add deployment-confirmations/bins-article.txt
+          git commit -m 'Potvrdit produkční nasazení článku o koších' || exit 0
+          git pull --rebase origin main
+          git push origin main
