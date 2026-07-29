@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   inspect:
@@ -19,13 +20,14 @@ jobs:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Vypsat bezpečnou strukturu agregace
+        id: inspect
         shell: bash
         run: |
           set -euo pipefail
           printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
           chmod 600 "$RUNNER_TEMP/key"
           ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo -u www-data bash -s' <<'REMOTE'
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo -u www-data bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/v5-structure.txt"
           set -euo pipefail
           cd /usr/local/lib/nasekadan-stats
           python3 - <<'PY'
@@ -59,3 +61,27 @@ jobs:
                   print(f'{key.upper()}=' + json.dumps(shape(data[key]), ensure_ascii=False, default=str))
           PY
           REMOTE
+
+      - name: Zapsat výsledek do issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let text = '';
+            try { text = fs.readFileSync(`${process.env.RUNNER_TEMP}/v5-structure.txt`, 'utf8'); } catch {}
+            const marker = '[STATISTIKY V5 STRUKTURA]';
+            const title = `${marker} ${new Date().toISOString()}`;
+            const body = [`Výsledek: **${process.env.OUTCOME || 'unknown'}**`, '', '```text', text.slice(-30000).replace(/```/g, '---'), '```'].join('\n');
+            const created = await github.rest.issues.create({owner: context.repo.owner, repo: context.repo.repo, title, body});
+            if (process.env.OUTCOME === 'success') {
+              await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: created.data.number, state: 'closed', state_reason: 'completed'});
+            }
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+        run: test "$OUTCOME" = success
