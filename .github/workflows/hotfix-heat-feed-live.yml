@@ -32,6 +32,7 @@ jobs:
           test -f clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
           python3 scripts/emphasize_revmatology_contacts.py
           python3 scripts/enforce_article_visibility.py
+          python3 scripts/fix_article_card_headlines.py
           python3 scripts/prepare_discovery.py
           python3 scripts/sort_articles_chronologically.py
           python3 -m pip install --disable-pip-version-check --quiet Pillow
@@ -39,7 +40,7 @@ jobs:
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
           git add -A
-          git commit -m 'Zvýraznit kontakty a zveřejnit Revmatologii Kadaň' || true
+          git commit -m 'Zobrazit celé nadpisy článků na úvodu a v archivu' || true
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -102,6 +103,12 @@ jobs:
               && grep -Fq 'revmakadan@centrum.cz' <<<"$article" \
               && grep -Fq "$slug" <<<"$home" \
               && grep -Fq "$slug" <<<"$archive" \
+              && grep -Fq '<strong>Starosta: Nemocnice to zvládne, na Béčku vyroste vyšší dům a na nepedagogy peníze budou</strong>' <<<"$home" \
+              && grep -Fq '<strong>Přetékající koše v Kadani budí kritiku. Město mluví o odchodu řidičů</strong>' <<<"$home" \
+              && grep -Fq '<strong>ZŠ Chomutovská od září zdraží obědy. Rodiče mají zvýšit limit inkasa</strong>' <<<"$home" \
+              && grep -Fq '.article-card .visual{height:240px' <<<"$home" \
+              && ! grep -Fq '.article-card .visual{height:170px' <<<"$home" \
+              && grep -Fq '<strong>Starosta: Nemocnice to zvládne, na Béčku vyroste vyšší dům a na nepedagogy peníze budou</strong>' <<<"$archive" \
               && grep -Fq "$slug" <<<"$rss" \
               && grep -Fq "$slug" <<<"$sitemap"; then
               exit 0
@@ -140,7 +147,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat stav hotfixu Revmatologie Kadaň: ${status.status}`,
+              message: `Zapsat stav hotfixu nadpisů: ${status.status}`,
               content,
               ...(sha ? { sha } : {})
             });
