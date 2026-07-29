@@ -1,0 +1,43 @@
+name: Vynutit nasazení článku o přeplněných koších
+run-name: Produkční nasazení článku o přeplněných koších
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/force-deploy-bins-trigger.txt'
+      - '.github/workflows/force-deploy-bins-article.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: force-deploy-bins-article
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
+    steps:
+      - name: Stáhnout nejnovější hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nasadit aktuální main na produkční web
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Ověřit zveřejněný článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -kfsS --max-time 30 'https://nasekadan.cz/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' | grep -Fq 'Přetékající koše v Kadani budí kritiku'
+          curl -kfsS --max-time 30 'https://nasekadan.cz/' | grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html'
+          curl -kfsS --max-time 30 'https://nasekadan.cz/clanky/' | grep -Fq '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html'
