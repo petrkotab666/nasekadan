@@ -1,0 +1,61 @@
+name: Zjistit strukturu obnovených statistik v5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/stats-expansion-trigger.txt'
+      - '.github/workflows/inspect-stats-v5-aggregate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Vypsat bezpečnou strukturu agregace
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo -u www-data bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /usr/local/lib/nasekadan-stats
+          python3 - <<'PY'
+          from __future__ import annotations
+          import inspect
+          import json
+          import stats_metrics_v5 as m
+          import stats_server as base
+
+          m.install(base)
+          data = m.aggregate(base)
+
+          def shape(value, depth=0):
+              if depth > 3:
+                  return type(value).__name__
+              if isinstance(value, dict):
+                  return {str(k): shape(v, depth+1) for k, v in list(value.items())[:40]}
+              if isinstance(value, (list, tuple)):
+                  return {'type': type(value).__name__, 'length': len(value), 'sample': [shape(v, depth+1) for v in list(value)[:5]]}
+              if isinstance(value, (str, int, float, bool)) or value is None:
+                  if isinstance(value, str) and len(value) > 160:
+                      return value[:160] + '…'
+                  return value
+              return type(value).__name__
+
+          print('FUNCTIONS=' + ','.join(name for name, obj in inspect.getmembers(m, inspect.isfunction) if not name.startswith('_')))
+          print('AGGREGATE_SHAPE=' + json.dumps(shape(data), ensure_ascii=False, default=str))
+          print('TOTAL=' + json.dumps(data.get('total'), ensure_ascii=False, default=str))
+          for key in ('pages','articles','top_pages','records','events','visits','daily','sources','devices','browsers','diag'):
+              if key in data:
+                  print(f'{key.upper()}=' + json.dumps(shape(data[key]), ensure_ascii=False, default=str))
+          PY
+          REMOTE
