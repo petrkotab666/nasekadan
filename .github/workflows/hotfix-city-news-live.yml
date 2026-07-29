@@ -1,0 +1,139 @@
+name: Přímý hotfix přehledu veřejných zdrojů
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/city-news-live-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-city-news-live-hotfix
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit zdrojové soubory
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('data/city-news.json').read_text(encoding='utf-8'))
+          items = data.get('items')
+          if not isinstance(items, list) or len(items) < 3:
+              raise SystemExit('Datový přehled neobsahuje alespoň tři položky.')
+          js = Path('city-news.js').read_text(encoding='utf-8')
+          if 'cityNewsFallback' not in js:
+              raise SystemExit('Chybí záložní režim cityNewsFallback.')
+          page = Path('prehled-zdroju/index.html').read_text(encoding='utf-8')
+          if 'Přehled veřejných zdrojů' not in page:
+              raise SystemExit('Chybí stránka přehledu veřejných zdrojů.')
+          print(f'Ověřeno {len(items)} položek a záložní režim.')
+          PY
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Odeslat opravený přehled přímo na server
+        id: deploy
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nk-city-news-upload"
+          mkdir -p "$RUNNER_TEMP/nk-city-news-upload/data" "$RUNNER_TEMP/nk-city-news-upload/prehled-zdroju"
+          cp city-news.js "$RUNNER_TEMP/nk-city-news-upload/city-news.js"
+          cp data/city-news.json "$RUNNER_TEMP/nk-city-news-upload/data/city-news.json"
+          cp prehled-zdroju/index.html "$RUNNER_TEMP/nk-city-news-upload/prehled-zdroju/index.html"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-city-news-upload" ubuntu@57.129.43.215:/tmp/nk-city-news-upload
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/data /var/www/nasekadan/prehled-zdroju
+          sudo cp /tmp/nk-city-news-upload/city-news.js /var/www/nasekadan/city-news.js
+          sudo cp /tmp/nk-city-news-upload/data/city-news.json /var/www/nasekadan/data/city-news.json
+          sudo cp /tmp/nk-city-news-upload/prehled-zdroju/index.html /var/www/nasekadan/prehled-zdroju/index.html
+          sudo chmod a+r /var/www/nasekadan/city-news.js /var/www/nasekadan/data/city-news.json /var/www/nasekadan/prehled-zdroju/index.html
+          rm -rf /tmp/nk-city-news-upload
+          grep -Fq 'cityNewsFallback' /var/www/nasekadan/city-news.js
+          grep -Fq 'Musíme si pomáhat' /var/www/nasekadan/data/city-news.json
+          grep -Fq 'Přehled veřejných zdrojů' /var/www/nasekadan/prehled-zdroju/index.html
+          REMOTE
+
+      - name: Ověřit veřejný web
+        id: verify
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            token="${GITHUB_SHA}-${attempt}"
+            json_body="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/data/city-news.json?hotfix=${token}" || true)"
+            js_body="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/city-news.js?hotfix=${token}" || true)"
+            page_body="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/prehled-zdroju/?hotfix=${token}" || true)"
+            if grep -Fq 'Musíme si pomáhat' <<<"$json_body" \
+              && grep -Fq 'cityNewsFallback' <<<"$js_body" \
+              && grep -Fq 'Přehled veřejných zdrojů' <<<"$page_body"; then
+              printf '%s' "$json_body" > /tmp/city-news-public.json
+              python3 - <<'PY'
+          import json
+          data = json.load(open('/tmp/city-news-public.json', encoding='utf-8'))
+          items = data.get('items')
+          if not isinstance(items, list) or len(items) < 3:
+              raise SystemExit('Veřejný přehled nemá dost položek.')
+          print(f'Veřejně ověřeno {len(items)} položek.')
+          PY
+              exit 0
+            fi
+            sleep 6
+          done
+          exit 1
+
+      - name: Zapsat stav hotfixu
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'city-news-hotfix-status.json';
+            const status = {
+              status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              server_deploy: process.env.DEPLOY_OUTCOME || 'skipped',
+              public_verification: process.env.VERIFY_OUTCOME || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat stav hotfixu veřejných zdrojů: ${status.status}`,
+              content,
+              ...(sha ? { sha } : {})
+            });
