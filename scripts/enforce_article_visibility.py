@@ -51,7 +51,7 @@ def card(a):
     d = a['dt']
     meta = f"{d.day}. {d.month}. {d.year} · {d.strftime('%H:%M')} · {a['tag']}"
     return f'''    <article class="article-card hospital" data-auto-article="{escape(a['path'].stem)}">
-      <div class="visual" style="background:linear-gradient(135deg,#10242e,#315d70 58%,#9d222a)"><strong>{escape(a['title'][:54])}</strong></div>
+      <div class="visual" style="background:linear-gradient(135deg,#10242e,#315d70 58%,#9d222a)"><strong>{escape(a['title'])}</strong></div>
       <div class="article-body"><span class="meta">{escape(meta)}</span><h3>{escape(a['title'])}</h3><p>{escape(a['desc'])}</p><a class="read-more" href="{a['href']}">Přečíst článek →</a></div>
     </article>'''
 
