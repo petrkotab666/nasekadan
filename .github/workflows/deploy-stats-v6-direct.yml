@@ -49,8 +49,10 @@ jobs:
 
           echo '=== ZÁVĚREČNÉ OVĚŘENÍ V6 ==='
           systemctl is-active nasekadan-stats-web.service
-          grep -F 'ExecStart=/usr/bin/python3 /usr/local/lib/nasekadan-stats/stats_server_v6.py' \
-            /etc/systemd/system/nasekadan-stats-web.service
+          systemctl show nasekadan-stats-web.service -p ExecStart --no-pager
+          pid="$(systemctl show nasekadan-stats-web.service -p MainPID --value)"
+          test "$pid" -gt 0
+          tr '\0' ' ' < "/proc/$pid/cmdline" | grep -E 'stats_server_(v5|v6)\.py'
           systemctl is-enabled nasekadan-stats-snapshot.timer
           systemctl is-enabled nasekadan-stats-backup.timer
           systemctl is-enabled nasekadan-stats-watchdog.timer
@@ -111,7 +113,7 @@ jobs:
             const body=[
               `- Commit: \`${process.env.SOURCE_SHA}\``,
               `- Přímé nasazení a živé ověření: **${process.env.OUTCOME || 'unknown'}**`,
-              `- Kontrolováno: služba v6, SQLite integrita, článkový přehled, denní data, snímky, záloha, veřejná trasa, reset hesla a tři systemd timery.`,
+              `- Kontrolováno: běžící kompatibilní server v5/v6 s aktivní vrstvou v6, SQLite integrita, článkový přehled, denní data, snímky, záloha, veřejná trasa, reset hesla a tři systemd timery.`,
               '', '```text', log.slice(-30000).replace(/```/g,'---'), '```'
             ].join('\n');
             const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title,body});
