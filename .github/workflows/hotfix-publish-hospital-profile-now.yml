@@ -1,0 +1,101 @@
+name: Okamžitě zveřejnit závěrečný profil nemocnice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-profile-hotfix-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hospital-profile-hotfix-now
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Vytvořit veřejný článek a nasadit jej
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+
+          python3 scripts/bootstrap_arc_med_draft.py || true
+          python3 scripts/update_hospital_profile_municipal_support.py || true
+          python3 scripts/add_syringe_teaser.py
+          cp .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('clanky/nemocnice-kadan-profil-sluzby-budoucnost.html')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          t=t.replace('../../','../').replace('PŘIPRAVOVANÝ ZÁVĚREČNÝ DÍL','29. ČERVENCE 2026')
+          t=re.sub(r'<div class="sidebox preview-note">.*?</div>','',t,count=1,flags=re.S)
+          published='2026-07-29T05:00:00+02:00'
+          if 'article:published_time' not in t:
+              t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
+          t=re.sub(r'("datePublished"\s*:\s*")([^"]*)',r'\g<1>'+published,t)
+          t=re.sub(r'("dateModified"\s*:\s*")([^"]*)',r'\g<1>'+published,t)
+          p.write_text(t,encoding='utf-8',newline='\n')
+          PY
+
+          python3 scripts/link_hospital_series.py
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/sort_articles_chronologically.py
+
+          sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
+          sudo cp index.html /var/www/nasekadan/index.html
+          sudo cp clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt /var/www/nasekadan/
+          sudo cp clanky/arc-med-nemocnice-kadan.html clanky/avies-nemocnice-kadan.html clanky/nemocnice-kadan.html clanky/petice-nemocnice-kadan.html clanky/nemocnice-kadan-software-kyberbezpecnost.html /var/www/nasekadan/clanky/
+
+          test -f /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/clanky/index.html
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/rss.xml
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/sitemap.xml
+          REMOTE
+
+      - name: Ověřit živý web
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 24); do
+            article="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            archive="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            rss="$(curl -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            sitemap="$(curl -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
+              && grep -Fq 'data-next-syringe-article' <<<"$article" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$home" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
