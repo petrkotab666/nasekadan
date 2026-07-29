@@ -60,6 +60,10 @@ RUN python scripts/update_petition_verified_details.py
 # a RSS ještě před generováním sitemapy a před blokujícím auditem.
 RUN python scripts/enforce_current_article_order.py
 
+# Starý AVIES publikátor mohl vedle automatické karty vložit ještě druhou ruční.
+# Před auditem proto musí na titulce i v archivu zůstat právě jedna karta článku.
+RUN python scripts/dedupe_avies_cards.py
+
 # Doplnit canonical, robots, Open Graph a Twitter metadata také všem starším
 # průvodcovským stránkám. Přísný audit tak neblokuje nové články kvůli historickým
 # souborům, kterým metadata dříve chyběla.
