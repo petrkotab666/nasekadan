@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
-          git add "$ARTICLE" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml production-content-manifest.json
+          git add -A
           if ! git diff --cached --quiet; then
             git commit -m 'Publikovat: nové stravné ZŠ Chomutovská'
             git pull --rebase origin main
