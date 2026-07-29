@@ -37,7 +37,7 @@ jobs:
           python3 scripts/generate_social_cards.py --write --check
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
-          git add index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt social clanky/nova-revmatologicka-ambulance-kadan-podzim-2026.html
+          git add -A
           git commit -m 'Zveřejnit Revmatologii Kadaň na všech výstupech' || true
           git pull --rebase origin main
           git push origin HEAD:main
