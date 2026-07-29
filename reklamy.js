@@ -13,7 +13,7 @@ const promoItems=[
   {id:'rixo',title:'RIXO.cz',text:'Online srovnání pojištění vozidel, majetku, cestování i dalších rizik.',url:'https://www.rixo.cz/pojisteni-vozidel/?a_box=9n97unga&a_cam=1',tag:'Pojištění',contexts:['finance','auto','travel','home','general']},
   {id:'vyklidime',title:'VYKLIDIME.TO',text:'Vyklízení bytů, domů, sklepů a pozůstalostí v Kadani a širokém okolí.',url:'https://vyklidime.to',tag:'Místní služba',contexts:['home','sidebar','local','general']},
   {id:'uklizecka',title:'Vaše uklízečka',text:'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',url:'https://vaseuklizecka.cz',tag:'Místní služba',contexts:['home','sidebar','local','general']},
-  {id:'uklizecka-cisteni',title:'Čištění koberců, sedaček a čalounění',text:'Hloubkové čištění koberců, sedaček a čalounění na Kadaňsku. Objednávky: 603 206 308.',url:'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',banner:'/assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp',wideBanner:'/assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp',tag:'Místní služba',contexts:['home','sidebar','local','general'],weight:4},
+  {id:'uklizecka-cisteni',title:'Čištění koberců, sedaček a čalounění',text:'Hloubkové čištění koberců, sedaček a čalounění na Kadaňsku. Objednávky: 603 206 308.',url:'https://www.vaseuklizecka.cz/sluzby/cisteni-kobercu-a-calouneni/',banner:'/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg',wideBanner:'/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg',tag:'Místní služba',contexts:['home','sidebar','local','general'],weight:4},
   {id:'haffit',title:'Haffit',text:'Krmivo pro psy připravené na míru podle potřeb konkrétního psa.',url:'https://www.haffit.cz/?a_box=cbhtyjjm&a_cam=1',tag:'Pro chovatele',contexts:['pets','family','general']},
   {id:'zonky',title:'Zonky půjčka',text:'Online půjčka od Zonky s přehledným vyřízením a možností předčasného splacení.',url:'https://www.zonky.cz/pujcka-od-zonky/?a_box=s8m27mmy',tag:'Finance',contexts:['finance','home','general']}
 ];
@@ -513,7 +513,7 @@ function installGuaranteedCleaningBanner(){
   const section=document.createElement('section');
   section.className='featured-cleaning-ad';
   section.setAttribute('aria-label','Reklama: Čištění koberců, sedaček a čalounění');
-  section.innerHTML=`<div class="promo-label">REKLAMA</div><a href="${escapeHtml(safeHttpUrl(item.url))}" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/vaseuklizecka-cisteni-yellow-wide-400x192.webp" width="1200" height="400" alt="Čištění koberců, sedaček a čalounění – Vaše uklízečka, telefon 603 206 308" decoding="async"></a>`;
+  section.innerHTML=`<div class="promo-label">REKLAMA</div><a href="${escapeHtml(safeHttpUrl(item.url))}" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/vaseuklizecka-cisteni-wide-sharp-v3.svg" width="1200" height="576" alt="Čištění koberců, sedaček a čalounění – Vaše uklízečka, telefon 603 206 308" decoding="async"></a>`;
   const article=document.querySelector('article.article');
   if(article){
     const anchor=article.querySelector('.hero-visual')||article.querySelector('.leadtext')||article.querySelector('h1');
