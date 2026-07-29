@@ -33,6 +33,7 @@ jobs:
           python3 scripts/enforce_article_visibility.py
           python3 scripts/prepare_discovery.py
           python3 scripts/sort_articles_chronologically.py
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
           python3 scripts/generate_social_cards.py --write --check
           git config user.name 'Naše Kadaň automat'
           git config user.email 'info@nasekadan.cz'
