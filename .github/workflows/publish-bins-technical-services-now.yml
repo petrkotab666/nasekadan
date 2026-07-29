@@ -1,0 +1,53 @@
+name: Publikovat článek o přeplněných koších
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/publish_bins_technical_services_article.py'
+      - '.github/workflows/publish-bins-technical-services-now.yml'
+      - '.github/publish-bins-technical-services-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-bins-technical-services-now
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zařadit článek do všech veřejných přehledů
+        run: python3 scripts/publish_bins_technical_services_article.py
+
+      - name: Uložit a odeslat změny
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml production-content-manifest.json
+          if git diff --cached --quiet; then
+            echo 'Publikace už je kompletní; není co ukládat.'
+            exit 0
+          fi
+          git commit -m 'Zařadit článek o přeplněných koších do veřejných přehledů'
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Závěrečná kontrola souborů
+        run: |
+          grep -q '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' index.html
+          grep -q '/clanky/pretekajici-kose-kadan-technicke-sluzby-ridici.html' clanky/index.html
+          grep -q 'pretekajici-kose-kadan-technicke-sluzby-ridici.html' rss.xml
+          grep -q 'pretekajici-kose-kadan-technicke-sluzby-ridici.html' sitemap.xml
