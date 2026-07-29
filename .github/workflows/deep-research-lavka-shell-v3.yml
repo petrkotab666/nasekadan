@@ -1,0 +1,127 @@
+name: Hluboká rešerše lávky u Shellu v3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deep-research-lavka-shell-v3-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deep-research-lavka-shell-v3
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat nástroje
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces python3-bs4 python3-lxml file
+
+      - name: Stáhnout a vytěžit přílohy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-shell-v3
+          mkdir -p .github/research/lavka-shell-v3/text /tmp/lavka-v3
+
+          python3 - <<'PY'
+          import requests
+          from bs4 import BeautifulSoup
+          from urllib.parse import urljoin
+          from pathlib import Path
+          import json,re
+
+          ids=['34471149','34491001','38341648']
+          out=[]
+          s=requests.Session(); s.headers['User-Agent']='NaseKadan research'
+          for vid in ids:
+              u=f'https://smlouvy.gov.cz/smlouva/{vid}'
+              r=s.get(u,timeout=90); r.raise_for_status()
+              soup=BeautifulSoup(r.text,'lxml')
+              for n,a in enumerate(soup.select('a[href*="/smlouva/soubor/"]'),1):
+                  full=urljoin(u,a.get('href'))
+                  name=re.sub(r'[^A-Za-z0-9._-]+','-',a.get_text(' ',strip=True)).strip('-')
+                  if not name.lower().endswith('.pdf'): name += '.pdf'
+                  p=Path('/tmp/lavka-v3')/f'{vid}-{n}-{name}'
+                  rr=s.get(full,timeout=120); rr.raise_for_status(); p.write_bytes(rr.content)
+                  out.append({'id':vid,'title':a.get_text(' ',strip=True),'url':full,'path':str(p),'bytes':len(rr.content)})
+          Path('.github/research/lavka-shell-v3/downloads.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess,re,json,os
+
+          root=Path('.github/research/lavka-shell-v3')
+          results=[]
+          keys=['smluvní pokuta','smluvni pokuta','prodlení','prodleni','termín dokončení','termin dokonceni','doba plnění','doba plneni','předání','predani','převzetí','prevzeti','přerušení','preruseni','staveniště','staveniste','harmonogram','mikropilot','osvětlení','osvetleni','vady','nedodělky','nedodelky','zádržné','zadrzne','vícepráce','viceprace','méněpráce','meneprace','31. 5. 2026','31.05.2026','15. 7. 2026','15.07.2026','31. 8. 2026','31.08.2026']
+
+          def run(cmd):
+              return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+
+          for pdf in sorted(Path('/tmp/lavka-v3').glob('*.pdf')):
+              txtfile=Path('/tmp')/(pdf.stem+'.txt')
+              run(['pdftotext','-layout',str(pdf),str(txtfile)])
+              txt=txtfile.read_text(encoding='utf-8',errors='ignore') if txtfile.exists() else ''
+              method='pdftotext'
+              if len(re.sub(r'\s+','',txt))<800:
+                  method='ocr'
+                  imgdir=Path('/tmp')/(pdf.stem+'-pages'); imgdir.mkdir(exist_ok=True)
+                  info=run(['pdfinfo',str(pdf)]).stdout
+                  m=re.search(r'^Pages:\s+(\d+)',info,re.M)
+                  pages=min(int(m.group(1)) if m else 60,100)
+                  run(['pdftoppm','-f','1','-l',str(pages),'-r','260','-png',str(pdf),str(imgdir/'p')])
+                  chunks=[]
+                  for im in sorted(imgdir.glob('p-*.png')):
+                      chunks.append(run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+                  txt='\n\n'.join(chunks)
+              out=root/'text'/(pdf.stem+'.txt')
+              out.write_text(txt,encoding='utf-8')
+              low=txt.lower()
+              hits=[]
+              for key in keys:
+                  start=0
+                  while True:
+                      pos=low.find(key,start)
+                      if pos<0: break
+                      hits.append({'key':key,'snippet':re.sub(r'\s+',' ',txt[max(0,pos-600):pos+1500]).strip()})
+                      start=pos+len(key)
+                      if sum(1 for h in hits if h['key']==key)>=8: break
+              results.append({'file':pdf.name,'method':method,'chars':len(txt),'hits':hits})
+          (root/'findings.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          lines=['# Hluboká rešerše lávky u Shellu v3','']
+          for r in results:
+              lines += [f"## {r['file']}",f"Metoda: {r['method']}; znaků: {r['chars']}",'']
+              for h in r['hits']:
+                  lines.append(f"- **{h['key']}** — {h['snippet']}")
+              lines.append('')
+          (root/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+
+      - name: Uložit výsledky
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/lavka-shell-v3
+          git commit -m 'Dokončit hlubokou rešerši lávky u Shellu v3' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
