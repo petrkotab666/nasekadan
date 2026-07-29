@@ -1,0 +1,134 @@
+name: Opravit duplicitní kartu AVIES na živém webu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-avies-duplicate-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-fix-avies-duplicate
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit čistou titulku a archiv
+        run: |
+          set -euo pipefail
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/dedupe_avies_cards.py
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          href='/clanky/avies-nemocnice-kadan.html'
+          for path, token in ((Path('index.html'),'article-card'),(Path('clanky/index.html'),'archive-item')):
+              text=path.read_text(encoding='utf-8')
+              blocks=re.findall(r'<article\b[^>]*>.*?</article>',text,re.I|re.S)
+              count=sum(token in block.split('>',1)[0] and href in block for block in blocks)
+              if count != 1:
+                  raise SystemExit(f'{path}: AVIES karta je {count}×')
+          print('Zdrojová titulka i archiv obsahují právě jednu kartu AVIES.')
+          PY
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit čisté přehledy do document rootu i kontejneru
+        id: deploy
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/nk-avies-fix/clanky"
+          cp index.html "$RUNNER_TEMP/nk-avies-fix/index.html"
+          cp clanky/index.html "$RUNNER_TEMP/nk-avies-fix/clanky/index.html"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r \
+            "$RUNNER_TEMP/nk-avies-fix" ubuntu@57.129.43.215:/tmp/nk-avies-fix
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 /tmp/nk-avies-fix/index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 /tmp/nk-avies-fix/clanky/index.html /var/www/nasekadan/clanky/index.html
+          if sudo docker ps --format '{{.Names}}' | grep -Fxq nasekadan-web; then
+            sudo docker cp /tmp/nk-avies-fix/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/nk-avies-fix/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+          fi
+          rm -rf /tmp/nk-avies-fix
+          REMOTE
+
+      - name: Ověřit veřejnou titulku a archiv
+        id: verify
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          for attempt in $(seq 1 24); do
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/index.html?aviesfix=${stamp}-${attempt}" -o /tmp/home.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/index.html?aviesfix=${stamp}-${attempt}" -o /tmp/archive.html || true
+            if python3 - <<'PY'
+          import re
+          from pathlib import Path
+          href='/clanky/avies-nemocnice-kadan.html'
+          checks=[]
+          for path, token in ((Path('/tmp/home.html'),'article-card'),(Path('/tmp/archive.html'),'archive-item')):
+              text=path.read_text(encoding='utf-8',errors='replace') if path.exists() else ''
+              blocks=re.findall(r'<article\b[^>]*>.*?</article>',text,re.I|re.S)
+              checks.append(sum(token in block.split('>',1)[0] and href in block for block in blocks))
+          raise SystemExit(0 if checks == [1,1] else 1)
+          PY
+            then
+              echo 'Veřejná titulka i archiv obsahují právě jednu kartu AVIES.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat stav opravy
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'avies-duplicate-fix-status.json';
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const status = {
+              status: ok ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              server_deploy: process.env.DEPLOY || 'skipped',
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',
+              message:`Zapsat stav opravy duplicity AVIES: ${status.status}`,
+              content,...(sha?{sha}:{})
+            });
