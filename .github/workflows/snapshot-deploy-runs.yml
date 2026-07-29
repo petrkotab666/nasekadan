@@ -1,0 +1,80 @@
+name: Zapsat stav produkčních běhů
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/snapshot-deploy-runs-trigger.txt'
+      - '.github/workflows/snapshot-deploy-runs.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Získat běhy a joby
+        id: runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const response = await github.rest.actions.listWorkflowRunsForRepo({owner, repo, branch: 'main', per_page: 100});
+            const interesting = response.data.workflow_runs
+              .filter(run => /nasad|deploy|přeplněných koších|koších/i.test(`${run.name} ${run.display_title}`))
+              .slice(0, 30);
+            const result = [];
+            for (const run of interesting) {
+              let jobs = [];
+              try {
+                const j = await github.rest.actions.listJobsForWorkflowRun({owner, repo, run_id: run.id, per_page: 100});
+                jobs = (j.data.jobs || []).map(job => ({
+                  id: job.id,
+                  name: job.name,
+                  status: job.status,
+                  conclusion: job.conclusion,
+                  runner_name: job.runner_name,
+                  labels: job.labels,
+                  started_at: job.started_at,
+                  completed_at: job.completed_at
+                }));
+              } catch (error) {}
+              result.push({
+                id: run.id,
+                run_number: run.run_number,
+                name: run.name,
+                title: run.display_title,
+                event: run.event,
+                status: run.status,
+                conclusion: run.conclusion,
+                head_sha: run.head_sha,
+                created_at: run.created_at,
+                updated_at: run.updated_at,
+                html_url: run.html_url,
+                jobs
+              });
+            }
+            fs.mkdirSync('deployment-confirmations', {recursive: true});
+            fs.writeFileSync('deployment-confirmations/active-deploy-runs.json', JSON.stringify({generated_at: new Date().toISOString(), runs: result}, null, 2) + '\n');
+
+      - name: Uložit snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kontrola běhů'
+          git config user.email 'info@nasekadan.cz'
+          git add deployment-confirmations/active-deploy-runs.json
+          git commit -m 'Zapsat aktuální stav produkčních běhů' || exit 0
+          git pull --rebase origin main
+          git push origin main
