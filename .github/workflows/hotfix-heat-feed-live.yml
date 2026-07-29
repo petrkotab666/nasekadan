@@ -1,4 +1,4 @@
-name: Přímý hotfix sezónního feedu na živý web
+name: Přímý živý hotfix Naše Kadaň
 
 on:
   push:
@@ -11,13 +11,13 @@ permissions:
   contents: write
 
 concurrency:
-  group: nasekadan-heat-feed-live
+  group: nasekadan-live-hotfix
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
@@ -28,53 +28,78 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit viditelný sezónní feed
+      - name: Okamžitě vydat profil nemocnice a zachovat sezónní feed
         id: deploy
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          test -f horko-feed.js
-          test -f scripts/inject_heat_feed_static.py
-          grep -Fq 'desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html' horko-feed.js
-          grep -Fq 'desturl=https%3A%2F%2Fwww.biano.cz%2Fprodukty%2Frolety' horko-feed.js
-          grep -Fq 'desturl=https%3A%2F%2Fwww.proalergiky.cz%2Feshop%2Fcisticky-vzduchu' horko-feed.js
-          sudo cp horko-feed.js /var/www/nasekadan/horko-feed.js
-          sudo python3 scripts/inject_heat_feed_static.py /var/www/nasekadan
-          sudo find /var/www/nasekadan -type f -name '*.html' ! -path '*/nahled/*' ! -path '*/sdilet/*' -print0 | while IFS= read -r -d '' file; do
-            if grep -Fq '/horko-feed.js' "$file"; then
-              sudo sed -i 's#horko-feed.js?v=[^"'"'"']*#horko-feed.js?v=20260728-heat-static-3#g' "$file"
-            else
-              sudo sed -i 's#</body>#<script src="/horko-feed.js?v=20260728-heat-static-3"></script></body>#' "$file"
-            fi
-          done
-          grep -Fq 'data-heat-affiliate-feed="1"' /var/www/nasekadan/index.html
-          grep -Fq 'Ventilátory Concept' /var/www/nasekadan/index.html
-          grep -Fq 'concept.cz/ventilatory' /var/www/nasekadan/index.html
-          grep -Fq 'data-heat-affiliate-feed="1"' /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+
+          python3 scripts/update_hospital_profile_municipal_support.py
+          python3 scripts/add_syringe_teaser.py
+          cp .github/drafts/nemocnice-kadan-profil-sluzby-budoucnost.html clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('clanky/nemocnice-kadan-profil-sluzby-budoucnost.html')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          t=t.replace('../../','../').replace('PŘIPRAVOVANÝ ZÁVĚREČNÝ DÍL','29. ČERVENCE 2026')
+          t=re.sub(r'<div class="sidebox preview-note">.*?</div>','',t,count=1,flags=re.S)
+          published='2026-07-29T05:00:00+02:00'
+          if 'article:published_time' not in t:
+              t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
+          if '"datePublished"' not in t:
+              t=t.replace('"isAccessibleForFree":true}',f'"isAccessibleForFree":true,"datePublished":"{published}","dateModified":"{published}"}}',1)
+          p.write_text(t,encoding='utf-8',newline='\n')
+          PY
+
+          python3 scripts/link_hospital_series.py
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/sort_articles_chronologically.py
+
+          sudo cp clanky/nemocnice-kadan-profil-sluzby-budoucnost.html /var/www/nasekadan/clanky/
+          sudo cp index.html /var/www/nasekadan/index.html
+          sudo cp clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo cp rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt /var/www/nasekadan/
+
+          if [[ -f horko-feed.js && -f scripts/inject_heat_feed_static.py ]]; then
+            sudo cp horko-feed.js /var/www/nasekadan/horko-feed.js
+            sudo python3 scripts/inject_heat_feed_static.py /var/www/nasekadan
+          fi
+
+          sudo chmod -R a+rX /var/www/nasekadan
+          grep -Fq 'Nemocnice Kadaň není jen spor o miliony' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          grep -Fq 'data-next-syringe-article' /var/www/nasekadan/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/index.html
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/clanky/index.html
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/rss.xml
+          grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' /var/www/nasekadan/sitemap.xml
           REMOTE
 
       - name: Ověřit veřejný web
         id: verify
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 18); do
-            home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/?heat=${GITHUB_SHA}-${attempt}" || true)"
-            article="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?heat=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq 'data-heat-affiliate-feed="1"' <<<"$home" \
-              && grep -Fq 'Ventilátory Concept' <<<"$home" \
-              && grep -Fq 'concept.cz/ventilatory' <<<"$home" \
-              && grep -Fq 'biano.cz/produkty/rolety' <<<"$home" \
-              && grep -Fq 'proalergiky.cz/eshop/cisticky-vzduchu' <<<"$home" \
-              && grep -Fq 'data-heat-affiliate-feed="1"' <<<"$article"; then
+          for attempt in $(seq 1 24); do
+            article="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            home="$(curl -kfsS --max-time 20 "https://nasekadan.cz/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            archive="$(curl -kfsS --max-time 20 "https://nasekadan.cz/clanky/?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            rss="$(curl -kfsS --max-time 20 "https://nasekadan.cz/rss.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            sitemap="$(curl -kfsS --max-time 20 "https://nasekadan.cz/sitemap.xml?hotfix=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'Nemocnice Kadaň není jen spor o miliony' <<<"$article" \
+              && grep -Fq 'data-next-syringe-article' <<<"$article" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$home" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$archive" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$rss" \
+              && grep -Fq 'nemocnice-kadan-profil-sluzby-budoucnost.html' <<<"$sitemap"; then
               exit 0
             fi
             sleep 10
@@ -89,7 +114,7 @@ jobs:
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         with:
           script: |
-            const path = 'heat-feed-status.json';
+            const path = 'hospital-profile-hotfix-status.json';
             const status = {
               status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'success' : 'failed',
               checked_at_utc: new Date().toISOString(),
@@ -111,7 +136,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat stav sezónního feedu: ${status.status}`,
+              message: `Zapsat stav hotfixu profilu nemocnice: ${status.status}`,
               content,
               ...(sha ? { sha } : {})
             });
