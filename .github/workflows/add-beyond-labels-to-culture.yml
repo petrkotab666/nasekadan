@@ -1,0 +1,86 @@
+name: Doplnit Beyond Labels do kulturního přehledu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/radka-beyond-labels-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-beyond-labels-culture
+  cancel-in-progress: true
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit akci do kulturního přehledu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/add_beyond_labels_to_culture.py
+          grep -Fq 'data-beyond-labels-radka' "$ARTICLE"
+          grep -Fq 'vymena-mladeze-beyond-labels' "$ARTICLE"
+
+      - name: Uložit změnu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE"
+          git commit -m 'Doplnit Beyond Labels do kulturního přehledu' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit článek přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$ARTICLE" ubuntu@57.129.43.215:/tmp/nk-culture-beyond-labels.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 /tmp/nk-culture-beyond-labels.html /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          rm -f /tmp/nk-culture-beyond-labels.html
+          REMOTE
+
+      - name: Veřejně ověřit doplnění
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          for attempt in $(seq 1 20); do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?beyond=${stamp}-${attempt}" || true)"
+            if grep -Fq 'data-beyond-labels-radka' <<<"$page" \
+              && grep -Fq 'Beyond Labels: mezinárodní výměna mládeže v Měděnci' <<<"$page"; then
+              echo 'HOTOVO: Beyond Labels je ve veřejném kulturním přehledu.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
