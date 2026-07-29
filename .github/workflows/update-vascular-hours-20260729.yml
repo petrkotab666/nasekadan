@@ -1,0 +1,164 @@
+name: Doplnit změnu ordinační doby cévní ambulance
+run-name: Aktualizace a veřejné ověření cévní ambulance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/update-vascular-hours-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: update-vascular-hours-20260729
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit cévní ambulanci
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/update_vascular_hours_20260729.py
+          grep -Fq 'Cévní ambulance: změna od 1. září' "$ARTICLE"
+          grep -Fq 'Nově bude ambulance otevřena od 10:00 do 14:00' "$ARTICLE"
+          grep -Fq 'osm kadaňských pracovišť a dvě regionální omezení' "$ARTICLE"
+          echo "changed=$(git diff --quiet -- "$ARTICLE" rss.xml && echo false || echo true)" >> "$GITHUB_OUTPUT"
+
+      - name: Uložit aktualizaci do hlavní větve
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE" rss.xml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Aktualizovat: cévní ambulance od 1. září'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit aktualizované soubory na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SHA="$(git rev-parse HEAD)"
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html /var/www/nasekadan/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html
+          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=targeted-static-update\n' \
+            "$SHA" "$(date -u +%FT%TZ)" \
+            | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+          sudo chmod -R a+rX /var/www/nasekadan
+          PAGE="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?deploy=$SHA")"
+          grep -Fq 'Cévní ambulance: změna od 1. září' <<<"$PAGE"
+          grep -Fq 'Nově bude ambulance otevřena od 10:00 do 14:00' <<<"$PAGE"
+          grep -Fq 'osm kadaňských pracovišť a dvě regionální omezení' <<<"$PAGE"
+          REMOTE
+
+      - name: Veřejně ověřit článek a distribuční kanály
+        id: verify
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s)"
+          for attempt in $(seq 1 24); do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html?v=$stamp-$attempt" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" 2>/dev/null || true)"
+            if grep -Fq '<h1>V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů</h1>' <<<"$page" \
+              && grep -Fq 'Cévní ambulance: změna od 1. září' <<<"$page" \
+              && grep -Fq 'Nově bude ambulance otevřena od 10:00 do 14:00' <<<"$page" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$home" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$archive" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$rss" \
+              && grep -Fq 'prakticti-lekari-nemocnice-kadan-srpen-2026.html' <<<"$sitemap" \
+              && grep -Fq "source=$EXPECTED_SHA" <<<"$health"; then
+              echo 'Veřejná aktualizace byla ověřena.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Veřejné ověření neprošlo.' >&2
+          exit 1
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          PUBLISHED_SHA: ${{ steps.commit.outputs.sha }}
+        with:
+          script: |
+            const title = '[MONITORING KADAŇ] Cévní ambulance mění ordinační dobu od 1. září [20260729-nemkadan-cevni-ambulance]';
+            const ok = process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
+            const body = [
+              ok ? '## ÚSPĚŠNĚ AKTUALIZOVÁNO A VEŘEJNĚ OVĚŘENO' : '## AKTUALIZACE NEBYLA PLNĚ OVĚŘENA',
+              '',
+              '- Cévní ambulance Nemocnice Kadaň bude od 1. 9. 2026 nově otevřena od 10:00 do 14:00.',
+              '- Ambulance přijímá objednané pacienty s doporučením lékaře.',
+              `- Commit: \`${process.env.PUBLISHED_SHA || context.sha}\``,
+              `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '- Článek: https://nasekadan.cz/clanky/prakticti-lekari-nemocnice-kadan-srpen-2026.html',
+              '',
+              ok ? 'Článek, titulní stránka, archiv, RSS, sitemap a deployment-health.txt prošly přímou veřejnou kontrolou.' : 'Zkontrolovat log běhu a veřejnou stránku; stav nelze označit za úspěšný.'
+            ].join('\n');
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100
+            });
+            const existing = issues.find(i => !i.pull_request && i.title === title);
+            if (existing) {
+              await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body, state: ok ? 'closed' : 'open', state_reason: ok ? 'completed' : undefined});
+            } else {
+              const created = await github.rest.issues.create({owner: context.repo.owner, repo: context.repo.repo, title, body, assignees: ['petrkotab666']});
+              if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: created.data.number, state: 'closed', state_reason: 'completed'});
+            }
