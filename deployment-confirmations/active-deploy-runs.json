@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-29T17:13:31.329Z",
+  "generated_at": "2026-07-29T17:16:17.141Z",
   "runners": [
     {
       "error": "HttpError: Resource not accessible by integration"
@@ -7,18 +7,224 @@
   ],
   "runs": [
     {
-      "id": 30474324334,
-      "run_number": 571,
+      "id": 30474540213,
+      "run_number": 573,
       "name": "Nasadit aktuální main a ověřit chronologické pořadí",
       "title": "Nasadit aktuální main a ověřit chronologické pořadí",
       "event": "push",
       "status": "pending",
       "conclusion": null,
+      "head_sha": "87b283be1dfd9b8a4cf833be39bca09867270cef",
+      "created_at": "2026-07-29T17:16:01Z",
+      "updated_at": "2026-07-29T17:16:02Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474540213",
+      "jobs": []
+    },
+    {
+      "id": 30474486557,
+      "run_number": 572,
+      "name": "Nasadit aktuální main a ověřit chronologické pořadí",
+      "title": "Nasadit aktuální main a ověřit chronologické pořadí",
+      "event": "push",
+      "status": "in_progress",
+      "conclusion": null,
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:18Z",
+      "updated_at": "2026-07-29T17:15:21Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474486557",
+      "jobs": [
+        {
+          "id": 90652644751,
+          "name": "deploy",
+          "status": "in_progress",
+          "conclusion": null,
+          "runner_name": "GitHub Actions 1000034877",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "started_at": "2026-07-29T17:15:21Z",
+          "completed_at": null
+        }
+      ]
+    },
+    {
+      "id": 30474486572,
+      "run_number": 86,
+      "name": "Trvalá viditelnost článků Naše Kadaň",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:18Z",
+      "updated_at": "2026-07-29T17:15:39Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474486572",
+      "jobs": [
+        {
+          "id": 90652644583,
+          "name": "guard",
+          "status": "completed",
+          "conclusion": "success",
+          "runner_name": "GitHub Actions 1000034876",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "started_at": "2026-07-29T17:15:27Z",
+          "completed_at": "2026-07-29T17:15:38Z"
+        }
+      ]
+    },
+    {
+      "id": 30474486137,
+      "run_number": 2,
+      "name": "Zveřejnit článek o přeplněných koších na nasekadan.cz",
+      "title": "Zveřejnit článek o přeplněných koších na nasekadan.cz",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:18Z",
+      "updated_at": "2026-07-29T17:15:43Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474486137",
+      "jobs": [
+        {
+          "id": 90652643035,
+          "name": "deploy",
+          "status": "completed",
+          "conclusion": "success",
+          "runner_name": "GitHub Actions 1000034875",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "started_at": "2026-07-29T17:15:27Z",
+          "completed_at": "2026-07-29T17:15:43Z"
+        }
+      ]
+    },
+    {
+      "id": 30474478746,
+      "run_number": 868,
+      "name": ".github/workflows/publish-epetice-now.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:13Z",
+      "updated_at": "2026-07-29T17:15:13Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474478746",
+      "jobs": []
+    },
+    {
+      "id": 30474478118,
+      "run_number": 996,
+      "name": ".github/workflows/publish-nemocnice-software-fallback-now.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:12Z",
+      "updated_at": "2026-07-29T17:15:12Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474478118",
+      "jobs": []
+    },
+    {
+      "id": 30474477419,
+      "run_number": 681,
+      "name": ".github/workflows/update-slovan-shell-campaign-context.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:11Z",
+      "updated_at": "2026-07-29T17:15:11Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474477419",
+      "jobs": []
+    },
+    {
+      "id": 30474476311,
+      "run_number": 463,
+      "name": ".github/workflows/fix-chronological-order-now.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:11Z",
+      "updated_at": "2026-07-29T17:15:11Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474476311",
+      "jobs": []
+    },
+    {
+      "id": 30474475477,
+      "run_number": 1137,
+      "name": ".github/workflows/patch-petice-teaser-sunday.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:10Z",
+      "updated_at": "2026-07-29T17:15:10Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474475477",
+      "jobs": []
+    },
+    {
+      "id": 30474474698,
+      "run_number": 970,
+      "name": ".github/workflows/patch-ad-core-descriptions-once.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:09Z",
+      "updated_at": "2026-07-29T17:15:09Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474474698",
+      "jobs": []
+    },
+    {
+      "id": 30474474116,
+      "run_number": 748,
+      "name": ".github/workflows/add-petition-document-details.yml",
+      "title": "Opravit oprávnění před přímým nasazením článku o koších",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
+      "head_sha": "e5d7dc2eda0cd6b745052040da2224f4132c8ff9",
+      "created_at": "2026-07-29T17:15:09Z",
+      "updated_at": "2026-07-29T17:15:09Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474474116",
+      "jobs": []
+    },
+    {
+      "id": 30474324334,
+      "run_number": 571,
+      "name": "Nasadit aktuální main a ověřit chronologické pořadí",
+      "title": "Nasadit aktuální main a ověřit chronologické pořadí",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "failure",
       "head_sha": "d09c49244fd7be178ef305992bd1080bccff1056",
       "created_at": "2026-07-29T17:13:10Z",
-      "updated_at": "2026-07-29T17:13:11Z",
+      "updated_at": "2026-07-29T17:13:37Z",
       "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474324334",
-      "jobs": []
+      "jobs": [
+        {
+          "id": 90652161831,
+          "name": "deploy",
+          "status": "completed",
+          "conclusion": "failure",
+          "runner_name": "GitHub Actions 1000034874",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "started_at": "2026-07-29T17:13:28Z",
+          "completed_at": "2026-07-29T17:13:37Z"
+        }
+      ]
     },
     {
       "id": 30474323497,
@@ -26,24 +232,24 @@
       "name": "Nasadit aktuální main a ověřit chronologické pořadí",
       "title": "Nasadit aktuální main a ověřit chronologické pořadí",
       "event": "push",
-      "status": "in_progress",
-      "conclusion": null,
+      "status": "completed",
+      "conclusion": "failure",
       "head_sha": "ee739ab9e663c428581fcd99eb555e0334e22a5f",
       "created_at": "2026-07-29T17:13:09Z",
-      "updated_at": "2026-07-29T17:13:19Z",
+      "updated_at": "2026-07-29T17:13:25Z",
       "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474323497",
       "jobs": [
         {
           "id": 90652096766,
           "name": "deploy",
-          "status": "in_progress",
-          "conclusion": null,
+          "status": "completed",
+          "conclusion": "failure",
           "runner_name": "GitHub Actions 1000034872",
           "labels": [
             "ubuntu-latest"
           ],
           "started_at": "2026-07-29T17:13:18Z",
-          "completed_at": null
+          "completed_at": "2026-07-29T17:13:25Z"
         }
       ]
     },
@@ -345,214 +551,6 @@
           ],
           "started_at": "2026-07-29T17:09:41Z",
           "completed_at": "2026-07-29T17:09:47Z"
-        }
-      ]
-    },
-    {
-      "id": 30474037101,
-      "run_number": 563,
-      "name": "Nasadit aktuální main a ověřit chronologické pořadí",
-      "title": "Nasadit aktuální main a ověřit chronologické pořadí",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "cancelled",
-      "head_sha": "fbc925a1313cb7dc4f4cef1f59880695b627dd4f",
-      "created_at": "2026-07-29T17:09:21Z",
-      "updated_at": "2026-07-29T17:09:34Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30474037101",
-      "jobs": []
-    },
-    {
-      "id": 30473944317,
-      "run_number": 76,
-      "name": "Trvalá viditelnost článků Naše Kadaň",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "success",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:06Z",
-      "updated_at": "2026-07-29T17:08:29Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473944317",
-      "jobs": [
-        {
-          "id": 90650809400,
-          "name": "guard",
-          "status": "completed",
-          "conclusion": "success",
-          "runner_name": "GitHub Actions 1000034852",
-          "labels": [
-            "ubuntu-latest"
-          ],
-          "started_at": "2026-07-29T17:08:09Z",
-          "completed_at": "2026-07-29T17:08:28Z"
-        }
-      ]
-    },
-    {
-      "id": 30473942834,
-      "run_number": 562,
-      "name": "Nasadit aktuální main a ověřit chronologické pořadí",
-      "title": "Nasadit aktuální main a ověřit chronologické pořadí",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "cancelled",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:05Z",
-      "updated_at": "2026-07-29T17:09:22Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473942834",
-      "jobs": []
-    },
-    {
-      "id": 30473942589,
-      "run_number": 3,
-      "name": "Produkční nasazení článku o přeplněných koších",
-      "title": "Produkční nasazení článku o přeplněných koších",
-      "event": "push",
-      "status": "pending",
-      "conclusion": null,
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:05Z",
-      "updated_at": "2026-07-29T17:08:06Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473942589",
-      "jobs": []
-    },
-    {
-      "id": 30473940665,
-      "run_number": 671,
-      "name": ".github/workflows/update-slovan-shell-campaign-context.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:03Z",
-      "updated_at": "2026-07-29T17:08:03Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473940665",
-      "jobs": []
-    },
-    {
-      "id": 30473939488,
-      "run_number": 453,
-      "name": ".github/workflows/fix-chronological-order-now.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:02Z",
-      "updated_at": "2026-07-29T17:08:02Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473939488",
-      "jobs": []
-    },
-    {
-      "id": 30473937528,
-      "run_number": 858,
-      "name": ".github/workflows/publish-epetice-now.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:01Z",
-      "updated_at": "2026-07-29T17:08:01Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473937528",
-      "jobs": []
-    },
-    {
-      "id": 30473938291,
-      "run_number": 986,
-      "name": ".github/workflows/publish-nemocnice-software-fallback-now.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:01Z",
-      "updated_at": "2026-07-29T17:08:01Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473938291",
-      "jobs": []
-    },
-    {
-      "id": 30473936271,
-      "run_number": 960,
-      "name": ".github/workflows/patch-ad-core-descriptions-once.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:00Z",
-      "updated_at": "2026-07-29T17:08:00Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473936271",
-      "jobs": []
-    },
-    {
-      "id": 30473936877,
-      "run_number": 1127,
-      "name": ".github/workflows/patch-petice-teaser-sunday.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:08:00Z",
-      "updated_at": "2026-07-29T17:08:00Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473936877",
-      "jobs": []
-    },
-    {
-      "id": 30473935711,
-      "run_number": 738,
-      "name": ".github/workflows/add-petition-document-details.yml",
-      "title": "Doplnit potvrzení úspěšného nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "failure",
-      "head_sha": "f9466c7db5cc8a94760f7941ceedd5172e229f2a",
-      "created_at": "2026-07-29T17:07:59Z",
-      "updated_at": "2026-07-29T17:07:59Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473935711",
-      "jobs": []
-    },
-    {
-      "id": 30473813461,
-      "run_number": 561,
-      "name": "Nasadit aktuální main a ověřit chronologické pořadí",
-      "title": "Nasadit aktuální main a ověřit chronologické pořadí",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "cancelled",
-      "head_sha": "9f228cb49a0644012fba437e0828783bbfddcca4",
-      "created_at": "2026-07-29T17:06:22Z",
-      "updated_at": "2026-07-29T17:08:06Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473813461",
-      "jobs": []
-    },
-    {
-      "id": 30473812219,
-      "run_number": 75,
-      "name": "Trvalá viditelnost článků Naše Kadaň",
-      "title": "Vynutit produkční nasazení článku o koších",
-      "event": "push",
-      "status": "completed",
-      "conclusion": "success",
-      "head_sha": "9f228cb49a0644012fba437e0828783bbfddcca4",
-      "created_at": "2026-07-29T17:06:21Z",
-      "updated_at": "2026-07-29T17:06:45Z",
-      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30473812219",
-      "jobs": [
-        {
-          "id": 90650377440,
-          "name": "guard",
-          "status": "completed",
-          "conclusion": "success",
-          "runner_name": "GitHub Actions 1000034851",
-          "labels": [
-            "ubuntu-latest"
-          ],
-          "started_at": "2026-07-29T17:06:33Z",
-          "completed_at": "2026-07-29T17:06:44Z"
         }
       ]
     }
