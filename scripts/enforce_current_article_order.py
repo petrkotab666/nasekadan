@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Doplní chybějící schválené karty a následně je chronologicky seřadí."""
+"""Doplní chybějící schválené karty a následně je chronologicky seřadí.
+
+Dříve tento obecný krok při každém produkčním sestavení znovu spouštěl jednorázový
+publikační skript přehledu ordinací. Ten měl pevně zapsanou titulní stranu z
+28. července a přepisoval tak novější články. Publikované články se zde už
+neregenerují; pouze se kontroluje jejich přítomnost a pořadí.
+"""
 from __future__ import annotations
 
 from pathlib import Path
 
-from publish_gp_august_limits import main as publish_gp_august
 from sort_articles_chronologically import main as sort_all
+from enforce_latest_homepage_hero import main as enforce_latest_hero
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "index.html"
@@ -55,7 +61,7 @@ KOLOB_ARCHIVE = '''
         <span class="archive-meta">27. července 2026 v 14:00 · Bezpečnost a doprava</span>
         <h2>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</h2>
         <p>Větší dohled byl ohlášen na celé léto. Hřiště se současně kontrolují i detektorem kovu.</p>
-        <a href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst článek →</a>
+        <a href="/clanky/kolobezky-hriste-detektor-kovu-kadan.html">Přečíst celý článek →</a>
       </div>
     </article>'''
 
@@ -67,7 +73,7 @@ RSS_ITEMS = {
     "https://nasekadan.cz/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html": '''
     <item><title>Z Kadaně až k frontové linii. Nemocnice darovala na Ukrajinu 82 lůžek</title><description><![CDATA[Funkční nemocniční postele dostaly druhou šanci tam, kde jsou mimořádně potřebné.]]></description><link>https://nasekadan.cz/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html</guid><pubDate>Mon, 27 Jul 2026 21:40:00 +0200</pubDate><category>Nemocnice Kadaň</category><category>Pomoc Ukrajině</category><szn:image><szn:url>https://nasekadan.cz/social/nemocnice-kadan-darovala-82-luzek-ukrajine-b7f09aa8e1.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>''',
     "https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html": '''
-    <item><title>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</title><description><![CDATA[Kadaňští strážníci avizovali větší letní dohled nad koloběžkami a jízdními koly. Dětská hřiště současně kontrolují i detektorem kovu.]]></description><link>https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html</guid><pubDate>Mon, 27 Jul 2026 14:00:00 +0200</pubDate><category>Bezpečnost</category><category>Doprava</category><category>Kadaň</category><szn:image><szn:url>https://nasekadan.cz/social/kolobezky-hriste-detektor-kovu-kadan-dbbb2d5f7e.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>''',
+    <item><title>Polovina prázdnin je za námi. Strážníci mají více sledovat koloběžky</title><description><![CDATA[Kadaňští strážníci avizovali větší letní dohled nad koloběžkami a jízdními koly. Dětská hřiště současně kontrolují i detektorem kovu.]]></description><link>https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/kolobezky-hriste-detektor-kovu-kadan.html</guid><pubDate>Mon, 27 Jul 2026 14:00:00 +0200</pubDate><category>Bezpečnost</category><category>Doprava</category><category>Kadaň</category><szn:image><szn:url>https://nasekadan.cz/social/kolobezky-hriste-detektor-kovu-kadan-dbbb2d5f7e.png</szn:url></szn:image><geo:lat>50.375984</geo:long><geo:long>13.271307</geo:long></item>''',
     "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html": '''
     <item><title>Kdo nastavil nákupy léčiv od AVIES? Nemocnice za sedm let zaplatila téměř 170 milionů</title><description><![CDATA[Analýza sedmi let plateb, vývoje smluvního vztahu, role jednotlivých vedení a veřejné dokumentační mezery roku 2024.]]></description><link>https://nasekadan.cz/clanky/avies-nemocnice-kadan.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/avies-nemocnice-kadan.html</guid><pubDate>Mon, 27 Jul 2026 05:00:00 +0200</pubDate><category>Zdravotnictví</category><category>Veřejné peníze</category><category>Nemocnice Kadaň</category><szn:image><szn:url>https://nasekadan.cz/social/avies-nemocnice-kadan-a52b96a304.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>''',
 }
@@ -103,8 +109,8 @@ def main() -> int:
     RSS.write_text(rss, encoding="utf-8", newline="\n")
 
     sort_all()
-    publish_gp_august()
-    print("Nejnovější schválené články jsou přítomné a chronologicky zařazené.")
+    enforce_latest_hero()
+    print("Schválené články jsou přítomné, chronologicky zařazené a nejnovější článek zůstává na titulní straně.")
     return 0
 
 
