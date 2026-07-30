@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: nasekadan-canonical-production
-  cancel-in-progress: false
+  group: nasekadan-canonical-production-fallback-housing
+  cancel-in-progress: true
 
 jobs:
   deploy:
