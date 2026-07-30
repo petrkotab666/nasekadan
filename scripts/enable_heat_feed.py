@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -64,6 +66,20 @@ def main() -> int:
     for path in (ROOT / 'index.html', ROOT / 'clanky' / 'index.html'):
         if path.exists() and '/horko-feed.js' in path.read_text(encoding='utf-8'):
             raise RuntimeError(f'Feed zůstal na nečlánkové stránce: {path.relative_to(ROOT)}')
+
+    # Tento skript volá produkční deploy i Docker build. Po každém vložení feedu
+    # proto zároveň sjednotit cache verzi hlavního reklamního balíku na všech
+    # veřejných stránkách, nikoli jen v článcích.
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / 'scripts' / 'ensure_summer_ad_rotation.py'),
+            '--write',
+            '--check',
+        ],
+        cwd=ROOT,
+        check=True,
+    )
 
     print(f'Veřejných článků: {articles}; změněných souborů: {changed}')
     return 0
