@@ -1,0 +1,69 @@
+name: Zjistit skutečné rozhraní společných statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-multisite-decompressed-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Rozbalit zdroj a vypsat obsluhu cest
+        shell: bash
+        run: |
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import base64,gzip,re
+          path=Path('/usr/local/lib/multisite-stats/multisite_stats_v2.py')
+          wrapper=path.read_text(encoding='utf-8')
+          m=re.search(r'base64\.b64decode\("([A-Za-z0-9+/=]+)"\)',wrapper)
+          if not m:
+              print('Soubor není komprimovaný wrapper.'); source=wrapper
+          else:
+              source=gzip.decompress(base64.b64decode(m.group(1))).decode('utf-8')
+          Path('/tmp/multisite-source.py').write_text(source,encoding='utf-8')
+          lines=source.splitlines()
+          needles=('do_GET','do_POST','self.path','urlsplit','parse_qs','send_response','X-Stats-Host','Chybi domena','healthz','collect','beacon','hit','track','ingest')
+          selected=set()
+          for i,line in enumerate(lines):
+              if any(n.lower() in line.lower() for n in needles):
+                  selected.update(range(max(0,i-6),min(len(lines),i+15)))
+          last=-2
+          for i in sorted(selected):
+              if i>last+1: print('\n---')
+              print(f'{i+1:04d}: {lines[i]}')
+              last=i
+          print('\n--- ROUTE STRING LITERALS ---')
+          for value in sorted(set(re.findall(r'["\'](/[^"\']{0,80})["\']',source))):
+              print(value)
+          PY
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[MULTISITE SOURCE ROUTES] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-50000).replace(/```/g,'---')+'\n```'});
