@@ -1,4 +1,4 @@
-name: Nasadit článek Martina Kadlece
+name: Okamžitě nasadit článek Martina Kadlece
 
 on:
   push:
@@ -13,22 +13,32 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
-      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
-      - name: Nasadit článek na OVH
+      - name: Připravit SSH klíč
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$SSH_KEY"
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+
+      - name: Přímé nasazení aktuálního main na OVH
+        shell: bash
+        run: |
           set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
@@ -37,15 +47,20 @@ jobs:
           sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
           sudo install -m 0644 clanky/martin-kadlec-navrat-hokej-kadan-2026.html /var/www/nasekadan/clanky/martin-kadlec-navrat-hokej-kadan-2026.html
           sudo install -m 0644 rss.xml sitemap.xml news-sitemap.xml /var/www/nasekadan/
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=martin-kadlec-direct\n' \
+            "$(git rev-parse HEAD)" "$(date -u +%FT%TZ)" \
+            | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+          sudo chmod -R a+rX /var/www/nasekadan
           REMOTE
 
       - name: Ověřit veřejný článek
         shell: bash
         run: |
           set -euo pipefail
-          for n in $(seq 1 12); do
-            page="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?check=${GITHUB_SHA}-${n}" || true)"
-            home="$(curl -fsS --max-time 20 "https://nasekadan.cz/?check=${GITHUB_SHA}-${n}" || true)"
+          stamp="${GITHUB_RUN_ID}-${GITHUB_SHA}"
+          for n in $(seq 1 24); do
+            page="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?check=${stamp}-${n}" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?check=${stamp}-${n}" || true)"
             if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home"; then
               echo 'Článek je veřejný a viditelný na titulní stránce.'
               exit 0
