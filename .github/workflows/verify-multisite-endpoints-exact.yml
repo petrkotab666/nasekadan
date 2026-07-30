@@ -1,0 +1,65 @@
+name: Ověřit přesně všechny koncové body statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-multisite-endpoints-exact.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Ověřit odpovědi jednotlivě
+        shell: bash
+        run: |
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          check() {
+            label="$1"; shift
+            echo "--- $label ---"
+            code=$(curl -kLsS --max-time 15 -D /tmp/h -o /tmp/b -w '%{http_code}' "$@" 2>/tmp/e || true)
+            echo "CODE=$code SIZE=$(wc -c < /tmp/b 2>/dev/null || echo 0)"
+            sed -n '1,30p' /tmp/h 2>/dev/null || true
+            echo BODY; head -c 1000 /tmp/b 2>/dev/null || true; echo
+            echo ERR; cat /tmp/e 2>/dev/null || true; echo
+          }
+          check HTTPS_TRACKER --resolve nasekadan.cz:443:127.0.0.1 https://nasekadan.cz/_nkstats/tracker.js
+          check HTTP_HIT --resolve nasekadan.cz:80:127.0.0.1 'http://nasekadan.cz/_nkstats/hit.gif?site=exact-selftest.invalid&path=%2Fhttp&ref='
+          check HTTPS_HIT --resolve nasekadan.cz:443:127.0.0.1 'https://nasekadan.cz/_nkstats/hit.gif?site=exact-selftest.invalid&path=%2Fhttps&ref='
+          AUTH_USER=$(cut -d: -f1 /opt/multisite-stats/.htpasswd | head -n1)
+          AUTH_PASS=''
+          if [[ -s /opt/nasekadan-stats/access.txt ]]; then AUTH_PASS=$(sed -n '1{s/^[^:]*:[[:space:]]*//;p;}' /opt/nasekadan-stats/access.txt); fi
+          if [[ -z "$AUTH_PASS" && -s /opt/nasekadan-stats/login.txt ]]; then AUTH_PASS=$(sed -n -E 's/^Heslo:[[:space:]]*//p' /opt/nasekadan-stats/login.txt | head -n1); fi
+          check HTTPS_DASH_NOAUTH --resolve nasekadan.cz:443:127.0.0.1 'https://nasekadan.cz/statistiky-webu/?site=exact-selftest.invalid'
+          check HTTPS_DASH_AUTH --resolve nasekadan.cz:443:127.0.0.1 -u "$AUTH_USER:$AUTH_PASS" 'https://nasekadan.cz/statistiky-webu/?site=exact-selftest.invalid'
+          echo '--- APP DATA CHECK ---'
+          curl -fsS --max-time 5 -H 'X-Stats-Host: exact-selftest.invalid' http://127.0.0.1:3226/ | grep -Eo 'Statistiky webu [^<]+|Zobrazení celkem[^<]*' | head -n 10 || true
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[MULTISITE ENDPOINTS EXACT] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-50000).replace(/```/g,'---')+'\n```'});
