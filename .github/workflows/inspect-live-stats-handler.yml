@@ -1,0 +1,117 @@
+name: Diagnostika skutečné stránky statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-live-stats-handler.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Prověřit skutečnou HTTP obsluhu
+        id: inspect
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/inspect.txt"
+          set -Eeuo pipefail
+          sudo -n true
+          cd /opt/nasekadan
+          echo '=== GIT ==='
+          pgrep -af '[g]it' || true
+          sudo rm -f .git/index.lock
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git rev-parse HEAD
+
+          echo '=== SLUŽBA ==='
+          systemctl show nasekadan-stats-web.service -p ExecStart -p MainPID -p ActiveState -p SubState --no-pager
+          pid="$(systemctl show -p MainPID --value nasekadan-stats-web.service)"
+          if [[ "$pid" != 0 ]]; then
+            tr '\0' ' ' < "/proc/$pid/cmdline"; echo
+            readlink -f "/proc/$pid/cwd" || true
+          fi
+
+          echo '=== SOUBORY ==='
+          sha256sum \
+            /opt/nasekadan/.github/scripts/nasekadan-stats/stats_server_v6.py \
+            /opt/nasekadan/.github/scripts/nasekadan-stats/stats_metrics_v7.py \
+            /usr/local/lib/nasekadan-stats/stats_server_v6.py 2>/dev/null || true
+          ls -l /usr/local/lib/nasekadan-stats/stats_metrics_v7.py 2>/dev/null || true
+
+          echo '=== PYTHON HANDLER ==='
+          sudo -u www-data /usr/bin/python3 - <<'PY'
+          import inspect, sys
+          sys.path.insert(0, '/opt/nasekadan/.github/scripts/nasekadan-stats')
+          sys.path.insert(1, '/usr/local/lib/nasekadan-stats')
+          import stats_server as base
+          import stats_metrics_v5, stats_metrics_v6, stats_metrics_v7
+          stats_metrics_v5.install(base)
+          stats_metrics_v6.install(base)
+          stats_metrics_v7.install(base)
+          print('render_dashboard=', base.render_dashboard, 'module=', getattr(base.render_dashboard, '__module__', None))
+          print('v6.render=', stats_metrics_v6.render, 'module=', getattr(stats_metrics_v6.render, '__module__', None))
+          print('handler methods=', [n for n in dir(base.Handler) if any(x in n.lower() for x in ('get','auth','session','login','dashboard'))])
+          for name in ('do_GET','do_POST','is_authenticated','authenticated','require_auth','dashboard'):
+              obj=getattr(base.Handler,name,None)
+              if obj is not None:
+                  print(f'--- {name} ---')
+                  try: print(inspect.getsource(obj))
+                  except Exception as exc: print(type(exc).__name__, exc)
+          body=base.render_dashboard().decode('utf-8','replace')
+          print('direct markers=', {
+              'recent': 'Posledních 25 článků' in body,
+              'button': 'href="#poslednich-25-clanku"' in body,
+              'position': body.find('id="poslednich-25-clanku"'),
+              'metrics': body.find('<section class="metrics">'),
+              'length': len(body),
+          })
+          PY
+
+          echo '=== HTTP BEZ PŘIHLÁŠENÍ ==='
+          curl -kfsS --max-time 10 --resolve nasekadan.cz:443:127.0.0.1 \
+            https://nasekadan.cz/statistiky/ | grep -Eo '<title>[^<]+|Přihlášení ke statistikám|Posledních 25 článků' | head -20 || true
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.inspect.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/inspect.txt`, 'utf8'); } catch {}
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[DIAGNOSTIKA STATISTIK HTTP] ${process.env.OUTCOME} ${new Date().toISOString()}`,
+              body: `- Commit: \`${process.env.SOURCE_SHA}\`\n- Výsledek: **${process.env.OUTCOME || 'unknown'}**\n\n\`\`\`text\n${log.slice(-50000).replace(/\`\`\`/g, '---')}\n\`\`\``
+            });
+
+      - name: Selhat při chybě
+        if: steps.inspect.outcome != 'success'
+        run: exit 1
