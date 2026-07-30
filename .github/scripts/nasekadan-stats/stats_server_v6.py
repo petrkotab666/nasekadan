@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import sys
+
+sys.path.insert(0, "/opt/nasekadan/.github/scripts/nasekadan-stats")
+
 import stats_metrics_v5
 import stats_metrics_v6
 import stats_metrics_v7
