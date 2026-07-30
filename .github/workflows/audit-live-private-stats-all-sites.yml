@@ -1,0 +1,63 @@
+name: Ověřit statistiky na všech živých webech
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-live-private-stats-all-sites.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prověřit živé weby
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cat > "$RUNNER_TEMP/sites.txt" <<'EOF'
+          dobreklima.cz
+          koupime.to
+          nakupvakci.cz
+          ocenime.to
+          pojistime.to
+          prodame.to
+          proverime.to
+          realitykadan.cz
+          uklidavyklizeni.cz
+          vaseterasy.cz
+          vyklidime.to
+          lastminuteslevy.cz
+          sirupyzbylinek.cz
+          dilynazakazku.cz
+          EOF
+          printf '%-25s %-6s %-8s %-8s %-8s %s\n' DOMENA HOME SCRIPT STATURL REDIRECT POZNAMKA > "$RUNNER_TEMP/out.txt"
+          while read -r domain; do
+            [ -n "$domain" ] || continue
+            home_code=$(curl -kLsS --max-time 20 -o "$RUNNER_TEMP/home" -w '%{http_code}' "https://$domain/" || true)
+            script=no
+            grep -q 'nasekadan.cz/_nkstats/tracker.js' "$RUNNER_TEMP/home" 2>/dev/null && script=ano
+            stat_code=$(curl -kLsS --max-time 20 -o "$RUNNER_TEMP/stat" -w '%{http_code}' "https://$domain/statistiky/" || true)
+            redirect=no
+            grep -q 'nasekadan.cz/statistiky-webu' "$RUNNER_TEMP/stat" 2>/dev/null && redirect=ano
+            location=$(curl -kLsSI --max-time 20 "https://$domain/statistiky/" 2>/dev/null | awk 'BEGIN{IGNORECASE=1}/^location:/{sub(/^[^:]*:[[:space:]]*/,"");gsub(/\r/,"");print;exit}')
+            [[ "$location" == *nasekadan.cz/statistiky-webu* ]] && redirect=ano
+            note=''
+            [ "$home_code" = 200 ] || note="home-$home_code"
+            printf '%-25s %-6s %-8s %-8s %-8s %s\n' "$domain" "$home_code" "$script" "$stat_code" "$redirect" "$note" >> "$RUNNER_TEMP/out.txt"
+          done < "$RUNNER_TEMP/sites.txt"
+          echo >> "$RUNNER_TEMP/out.txt"
+          echo 'CENTRAL TRACKER:' >> "$RUNNER_TEMP/out.txt"
+          curl -kLsSI --max-time 20 https://nasekadan.cz/_nkstats/tracker.js >> "$RUNNER_TEMP/out.txt" || true
+      - name: Zapsat audit
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[ŽIVÉ STATISTIKY VŠECH WEBŮ] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-40000).replace(/```/g,'---')+'\n```'});
