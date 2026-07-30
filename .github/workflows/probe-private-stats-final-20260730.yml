@@ -32,3 +32,4 @@ jobs:
         with:
           script: |
             const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/probe.txt`,'utf8')}catch{};await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[POSLEDNÍ SONDA STATISTIK] ${new Date().toISOString()}`,body:'```text\n'+log+'\n```'});
+# second push triggers the workflow
