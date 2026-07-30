@@ -1,0 +1,202 @@
+name: Nasadit serverové statistiky DílyNaZakázku
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/install-dnz-server-stats.yml'
+      - '.github/dnz-server-stats-trigger.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY1: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY2: ${{ secrets.OVH_SSH_KEY }}
+      KEY3: ${{ secrets.SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for value in "$KEY1" "$KEY2" "$KEY3"; do
+            if [ -n "$value" ]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+      - name: Nasadit serverový sběr a samoopravu
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'sudo bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/dnz-stats.log"
+          set -Eeuo pipefail
+          install -d -o root -g root -m 0755 /usr/local/lib/multisite-stats
+          cat > /usr/local/lib/multisite-stats/import_dnz_caddy.py <<'PY'
+          #!/usr/bin/env python3
+          import hashlib,json,os,re,sqlite3,time,urllib.parse
+          from pathlib import Path
+          LOG=Path('/var/log/caddy/dilynazakazku.access.log')
+          STATE=Path('/opt/multisite-stats/dnz-caddy-state.json')
+          DB=Path('/opt/multisite-stats/stats.sqlite3')
+          SALT=Path('/opt/multisite-stats/secret-salt')
+          BOT=re.compile(r'bot\b|crawler|spider|slurp|facebookexternalhit|semrush|ahrefs|gptbot|chatgpt|claudebot|perplexity|uptime|monitor|headless|lighthouse|pagespeed|curl/|wget/|python-requests',re.I)
+          STATIC=re.compile(r'\.(?:css|js|mjs|jpg|jpeg|png|webp|gif|svg|ico|woff2?|ttf|eot|map|xml|txt|pdf|zip|gz)$',re.I)
+          def state_read():
+              try:return json.loads(STATE.read_text())
+              except:return {}
+          def state_write(v):
+              tmp=STATE.with_suffix('.tmp'); tmp.write_text(json.dumps(v)); os.replace(tmp,STATE)
+          def source(ref):
+              if not ref:return 'Přímá návštěva'
+              try:h=(urllib.parse.urlsplit(ref).hostname or '').lower().removeprefix('www.')
+              except:return 'Ostatní odkazy'
+              if h=='dilynazakazku.cz':return 'Vnitřní odkazy'
+              if 'google.' in h:return 'Google'
+              if 'facebook.' in h or h in {'fb.com','l.facebook.com','lm.facebook.com'}:return 'Facebook'
+              if 'seznam.' in h:return 'Seznam'
+              if 'bing.' in h:return 'Bing'
+              return h[:90] or 'Ostatní odkazy'
+          def device(ua):
+              l=ua.lower()
+              if any(x in l for x in ('ipad','tablet','kindle','silk/')):return 'Tablet'
+              if any(x in l for x in ('mobile','iphone','ipod','android','windows phone')):return 'Mobil'
+              return 'Počítač'
+          def browser(ua):
+              l=ua.lower()
+              if 'edg/' in l:return 'Edge'
+              if 'opr/' in l or 'opera' in l:return 'Opera'
+              if 'firefox/' in l:return 'Firefox'
+              if 'chrome/' in l or 'crios/' in l:return 'Chrome'
+              if 'safari/' in l:return 'Safari'
+              return 'Jiný'
+          def header(headers,name):
+              value=headers.get(name) or headers.get(name.lower()) or []
+              return value[0] if isinstance(value,list) and value else str(value or '')
+          salt=SALT.read_text().strip() if SALT.exists() else 'multisite-stats'
+          st=state_read()
+          while True:
+              try:
+                  if not LOG.exists(): time.sleep(2); continue
+                  stat=LOG.stat(); inode=stat.st_ino; size=stat.st_size
+                  offset=int(st.get('offset',0) or 0)
+                  if int(st.get('inode',0) or 0)!=inode or offset>size: offset=0
+                  rows=[]
+                  with LOG.open('r',encoding='utf-8',errors='replace') as f:
+                      f.seek(offset)
+                      for line in f:
+                          try:d=json.loads(line); req=d.get('request') or {}
+                          except:continue
+                          method=str(req.get('method','')).upper(); path=str(req.get('uri','/'))
+                          status=int(d.get('status') or 0); ip=str(req.get('client_ip') or req.get('remote_ip') or '')
+                          headers=req.get('headers') or {}; ua=header(headers,'User-Agent'); ref=header(headers,'Referer')
+                          host=str(req.get('host') or '').split(':',1)[0].lower().removeprefix('www.')
+                          if host!='dilynazakazku.cz' or method not in {'GET','HEAD'} or not ip or BOT.search(ua):continue
+                          clean=urllib.parse.urlsplit(path).path or '/'; clean=urllib.parse.unquote(clean)
+                          if clean!='/':clean=clean.rstrip('/') or '/'
+                          if clean.startswith('/statistiky') or STATIC.search(clean):continue
+                          if not (200<=status<300 or status==304):continue
+                          visitor=hashlib.sha256(f'{salt}\0{ip}\0{ua}'.encode()).hexdigest()[:24]
+                          rows.append((int(float(d.get('ts') or time.time())),'dilynazakazku.cz',visitor,clean,status,source(ref),device(ua),browser(ua)))
+                      offset=f.tell()
+                  if rows:
+                      con=sqlite3.connect(DB,timeout=20); con.executemany('INSERT INTO hits(ts,host,visitor,path,status,source,device,browser) VALUES(?,?,?,?,?,?,?,?)',rows); con.commit(); con.close()
+                  st={'inode':inode,'offset':offset,'updated':int(time.time())}; state_write(st)
+              except Exception as e:
+                  Path('/opt/multisite-stats/dnz-import-error.log').write_text(f'{time.time()} {e}\n')
+              time.sleep(2)
+          PY
+          chmod 0755 /usr/local/lib/multisite-stats/import_dnz_caddy.py
+
+          cat > /usr/local/sbin/ensure-dnz-stats-caddy.py <<'PY'
+          #!/usr/bin/env python3
+          from pathlib import Path
+          import re,shutil,subprocess,time
+          p=Path('/etc/caddy/sites-enabled/dilynazakazku.cz.caddy')
+          text=p.read_text(); original=text
+          begin='# BEGIN DNZ_PRIVATE_STATS_V1'; end='# END DNZ_PRIVATE_STATS_V1'
+          block='''\n    # BEGIN DNZ_PRIVATE_STATS_V1\n    @dnz_private_stats path /statistiky /statistiky/*\n    handle @dnz_private_stats {\n        rewrite * /statistiky-webu/?site=dilynazakazku.cz\n        reverse_proxy 127.0.0.1:80 {\n            header_up Host nasekadan.cz\n            header_up X-Forwarded-Proto https\n        }\n    }\n    log dnz_private_stats_log {\n        output file /var/log/caddy/dilynazakazku.access.log {\n            mode 0640\n            roll_size 20MiB\n            roll_keep 180\n            roll_keep_for 4320h\n        }\n        format json\n    }\n    # END DNZ_PRIVATE_STATS_V1\n'''
+          if begin in text:
+              text=re.sub(r'\n\s*# BEGIN DNZ_PRIVATE_STATS_V1.*?# END DNZ_PRIVATE_STATS_V1\n?', '\n', text, flags=re.S)
+          m=re.search(r'(?m)^dilynazakazku\.cz\s*,\s*www\.dilynazakazku\.cz\s*\{\s*$',text)
+          if not m: raise SystemExit('Nenalezen Caddy blok DNZ')
+          text=text[:m.end()]+block+text[m.end():]
+          if text!=original:
+              shutil.copy2(p,p.with_name(p.name+f'.bak-stats-{int(time.time())}'))
+              p.write_text(text)
+              subprocess.run(['caddy','validate','--config','/etc/caddy/Caddyfile','--adapter','caddyfile'],check=True)
+              subprocess.run(['systemctl','reload','caddy'],check=True)
+          PY
+          chmod 0755 /usr/local/sbin/ensure-dnz-stats-caddy.py
+
+          cat > /etc/systemd/system/dnz-stats-import.service <<'UNIT'
+          [Unit]
+          Description=Import návštěv DílyNaZakázku do společných statistik
+          After=caddy.service multisite-stats.service
+          [Service]
+          Type=simple
+          User=www-data
+          Group=www-data
+          SupplementaryGroups=adm
+          ExecStart=/usr/bin/python3 /usr/local/lib/multisite-stats/import_dnz_caddy.py
+          Restart=always
+          RestartSec=3
+          NoNewPrivileges=true
+          ProtectSystem=full
+          ReadWritePaths=/opt/multisite-stats
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          cat > /etc/systemd/system/dnz-stats-ensure.service <<'UNIT'
+          [Unit]
+          Description=Obnovit statistiky v Caddy konfiguraci DílyNaZakázku
+          After=caddy.service
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/bin/python3 /usr/local/sbin/ensure-dnz-stats-caddy.py
+          UNIT
+          cat > /etc/systemd/system/dnz-stats-ensure.timer <<'UNIT'
+          [Unit]
+          Description=Pravidelná kontrola statistik DílyNaZakázku
+          [Timer]
+          OnBootSec=1min
+          OnUnitActiveSec=2min
+          AccuracySec=20s
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+          UNIT
+          touch /var/log/caddy/dilynazakazku.access.log
+          chown caddy:adm /var/log/caddy/dilynazakazku.access.log || true
+          chmod 0640 /var/log/caddy/dilynazakazku.access.log
+          /usr/bin/python3 /usr/local/sbin/ensure-dnz-stats-caddy.py
+          systemctl daemon-reload
+          systemctl enable --now dnz-stats-import.service dnz-stats-ensure.timer
+          systemctl restart dnz-stats-import.service
+          code=$(curl -kLsS --max-time 10 --resolve dilynazakazku.cz:443:127.0.0.1 -o /tmp/dnz-stats.html -w '%{http_code}' https://dilynazakazku.cz/statistiky/ || true)
+          test "$code" = 401
+          before=$(sudo -u www-data sqlite3 /opt/multisite-stats/stats.sqlite3 "select count(*) from hits where host='dilynazakazku.cz';")
+          curl -kfsS --max-time 10 --resolve dilynazakazku.cz:443:127.0.0.1 -A 'Mozilla/5.0 DNZStatsVerification' https://dilynazakazku.cz/ >/dev/null
+          sleep 4
+          after=$(sudo -u www-data sqlite3 /opt/multisite-stats/stats.sqlite3 "select count(*) from hits where host='dilynazakazku.cz';")
+          test "$after" -gt "$before"
+          echo "DNZ_STATS_CODE=$code BEFORE=$before AFTER=$after"
+          echo 'OVERENO: DílyNaZakázku má serverové měření a chráněnou adresu /statistiky/.'
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/dnz-stats.log`,'utf8')}catch{}
+            const ok=process.env.OUTCOME==='success';const x=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[DNZ STATISTIKY] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+log.slice(-30000).replace(/```/g,'---')+'\n```'});if(ok)await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:x.data.number,state:'closed',state_reason:'completed'});
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
