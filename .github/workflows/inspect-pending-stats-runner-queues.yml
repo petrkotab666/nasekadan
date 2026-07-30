@@ -1,0 +1,57 @@
+name: Prověřit blokované runnery statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-pending-stats-runner-queues.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Načíst stav tří runnerů
+        shell: bash
+        run: |
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'sudo bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          for slug in dobreklima nakupvakci lastminuteslevy dilynazakazku; do
+            echo "===== $slug ====="
+            unit=$(systemctl list-unit-files --type=service --no-legend "actions.runner.*${slug}*.service" | awk 'NR==1{print $1}')
+            echo "UNIT=$unit"
+            [ -n "$unit" ] || continue
+            systemctl status "$unit" --no-pager -l || true
+            echo '--- JOURNAL ---'
+            journalctl -u "$unit" -n 120 --no-pager || true
+            work=$(systemctl show "$unit" -p WorkingDirectory --value 2>/dev/null || true)
+            echo "WORK=$work"
+            if [ -n "$work" ]; then
+              echo '--- DIAG ---'
+              find "$work" -maxdepth 2 -type f -path '*/_diag/*.log' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 3 | cut -d' ' -f2- | while read -r f; do echo "FILE $f"; tail -n 100 "$f" || true; done
+            fi
+          done
+          REMOTE
+      - name: Zapsat diagnostiku
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[FRONTY RUNNERŮ STATISTIK] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-50000).replace(/```/g,'---')+'\n```'});
