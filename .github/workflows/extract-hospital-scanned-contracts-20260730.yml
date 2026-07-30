@@ -1,0 +1,46 @@
+name: Projít neindexované smlouvy Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-scanned-contracts-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hospital-scanned-contracts-20260730
+  cancel-in-progress: true
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Instalovat nástroje pro textovou i obrazovou vrstvu PDF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ces
+          python -m pip install --quiet Pillow
+
+      - name: Stáhnout otevřená data a projít přílohy
+        run: |
+          set -euo pipefail
+          python3 scripts/extract_hospital_scanned_contracts_20260730.py
+
+      - name: Zapsat výsledky rešerše
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add research/nemocnice-kadan-neindexovane-20260730/
+          git commit -m 'Doplnit neindexované přílohy smluv Nemocnice Kadaň' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
