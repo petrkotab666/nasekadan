@@ -1,0 +1,109 @@
+name: Rychle vytěžit investiční plán lávky v12
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-kadan-investment-plan-lavka-v12-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nainstalovat nástroje
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml openpyxl
+      - name: Vytěžit detail 293079
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-investment-plan-v12
+          mkdir -p .github/research/lavka-investment-plan-v12/text
+          cat > /tmp/v12.py <<'PY'
+          import io,json,re,subprocess,time,unicodedata,zipfile
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          R=Path('.github/research/lavka-investment-plan-v12'); T=R/'text'
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0)'
+          def get(u):
+              e=None
+              for i in range(5):
+                  try:
+                      r=s.get(u,timeout=60,allow_redirects=True);r.raise_for_status();return r
+                  except Exception as x:e=x;time.sleep(2+i)
+              raise e
+          def norm(x):return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+          def run(c):return subprocess.run(c,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          u='https://www.mesto-kadan.cz/redakce/index.php?as4uOriginalDomain=www.mesto-kadan.cz&as4u_protocol=https&clanek=274670&detail_claim=293079&lanG=cs&slozka=219380'
+          r=get(u);soup=BeautifulSoup(r.content,'lxml');links=[]
+          for a in soup.select('a[href]'):
+              v=urljoin(r.url,a.get('href'));lab=a.get_text(' ',strip=True)
+              links.append({'label':lab,'url':v})
+          # Keep only actual attachments and links near the content title.
+          cand=[]
+          for x in links:
+              n=norm(x['label']+' '+x['url'])
+              if any(k in n for k in ['priloha','stahnout','soubor','investicni vystavby','plan investicni']) or x['url'].lower().endswith(('.pdf','.xlsx','.xls','.docx','.doc','.zip')):
+                  if x['url'] not in cand:cand.append(x['url'])
+          docs=[]
+          for i,v in enumerate(cand):
+              try:q=get(v)
+              except Exception as e:docs.append({'url':v,'error':repr(e)});continue
+              ct=q.headers.get('content-type','').lower();final=q.url;data=q.content;txt='';method=''
+              if 'pdf' in ct or final.lower().endswith('.pdf'):
+                  p=Path('/tmp')/f'd{i}.pdf';p.write_bytes(data);o=Path('/tmp')/f'd{i}.txt';run(['pdftotext','-layout',str(p),str(o)]);txt=o.read_text(encoding='utf-8',errors='ignore') if o.exists() else '';method='pdftotext'
+                  if len(re.sub(r'\s+','',txt))<800:
+                      d=Path('/tmp')/f'ocr{i}';d.mkdir(exist_ok=True);run(['pdftoppm','-r','240','-jpeg',str(p),str(d/'p')]);chunks=[]
+                      for im in sorted(d.glob('p-*.jpg')):chunks.append(run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+                      txt+='\n\n'.join(chunks);method+='+ocr'
+              elif final.lower().endswith('.xlsx') or 'spreadsheet' in ct or 'excel' in ct:
+                  from openpyxl import load_workbook
+                  wb=load_workbook(io.BytesIO(data),data_only=True,read_only=True);parts=[]
+                  for ws in wb.worksheets:
+                      parts.append('### '+ws.title)
+                      for row in ws.iter_rows(values_only=True):parts.append('\t'.join('' if v is None else str(v) for v in row))
+                  txt='\n'.join(parts);method='openpyxl'
+              elif final.lower().endswith('.docx'):
+                  z=zipfile.ZipFile(io.BytesIO(data));raw=z.read('word/document.xml').decode('utf-8','ignore');txt=re.sub(r'<[^>]+>',' ',raw);method='docx-xml'
+              elif 'html' in ct:
+                  ss=BeautifulSoup(data,'lxml');txt=' '.join(ss.stripped_strings);method='html'
+              if txt:
+                  tp=T/f'doc-{i}.txt';tp.write_text(txt,encoding='utf-8')
+              docs.append({'url':final,'content_type':ct,'bytes':len(data),'method':method,'text_file':str(tp) if txt else None,'text':txt[:150000]})
+          page_text=' '.join(soup.stripped_strings)
+          out={'url':r.url,'status':r.status_code,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'page_text':page_text[:50000],'links':links,'candidates':cand,'documents':docs}
+          (R/'results.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Rychlé vytěžení investičního plánu lávky v12','',page_text,'']
+          for d in docs:md += ['## '+d['url'],d.get('text','')]
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v12.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-investment-plan-v12
+          git commit -m 'Rychle vytěžit investiční plán lávky v12' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
