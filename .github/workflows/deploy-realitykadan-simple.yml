@@ -1,0 +1,92 @@
+name: Jednoduše nasadit Reality Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-realitykadan-simple.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-realitykadan-simple
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zapojit bannery
+        run: python3 scripts/install_realitykadan_banners.py
+
+      - name: Uložit rotaci
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add reklamy.js reklamy-oprava-obrazku.js
+          git commit -m 'Nasadit rotační bannery Reality Kadaň' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/rk-upload"
+          mkdir -p "$RUNNER_TEMP/rk-upload/assets/reklamy"
+          cp reklamy.js reklamy-oprava-obrazku.js "$RUNNER_TEMP/rk-upload/"
+          cp assets/reklamy/realitykadan-byt-wide-v1.svg assets/reklamy/realitykadan-garaz-wide-v1.svg "$RUNNER_TEMP/rk-upload/assets/reklamy/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/rk-upload" ubuntu@57.129.43.215:/tmp/rk-upload
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 /tmp/rk-upload/reklamy.js /var/www/nasekadan/reklamy.js
+          sudo install -m 0644 /tmp/rk-upload/reklamy-oprava-obrazku.js /var/www/nasekadan/reklamy-oprava-obrazku.js
+          sudo install -m 0644 /tmp/rk-upload/assets/reklamy/realitykadan-byt-wide-v1.svg /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 /tmp/rk-upload/assets/reklamy/realitykadan-garaz-wide-v1.svg /var/www/nasekadan/assets/reklamy/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/assets/reklamy
+            sudo docker cp /tmp/rk-upload/reklamy.js nasekadan-web:/usr/share/nginx/html/reklamy.js
+            sudo docker cp /tmp/rk-upload/reklamy-oprava-obrazku.js nasekadan-web:/usr/share/nginx/html/reklamy-oprava-obrazku.js
+            sudo docker cp /tmp/rk-upload/assets/reklamy/realitykadan-byt-wide-v1.svg nasekadan-web:/usr/share/nginx/html/assets/reklamy/realitykadan-byt-wide-v1.svg
+            sudo docker cp /tmp/rk-upload/assets/reklamy/realitykadan-garaz-wide-v1.svg nasekadan-web:/usr/share/nginx/html/assets/reklamy/realitykadan-garaz-wide-v1.svg
+          fi
+          rm -rf /tmp/rk-upload
+          REMOTE
+
+      - name: Ověřit veřejný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/reklamy.js?v=$stamp")"
+          fix="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/reklamy-oprava-obrazku.js?v=$stamp")"
+          byt="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/assets/reklamy/realitykadan-byt-wide-v1.svg?v=$stamp")"
+          garaz="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/assets/reklamy/realitykadan-garaz-wide-v1.svg?v=$stamp")"
+          grep -Fq "id:'realitykadan-byt'" <<<"$js"
+          grep -Fq "id:'realitykadan-garaz'" <<<"$js"
+          grep -Fq '[...reality,...cleaning,...seasonal]' <<<"$fix"
+          grep -Fq 'KOUPÍME HO.' <<<"$byt"
+          grep -Fq 'KOUPÍME JI.' <<<"$garaz"
+          echo 'HOTOVO: Reality Kadaň rotuje na živém webu.'
