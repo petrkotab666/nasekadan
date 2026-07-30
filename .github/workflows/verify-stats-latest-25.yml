@@ -39,7 +39,7 @@ jobs:
           ssh -i "$RUNNER_TEMP/key" \
             -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/latest-25.txt"
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/latest-25.txt"
           set -Eeuo pipefail
           sudo -n true
           cd /opt/nasekadan
