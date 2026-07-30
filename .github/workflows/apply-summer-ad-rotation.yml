@@ -6,7 +6,10 @@ on:
     branches: [main]
     paths:
       - 'reklamy-oprava-obrazku.js'
+      - 'horko-feed.js'
+      - 'assets/affiliate-site-config.json'
       - 'assets/affiliate-site-travel-overlay.json'
+      - 'scripts/enable_heat_feed.py'
       - 'scripts/ensure_summer_ad_rotation.py'
       - 'scripts/normalize_articles.py'
       - 'scripts/finalize_site.py'
@@ -36,7 +39,9 @@ jobs:
         run: |
           set -euo pipefail
           node --check reklamy-oprava-obrazku.js
+          node --check horko-feed.js
           python3 -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null
+          python3 -m json.tool assets/affiliate-site-config.json >/dev/null
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -55,13 +60,19 @@ jobs:
           missing = sorted(required - ids)
           if missing:
               raise SystemExit(f'V letní rotaci chybí: {missing}')
+
+          script = Path('horko-feed.js').read_text(encoding='utf-8')
+          for marker in ('horko-apollostore', 'horko-concept', 'horko-proalergiky', 'rotatingItems'):
+              if marker not in script:
+                  raise SystemExit(f'V bloku pro vedra chybí {marker}')
           print(f'Letní reklamní seznam obsahuje {len(ids)} partnerů.')
           PY
 
-      - name: Přepsat veřejné stránky na novou verzi
+      - name: Přepsat veřejné stránky na nové verze
         shell: bash
         run: |
           set -euo pipefail
+          python3 scripts/enable_heat_feed.py
           python3 scripts/ensure_summer_ad_rotation.py --write --check
 
       - name: Uložit aktualizované HTML
