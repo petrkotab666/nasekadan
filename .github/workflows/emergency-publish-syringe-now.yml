@@ -40,6 +40,9 @@ jobs:
           t=t.replace('../../','../')
           t=t.replace('PŘIPRAVOVANÝ ČLÁNEK','30. ČERVENCE 2026')
           t=t.replace('<h3>Plánované vydání</h3><p><strong>30. července 2026 ve 4:00</strong></p>','<h3>Zveřejněno</h3><p><strong>30. července 2026 ve 4:00</strong></p>')
+          published='2026-07-30T04:00:00+02:00'
+          if 'article:published_time' not in t:
+              t=t.replace('</head>',f'<meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}">\n</head>',1)
           p.write_text(t,encoding='utf-8',newline='\n')
           PY
           python3 -m pip install --disable-pip-version-check --quiet Pillow
@@ -51,6 +54,11 @@ jobs:
           python3 scripts/enforce_article_visibility.py
           python3 scripts/sort_articles_chronologically.py
           python3 scripts/prepare_discovery.py
+          grep -Fq "/clanky/${SLUG}.html" index.html
+          grep -Fq "/clanky/${SLUG}.html" clanky/index.html
+          grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" sitemap.xml
+          grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" news-sitemap.xml
 
       - name: Uložit článek a přehledy do main
         shell: bash
@@ -58,9 +66,10 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň nouzové vydání'
           git config user.email 'info@nasekadan.cz'
-          git add -A -- "clanky/${SLUG}.html" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt social style.css
+          git add -A
           git commit -m 'Publikovat: stříkačky ve vchodech a drogové podněty v Kadani'
-          git pull --rebase origin main
+          git fetch --prune origin main
+          git rebase origin/main
           git push origin HEAD:main
 
       - name: Připravit SSH klíč
