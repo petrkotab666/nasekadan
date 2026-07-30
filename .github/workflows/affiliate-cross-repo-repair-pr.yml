@@ -70,7 +70,8 @@ jobs:
           }
 
           repair() {
-            local repo="$1" key="$2" expected_config="$3" base="reports/affiliate-repair-generated/$key" config_hash
+            local repo="$1" key="$2" expected_config="$3" config_hash
+            local base="reports/affiliate-repair-generated/$key"
             echo "Kontrola $repo"
             select_token "$repo" || { echo "$repo: NO_PUSH_TOKEN"; return 0; }
             echo "$repo: token=$SELECTED_NAME"
