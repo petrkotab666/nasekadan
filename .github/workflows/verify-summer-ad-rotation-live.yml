@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'reklamy-oprava-obrazku.js'
+      - 'horko-feed.js'
       - 'assets/affiliate-site-travel-overlay.json'
       - 'index.html'
       - 'clanky/*.html'
@@ -36,18 +37,23 @@ jobs:
             homepage="$(curl -fsS --max-time 20 "https://nasekadan.cz/?summer-ad-check=${GITHUB_SHA}-${attempt}" 2>/dev/null || true)"
             article="$(curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html?summer-ad-check=${GITHUB_SHA}-${attempt}" 2>/dev/null || true)"
             script="$(curl -fsS --max-time 20 "https://nasekadan.cz/reklamy-oprava-obrazku.js?summer-ad-check=${GITHUB_SHA}-${attempt}" 2>/dev/null || true)"
+            heat="$(curl -fsS --max-time 20 "https://nasekadan.cz/horko-feed.js?summer-ad-check=${GITHUB_SHA}-${attempt}" 2>/dev/null || true)"
             overlay="$(curl -fsS --max-time 20 "https://nasekadan.cz/assets/affiliate-site-travel-overlay.json?summer-ad-check=${GITHUB_SHA}-${attempt}" 2>/dev/null || true)"
 
             printf '%s' "$homepage" > /tmp/summer-ad-check/homepage.html
             printf '%s' "$article" > /tmp/summer-ad-check/article.html
             printf '%s' "$script" > /tmp/summer-ad-check/reklamy-oprava-obrazku.js
+            printf '%s' "$heat" > /tmp/summer-ad-check/horko-feed.js
             printf '%s' "$overlay" > /tmp/summer-ad-check/overlay.json
 
             if grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' /tmp/summer-ad-check/homepage.html \
               && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' /tmp/summer-ad-check/article.html \
+              && grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' /tmp/summer-ad-check/article.html \
               && grep -Fq 'lastminuteslevy-cz' /tmp/summer-ad-check/reklamy-oprava-obrazku.js \
               && grep -Fq 'apollostore-cz' /tmp/summer-ad-check/reklamy-oprava-obrazku.js \
               && grep -Fq 'installFeaturedSeasonalBanner' /tmp/summer-ad-check/reklamy-oprava-obrazku.js \
+              && grep -Fq 'horko-apollostore' /tmp/summer-ad-check/horko-feed.js \
+              && grep -Fq 'rotatingItems' /tmp/summer-ad-check/horko-feed.js \
               && python3 - <<'PY'
           import json
           from pathlib import Path
@@ -78,6 +84,7 @@ jobs:
             const homepage = read('/tmp/summer-ad-check/homepage.html');
             const article = read('/tmp/summer-ad-check/article.html');
             const script = read('/tmp/summer-ad-check/reklamy-oprava-obrazku.js');
+            const heat = read('/tmp/summer-ad-check/horko-feed.js');
             let overlay = null;
             try { overlay = JSON.parse(read('/tmp/summer-ad-check/overlay.json')); } catch {}
             const report = {
@@ -87,9 +94,12 @@ jobs:
               workflow_outcome: process.env.LIVE_OUTCOME || null,
               homepage_uses_summer_version: homepage.includes('reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1'),
               heat_article_uses_summer_version: article.includes('reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1'),
+              heat_article_uses_rotating_heat_feed: article.includes('horko-feed.js?v=20260730-heat-rotation-1'),
               live_script_has_lastminute: script.includes('lastminuteslevy-cz'),
               live_script_has_cooling: script.includes('apollostore-cz') && script.includes('concept-cz') && script.includes('proalergiky-cz'),
               live_script_has_rotation: script.includes('installFeaturedSeasonalBanner'),
+              live_heat_feed_has_apollostore: heat.includes('horko-apollostore'),
+              live_heat_feed_rotates: heat.includes('rotatingItems'),
               live_partner_ids: Array.isArray(overlay?.partners) ? overlay.partners.map(row => row.id) : []
             };
             const path = 'summer-ad-rotation-live-status.json';
