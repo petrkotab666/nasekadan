@@ -20,27 +20,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
     steps:
       - name: Opravit odesílací účet a vyžádat nový reset
         id: repair
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
+          set -Eeuo pipefail
           umask 077
-          test -n "${OVH_KEY:-}" || { echo 'Chybí OVH_SSH_PRIVATE_KEY.' >&2; exit 20; }
-          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
-          chmod 600 "$RUNNER_TEMP/key"
+          exec > >(tee "$RUNNER_TEMP/result.txt") 2>&1
 
-          ssh -i "$RUNNER_TEMP/key" \
-            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/result.txt"
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"
+              selected="$name"
+              break
+            fi
+          done
+          test -n "$selected" || { echo 'Není dostupný žádný SSH klíč.'; exit 20; }
+          chmod 600 "$RUNNER_TEMP/key"
+          echo "Použit dostupný SSH secret: $selected"
+
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           sudo -n true
 
-          # Použijeme dříve živě ověřený vlastnický SMTP účet. Konfiguraci
-          # newsletteru neměníme; opravujeme jen odesílání resetu statistik.
           sudo python3 - <<'PY'
           from __future__ import annotations
           import os, shlex, smtplib, ssl, tempfile
@@ -59,8 +75,7 @@ jobs:
                   line = raw.strip()
                   if not line or line.startswith('#') or '=' not in line:
                       continue
-                  if line.startswith('export '):
-                      line = line[7:].lstrip()
+                  if line.startswith('export '): line = line[7:].lstrip()
                   key, value = line.split('=', 1)
                   value = value.strip()
                   try:
@@ -77,22 +92,14 @@ jobs:
           password = env.get('SMTP_PASSWORD') or env.get('SMTP_PASS') or env.get('MAIL_PASSWORD')
           port = int(env.get('SMTP_PORT') or env.get('MAIL_PORT') or '465')
           mode = (env.get('SMTP_TLS') or env.get('SMTP_SECURITY') or 'ssl').lower()
-          if not (host and user and password):
-              raise SystemExit('Vlastnická SMTP konfigurace není úplná.')
-          if user.strip().lower() != 'petrkotab@seznam.cz':
-              raise SystemExit('Vlastnický SMTP účet není očekávaný účet.')
+          if not (host and user and password): raise SystemExit('Vlastnická SMTP konfigurace není úplná.')
+          if user.strip().lower() != 'petrkotab@seznam.cz': raise SystemExit('Vlastnický SMTP účet není očekávaný účet.')
 
           values = {
-              'SMTP_HOST': host,
-              'SMTP_PORT': str(port),
-              'SMTP_USER': user,
-              'SMTP_PASSWORD': password,
-              'SMTP_TLS': mode,
-              'NEWSLETTER_FROM': user,
-              'SMTP_FROM': user,
-              'EMAIL_FROM': user,
-              'RESET_EMAIL': 'petrkotab@seznam.cz',
-              'ADMIN_EMAIL': 'petrkotab@seznam.cz',
+              'SMTP_HOST': host, 'SMTP_PORT': str(port), 'SMTP_USER': user,
+              'SMTP_PASSWORD': password, 'SMTP_TLS': mode,
+              'NEWSLETTER_FROM': user, 'SMTP_FROM': user, 'EMAIL_FROM': user,
+              'RESET_EMAIL': 'petrkotab@seznam.cz', 'ADMIN_EMAIL': 'petrkotab@seznam.cz',
           }
           fd, tmp_name = tempfile.mkstemp(prefix='.nasekadan-stats-email.', dir='/etc', text=True)
           try:
@@ -100,34 +107,27 @@ jobs:
                   for key, value in values.items():
                       escaped = value.replace('\\', '\\\\').replace('"', '\\"')
                       handle.write(f'{key}="{escaped}"\n')
-              os.chmod(tmp_name, 0o600)
-              os.chown(tmp_name, 0, 0)
-              os.replace(tmp_name, target)
+              os.chmod(tmp_name, 0o600); os.chown(tmp_name, 0, 0); os.replace(tmp_name, target)
           finally:
               try: os.unlink(tmp_name)
               except FileNotFoundError: pass
 
           context = ssl.create_default_context()
           if mode == 'ssl' or port == 465:
-              smtp = smtplib.SMTP_SSL(host, port, timeout=25, context=context)
+              client = smtplib.SMTP_SSL(host, port, timeout=25, context=context)
           else:
-              smtp = smtplib.SMTP(host, port, timeout=25)
-              smtp.ehlo()
-              if mode in {'starttls', 'tls', 'true', '1'} or port == 587:
-                  smtp.starttls(context=context)
-                  smtp.ehlo()
-          with smtp:
-              smtp.login(user, password)
+              client = smtplib.SMTP(host, port, timeout=25); client.ehlo()
+              if mode in {'starttls','tls','true','1'} or port == 587:
+                  client.starttls(context=context); client.ehlo()
+          with client:
+              client.login(user, password)
               message = EmailMessage()
-              message['From'] = user
-              message['To'] = 'petrkotab@seznam.cz'
+              message['From'] = user; message['To'] = 'petrkotab@seznam.cz'
               message['Subject'] = 'Kontrola doručení – Naše Kadaň statistiky'
-              message['Date'] = formatdate(localtime=False)
-              message['Message-ID'] = make_msgid(domain='nasekadan.cz')
+              message['Date'] = formatdate(localtime=False); message['Message-ID'] = make_msgid(domain='nasekadan.cz')
               message.set_content('Odesílání ze statistik bylo znovu nastaveno. Samostatný obnovovací odkaz následuje v dalším e-mailu.')
-              refused = smtp.send_message(message, from_addr=user, to_addrs=['petrkotab@seznam.cz'])
-              if refused:
-                  raise SystemExit(f'SMTP odmítlo příjemce: {list(refused)}')
+              refused = client.send_message(message, from_addr=user, to_addrs=['petrkotab@seznam.cz'])
+              if refused: raise SystemExit(f'SMTP odmítlo příjemce: {list(refused)}')
           print('Přímý kontrolní e-mail byl SMTP serverem přijat bez odmítnutého příjemce.')
           PY
 
@@ -142,26 +142,19 @@ jobs:
           url='https://nasekadan.cz/statistiky/zapomenute-heslo'
           curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$url" -o /tmp/reset-get.html
           status="$(curl -kisS -L --max-time 45 --resolve nasekadan.cz:443:127.0.0.1 \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data '' "$url" -o /tmp/reset-post.html -w '%{http_code}' || true)"
+            -H 'Content-Type: application/x-www-form-urlencoded' --data '' "$url" \
+            -o /tmp/reset-post.html -w '%{http_code}' || true)"
           echo "HTTP reset: $status"
-          if [ "$status" != 200 ]; then
-            echo 'Reset nevrátil HTTP 200.' >&2
-            exit 31
-          fi
+          [ "$status" = 200 ] || exit 31
           if grep -Eqi 'nepodařilo odeslat|zkontrolujte nastavení odesílací schránky' /tmp/reset-post.html; then
-            echo 'Aplikace stále hlásí chybu odeslání.' >&2
+            echo 'Aplikace stále hlásí chybu odeslání.'
             sudo journalctl -u nasekadan-stats-web.service --since '-3 minutes' --no-pager -n 120 \
-              | sed -E 's/(SMTP_PASSWORD|password|heslo)=?[^ ]*/\1=[REDACTED]/Ig; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/[EMAIL]/g' >&2
+              | sed -E 's/(SMTP_PASSWORD|password|heslo)=?[^ ]*/\1=[REDACTED]/Ig; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/[EMAIL]/g'
             exit 32
           fi
-          grep -Eqi 'odeslán|odeslali|obnovovací odkaz|zkontrolujte.{0,40}(schránku|e-mail|email)' /tmp/reset-post.html || {
-            echo 'Odpověď aplikace nepotvrdila reset.' >&2
-            sed -E 's/<[^>]+>/ /g' /tmp/reset-post.html | tr -s ' ' | head -c 1600 >&2
-            exit 33
-          }
+          grep -Eqi 'odeslán|odeslali|obnovovací odkaz|zkontrolujte.{0,40}(schránku|e-mail|email)' /tmp/reset-post.html || exit 33
           rm -f /tmp/reset-get.html /tmp/reset-post.html /tmp/stats-health.json
-          echo 'HOTOVO: služba byla restartována, kontrolní e-mail i nový reset byly vyžádány na petrkotab@seznam.cz.'
+          echo 'HOTOVO: kontrolní e-mail i nový reset byly vyžádány na petrkotab@seznam.cz.'
           REMOTE
 
       - name: Zapsat skutečný výsledek
@@ -172,16 +165,12 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         with:
           script: |
-            const fs = require('fs');
-            let log = '';
+            const fs = require('fs'); let log = '';
             try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/result.txt`, 'utf8'); } catch {}
             const ok = process.env.OUTCOME === 'success';
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+            const issue = await github.rest.issues.create({owner: context.repo.owner, repo: context.repo.repo,
               title: `[STATISTIKY RESET DORUČENÍ] ${ok ? 'Opraveno' : 'Selhalo'} ${new Date().toISOString()}`,
-              body: [`- Commit: \`${process.env.SOURCE_SHA}\``, `- Výsledek: **${process.env.OUTCOME}**`, '', '```text', log.slice(-22000).replace(/```/g, '---'), '```'].join('\n')
-            });
+              body: [`- Commit: \`${process.env.SOURCE_SHA}\``, `- Výsledek: **${process.env.OUTCOME}**`, '', '```text', log.slice(-22000).replace(/```/g, '---'), '```'].join('\n')});
             if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.data.number, state: 'closed', state_reason: 'completed'});
 
       - name: Vyhodnotit
