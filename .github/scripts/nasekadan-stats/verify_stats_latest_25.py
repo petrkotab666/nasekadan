@@ -21,6 +21,13 @@ body = base.render_dashboard().decode("utf-8", "replace")
 recent = stats_metrics_v7.latest_published_articles()
 assert len(recent) == 25, f"Očekáváno 25 článků, nalezeno {len(recent)}"
 assert "Posledních 25 článků" in body
+assert 'href="#poslednich-25-clanku"' in body, "Horní tlačítko na přehled chybí"
+
+header_end = body.find("</header>")
+recent_pos = body.find('id="poslednich-25-clanku"')
+metrics_pos = body.find('<section class="metrics">')
+assert header_end >= 0 and recent_pos > header_end, "Přehled není pod záhlavím"
+assert metrics_pos < 0 or recent_pos < metrics_pos, "Přehled je stále schovaný až pod metrikami"
 
 table = re.search(r'<table id="recent-articles">(.*?)</table>', body, re.S)
 assert table, "Tabulka recent-articles chybí"
@@ -37,4 +44,4 @@ output = [
     }
     for item in recent
 ]
-print(json.dumps({"ok": True, "count": len(output), "articles": output}, ensure_ascii=False))
+print(json.dumps({"ok": True, "count": len(output), "visibleAtTop": True, "articles": output}, ensure_ascii=False))
