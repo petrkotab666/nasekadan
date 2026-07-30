@@ -1,12 +1,15 @@
 {
-  "generatedAt": "2026-07-30T14:34:20.302614+00:00",
+  "generatedAt": "2026-07-30T16:08:40.416225+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Registr smluv – Město Kadaň (15)",
     "Kadaňské noviny (15)",
+    "Kultura Kadaň (15)",
     "Liďák Kadaň – kulturní program (0)",
     "Městská knihovna (12)",
     "Turistický portál Kadaň (15)",
+    "Městské muzeum v Kadani (15)",
+    "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (7)",
     "Technické služby Kadaň (15)",
@@ -42,6 +45,7 @@
     "Městská knihovna Litvínov (15)",
     "Policie ČR – Ústecký kraj (15)",
     "HZS Ústeckého kraje (15)",
+    "ZZS Ústeckého kraje (15)",
     "Portál krizového řízení Ústeckého kraje (15)",
     "ČEZ – tiskové zprávy (0)",
     "ČEZ Distribuce – plánované odstávky (15)",
@@ -55,7 +59,6 @@
   ],
   "errors": [
     "Městský GIS Kadaň: URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>",
-    "Kultura Kadaň: HTTPError: HTTP Error 429: Too Many Requests",
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
@@ -64,12 +67,20 @@
     "Muzeum a galerie Most – program: HTTPError: HTTP Error 403: Forbidden",
     "Let It Roll – akce: HTTPError: HTTP Error 404: Not Found",
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
-    "ZZS Ústeckého kraje: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Doprava Ústeckého kraje: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found"
   ],
   "items": [
+    {
+      "id": "de0804208d6a",
+      "title": "Všechny akce",
+      "date": "2026-07-30",
+      "category": "Kultura",
+      "description": "30&show=30.7.2026\" class=\"den_vkalendari aktualni_den vybrany_den\">30 31 od dnes dnes zítra tento víkend tento týden příští týden tento měsíc příští měsíc Rozšířené vyhledávání <li id=\"id_li_akce_ad",
+      "source": "https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&",
+      "sourceName": "Kultura Kadaň"
+    },
     {
       "id": "52b60804ad36",
       "title": "Pítka a vodní prvky ve městě",
@@ -890,6 +901,15 @@
       "sourceName": "HZS Ústeckého kraje"
     },
     {
+      "id": "d6c34bd4149e",
+      "title": "Úvodní strana",
+      "date": "",
+      "category": "Kultura",
+      "description": "Kalendář akcí <script src=\"./../js/nove_okno_obrazku.js?ver=1779704200\" type=",
+      "source": "https://www.kultura-kadan.cz",
+      "sourceName": "Kultura Kadaň"
+    },
+    {
       "id": "f0cb653fcb79",
       "title": "Úvodní strana",
       "date": "",
@@ -906,6 +926,15 @@
       "description": "img.lazy{min-height:1px}  ŘSD ČR - Ředitelství silnic a dálnic s. p. pro Ústecký kraj <meta property=\"og:description\" content=\"Oficiální informační portál Ředitelství silnic a dálnic s. p. X-twitter Facebook Youtube Mapa staveb v Ústeckém kraji OTEVŘÍT Mapa oprav v Ústeckém kraji OTEVŘÍT Mapa odpočívek v České republice OTEVŘÍT Přehled projektů v Ústeckém kraji STÁHNOUT PDF Přehled oprav v Ústeckém kraji STÁHNOUT PDF",
       "source": "https://kraje.rsd.cz/ustecky",
       "sourceName": "ŘSD – Ústecký kraj"
+    },
+    {
+      "id": "29acd1da538c",
+      "title": "Úsek krizového managementu",
+      "date": "",
+      "category": "Záchranná služba",
+      "description": "/rzp-a-rlp/\">Výjezdové skupiny Letecká záchranná služba Vzdělávací a výcvikové centrum Specializační vzdělávání Urgentní medicína  Odborné pracoviště FZS UJEP Výroční zprávy Přehled přijatých darů – 2024 Whistleblowing Projekty Projekt AED Projekt: Záchranáři do středních škol Projekt ČEZ: NEČEKEJ – ZACHRAŇUJ! Program Interreg Česko – Sasko 2021–2027 <a href=\"https:",
+      "source": "https://www.zzsuk.cz/usek-krizoveho-managementu/",
+      "sourceName": "ZZS Ústeckého kraje"
     },
     {
       "id": "2d1979e01c81",
@@ -942,33 +971,6 @@
       "description": "ONLINE KATALOG NOVÝ ČTENÁŘ Aktuality Otevírací doba Hrad Pobočka Knihovní řád Ceník FAQ Kontakt <",
       "source": "https://www.knihovnakadan.cz/akce",
       "sourceName": "Městská knihovna"
-    },
-    {
-      "id": "1e8963b769e5",
-      "title": "setkavanikadan.cz",
-      "date": "",
-      "category": "Bezpečnost",
-      "description": "roce. Bylo jich přes 40. Přítomní se také dozvěděli o novinkách a chystaných investičních akcích. A především mohli vznášet další připomínky, co by chtěli na sídlišti zlepšit. Vše se pečlivě zapsalo. Setkání se účastníci také zástupci městské policie, kteří odpovídají na případné dotazy. Na často kladené otázky najdete odpovědi na těchto stránkách, další odpovědi a konkrétní řešení připomínek najdete na stránkách:  .",
-      "source": "http://www.setkavanikadan.cz",
-      "sourceName": "Městská policie Kadaň"
-    },
-    {
-      "id": "967d06c3250c",
-      "title": "rozšířené vyhledávání",
-      "date": "",
-      "category": "Zdravotnictví",
-      "description": "lder=\"Hledaný výraz\"> Hledaný výraz Hledat  Lůžková odd.",
-      "source": "https://www.nemkadan.cz/?hledej=&amp;lang=cs",
-      "sourceName": "Nemocnice Kadaň"
-    },
-    {
-      "id": "45b5eb92a77c",
-      "title": "rozšířené vyhledávání",
-      "date": "",
-      "category": "Děti",
-      "description": "lder=\"Hledaný výraz\"> Hledaný výraz Hledat  ​​ Menu",
-      "source": "https://www.ddmsuplik.cz/?hledej=&amp;lang=cs",
-      "sourceName": "DDM Šuplík"
     }
   ]
 }
