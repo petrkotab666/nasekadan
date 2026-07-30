@@ -1,0 +1,63 @@
+name: Ověřit serverové statistiky DNZ přes Python
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-dnz-server-stats-python.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY1: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY2: ${{ secrets.OVH_SSH_KEY }}
+      KEY3: ${{ secrets.SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail; umask 077
+          for value in "$KEY1" "$KEY2" "$KEY3"; do if [ -n "$value" ]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Ověřit živou trasu a zápis
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/dnz-verify.log"
+          set -Eeuo pipefail
+          systemctl is-active --quiet dnz-stats-import.service
+          systemctl is-active --quiet dnz-stats-ensure.timer
+          code=$(curl -kLsS --max-time 10 --resolve dilynazakazku.cz:443:127.0.0.1 -o /tmp/dnz-private.html -w '%{http_code}' https://dilynazakazku.cz/statistiky/ || true)
+          test "$code" = 401
+          before=$(sudo -u www-data python3 - <<'PY'
+          import sqlite3
+          c=sqlite3.connect('/opt/multisite-stats/stats.sqlite3')
+          print(c.execute("select count(*) from hits where host='dilynazakazku.cz'").fetchone()[0])
+          PY
+          )
+          curl -kfsS --max-time 10 --resolve dilynazakazku.cz:443:127.0.0.1 -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/150 DNZHumanVerify' https://dilynazakazku.cz/ >/dev/null
+          sleep 5
+          after=$(sudo -u www-data python3 - <<'PY'
+          import sqlite3
+          c=sqlite3.connect('/opt/multisite-stats/stats.sqlite3')
+          print(c.execute("select count(*) from hits where host='dilynazakazku.cz'").fetchone()[0])
+          PY
+          )
+          echo "PRIVATE_CODE=$code BEFORE=$before AFTER=$after"
+          test "$after" -gt "$before"
+          echo 'OVERENO: DílyNaZakázku mají chráněný přehled a serverový sběr návštěv.'
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env: {OUTCOME: "${{ steps.check.outcome }}"}
+        with:
+          script: |
+            const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/dnz-verify.log`,'utf8')}catch{};const ok=process.env.OUTCOME==='success';const i=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[DNZ STATISTIKY PYTHON] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+log.replace(/```/g,'---')+'\n```'});if(ok)await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:i.data.number,state:'closed',state_reason:'completed'});
+      - if: steps.check.outcome != 'success'
+        run: exit 1
