@@ -14,16 +14,17 @@ import sys
 from pathlib import Path
 
 TEMPLATE_VERSION = "unified-v1"
-ASSET_VERSION = "20260726-unified-article-1"
+ASSET_VERSION = "20260730-ad-spacing-1"
 SCRIPT_BLOCK = (
     '<script src="/site.js" defer></script>\n'
     f'<script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script>\n'
+    f'<script src="/ad-spacing-guard.js?v={ASSET_VERSION}" defer></script>\n'
     f'<script src="/reklamy-oprava-obrazku.js?v={ASSET_VERSION}"></script>\n'
     f'<script src="/obsah-doplnky.js?v={ASSET_VERSION}"></script>'
 )
 
 AD_SCRIPT_RE = re.compile(
-    r"\s*<script\s+src=[\"'][^\"']*(?:site\.js|reklamy\.js|reklamy-oprava-obrazku\.js|reklamy-popisy\.js|obsah-doplnky\.js)(?:\?[^\"']*)?[\"']\s*(?:defer)?\s*></script>",
+    r"\s*<script\s+src=[\"'][^\"']*(?:site\.js|reklamy\.js|ad-spacing-guard\.js|reklamy-oprava-obrazku\.js|reklamy-popisy\.js|obsah-doplnky\.js)(?:\?[^\"']*)?[\"']\s*(?:defer)?\s*></script>",
     re.IGNORECASE,
 )
 
@@ -106,7 +107,8 @@ def normalize_article(text: str) -> str:
 
     # Jediný společný balík skriptů na konci stránky. site.js spouští průběžné
     # střídání různých partnerských nabídek v pravém sloupci; bez něj může být
-    # slot přítomný, ale zůstane prázdný nebo statický.
+    # slot přítomný, ale zůstane prázdný nebo statický. Pojistka rozestupů navíc
+    # odstraní automatickou reklamu, pokud by se ocitla hned za jinou reklamou.
     text = AD_SCRIPT_RE.sub("", text)
     body_matches = list(re.finditer(r'</body>', text, re.I))
     if body_matches:
@@ -130,7 +132,13 @@ def validate(path: Path, text: str) -> list[str]:
         re.I | re.S,
     ):
         errors.append("pravý panel nemá společný reklamní slot")
-    for asset in ("/site.js", "/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3", "/reklamy-oprava-obrazku.js", "/obsah-doplnky.js"):
+    for asset in (
+        "/site.js",
+        "/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3",
+        "/ad-spacing-guard.js",
+        "/reklamy-oprava-obrazku.js",
+        "/obsah-doplnky.js",
+    ):
         if text.count(asset) != 1:
             errors.append(f"soubor {asset} není načten právě jednou")
     if "</body>" not in text.lower():
