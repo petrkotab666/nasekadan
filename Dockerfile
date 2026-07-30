@@ -33,11 +33,10 @@ RUN python scripts/normalize_footers.py --write --check
 # a následná kontrola zastaví build, pokud by některý článek pravidlo porušil.
 RUN python scripts/normalize_articles.py --write --check
 
-# Sezónní feed pro horké dny se vkládá do všech veřejných HTML stránek při každém
-# produkčním sestavení. Tím nemůže zmizet při další publikaci nebo opravě článků.
+# Sezónní blok pro horké dny patří pouze do veřejných článků. Zároveň sjednotit
+# cache verzi hlavního letního reklamního balíku na všech stránkách.
 RUN python scripts/enable_heat_feed.py
-RUN grep -Fq '/horko-feed.js' /site/index.html \
- && grep -Fq 'Ventilátory a mobilní klimatizace' /site/horko-feed.js
+RUN python scripts/ensure_summer_ad_rotation.py --write --check
 
 # Každý článek dostane vlastní Facebook/OG obrázek s novou URL odvozenou
 # z názvu a metadat. Generický social-card.png se u článků nepoužívá.
@@ -68,6 +67,26 @@ RUN python scripts/dedupe_avies_cards.py
 # průvodcovským stránkám. Přísný audit tak neblokuje nové články kvůli historickým
 # souborům, kterým metadata dříve chyběla.
 RUN python scripts/finalize_launch.py
+
+# Publikační kroky výše mohly přepsat konstrukci některého článku nebo titulky.
+# Letní rotaci proto obnovit ještě jednou těsně před vyhledávacími audity.
+RUN python scripts/normalize_articles.py --write --check
+RUN python scripts/enable_heat_feed.py
+RUN python scripts/ensure_summer_ad_rotation.py --write --check
+
+# Blokující kontrola reklamních podkladů: build nesmí projít s historickým feedem,
+# starým JS ani neúplným seznamem cestovních a letních partnerů.
+RUN python -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null \
+ && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' index.html \
+ && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
+ && grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
+ && grep -Fq 'lastminuteslevy-cz' reklamy-oprava-obrazku.js \
+ && grep -Fq 'apollostore-cz' reklamy-oprava-obrazku.js \
+ && grep -Fq 'installFeaturedSeasonalBanner' reklamy-oprava-obrazku.js \
+ && grep -Fq 'horko-apollostore' horko-feed.js \
+ && grep -Fq 'rotatingItems' horko-feed.js \
+ && grep -Fq 'ceskekormidlo-cz' assets/affiliate-site-travel-overlay.json \
+ && grep -Fq 'proalergiky-cz' assets/affiliate-site-travel-overlay.json
 
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
