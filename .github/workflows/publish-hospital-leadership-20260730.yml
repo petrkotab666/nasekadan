@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       ARTICLE: clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +41,8 @@ jobs:
           git pull --rebase origin main
           git push origin HEAD:main
 
-      - name: Nasadit přímo na OVH
+      - name: Nasadit do aktivního Dockeru i statického kořene
+        id: deploy
         run: |
           set -euo pipefail
           test -n "$SSH_KEY"
@@ -52,20 +53,41 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
-          sudo install -m 0644 index.html /var/www/nasekadan/index.html
-          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
-          sudo install -m 0644 clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html /var/www/nasekadan/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+
+          files=(
+            index.html
+            clanky/index.html
+            clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+          )
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          test -n "$cid"
+
+          for file in "${files[@]}"; do
+            sudo install -d -m 0755 "/var/www/nasekadan/$(dirname "$file")"
+            sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
+            sudo docker exec "$cid" mkdir -p "/usr/share/nginx/html/$(dirname "$file")"
+            sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+          done
+
+          sudo install -d -m 0755 /var/www/nasekadan/social
           sudo cp -a social/. /var/www/nasekadan/social/
+          sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/social
+          sudo docker cp social/. "$cid:/usr/share/nginx/html/social/"
+
+          curl -fsS http://127.0.0.1:3224/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html | grep -Fq 'Nemocnice Kadaň mění vedení'
+          curl -fsS http://127.0.0.1:3224/index.html | grep -Fq 'nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html'
+          curl -fsS http://127.0.0.1:3224/clanky/index.html | grep -Fq 'nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html'
           REMOTE
 
       - name: Ověřit veřejné zveřejnění
         run: |
           set -euo pipefail
-          for n in $(seq 1 18); do
-            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?check=$n" || true)"
-            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?check=$n" || true)"
-            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?check=$n" || true)"
+          for n in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?check=${GITHUB_SHA}-$n" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?check=${GITHUB_SHA}-$n" || true)"
+            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?check=${GITHUB_SHA}-$n" || true)"
             if grep -Fq 'Nemocnice Kadaň mění vedení' <<<"$article" \
               && grep -Fq 'nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$home" \
               && grep -Fq 'nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$archive"; then
