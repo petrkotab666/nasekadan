@@ -1,0 +1,82 @@
+name: Diagnostikovat skutečnou přihlášenou stránku statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-authenticated-stats-http-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Ověřit skutečné HTTP po přihlášení
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/diag.txt"
+          set -Eeuo pipefail
+          sudo -n true
+
+          python3 - <<'PY'
+          import ast, base64, gzip, pathlib, re
+          p=pathlib.Path('/usr/local/lib/nasekadan-stats/stats_server.py')
+          t=p.read_text()
+          m=re.search(r'b64decode\("([A-Za-z0-9+/=]+)"\)', t)
+          assert m
+          src=gzip.decompress(base64.b64decode(m.group(1))).decode('utf-8','replace')
+          pathlib.Path('/tmp/stats_server_decoded.py').write_text(src)
+          tree=ast.parse(src)
+          print('=== RELEVANTNÍ KONSTANTY A CESTY ===')
+          for line in src.splitlines():
+              if any(k in line for k in ('PASSWORD_FILE','SESSION','COOKIE','LOGIN','USERNAME','/statistiky','render_dashboard')):
+                  if 'password' not in line.lower() or 'FILE' in line or 'field' in line.lower():
+                      print(line[:500])
+          print('=== HANDLER METODY ===')
+          for node in ast.walk(tree):
+              if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name in {'do_GET','do_POST','session','login','send_html'}:
+                  seg=ast.get_source_segment(src,node) or ''
+                  print(f'--- {node.name} ---')
+                  print(seg[:12000])
+          PY
+
+          echo '=== SOUBORY KONFIGURACE (JEN NÁZVY) ==='
+          find /opt/nasekadan-stats -maxdepth 2 -type f -printf '%p\n' | sort | sed -n '1,120p'
+
+          echo '=== FORMULÁŘ PŘIHLÁŠENÍ ==='
+          curl -kfsS --resolve nasekadan.cz:443:127.0.0.1 https://nasekadan.cz/statistiky/ \
+            | grep -Eo '<form[^>]*>|<input[^>]*>|<button[^>]*>[^<]*' | head -40
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let log='';
+            try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/diag.txt`,'utf8')}catch{}
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[DIAGNOSTIKA PŘIHLÁŠENÝCH STATISTIK] ${process.env.OUTCOME} ${new Date().toISOString()}`,body:`\`\`\`text\n${log.slice(-50000).replace(/```/g,'---')}\n\`\`\``});
+            if(process.env.OUTCOME==='success') await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při chybě
+        if: steps.check.outcome != 'success'
+        run: exit 1
