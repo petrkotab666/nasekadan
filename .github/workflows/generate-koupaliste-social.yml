@@ -1,0 +1,48 @@
+name: Vytvořit sociální obrázek koupaliště
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'social/koupaliste-kadan-50-let-niagara-2026.svg'
+      - '.github/workflows/generate-koupaliste-social.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat převodník SVG
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+
+      - name: Vytvořit PNG 1200 × 630
+        run: |
+          rsvg-convert \
+            --width 1200 \
+            --height 630 \
+            social/koupaliste-kadan-50-let-niagara-2026.svg \
+            --output social/koupaliste-kadan-50-let-niagara-2026.png
+          file social/koupaliste-kadan-50-let-niagara-2026.png
+
+      - name: Uložit obrázek do repozitáře
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add social/koupaliste-kadan-50-let-niagara-2026.png
+          if git diff --cached --quiet; then
+            echo 'PNG je beze změny.'
+            exit 0
+          fi
+          git commit -m 'Vytvořit sociální PNG ke článku o koupališti'
+          git push origin HEAD:main
