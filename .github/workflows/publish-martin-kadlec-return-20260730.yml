@@ -1,4 +1,4 @@
-name: Zveřejnit návrat Martina Kadlece do Kadaně
+name: Nasadit článek Martina Kadlece
 
 on:
   push:
@@ -8,91 +8,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
 
-      - name: Připravit a zařadit článek
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          slug='martin-kadlec-navrat-hokej-kadan-2026'
-          href=f'/clanky/{slug}.html'
-          url=f'https://nasekadan.cz{href}'
-          title='Velký návrat do Kadaně. Martin Kadlec po deseti letech znovu oblékne dres mateřského klubu'
-          desc='Odchovanec kadaňského hokeje Martin Kadlec se po deseti letech vrací do mateřského klubu. Zkušený útočník se zapojí do přípravy a pomůže týmu v úvodu druholigové sezony.'
-          published='2026-07-30T14:20:00+02:00'
-
-          article=f'''<!doctype html>
-          <html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-          <title>{title} | Naše Kadaň</title><meta name="description" content="{desc}"><meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
-          <link rel="canonical" href="{url}"><link rel="icon" href="../favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="/footer.css?v=20260726-event-hotfix-2">
-          <meta property="article:published_time" content="{published}"><meta property="article:modified_time" content="{published}"><meta property="og:locale" content="cs_CZ"><meta property="og:type" content="article"><meta property="og:site_name" content="Naše Kadaň"><meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:url" content="{url}"><meta property="og:image" content="https://nasekadan.cz/social-card.png"><meta name="twitter:card" content="summary_large_image">
-          <script type="application/ld+json">{{"@context":"https://schema.org","@type":"NewsArticle","headline":"{title}","description":"{desc}","datePublished":"{published}","dateModified":"{published}","author":{{"@type":"Organization","name":"Naše Kadaň"}},"publisher":{{"@type":"Organization","name":"Naše Kadaň"}},"mainEntityOfPage":"{url}","inLanguage":"cs-CZ","isAccessibleForFree":true}}</script>
-          <style>.article-shell{{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:56px 0}}.article h1{{font:800 clamp(38px,6vw,64px)/1.02 Georgia,serif;letter-spacing:-.035em;margin:.25em 0}}.article h2{{font:800 34px/1.15 Georgia,serif;margin:48px 0 14px}}.article p,.article li{{font-size:18px}}.article .leadtext{{font-size:23px;color:#465862;line-height:1.55}}.hero-visual{{min-height:340px;border-radius:24px;background:radial-gradient(circle at 78% 18%,#ffffff22,transparent 28%),linear-gradient(135deg,#071b3c,#124f8a 58%,#a9232b);display:flex;align-items:flex-end;padding:30px;color:#fff;box-shadow:var(--shadow);margin:30px 0;position:relative;overflow:hidden}}.hero-visual:after{{content:'NÁVRAT DOMŮ';position:absolute;right:-12px;top:24px;font:900 56px/1 Arial;color:#ffffff12;white-space:nowrap}}.hero-visual strong{{font:800 31px Georgia,serif;max-width:670px;position:relative;z-index:1}}.source-list{{background:#eef3f5;padding:24px;border-radius:18px;margin-top:44px}}.sticky{{position:sticky;top:100px}}.sidebox{{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:18px}}@media(max-width:980px){{.article-shell{{grid-template-columns:1fr}}.sticky{{position:static}}}}</style></head>
-          <body><header><div class="wrap head"><a class="logo" href="../index.html"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><nav><a href="../index.html">Úvod</a><a href="/clanky/">Články</a><a href="../index.html#akce">Akce</a><a href="../pruvodce/">Průvodce</a></nav></div></header>
-          <main class="wrap article-shell" data-article-template="unified-v1"><article class="article"><p class="tag">HOKEJ · SPORT · 30. ČERVENCE 2026</p><h1>{title}</h1><p class="leadtext"><strong>Kadaňský hokej oznámil návrat zkušeného útočníka Martina Kadlece. Odchovanec místního klubu se po deseti letech vrací tam, kde s hokejem začínal, a zapojí se do přípravy na nadcházející druholigovou sezonu.</strong></p>
-          <div class="hero-visual"><strong>Po působení v nejvyšší české soutěži i v zahraničí se Martin Kadlec vrací do mateřského klubu.</strong></div>
-          <p>Pro kadaňské fanoušky jde o výraznou posilu i symbolický návrat domácího odchovance. Podle zveřejněné informace má Kadlec týmu pomoci minimálně v úvodu nové sezony.</p>
-          <h2>Zkušenosti z extraligy i zahraničí</h2><p>Během desetiletí mimo mateřský klub nasbíral Martin Kadlec zkušenosti ve vyšších českých soutěžích i v zahraničí. Právě ty může nyní předávat mladším spoluhráčům a současně pomoci mužstvu přímo na ledě.</p>
-          <p>Jeho příchod přichází v době, kdy Kadaň skládá kádr pro další ročník druhé ligy. Návrat hráče s vazbou na město může být důležitý také pro fanoušky a atmosféru kolem týmu.</p>
-          <h2>Zapojí se už do přípravy</h2><p>Kadlec se má zapojit do týmové přípravy před startem soutěžního ročníku. Klub zatím prezentuje jeho pomoc především pro úvod sezony; další pokračování bude záležet na následném vývoji a dohodě.</p>
-          <p><strong>Návrat odchovance po deseti letech patří mezi nejzajímavější letošní personální zprávy z kadaňského sportu.</strong></p>
-          <div class="source-list"><strong>Zdroje</strong><p>Veřejné oznámení kadaňského klubu a informace zveřejněná portálem Sport Kadaň dne 30. července 2026.</p></div></article><aside class="sticky"><div class="sidebox"><h3>Rychlý přehled</h3><ul><li>Návrat po deseti letech</li><li>Odchovanec Kadaně</li><li>Zkušenosti z extraligy</li><li>Působení v zahraničí</li><li>Zapojení do přípravy</li><li>Pomoc v úvodu sezony</li></ul></div><div data-promos data-context="sidebar"></div></aside></main>
-          <footer class="site-footer" data-site-footer="v1"><div class="wrap footer-grid"><div class="footer-brand"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><p>Nezávislé informace, události a příběhy města.</p></div><div class="footer-column"><strong>Obsah webu</strong><a href="/">Úvod</a><a href="/clanky/">Naše články</a><a href="/#akce">Akce</a><a href="/pruvodce/">Průvodce</a></div><div class="footer-column"><strong>Praktické a kontakt</strong><a href="/prakticke/">Praktická Kadaň</a><a href="/inzerce/"><b>Inzerce a ceník</b></a><a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a></div></div><div class="footer-legal"><span>© 2026 Naše Kadaň</span><a href="/o-webu/">O webu</a><a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a></div></footer>
-          <script src="/site.js" defer></script><script src="/reklamy.js"></script><script src="/obsah-doplnky.js"></script></body></html>'''
-          Path('clanky').mkdir(exist_ok=True)
-          Path(f'clanky/{slug}.html').write_text(article,encoding='utf-8',newline='\n')
-
-          home=Path('index.html').read_text(encoding='utf-8')
-          card=f'''    <article class="article-card sport" data-martin-kadlec-card><div class="visual" style="background:linear-gradient(135deg,#071b3c,#124f8a 58%,#a9232b)"><strong>Velký návrat</strong></div><div class="article-body"><span class="meta">30. 7. 2026 · 14:20 · Hokej</span><h3>Martin Kadlec se po deseti letech vrací do Kadaně</h3><p>Odchovanec klubu se zapojí do přípravy a pomůže týmu v úvodu druholigové sezony.</p><a class="read-more" href="{href}">Přečíst článek →</a></div></article>'''
-          home=re.sub(r'\s*<article\b[^>]*data-martin-kadlec-card[^>]*>.*?</article>\s*','\n',home,flags=re.S)
-          home=home.replace('<div class="article-list">','<div class="article-list">\n'+card,1)
-          Path('index.html').write_text(home,encoding='utf-8',newline='\n')
-
-          archive=Path('clanky/index.html').read_text(encoding='utf-8')
-          item=f'''    <article class="archive-item sport" data-martin-kadlec-card><div class="archive-visual" style="background:linear-gradient(135deg,#071b3c,#124f8a 58%,#a9232b)"><strong>Velký návrat</strong></div><div class="archive-body"><span class="archive-meta">30. července 2026 v 14:20 · Hokej · Kadaň</span><h2>{title}</h2><p>{desc}</p><a href="{href}">Přečíst článek →</a></div></article>'''
-          archive=re.sub(r'\s*<article\b[^>]*data-martin-kadlec-card[^>]*>.*?</article>\s*','\n',archive,flags=re.S)
-          marker='<section class="archive-list" aria-label="Chronologický přehled článků">'
-          archive=archive.replace(marker,marker+'\n'+item,1)
-          Path('clanky/index.html').write_text(archive,encoding='utf-8',newline='\n')
-
-          rss=Path('rss.xml').read_text(encoding='utf-8')
-          rss=re.sub(r'\s*<item>.*?<link>'+re.escape(url)+r'</link>.*?</item>\s*','\n',rss,flags=re.S)
-          node=f'''    <item><title>{title}</title><description><![CDATA[{desc}]]></description><link>{url}</link><guid isPermaLink="true">{url}</guid><pubDate>Thu, 30 Jul 2026 14:20:00 +0200</pubDate><category>Hokej</category><category>Sport</category><category>Kadaň</category></item>'''
-          rss=rss.replace('    <item>',node+'\n\n    <item>',1)
-          rss=re.sub(r'<lastBuildDate>.*?</lastBuildDate>','<lastBuildDate>Thu, 30 Jul 2026 14:20:00 +0200</lastBuildDate>',rss,count=1)
-          Path('rss.xml').write_text(rss,encoding='utf-8',newline='\n')
-
-          for name in ('sitemap.xml','news-sitemap.xml'):
-              p=Path(name); text=p.read_text(encoding='utf-8')
-              if url not in text:
-                  if name=='news-sitemap.xml': node=f'''  <url><loc>{url}</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>{published}</news:publication_date><news:title>{title}</news:title></news:news></url>\n'''
-                  else: node=f'''  <url><loc>{url}</loc><lastmod>2026-07-30</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'''
-                  text=text.replace('</urlset>',node+'</urlset>',1)
-              p.write_text(text,encoding='utf-8',newline='\n')
-          PY
-          git config user.name "Naše Kadaň automat"
-          git config user.email "actions@users.noreply.github.com"
-          git add clanky/martin-kadlec-navrat-hokej-kadan-2026.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
-          git commit -m "Publikovat návrat Martina Kadlece do Kadaně"
-          git push origin main
-
-      - name: Nasadit přímo na OVH
+      - name: Nasadit článek na OVH
         shell: bash
         run: |
           set -euo pipefail
