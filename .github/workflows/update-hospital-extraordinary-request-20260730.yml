@@ -1,0 +1,140 @@
+name: Aktualizovat článek o žádosti na mimořádné zastupitelstvo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-extraordinary-request-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-hospital-extraordinary-request
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit žádost ANO a neoficiální termín
+        run: |
+          set -euo pipefail
+          python3 scripts/update_hospital_extraordinary_request_20260730.py
+          python3 scripts/enforce_article_visibility.py
+          grep -Fq 'data-extraordinary-request="20260730"' "$ARTICLE"
+          grep -Fq '17. srpna 2026 v 8:00' "$ARTICLE"
+          grep -Fq '2026-07-30T18:51:00+02:00' "$ARTICLE"
+          grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' index.html
+          grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' clanky/index.html
+
+      - name: Uložit trvalou změnu do main
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň aktualizace'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE" index.html clanky/index.html
+          if git diff --cached --quiet; then
+            echo 'Zdrojové soubory už jsou aktualizované.'
+          else
+            git commit -m 'Aktualizovat: ANO podalo žádost o mimořádné zastupitelstvo'
+            git pull --rebase --autostash origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit aktualizovaný článek přímo na OVH
+        id: deploy
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nk-hospital-request"
+          mkdir -p "$RUNNER_TEMP/nk-hospital-request/clanky"
+          cp "$ARTICLE" "$RUNNER_TEMP/nk-hospital-request/clanky/"
+          cp clanky/index.html "$RUNNER_TEMP/nk-hospital-request/clanky/index.html"
+          cp index.html "$RUNNER_TEMP/nk-hospital-request/index.html"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r \
+            "$RUNNER_TEMP/nk-hospital-request" ubuntu@57.129.43.215:/tmp/nk-hospital-request
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 /tmp/nk-hospital-request/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/nk-hospital-request/clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 /tmp/nk-hospital-request/index.html /var/www/nasekadan/index.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-hospital-request/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html nasekadan-web:/usr/share/nginx/html/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+            sudo docker cp /tmp/nk-hospital-request/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp /tmp/nk-hospital-request/index.html nasekadan-web:/usr/share/nginx/html/index.html
+          fi
+          rm -rf /tmp/nk-hospital-request
+          REMOTE
+
+      - name: Veřejně ověřit aktualizaci
+        id: verify
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s)"
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?update=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?update=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?update=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'data-extraordinary-request="20260730"' <<<"$article" \
+              && grep -Fq '17. srpna 2026 v 8:00' <<<"$article" \
+              && grep -Fq 'Aktualizace 30. července v 18:51' <<<"$article" \
+              && grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$home" \
+              && grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$archive"; then
+              echo 'HOTOVO: aktualizace žádosti ANO je veřejná.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat stav aktualizace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = '.github/hospital-extraordinary-request-status.json';
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const state = {
+              status: ok ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              server_deploy: process.env.DEPLOY || 'skipped',
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(state, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',
+              message:`Zapsat stav aktualizace mimořádného zastupitelstva: ${state.status}`,
+              content,...(sha?{sha}:{})
+            });
