@@ -218,10 +218,18 @@ def install(base: Any) -> None:
 
     def render_with_recent_articles(render_base: Any) -> bytes:
         body = original_render(render_base).decode("utf-8", "replace")
-        marker = '<section class="panel"><h2>Statistiky jednotlivých článků</h2>'
         section = render_recent_articles()
-        if marker in body:
-            body = body.replace(marker, section + marker, 1)
+
+        # Přímý odkaz v horní liště, aby byla nová sekce okamžitě viditelná.
+        badges_marker = '<div class="badges">'
+        quick_link = '<a class="badge neutral" href="#poslednich-25-clanku" style="text-decoration:none">↓ Posledních 25 článků</a>'
+        if badges_marker in body and 'href="#poslednich-25-clanku"' not in body:
+            body = body.replace(badges_marker, badges_marker + quick_link, 1)
+
+        # Sekce je záměrně hned pod záhlavím, nikoli až hluboko pod grafy.
+        header_marker = '</header>'
+        if header_marker in body:
+            body = body.replace(header_marker, header_marker + section, 1)
         else:
             body = body.replace("</main>", section + "</main>", 1)
         return body.encode("utf-8")
