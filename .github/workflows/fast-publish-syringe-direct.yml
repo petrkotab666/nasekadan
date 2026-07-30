@@ -1,0 +1,192 @@
+name: Rychle nasadit článek o stříkačkách
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/syringe-fast-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-syringe-fast-direct
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SLUG: strikacky-vchody-drogy-kadan
+      URL: https://nasekadan.cz/clanky/strikacky-vchody-drogy-kadan.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit veřejnou verzi
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ".github/drafts/${SLUG}.html" "clanky/${SLUG}.html"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('clanky/strikacky-vchody-drogy-kadan.html')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('noindex,nofollow','index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1')
+          t=t.replace('../../','../')
+          t=t.replace('PŘIPRAVOVANÝ ČLÁNEK','30. ČERVENCE 2026')
+          t=t.replace('<h3>Plánované vydání</h3><p><strong>30. července 2026 ve 4:00</strong></p>','<h3>Zveřejněno</h3><p><strong>30. července 2026 ve 4:00</strong></p>')
+          p.write_text(t,encoding='utf-8',newline='\n')
+          PY
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,re
+          p=Path('clanky/strikacky-vchody-drogy-kadan.html')
+          t=p.read_text(encoding='utf-8')
+          published='2026-07-30T04:00:00+02:00'
+          title='Stříkačky ve vchodech a podezřelé byty. Obyvatelé upozorňují na drogový problém v Kadani'
+          desc='Co dělat při nálezu použité stříkačky, jaké možnosti má městská policie a proč jednotlivé kontroly hřišť nenahrazují systematické řešení drogových míst v Kadani.'
+          t=re.sub(r'<meta[^>]+property=["\']article:(?:published|modified)_time["\'][^>]*>','',t,flags=re.I)
+          schema={"@context":"https://schema.org","@type":"NewsArticle","headline":title,"description":desc,"datePublished":published,"dateModified":published,"author":{"@type":"Organization","name":"Naše Kadaň"},"publisher":{"@type":"Organization","name":"Naše Kadaň"},"mainEntityOfPage":"https://nasekadan.cz/clanky/strikacky-vchody-drogy-kadan.html","inLanguage":"cs-CZ"}
+          meta=(f'<meta property="article:published_time" content="{published}">'
+                f'<meta property="article:modified_time" content="{published}">'
+                '<script type="application/ld+json">'+json.dumps(schema,ensure_ascii=False,separators=(',',':'))+'</script>')
+          t=t.replace('</head>',meta+'\n</head>',1)
+          p.write_text(t,encoding='utf-8',newline='\n')
+          PY
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          article=Path('clanky/strikacky-vchody-drogy-kadan.html').read_text(encoding='utf-8')
+          url='https://nasekadan.cz/clanky/strikacky-vchody-drogy-kadan.html'
+          title='Stříkačky ve vchodech a podezřelé byty. Obyvatelé upozorňují na drogový problém v Kadani'
+          desc='Co dělat při nálezu použité stříkačky, jaké možnosti má městská policie a proč jednotlivé kontroly hřišť nenahrazují systematické řešení drogových míst v Kadani.'
+          image_match=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)',article,re.I)
+          image=image_match.group(1) if image_match else 'https://nasekadan.cz/social-card.png'
+          rss=Path('rss.xml')
+          text=rss.read_text(encoding='utf-8')
+          text=re.sub(r'\s*<item>.*?'+re.escape(url)+r'.*?</item>\s*','\n',text,flags=re.S)
+          item=f'''    <item><title>{title}</title><description><![CDATA[{desc}]]></description><link>{url}</link><guid isPermaLink="true">{url}</guid><pubDate>Thu, 30 Jul 2026 04:00:00 +0200</pubDate><category>Bezpečnost</category><category>Veřejný prostor</category><category>Kadaň</category><szn:image><szn:url>{image}</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>'''
+          anchor='<atom:link href="https://nasekadan.cz/rss.xml" rel="self" type="application/rss+xml" />'
+          if anchor not in text: raise SystemExit('RSS marker chybí')
+          text=text.replace(anchor,anchor+'\n'+item,1)
+          text=re.sub(r'<lastBuildDate>.*?</lastBuildDate>','<lastBuildDate>Thu, 30 Jul 2026 04:00:00 +0200</lastBuildDate>',text,count=1)
+          rss.write_text(text,encoding='utf-8',newline='\n')
+          sm=Path('sitemap.xml'); text=sm.read_text(encoding='utf-8')
+          if url not in text: text=text.replace('</urlset>',f'  <url><loc>{url}</loc><lastmod>2026-07-30</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n</urlset>')
+          sm.write_text(text,encoding='utf-8',newline='\n')
+          ns=Path('news-sitemap.xml'); text=ns.read_text(encoding='utf-8')
+          if url not in text:
+              entry=f'  <url><loc>{url}</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>2026-07-30T04:00:00+02:00</news:publication_date><news:title>{title}</news:title></news:news></url>\n'
+              text=text.replace('</urlset>',entry+'</urlset>')
+          ns.write_text(text,encoding='utf-8',newline='\n')
+          PY
+          python3 scripts/sort_articles_chronologically.py
+          grep -Fq "/clanky/${SLUG}.html" index.html
+          grep -Fq "/clanky/${SLUG}.html" clanky/index.html
+          grep -Fq "$URL" rss.xml
+          grep -Fq "$URL" sitemap.xml
+          grep -Fq "$URL" news-sitemap.xml
+
+      - name: Uložit veřejnou verzi do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rychlé vydání'
+          git config user.email 'info@nasekadan.cz'
+          git add -A
+          git commit -m 'Publikovat: stříkačky ve vchodech a drogové podněty v Kadani'
+          git fetch --prune origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nk-syringe-fast"
+          mkdir -p "$RUNNER_TEMP/nk-syringe-fast/clanky" "$RUNNER_TEMP/nk-syringe-fast/social"
+          cp "clanky/${SLUG}.html" "$RUNNER_TEMP/nk-syringe-fast/clanky/"
+          cp clanky/index.html "$RUNNER_TEMP/nk-syringe-fast/clanky/index.html"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$RUNNER_TEMP/nk-syringe-fast/"
+          cp -a social/. "$RUNNER_TEMP/nk-syringe-fast/social/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-syringe-fast" ubuntu@57.129.43.215:/tmp/nk-syringe-fast
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -m 0644 /tmp/nk-syringe-fast/clanky/strikacky-vchody-drogy-kadan.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/nk-syringe-fast/clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 /tmp/nk-syringe-fast/index.html /tmp/nk-syringe-fast/rss.xml /tmp/nk-syringe-fast/sitemap.xml /tmp/nk-syringe-fast/news-sitemap.xml /tmp/nk-syringe-fast/llms.txt /tmp/nk-syringe-fast/robots.txt /var/www/nasekadan/
+          sudo cp -a /tmp/nk-syringe-fast/social/. /var/www/nasekadan/social/
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-syringe-fast/clanky/strikacky-vchody-drogy-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/strikacky-vchody-drogy-kadan.html
+            sudo docker cp /tmp/nk-syringe-fast/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp /tmp/nk-syringe-fast/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/nk-syringe-fast/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/nk-syringe-fast/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp /tmp/nk-syringe-fast/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/nk-syringe-fast/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp /tmp/nk-syringe-fast/robots.txt nasekadan-web:/usr/share/nginx/html/robots.txt
+            sudo docker cp /tmp/nk-syringe-fast/social/. nasekadan-web:/usr/share/nginx/html/social/
+          fi
+          rm -rf /tmp/nk-syringe-fast
+          REMOTE
+
+      - name: Ověřit živý web
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/${SLUG}.html?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fiq 'Stříkačky ve vchodech' <<<"$article" && grep -Fq "/clanky/${SLUG}.html" <<<"$home" && grep -Fq "/clanky/${SLUG}.html" <<<"$archive" && grep -Fq "$URL" <<<"$rss"; then
+              echo 'HOTOVO: článek o stříkačkách je veřejný na článku, titulce, v archivu a RSS.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat stav
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path='syringe-fast-status.json';
+            const ok=process.env.DEPLOY==='success'&&process.env.VERIFY==='success';
+            const status={status:ok?'success':'failed',checked_at_utc:new Date().toISOString(),trigger_commit:context.sha,run_id:context.runId,server_deploy:process.env.DEPLOY||'skipped',public_verification:process.env.VERIFY||'skipped'};
+            const content=Buffer.from(JSON.stringify(status,null,2)+'\n').toString('base64');
+            let sha;
+            try{const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(current.data))sha=current.data.sha;}catch(error){if(error.status!==404)throw error;}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat rychlé nasazení článku o stříkačkách: ${status.status}`,content,...(sha?{sha}:{})});
