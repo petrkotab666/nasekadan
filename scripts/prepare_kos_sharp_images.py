@@ -29,12 +29,7 @@ USER_AGENT = (
 
 
 def valid_image(path: Path, minimum_size: int = 5_000) -> bool:
-    """Return True only for an existing, decodable, non-trivial image.
-
-    The generated WebP files are versioned in the repository. Reusing a verified
-    target makes the Docker build independent of old split base64 recovery chunks
-    and transient Facebook access, while still refusing corrupt output.
-    """
+    """Return True only for an existing, decodable, non-trivial image."""
     if not path.is_file() or path.stat().st_size < minimum_size:
         return False
     try:
@@ -53,7 +48,9 @@ def rebuild_webp(prefix: str, target: Path) -> None:
 
     parts = sorted(CHUNKS.glob(f"{prefix}-*.txt"))
     if not parts:
-        raise RuntimeError(f"Chybí datové části pro {prefix} a neexistuje platný cílový obrázek")
+        raise RuntimeError(
+            f"Chybí datové části pro {prefix} a neexistuje platný cílový obrázek"
+        )
     encoded = "".join(
         re.sub(r"\s+", "", part.read_text(encoding="ascii")) for part in parts
     )
@@ -90,7 +87,7 @@ def load_main_photo() -> bytes:
             body, content_type = download(url)
             if content_type.lower().startswith("image/") and len(body) > 5_000:
                 return body
-        except Exception as exc:  # Facebook occasionally blocks automated requests.
+        except Exception as exc:
             print(f"Facebook image endpoint failed: {url}: {exc}")
 
     try:
@@ -150,20 +147,31 @@ def build_main_photo(target: Path) -> None:
 
 def update_article() -> None:
     text = ARTICLE.read_text(encoding="utf-8")
-    replacements = {
+
+    # Obrazové odkazy jsou podstatné a musí být přítomné buď ve staré, nebo
+    # již převedené podobě. Rozměry a datový marker mohou mezitím legitimně
+    # změnit normalizační skripty, proto jsou jejich úpravy pouze idempotentní.
+    required_links = {
         "../images/clanky/kadan-pretekajici-kos-facebook-real.svg": "../images/clanky/kadan-pretekajici-kos-facebook-ostry.webp",
         "../images/clanky/kadan-forum-petra-pokorna-prispevek-real.svg": "../images/clanky/kadan-forum-petra-pokorna-prispevek-ostry.webp",
         "../images/clanky/jan-losenicky-komentar-facebook-real.svg": "../images/clanky/jan-losenicky-komentar-facebook-ostry.webp",
+    }
+    for old, new in required_links.items():
+        if old in text:
+            text = text.replace(old, new, 1)
+        elif new not in text:
+            raise RuntimeError(f"V článku chybí očekávaný obrazový odkaz: {old}")
+
+    optional_replacements = {
         'width="220" height="390" loading="eager"': 'width="720" height="1277" loading="eager"',
         'width="320" height="290" loading="lazy"': 'width="525" height="475" loading="lazy"',
         'width="360" height="130" loading="lazy"': 'width="620" height="391" loading="lazy"',
         'data-fb-photo-evidence="v2"': 'data-fb-photo-evidence="v3-sharp"',
     }
-    for old, new in replacements.items():
+    for old, new in optional_replacements.items():
         if old in text:
             text = text.replace(old, new, 1)
-        elif new not in text:
-            raise RuntimeError(f"V článku chybí očekávaný obrazový odkaz: {old}")
+
     ARTICLE.write_text(text, encoding="utf-8")
 
 
