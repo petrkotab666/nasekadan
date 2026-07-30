@@ -331,6 +331,11 @@ function ensurePromoStyles(){
     .promo-card-wide{display:grid!important;grid-template-columns:minmax(210px,34%) minmax(0,1fr);padding:0!important;min-height:154px!important}
     .promo-card-wide .promo-banner{height:100%!important;min-height:154px;margin:0!important;border:0;border-right:1px solid var(--line)}
     .promo-card-wide .promo-banner img{width:100%;height:100%;max-width:none!important;max-height:none!important;object-fit:contain;padding:10px;background:#fff}
+    .promo-card-wide.promo-card-full-image{display:block!important;grid-template-columns:none!important;width:100%!important;max-width:1180px!important;min-height:0!important;padding:0!important}
+    .promo-card-wide.promo-card-full-image>.promo-banner{display:block!important;width:100%!important;height:auto!important;min-height:0!important;margin:0!important;border:0!important}
+    .promo-card-wide.promo-card-full-image>.promo-banner img{display:block!important;width:100%!important;height:auto!important;max-width:none!important;max-height:none!important;object-fit:contain!important;padding:0!important;background:#fff}
+    .promo-card-wide.promo-card-full-image>.promo-wide-copy{display:none!important}
+    .featured-cleaning-ad>a.promo-card-full-image{max-width:1180px!important}
     .promo-banner-fallback{background:linear-gradient(135deg,var(--red2),var(--red))!important;color:#fff;font:800 24px/1.2 Georgia,serif;text-align:center;padding:24px}
     .promo-wide-copy{display:flex!important;flex-direction:column;padding:22px 25px;color:inherit!important;min-width:0}
     .promo-wide-copy small{color:var(--red);font-weight:850;text-transform:uppercase;letter-spacing:.06em}
