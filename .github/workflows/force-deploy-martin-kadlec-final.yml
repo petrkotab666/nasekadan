@@ -65,13 +65,13 @@ jobs:
           for n in $(seq 1 20); do
             page="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?force=${GITHUB_SHA}-${n}" || true)"
             home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?force=${GITHUB_SHA}-${n}" || true)"
-            if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home"; then
-              echo 'Článek je veřejný a na titulní stránce.'
+            if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq '100 bodů' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home"; then
+              echo 'Rozšířený článek je veřejný a na titulní stránce.'
               exit 0
             fi
             sleep 5
           done
-          echo 'Veřejné ověření selhalo.' >&2
+          echo 'Veřejné ověření rozšířené verze selhalo.' >&2
           exit 1
 
-# redeploy 2026-07-30 20:44 CEST
+# redeploy 2026-07-30 20:47 CEST
