@@ -20,7 +20,7 @@ stats_metrics_v7.install(base)
 body = base.render_dashboard().decode("utf-8", "replace")
 recent = stats_metrics_v7.latest_published_articles()
 assert len(recent) == 25, f"Očekáváno 25 článků, nalezeno {len(recent)}"
-assert "Posledních 25 publikovaných článků" in body
+assert "Posledních 25 článků" in body
 
 table = re.search(r'<table id="recent-articles">(.*?)</table>', body, re.S)
 assert table, "Tabulka recent-articles chybí"
