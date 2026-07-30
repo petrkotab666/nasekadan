@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "syncRevision": 7,
+  "syncRevision": 8,
   "site": "nasekadan.cz",
   "mode": "filtered",
   "aliases": ["nasekadan", "nasekadan.cz", "Naše Kadaň", "Kadaň"],
@@ -21,10 +21,20 @@
     "nanospace",
     "concept",
     "proalergiky",
+    "apollostore",
+    "atis",
+    "ceskekormidlo",
+    "excursia",
     "haffit",
     "zonky"
   ],
-  "blockedPartnerIds": ["vodafone", "ehub-aface625", "aface625"],
+  "blockedPartnerIds": [
+    "vodafone",
+    "ehub-aface625",
+    "aface625",
+    "invia",
+    "invia-cz"
+  ],
   "allowedCategories": [
     "auto",
     "majetek",
@@ -38,6 +48,6 @@
     "finance"
   ],
   "autoPublish": false,
-  "centralSyncReason": "Audit 28. 7. 2026: lokální reklamní výběr bez Vodafone. Nový snapshot musí odpovídat centrální databázi 2026-07-28 a telekomunikační partneři se vybírají pouze přes konkrétní povolená ID.",
-  "lastConnectionAudit": "2026-07-29T08:39:43Z"
+  "centralSyncReason": "Letní rotace 30. 7. 2026: LastMinuteSlevy jako vlastní cestovní rozcestník; Atis, České kormidlo a Excursia jako schválení cestovní partneři; ApolloStore, Concept a Proalergiky pro klimatizace, ventilátory a ochlazení. Přímá Invia je na Naše Kadaň blokována, protože její zde evidované podklady jsou vedené pro LastMinuteSlevy.cz.",
+  "lastConnectionAudit": "2026-07-30T20:04:00Z"
 }
