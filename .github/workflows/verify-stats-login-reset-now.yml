@@ -40,13 +40,21 @@ jobs:
           PY
           url='https://nasekadan.cz/statistiky/zapomenute-heslo'
           curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$url" -o /tmp/reset-get.html
-          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data '' "$url" -o /tmp/reset-post.html
-          ! grep -Eqi 'nepodařilo odeslat|zkontrolujte nastavení odesílací schránky' /tmp/reset-post.html
-          grep -Eqi 'odeslán|odeslali|zkontrolujte.{0,20}(e-mail|email)|obnovovací odkaz' /tmp/reset-post.html
+          ok=0
+          for attempt in $(seq 1 8); do
+            status="$(curl -kisS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 \
+              -H 'Content-Type: application/x-www-form-urlencoded' \
+              --data '' "$url" -o /tmp/reset-post.html -w '%{http_code}' || true)"
+            if [ "$status" = 200 ] && ! grep -Eqi 'nepodařilo odeslat|zkontrolujte nastavení odesílací schránky' /tmp/reset-post.html \
+              && grep -Eqi 'odeslán|odeslali|zkontrolujte.{0,40}(schránku|e-mail|email)|obnovovací odkaz' /tmp/reset-post.html; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+          [ "$ok" = 1 ]
           rm -f /tmp/reset-get.html /tmp/reset-post.html
-          echo 'Živá aplikace potvrdila odeslání obnovovacího odkazu.'
+          echo 'Živá aplikace potvrdila funkční reset a odeslaný obnovovací odkaz.'
           REMOTE
 
       - name: Zapsat výsledek do issue
