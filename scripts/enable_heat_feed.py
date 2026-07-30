@@ -5,7 +5,8 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = '<script src="/horko-feed.js?v=20260728-heat-2"></script>'
+VERSION = '20260730-heat-rotation-1'
+SCRIPT = f'<script src="/horko-feed.js?v={VERSION}"></script>'
 SCRIPT_RE = re.compile(
     r'\s*<script\s+src=["\']/horko-feed\.js(?:\?[^"\']*)?["\'][^>]*></script>\s*',
     re.IGNORECASE,
@@ -52,9 +53,10 @@ def main() -> int:
         raise RuntimeError('Nebyl nalezen žádný veřejný článek.')
 
     failures = []
+    expected = f'/horko-feed.js?v={VERSION}'
     for path in sorted((ROOT / 'clanky').glob('*.html')):
         text = path.read_text(encoding='utf-8')
-        if is_public_article(path, text) and text.count('/horko-feed.js?v=20260728-heat-2') != 1:
+        if is_public_article(path, text) and text.count(expected) != 1:
             failures.append(str(path.relative_to(ROOT)))
     if failures:
         raise RuntimeError('Feed není právě jednou v článcích: ' + ', '.join(failures))
