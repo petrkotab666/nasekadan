@@ -1,0 +1,76 @@
+name: Publikovat nové vedení Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-hospital-leadership-20260730.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-hospital-leadership-20260730
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Aktualizovat titulku, archiv a sociální grafiku
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python -m pip install --quiet Pillow
+          python scripts/enforce_article_visibility.py
+          python scripts/generate_social_cards.py --write --check
+          git config user.name "Naše Kadaň automat"
+          git config user.email "actions@users.noreply.github.com"
+          git add "$ARTICLE" index.html clanky/index.html social/
+          git commit -m "Nasadit zprávu o novém vedení Nemocnice Kadaň" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Nasadit přímo na OVH
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html /var/www/nasekadan/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+          sudo cp -a social/. /var/www/nasekadan/social/
+          REMOTE
+
+      - name: Ověřit veřejné zveřejnění
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 18); do
+            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?check=$n" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?check=$n" || true)"
+            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?check=$n" || true)"
+            if grep -Fq 'Nemocnice Kadaň mění vedení' <<<"$article" \
+              && grep -Fq 'nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$home" \
+              && grep -Fq 'nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$archive"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
