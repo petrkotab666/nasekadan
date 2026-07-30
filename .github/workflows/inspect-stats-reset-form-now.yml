@@ -1,4 +1,4 @@
-name: Zjistit formulář obnovy hesla statistik
+name: Zjistit formulář a odpověď obnovy hesla statistik
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Načíst a bezpečně popsat formulář
+      - name: Načíst formulář a bezpečně popsat odpověď POST
         shell: bash
         run: |
           set -euo pipefail
@@ -28,13 +28,20 @@ jobs:
           ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' > "$RUNNER_TEMP/form.txt"
           set -Eeuo pipefail
           url='https://nasekadan.cz/statistiky/zapomenute-heslo'
-          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$url" -o /tmp/reset-form.html
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$url" -o /tmp/reset-get.html
+          curl -kisS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data '' "$url" -o /tmp/reset-post.raw
           python3 - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
           import re
 
-          html=Path('/tmp/reset-form.html').read_text(encoding='utf-8',errors='replace')
+          get_html=Path('/tmp/reset-get.html').read_text(encoding='utf-8',errors='replace')
+          raw=Path('/tmp/reset-post.raw').read_text(encoding='utf-8',errors='replace')
+          parts=raw.split('\r\n\r\n')
+          post_html=parts[-1]
+
           class P(HTMLParser):
               def handle_starttag(self,tag,attrs):
                   if tag in ('form','input','button'):
@@ -44,11 +51,14 @@ jobs:
                               v='[HIDDEN]'
                           safe.append((k,v))
                       print(tag, safe)
-          P().feed(html)
-          text=re.sub(r'<[^>]+>',' ',html)
-          print('TEXT:',re.sub(r'\s+',' ',text).strip()[:1600])
+          P().feed(get_html)
+          get_text=re.sub(r'<[^>]+>',' ',get_html)
+          post_text=re.sub(r'<[^>]+>',' ',post_html)
+          print('GET TEXT:',re.sub(r'\s+',' ',get_text).strip()[:1000])
+          print('POST TEXT:',re.sub(r'\s+',' ',post_text).strip()[:1800])
+          print('POST HEADERS:', ' | '.join(line for line in parts[0].splitlines()[:12] if line.lower().startswith(('http/','location:','content-type:'))))
           PY
-          rm -f /tmp/reset-form.html
+          rm -f /tmp/reset-get.html /tmp/reset-post.raw
           REMOTE
 
       - name: Zapsat zjištění
@@ -58,4 +68,4 @@ jobs:
           script: |
             const fs=require('fs'); let log='';
             try {log=fs.readFileSync(`${process.env.RUNNER_TEMP}/form.txt`,'utf8')} catch {}
-            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY RESET FORM] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-12000).replace(/```/g,'---')+'\n```'});
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY RESET RESPONSE] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-12000).replace(/```/g,'---')+'\n```'});
