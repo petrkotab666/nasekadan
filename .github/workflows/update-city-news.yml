@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - data/city-sources.json
+      - data/organizations.json
       - city-news.js
       - scripts/update_city_news.py
       - .github/workflows/update-city-news.yml
@@ -17,7 +18,7 @@ permissions:
 
 concurrency:
   group: nasekadan-city-news
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   update-and-deploy:
@@ -32,7 +33,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Aktualizovat veřejné zdroje
+      - name: Aktualizovat všechny veřejné zdroje a organizace
         shell: bash
         run: |
           set -euo pipefail
@@ -40,6 +41,7 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
+
           path = Path('data/city-news.json')
           data = json.loads(path.read_text(encoding='utf-8'))
           items = data.get('items')
@@ -48,7 +50,35 @@ jobs:
           for item in items:
               if not item.get('title') or not str(item.get('source', '')).startswith('http'):
                   raise SystemExit('Přehled obsahuje neplatnou položku.')
-          print(f'Ověřeno {len(items)} položek veřejných zdrojů.')
+
+          coverage = data.get('monitoringCoverage') or {}
+          directory_total = int(coverage.get('directoryOrganizations') or 0)
+          monitored = int(coverage.get('monitoredDirectoryOrganizations') or 0)
+          percent = float(coverage.get('coveragePercent') or 0)
+          unique_sources = int(coverage.get('totalUniqueSources') or 0)
+          missing = coverage.get('missingDirectoryOrganizations') or []
+          statuses = data.get('sourceStatus') or []
+
+          if directory_total < 60:
+              raise SystemExit(f'Adresář obsahuje jen {directory_total} organizací; očekáváno nejméně 60.')
+          if monitored != directory_total or percent != 100:
+              raise SystemExit(
+                  f'Monitoring nepokrývá celý adresář: {monitored}/{directory_total}, '
+                  f'chybějí: {missing}'
+              )
+          if len(statuses) != unique_sources:
+              raise SystemExit(
+                  f'Počet kontrolovaných stavů {len(statuses)} neodpovídá '
+                  f'{unique_sources} unikátním zdrojům.'
+              )
+          if not coverage.get('directoryIsCanonicalRegistry'):
+              raise SystemExit('Adresář organizací není označen jako kanonický registr monitoringu.')
+
+          failed = sum(1 for status in statuses if status.get('status') == 'failed')
+          print(
+              f'Ověřeno {len(items)} položek; celý adresář {monitored}/{directory_total}; '
+              f'{unique_sources} unikátních zdrojů; {failed} přímo nedostupných zdrojů.'
+          )
           PY
 
       - name: Uložit změnu dat do hlavní větve
@@ -61,7 +91,7 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add data/city-news.json
-            git commit -m 'Automaticky aktualizovat veřejné zdroje'
+            git commit -m 'Automaticky aktualizovat všechny organizace a veřejné zdroje'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
@@ -90,24 +120,37 @@ jobs:
           rm -f /tmp/city-news.json /tmp/city-news.js
           REMOTE
 
-      - name: Ověřit živý přehled
+      - name: Ověřit živý přehled a úplné pokrytí adresáře
         id: verify
         shell: bash
         run: |
           set -euo pipefail
-          token="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          token="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s)"
           curl -4 -kfsS --max-time 30 "https://nasekadan.cz/data/city-news.json?check=${token}" -o /tmp/city-news-live.json
           python3 - <<'PY'
           import json
+
           data = json.load(open('/tmp/city-news-live.json', encoding='utf-8'))
           items = data.get('items')
+          coverage = data.get('monitoringCoverage') or {}
+          statuses = data.get('sourceStatus') or []
           if not isinstance(items, list) or len(items) < 3:
               raise SystemExit('Živý datový přehled neobsahuje dost položek.')
-          print(f'Živý datový přehled obsahuje {len(items)} položek.')
+          total = int(coverage.get('directoryOrganizations') or 0)
+          monitored = int(coverage.get('monitoredDirectoryOrganizations') or 0)
+          unique_sources = int(coverage.get('totalUniqueSources') or 0)
+          if total < 60 or monitored != total or float(coverage.get('coveragePercent') or 0) != 100:
+              raise SystemExit(f'Živý monitoring nepokrývá celý adresář: {monitored}/{total}.')
+          if len(statuses) != unique_sources:
+              raise SystemExit('Živý přehled nemá stav pro každý unikátní zdroj.')
+          print(
+              f'Živě ověřeno: {len(items)} položek, {monitored}/{total} organizací, '
+              f'{unique_sources} zdrojů.'
+          )
           PY
           curl -4 -kfsS --max-time 30 "https://nasekadan.cz/prehled-zdroju/?check=${token}" | grep -Fq 'Přehled veřejných zdrojů'
           curl -4 -kfsS --max-time 30 "https://nasekadan.cz/city-news.js?check=${token}" | grep -Fq 'cityNewsFallback'
-          echo 'HOTOVO: živý přehled veřejných zdrojů i záložní režim jsou funkční.'
+          echo 'HOTOVO: celý adresář organizací je napojený na živý monitoring.'
 
       - name: Zapsat stav aktualizace
         if: always()
@@ -122,7 +165,8 @@ jobs:
               checked_at_utc: new Date().toISOString(),
               trigger_commit: context.sha,
               run_id: context.runId,
-              public_verification: process.env.VERIFY || 'skipped'
+              public_verification: process.env.VERIFY || 'skipped',
+              canonical_registry: 'data/organizations.json'
             };
             const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
             let sha;
@@ -137,7 +181,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat stav aktualizace veřejných zdrojů: ${status.status}`,
+              message: `Zapsat stav monitoringu celého adresáře: ${status.status}`,
               content,
               ...(sha ? { sha } : {})
             });
