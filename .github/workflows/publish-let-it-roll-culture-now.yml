@@ -1,4 +1,4 @@
-name: Okamžitě zveřejnit Let It Roll v kulturním přehledu
+name: Okamžitě zveřejnit aktuální kulturní přehled
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: nasekadan-let-it-roll-live
+  group: nasekadan-current-culture-live
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +50,8 @@ jobs:
           test -f clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
           grep -q 'data-let-it-roll-2026' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
           grep -q 'https://letitroll.cz/akce/let-it-roll-2026/' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          grep -q 'data-lidak-dj-phantom' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
+          grep -q 'Best of 80’s &amp; 90’s s DJ Phantomem na Liďáku' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
           if grep -q 'Prověřili jsme také Most, Litvínov.*nenašli mimořádnou velkou událost' clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html; then
             echo 'Zdroj stále obsahuje nepravdivou větu o Mostu a Litvínovu.' >&2
             exit 1
@@ -58,11 +60,11 @@ jobs:
             clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html \
             /var/www/nasekadan/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html
           SOURCE_SHA="$(git rev-parse HEAD)"
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-let-it-roll-article\n' \
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-current-culture-article\n' \
             "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
           REMOTE
 
-      - name: Ověřit Let It Roll na veřejném webu
+      - name: Ověřit kulturní přehled na veřejném webu
         id: verify
         shell: bash
         run: |
@@ -72,18 +74,21 @@ jobs:
             curl -4 -kfsS --max-time 25 \
               -H 'Cache-Control: no-cache, no-store, max-age=0' \
               -H 'Pragma: no-cache' \
-              "${URL}?let_it_roll=${GITHUB_RUN_ID}-${attempt}-$(date +%s)" \
+              "${URL}?culture_check=${GITHUB_RUN_ID}-${attempt}-$(date +%s)" \
               -o /tmp/culture-live.html || true
             if grep -q 'data-let-it-roll-2026' /tmp/culture-live.html 2>/dev/null \
               && grep -q 'Let It Roll 2026: největší regionální hudební akce týdne' /tmp/culture-live.html 2>/dev/null \
               && grep -q 'https://letitroll.cz/akce/let-it-roll-2026/' /tmp/culture-live.html 2>/dev/null \
+              && grep -q 'data-lidak-dj-phantom' /tmp/culture-live.html 2>/dev/null \
+              && grep -q 'Best of 80’s &amp; 90’s s DJ Phantomem na Liďáku' /tmp/culture-live.html 2>/dev/null \
+              && grep -q 'SOBOTA 1. SRPNA · 17:00–22:00' /tmp/culture-live.html 2>/dev/null \
               && ! grep -q 'Prověřili jsme také Most, Litvínov.*nenašli mimořádnou velkou událost' /tmp/culture-live.html 2>/dev/null; then
-              echo 'Let It Roll je veřejně viditelný.'
+              echo 'Aktuální kulturní přehled včetně DJ Phantoma je veřejně viditelný.'
               exit 0
             fi
             sleep 5
           done
-          echo 'Veřejný článek stále nepotvrdil Let It Roll.' >&2
+          echo 'Veřejný článek stále nepotvrdil sobotní program DJ Phantoma.' >&2
           exit 1
 
       - name: Zapsat výsledek nasazení
@@ -102,6 +107,7 @@ jobs:
               sourceSha: context.sha,
               serverDeploy: process.env.DEPLOY_OUTCOME || 'skipped',
               publicVerification: process.env.VERIFY_OUTCOME || 'skipped',
+              requiredContent: ['Let It Roll 2026', 'Best of 80’s & 90’s s DJ Phantomem'],
               publicUrl: 'https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html'
             };
             const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
@@ -114,6 +120,6 @@ jobs:
             }
             await github.rest.repos.createOrUpdateFileContents({
               owner: context.repo.owner, repo: context.repo.repo, path, branch: 'main',
-              message: `Zapsat nasazení Let It Roll: ${status.status} [skip ci]`,
+              message: `Zapsat nasazení kulturního přehledu: ${status.status} [skip ci]`,
               content, ...(sha ? {sha} : {})
             });
