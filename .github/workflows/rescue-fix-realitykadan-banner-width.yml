@@ -1,0 +1,118 @@
+name: Jednorázově opravit šířku bannerů Reality Kadaň
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rescue-fix-realitykadan-banner-width
+  cancel-in-progress: false
+
+jobs:
+  fix-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit plnou šířku bannerů
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/install_realitykadan_banners.py
+          grep -Fq '.promo-card-wide.promo-card-full-image{' reklamy.js
+          grep -Fq 'grid-template-columns:none!important' reklamy.js
+          grep -Fq 'featured-cleaning-ad>a.promo-card-full-image' reklamy.js
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add reklamy.js reklamy-oprava-obrazku.js scripts/install_realitykadan_banners.py
+          git commit -m 'Opravit bannery Reality Kadaň přes celou šířku' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit opravené skripty na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/rk-width"
+          mkdir -p "$RUNNER_TEMP/rk-width"
+          cp reklamy.js reklamy-oprava-obrazku.js "$RUNNER_TEMP/rk-width/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/rk-width" ubuntu@57.129.43.215:/tmp/rk-width
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -m 0644 /tmp/rk-width/reklamy.js /var/www/nasekadan/reklamy.js
+          sudo install -m 0644 /tmp/rk-width/reklamy-oprava-obrazku.js /var/www/nasekadan/reklamy-oprava-obrazku.js
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/rk-width/reklamy.js nasekadan-web:/usr/share/nginx/html/reklamy.js
+            sudo docker cp /tmp/rk-width/reklamy-oprava-obrazku.js nasekadan-web:/usr/share/nginx/html/reklamy-oprava-obrazku.js
+          fi
+          rm -rf /tmp/rk-width
+          grep -Fq '.promo-card-wide.promo-card-full-image{' /var/www/nasekadan/reklamy.js
+          REMOTE
+
+      - name: Veřejně ověřit opravu bez cache
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/reklamy.js?v=$stamp")"
+          grep -Fq '.promo-card-wide.promo-card-full-image{' <<<"$js"
+          grep -Fq 'grid-template-columns:none!important' <<<"$js"
+          grep -Fq 'width:100%!important;height:auto!important' <<<"$js"
+          echo 'HOTOVO: Reality Kadaň vyplní celou reklamní kartu bez bílé prázdné části.'
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'realitykadan-banner-width-status.json';
+            const status = {
+              status: process.env.VERIFY === 'success' ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              run_id: context.runId,
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat opravu šířky banneru Reality Kadaň: ${status.status}`,
+              content,
+              ...(sha ? { sha } : {})
+            });
