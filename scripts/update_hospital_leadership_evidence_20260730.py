@@ -4,70 +4,56 @@ from pathlib import Path
 PATH = Path('clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html')
 text = PATH.read_text(encoding='utf-8')
 
-text = text.replace('2026-07-30T10:05:00+02:00', '2026-07-30T10:25:00+02:00')
-text = text.replace('Aktuální zpráva · aktualizováno v 10:05', 'Aktuální zpráva · aktualizováno v 10:25')
-text = text.replace('k 30. červenci v 10:05 oficiálně svoláno', 'k 30. červenci v 10:25 oficiálně svoláno')
-text = text.replace('kontrola 30. července 2026 v 10:05', 'kontrola 30. července 2026 v 10:25')
-text = text.replace('K 10:05 nebylo možné', 'K 10:25 nebylo možné')
+# Posun času poslední ověřené redakční aktualizace.
+text = text.replace('2026-07-30T10:25:00+02:00', '2026-07-30T11:20:00+02:00')
+text = text.replace('Aktuální zpráva · aktualizováno v 10:25', 'Aktuální zpráva · aktualizováno v 11:20')
+text = text.replace('k 30. červenci v 10:25 oficiálně svoláno', 'k 30. červenci v 11:20 oficiálně svoláno')
+text = text.replace('k 30. červenci v 10:25 nebyl', 'k 30. červenci v 11:20 nebyl')
+text = text.replace('Poslední ověřená aktualizace 30. července 2026 v 10:25.', 'Poslední ověřená aktualizace 30. července 2026 v 11:20.')
 
-css_anchor = '    .verified-box{background:#f2f7f5;border:1px solid #bad3c7;border-radius:18px;padding:23px 25px;margin:28px 0}.verified-box strong{font:800 23px Georgia,serif;display:block;color:#245b43;margin-bottom:7px}\n'
-css_add = "    .timeline{border-left:4px solid #d7dde0;margin:28px 0;padding-left:24px}.timeline div{position:relative;padding:0 0 24px}.timeline div:before{content:'';position:absolute;left:-33px;top:7px;width:14px;height:14px;border-radius:50%;background:var(--red);border:4px solid #f7f8f8}.timeline b{display:block;font:800 21px Georgia,serif}.timeline p{margin:5px 0}\n"
-if '.timeline{' not in text:
-    text = text.replace(css_anchor, css_anchor + css_add)
-
-old_update = '<div class="update-box"><strong>Článek průběžně doplňujeme</strong><p>Žádáme město, nemocnici i odcházejícího jednatele o potvrzení, zda mu náleží jakékoli odstupné nebo jiné odchodové plnění, v jaké výši a podle jakého smluvního ustanovení. Zjišťujeme také, zda už byla městu doručena žádost zastupitelů o mimořádné zasedání.</p></div>'
-new_update = '<div class="update-box"><strong>Aktualizace 30. července v 10:25</strong><p>Ve zveřejněných usneseních rady města z 11. června, 25. června a 15. července jsme nenašli schválení odstupného ani jiné odchodové kompenzace pro Martina Krušinu. Rozhodující výpis z mimořádné rady města konané 29. července ale zatím zveřejněn nebyl. Mimořádné zastupitelstvo také dosud není oficiálně svolané.</p></div>'
+old_update = '<div class="update-box"><strong>Aktualizace 30. července v 10:25</strong><p>Ve zveřejněných usneseních rady města z 11. června, 25. června a 15. července jsme nenašli schválení odstupného ani jiné odchodové kompenzace pro Martina Krušinu. Rozhodující výpis z mimořádné rady města konané 29. července ale zatím zveřejněn nebyl. Mimořádné zastupitelstvo také dosud není oficiálně svolané.</p></div>'
+new_update = '<div class="update-box"><strong>Aktualizace 30. července v 11:20</strong><p>Rozšířili jsme kontrolu o registr smluv, úřední desku, veřejná vyjádření, soukromou e-petici a dřívější zprávy vedení nemocnice. Konkrétní odstupné Martina Krušiny stále není doloženo. Částka 6,48 milionu korun, která se objevila ve veřejné debatě, není odstupným: Petr Hossner ji uvedl jako vlastní výpočet možné povinnosti jednatele vracet až dvouletou odměnu v hypotetickém insolvenčním řízení. Výpis z mimořádné rady 29. července ani pozvánka na mimořádné zastupitelstvo dosud zveřejněny nejsou.</p></div>'
 text = text.replace(old_update, new_update)
 
 insert_anchor = '  <h2>Mimořádné zastupitelstvo zatím není oficiálně svolané</h2>'
-section = '''  <h2>Dokumenty ukazují, že změna se připravovala nejméně od června</h2>
-  <div class="timeline">
-    <div><b>11. června: Pavel Marek vstoupil do dozorčí rady</b><p>Rada města jej zvolila členem dozorčí rady s účinností od 12. června a výslovně povolila jeho souběžné působení v představenstvu společnosti MMN.</p></div>
-    <div><b>11. června: zadání transformačních variant</b><p>Jednatel nemocnice měl ve spolupráci s předsedou dozorčí rady připravit varianty ekonomického, provozního a zdravotnického směřování nemocnice, včetně omezení nároků na rozpočet města a možné spolupráce s Ústeckým krajem.</p></div>
-    <div><b>25. června: ztráta 46,139 milionu korun</b><p>Rada jako valná hromada schválila účetní závěrku za rok 2025 se ztrátou 46,139 milionu korun. Současně schválila smlouvu o výkonu funkce předsedy dozorčí rady s úpravou článku 4; veřejný výpis však obsah tohoto článku ani výši odměny neuvádí.</p></div>
-    <div><b>15. července: termín zkrácen na 4. září</b><p>Město požadovalo dopracování financování do konce roku 2026 a výhledu na rok 2027, podklady pro spolupráci s krajem a posouzení přeměny nemocnice na akciovou společnost. Termín transformačních podkladů posunulo z 30. září na 4. září.</p></div>
-    <div><b>29. července: mimořádná rada města</b><p>Její svolání bylo schváleno už 15. července. Právě po této schůzi nemocnice oznámila změnu vedení, výpis usnesení ale k 30. červenci v 10:25 nebyl na webu města zveřejněn.</p></div>
+section = '''  <h2>Další veřejné stopy: co potvrzují a co nikoli</h2>
+  <div class="fact-grid">
+    <div class="fact-card"><span>Registr smluv</span><strong>Bez dohledané manažerské smlouvy</strong><p>Ve veřejně vyhledatelných záznamech Nemocnice Kadaň jsme nenašli smlouvu o výkonu funkce, pracovní smlouvu, dohodu o ukončení ani odchodové plnění Martina Krušiny, Pavla Marka nebo Jiřího Vlase. Nepřítomnost v registru sama o sobě nedokazuje, že dokument neexistuje nebo nemusí být zveřejněn.</p></div>
+    <div class="fact-card"><span>Úřední deska</span><strong>Bez pozvánky na mimořádné zastupitelstvo</strong><p>Úřední deska zveřejňuje zprávu nemocnice za rok 2025 a další městské materiály, ale při kontrole neobsahovala termín ani program mimořádného zastupitelstva kvůli změně vedení nemocnice.</p></div>
   </div>
+  <h3>Částka 6,48 milionu není odstupné</h3>
+  <p>Zastupitel a bývalý šéf nemocnice Petr Hossner ve veřejné výzvě ze 14. července tvrdil, že nemocnici může hrozit úpadek. V této souvislosti vypočetl částku až 6,48 milionu korun jako možnou dvouletou odměnu, kterou by podle jeho právního názoru mohl insolvenční soud po jednateli požadovat zpět. Jde o Hossnerovo tvrzení a hypotetický scénář, nikoli o potvrzený insolvenční stav, schválenou platbu ani odstupné vyplácené Krušinovi.</p>
+  <h3>Soukromá petice není žádostí třetiny zastupitelů</h3>
+  <p>Na soukromém portálu e-petice.cz byla 21. července zveřejněna petice Vlasty Štaubrové za zachování nemocnice ve vlastnictví města. Požaduje stabilizační plán, pravidelné zveřejňování výsledků, nezávislé posouzení řízení a případné personální změny. Při kontrole portál uváděl 11 elektronických podpisů. Tato občanská iniciativa ale není formální žádostí alespoň třetiny členů zastupitelstva o svolání mimořádného zasedání.</p>
+  <h3>Veřejná hodnocení výsledků nemocnice se rozcházejí</h3>
+  <p>Martin Krušina v květnu 2025 veřejně uváděl, že nemocnice zvyšuje počet pacientů a výkonů, stabilizuje personál a drží se hospodářského plánu. Petr Hossner naopak v roce 2026 tvrdil, že produkce a úhrady klesají a finanční situace je vážná. Jde o protichůdná vyjádření zainteresovaných osob. Účetní ztráta 46,139 milionu korun za rok 2025 je doložená usnesením rady, ale sama nevysvětluje příčiny ztráty ani konkrétní důvod Krušinova odvolání.</p>
+  <div class="callout"><strong>Rozhodující dokumenty stále chybějí</strong><p>Pro potvrzení odchodového plnění potřebujeme smlouvu o výkonu funkce, případný pracovní kontrakt či dohodu o ukončení a příslušné schválení. Pro objasnění personální změny je klíčový také dosud nezveřejněný výpis usnesení mimořádné rady města z 29. července.</p></div>
 
 '''
-if 'Dokumenty ukazují, že změna se připravovala' not in text:
+if 'Další veřejné stopy: co potvrzují a co nikoli' not in text:
     text = text.replace(insert_anchor, section + insert_anchor)
 
+# Zpřesnění seznamu otevřených otázek.
 text = text.replace(
-    'V obchodním rejstříku byl 21. července 2026 zapsán jako člen dozorčí rady Nemocnice Kadaň. Aktuální oznámení nemocnice jej označuje za dosavadního předsedu dozorčí rady. Nyní přechází do výkonné funkce jednatele.',
-    'Rada města jej zvolila členem dozorčí rady už 11. června 2026 s účinností od následujícího dne. Aktuální oznámení nemocnice jej označuje za dosavadního předsedu dozorčí rady. Z kontrolní pozice nyní přechází do výkonné funkce jednatele.'
+    '<li>Zda Krušinovi vznikl nárok na odchodové plnění, podle jaké smlouvy a v jaké výši.</li>',
+    '<li>Zda Krušinovi vznikl nárok na odchodové plnění, podle jaké smlouvy a v jaké výši; veřejně zmiňovaných 6,48 milionu korun odstupným není.</li>'
 )
 
-text = text.replace(
-    '<li>Zda Martin Krušina obdrží odstupné nebo jiné odchodové plnění, v jaké výši a podle jaké smlouvy.</li>',
-    '<li>Zda Martin Krušina obdrží odstupné nebo jiné odchodové plnění, v jaké výši a podle jaké smlouvy.</li>\n    <li>Jaká přesná usnesení přijala mimořádná rada města 29. července.</li>'
-)
-
-source_anchor = '    <li><a href="https://www.mesto-kadan.cz/cs/mesto/zastupitelstvo-mesta/terminy-zasedani-zastupitelstva.html" target="_blank" rel="noopener noreferrer">Město Kadaň – termíny zasedání zastupitelstva</a>, kontrola 30. července 2026.</li>\n'
-source_add = '''    <li><a href="https://www.mesto-kadan.cz/filemanager/files/5076063.pdf" target="_blank" rel="noopener noreferrer">Město Kadaň – výpis usnesení 37. rady města ze dne 11. června 2026</a>, zejména usnesení 371 až 377.</li>
-    <li><a href="https://www.mesto-kadan.cz/filemanager/files/5090957.pdf" target="_blank" rel="noopener noreferrer">Město Kadaň – výpis usnesení mimořádné rady města ze dne 25. června 2026</a>, zejména usnesení 510 až 515.</li>
-    <li><a href="https://www.mesto-kadan.cz/filemanager/files/5105200.pdf" target="_blank" rel="noopener noreferrer">Město Kadaň – výpis usnesení mimořádné rady města ze dne 15. července 2026</a>, zejména usnesení 559 až 561.</li>
+source_anchor = '    <li><a href="https://www.mesto-kadan.cz/cs/mesto/zastupitelstvo-mesta/terminy-zasedani-zastupitelstva.html" target="_blank" rel="noopener noreferrer">Město Kadaň – termíny zasedání zastupitelstva</a>.</li>\n'
+source_add = '''    <li><a href="https://smlouvy.gov.cz/vyhledavani?party_idnum=25479300" target="_blank" rel="noopener noreferrer">Registr smluv – vyhledávání smluv Nemocnice Kadaň, IČO 25479300</a>, kontrola 30. července 2026.</li>
+    <li><a href="https://petrhossnerkadan.cz/aktuality/upozorneni-na-povinnosti-jednatele-nemocnice-kadan-a-vyzva-k-prevenci-dalsich-skod/" target="_blank" rel="noopener noreferrer">Petr Hossner – veřejná výzva jednateli ze 14. července 2026</a>; jde o stanovisko zastupitele a bývalého vedení, nikoli úřední závěr.</li>
+    <li><a href="https://e-petice.cz/es/petitions/?display=1&amp;filt1=1&amp;filt2=5" target="_blank" rel="noopener noreferrer">e-petice.cz – Petice za zachování Nemocnice Kadaň ve vlastnictví města</a>, zveřejněná 21. července 2026 na soukromém portálu.</li>
+    <li><a href="https://www.nemkadan.cz/pro-verejnost/verejnost/aktuality/zprava-jednatele-nemocnice-kadan-sro-mgr-martina-krusiny-mba-682cs.html" target="_blank" rel="noopener noreferrer">Nemocnice Kadaň – veřejná zpráva Martina Krušiny z 7. května 2025</a>.</li>
 '''
-if 'filemanager/files/5076063.pdf' not in text:
+if 'petrhossnerkadan.cz/aktuality/upozorneni-na-povinnosti' not in text:
     text = text.replace(source_anchor, source_add + source_anchor)
 
-text = text.replace(
-    'Aktualizováno v 10:05 o prověření odstupného a stavu možného mimořádného zastupitelstva. Text doplníme po obdržení vyjádření.',
-    'Aktualizováno v 10:25 o časovou osu rozhodnutí rady města, hospodářskou ztrátu za rok 2025 a dosud nezveřejněný výpis z mimořádné rady 29. července. Text doplníme po obdržení vyjádření.'
-)
-text = text.replace(
-    '<li>Výše odstupného není doložena</li><li>Mimořádné zastupitelstvo není oficiálně svoláno</li>',
-    '<li>Výše odstupného není doložena</li><li>Ztráta za rok 2025 činila 46,139 mil. Kč</li><li>Výpis z rady 29. července zatím chybí</li><li>Mimořádné zastupitelstvo není oficiálně svoláno</li>'
-)
-text = text.replace(
-    'Právní titul a výši případného odchodového plnění, existenci žádosti zastupitelů, důvod odvolání a smluvní podmínky nového vedení.',
-    'Výpis z mimořádné rady 29. července, právní titul a výši případného odchodového plnění, existenci žádosti zastupitelů, důvod odvolání a smluvní podmínky nového vedení.'
-)
-
-if '46,139 milionu korun' not in text:
-    raise SystemExit('Aktualizace se nevložila')
-if '2026-07-30T10:25:00+02:00' not in text:
+if 'Aktualizace 30. července v 11:20' not in text:
+    raise SystemExit('Nová aktualizace se nevložila')
+if 'Částka 6,48 milionu není odstupné' not in text:
+    raise SystemExit('Chybí korekce částky 6,48 milionu')
+if '2026-07-30T11:20:00+02:00' not in text:
     raise SystemExit('Čas aktualizace se nezměnil')
 
 PATH.write_text(text, encoding='utf-8', newline='\n')
-print('Článek doplněn o časovou osu a veřejné dokumenty.')
+print('Článek doplněn o registr smluv, veřejná stanoviska, petici a korekci částky 6,48 mil. Kč.')
