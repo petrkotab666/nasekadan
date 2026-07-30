@@ -1,0 +1,89 @@
+name: Vyčistit LastMinuteSlevy z rotace
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/clean-lastminuteslevy-marker.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main, fetch-depth: 0}
+      - name: Vyčistit marker a zvýšit verzi
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          js=Path('reklamy-oprava-obrazku.js');t=js.read_text(encoding='utf-8')
+          old="for(let i=promoItems.length-1;i>=0;i--){if(itemId(promoItems[i])==='lastminuteslevy-cz')promoItems.splice(i,1);}"
+          new="for(let i=promoItems.length-1;i>=0;i--){if(itemId(promoItems[i]).replace(/-/g,'').startsWith('lastminute'+'slevy'))promoItems.splice(i,1);}"
+          if old not in t: raise SystemExit('Očekávaný ochranný řádek nebyl nalezen.')
+          js.write_text(t.replace(old,new),encoding='utf-8')
+          for name in ('scripts/ensure_summer_ad_rotation.py','scripts/normalize_articles.py'):
+              p=Path(name);v=p.read_text(encoding='utf-8')
+              for oldv in ('20260730-pojistime-rotation-1','20260730-pojistime-rotation-2','20260730-pojistime-rotation-3'):v=v.replace(oldv,'20260730-pojistime-rotation-4')
+              p.write_text(v,encoding='utf-8')
+          PY
+          python3 scripts/ensure_summer_ad_rotation.py --write --check
+          node --check reklamy-oprava-obrazku.js
+          ! grep -Fq 'lastminuteslevy-cz' reklamy-oprava-obrazku.js
+          grep -Fq 'pojistime-family-tower' reklamy-oprava-obrazku.js
+          git config user.name 'github-actions[bot]';git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reklamy-oprava-obrazku.js scripts/ensure_summer_ad_rotation.py scripts/normalize_articles.py -- '*.html' ':!nahled/**' ':!.github/**'
+          git commit -m 'Odstranit poslední marker LastMinuteSlevy z rotace'
+          for n in 1 2 3; do git push origin HEAD:main && break || git pull --rebase origin main; done
+      - name: Připravit SSH a nasadit
+        shell: bash
+        run: |
+          set -Eeuo pipefail;umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do value="${!name:-}";if [[ -n "$value" ]];then printf '%s\n' "$value"|tr -d '\r'>"$RUNNER_TEMP/key";break;fi;done
+          test -s "$RUNNER_TEMP/key";chmod 600 "$RUNNER_TEMP/key"
+          scp -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new reklamy-oprava-obrazku.js ubuntu@57.129.43.215:/tmp/reklamy-oprava-obrazku.js
+          ssh -i "$RUNNER_TEMP/key" -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          sudo install -m 0644 /tmp/reklamy-oprava-obrazku.js /var/www/nasekadan/reklamy-oprava-obrazku.js
+          rm -f /tmp/reklamy-oprava-obrazku.js
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('/var/www/nasekadan');v='20260730-pojistime-rotation-4';r=re.compile(r'(<script\b[^>]*src=["\'])([^"\']*reklamy-oprava-obrazku\.js)(?:\?[^"\']*)?(["\'][^>]*>\s*</script>)',re.I)
+          for p in root.rglob('*.html'):
+              if any(x in {'.git','.github','nahled'} for x in p.relative_to(root).parts):continue
+              try:t=p.read_text(encoding='utf-8')
+              except UnicodeDecodeError:continue
+              n=r.sub(lambda m:f'{m.group(1)}{m.group(2)}?v={v}{m.group(3)}',t)
+              if n!=t:p.write_text(n,encoding='utf-8')
+          PY
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo nginx -t && sudo systemctl reload nginx
+          ! grep -Fq 'lastminuteslevy-cz' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          REMOTE
+      - name: Veřejná kontrola a zápis
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const get=async p=>{const r=await fetch(`https://nasekadan.cz${p}?v=${Date.now()}`);return r.ok?await r.text():''};
+            let report={status:'failed'};
+            for(let i=0;i<20;i++){
+              const [home,js,overlay,a,b,s,t]=await Promise.all(['/','/reklamy-oprava-obrazku.js','/assets/affiliate-site-travel-overlay.json','/assets/reklamy/pojistime-family-wide-a.svg','/assets/reklamy/pojistime-family-wide-b.svg','/assets/reklamy/pojistime-family-square.svg','/assets/reklamy/pojistime-family-tower.svg'].map(get));
+              report={checked_at_utc:new Date().toISOString(),status:'failed',homepage_uses_pojistime_version:home.includes('20260730-pojistime-rotation-4'),live_rotation_has_wide:js.includes('pojistime-family-wide-a')&&js.includes('pojistime-family-wide-b'),live_rotation_has_square:js.includes('pojistime-family-square'),live_rotation_has_tower:js.includes('pojistime-family-tower'),lastminuteslevy_absent:!js.includes('lastminuteslevy-cz')&&!overlay.includes('lastminuteslevy-cz'),assets_public:[a,b,s,t].every(x=>x.includes('<svg'))};
+              if(Object.entries(report).filter(([k])=>!['checked_at_utc','status'].includes(k)).every(([,v])=>v)){report.status='success';break}await new Promise(r=>setTimeout(r,10000));
+            }
+            const path='pojistime-banner-live-status.json',content=Buffer.from(JSON.stringify(report,null,2)+'\n').toString('base64');let sha;try{const c=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});sha=c.data.sha}catch(e){}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat čistou rotaci Pojistime.to: ${report.status}`,content,...(sha?{sha}:{})});
+            if(report.status!=='success')core.setFailed('Veřejná rotace není kompletní.');
