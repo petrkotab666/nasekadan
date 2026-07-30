@@ -1,0 +1,115 @@
+name: Dohledat soutěže a penále lávky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/research-lavka-procurement-and-penalties-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Projít agregátory zakázek, městské dokumenty a účetní stopy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-procurement-penalties
+          mkdir -p .github/research/lavka-procurement-penalties/{html,meta}
+          cat > /tmp/research.py <<'PY'
+          from __future__ import annotations
+          import json,re,time,unicodedata
+          from pathlib import Path
+          from urllib.parse import quote,urljoin
+          import requests
+          from bs4 import BeautifulSoup
+
+          root=Path('.github/research/lavka-procurement-penalties'); html=root/'html'; meta=root/'meta'
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 NaseKadan research'
+          def get(u):
+              last=None
+              for i in range(5):
+                  try:
+                      r=s.get(u,timeout=60,allow_redirects=True); r.raise_for_status(); return r
+                  except Exception as e: last=e; time.sleep(2+i*2)
+              raise last
+          def norm(x): return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+
+          urls=[
+            'https://www.hlidacstatu.cz/VerejneZakazky/Hledat?Q='+quote('"Lávka přes silnici č. 568"')+'&Zahajeny=False',
+            'https://www.hlidacstatu.cz/VerejneZakazky/Hledat?Q='+quote('ico:00261912 lávka svatý kopeček')+'&Zahajeny=False',
+            'https://www.hlidacstatu.cz/HledatSmlouvy?Q='+quote('ico:00261912 lávka pokuta penále zádržné'),
+            'https://www.mesto-kadan.cz/',
+            'https://www.mesto-kadan.cz/vyhledavani/?q='+quote('lávka svatý kopeček'),
+            'https://www.mesto-kadan.cz/vyhledavani/?q='+quote('419/2026'),
+            'https://www.mesto-kadan.cz/vyhledavani/?q='+quote('523/2026'),
+            'https://edesky.cz/dokumenty?query='+quote('Kadaň lávka svatý kopeček'),
+          ]
+          pages=[]; candidates=[]
+          for i,u in enumerate(urls):
+              try:
+                  r=get(u); (html/f'page-{i}.html').write_bytes(r.content)
+                  soup=BeautifulSoup(r.text,'lxml'); text=' '.join(soup.stripped_strings)
+                  rec={'url':u,'final_url':r.url,'status':r.status_code,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'mentions':[],'links':[]}
+                  nt=norm(text)
+                  for key in ['lavka','svaty kopecek','podruhe','zrusen','silnice group','penale','smluvni pokuta','zadrzne','predani','kolaudac']:
+                      pos=nt.find(key)
+                      if pos>=0: rec['mentions'].append({'key':key,'snippet':nt[max(0,pos-500):pos+1200]})
+                  for a in soup.find_all('a',href=True):
+                      tx=' '.join(a.stripped_strings); hx=urljoin(r.url,a['href']); nx=norm(tx+' '+hx)
+                      if any(k in nx for k in ['lavka pres silnici','svaty kopecek','verejnezakazky/detail','zakazka/']):
+                          rec['links'].append({'text':tx,'url':hx})
+                          candidates.append(hx)
+                  pages.append(rec)
+              except Exception as e: pages.append({'url':u,'error':repr(e)})
+          (meta/'pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          details=[]
+          for j,u in enumerate(dict.fromkeys(candidates)):
+              try:
+                  r=get(u); (html/f'detail-{j}.html').write_bytes(r.content)
+                  soup=BeautifulSoup(r.text,'lxml'); text=' '.join(soup.stripped_strings); nt=norm(text)
+                  details.append({'url':u,'final_url':r.url,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'text':text[:50000], 'mentions':[{'key':k,'snippet':nt[max(0,nt.find(k)-600):nt.find(k)+1800]} for k in ['podruhe','zrusen','lhuta pro podani','pocet nabidek','silnice group','21 610 045','predpokladana hodnota'] if k in nt]})
+              except Exception as e: details.append({'url':u,'error':repr(e)})
+          (meta/'details.json').write_text(json.dumps(details,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          md=['# Soutěže, předání a penále – lávka u Shellu','',f'Zpracováno {time.strftime("%Y-%m-%d %H:%M:%S UTC",time.gmtime())}','','## Nalezené odkazy']
+          for p in pages:
+              md.append(f"### {p.get('final_url') or p.get('url')}")
+              if p.get('error'): md.append('- Chyba: '+p['error']); continue
+              for l in p.get('links',[]): md.append(f"- {l['text']} — {l['url']}")
+              for m in p.get('mentions',[]): md.append(f"- **{m['key']}** — {m['snippet'][:1600]}")
+          md += ['','## Detaily']
+          for d in details:
+              md.append(f"### {d.get('final_url') or d.get('url')}")
+              if d.get('error'): md.append('- Chyba: '+d['error']); continue
+              md.append('- Titulek: '+d.get('title',''))
+              for m in d.get('mentions',[]): md.append(f"- **{m['key']}** — {m['snippet'][:1800]}")
+          (root/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/research.py
+
+      - name: Uložit výsledek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/lavka-procurement-penalties
+          git commit -m 'Dohledat soutěže, předání a penále lávky' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
