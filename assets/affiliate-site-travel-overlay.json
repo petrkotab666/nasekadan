@@ -1,21 +1,31 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "site": "nasekadan.cz",
-  "updatedAt": "2026-07-25",
-  "centralSource": "https://pojistime.to/assets/affiliate-database-travel.json",
+  "updatedAt": "2026-07-30",
+  "centralSources": [
+    "https://pojistime.to/assets/owned-promotion-assets.json",
+    "https://pojistime.to/assets/affiliate-database-travel.json",
+    "https://pojistime.to/assets/ehub-partner-assets/atis.json",
+    "https://pojistime.to/assets/ehub-partner-assets/ceskekormidlo.json",
+    "https://pojistime.to/assets/ehub-partner-assets/excursia.json",
+    "https://pojistime.to/assets/ehub-partner-assets/apollostore.json",
+    "https://pojistime.to/assets/ehub-partner-assets/concept.json",
+    "https://pojistime.to/assets/ehub-partner-assets/proalergiky.json"
+  ],
   "season": {
     "activeMonths": [5, 6, 7, 8, 9],
-    "plannedReplacement": "https://lastminuteslevy.cz",
-    "replaceExternalPartnersAfterLaunch": true
+    "rotationGroups": ["travel", "summer-cooling"],
+    "maximumSeasonalPromosPerPage": 4
   },
   "partners": [
     {
-      "id": "invia-cz",
-      "name": "Invia.cz",
-      "status": "approved",
-      "sourceRegistry": "assets/affiliate-database-travel.json",
-      "categories": ["cestovani", "dovolena", "last-minute", "zajezdy", "rodina"],
-      "baseClickUrl": "https://www.invia.cz/dovolena/last-minute/?b_https=1&aid=9256106"
+      "id": "lastminuteslevy-cz",
+      "name": "LastMinuteSlevy.cz",
+      "status": "active-owned-network",
+      "sourceRegistry": "assets/owned-promotion-assets.json",
+      "categories": ["cestovani", "dovolena", "last-minute", "zajezdy", "leto", "rodina"],
+      "baseClickUrl": "https://www.lastminuteslevy.cz/?utm_source=nasekadan&utm_medium=banner&utm_campaign=leto_2026",
+      "sampleBanner": "https://pojistime.to/assets/owned-promotions/lastminuteslevy-wide-v1.svg?v=20260714-2"
     },
     {
       "id": "atis-cz",
@@ -26,13 +36,60 @@
       "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=49886ce2"
     },
     {
+      "id": "ceskekormidlo-cz",
+      "name": "Českékormidlo.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/ehub-partner-assets/ceskekormidlo.json",
+      "categories": ["cestovani", "zajezdy", "last-minute", "pobytove-zajezdy", "poznavaci-zajezdy"],
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b880f187",
+      "sampleBanner": "https://doc.ehub.cz/b/3babee44/7ac23a04.jpg",
+      "banners": [
+        {
+          "id": "ceskekormidlo-tower-300x600",
+          "format": "300x600",
+          "clickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=41fbcb1c",
+          "imageUrl": "https://doc.ehub.cz/b/3babee44/41fbcb1c.jpg"
+        },
+        {
+          "id": "ceskekormidlo-wide-970x250",
+          "format": "970x250",
+          "clickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=7ac23a04",
+          "imageUrl": "https://doc.ehub.cz/b/3babee44/7ac23a04.jpg"
+        }
+      ]
+    },
+    {
       "id": "excursia-cz",
       "name": "Excursia.cz",
       "status": "approved",
       "sourceRegistry": "assets/ehub-partner-assets/excursia.json",
-      "categories": ["cestovani", "vylety", "zazitky", "exkurze", "volny-cas"],
+      "categories": ["cestovani", "vylety", "zazitky", "exkurze", "volny-cas", "leto"],
       "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=76c9b39c",
       "sampleBanner": "https://doc.ehub.cz/b/2e6a0944/368140a3.jpg"
+    },
+    {
+      "id": "apollostore-cz",
+      "name": "ApolloStore.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/ehub-partner-assets/apollostore.json",
+      "categories": ["domacnost", "spotrebice", "klimatizace", "ventilatory", "ochlazeni", "odvlhcovace", "leto"],
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=a883bbdd"
+    },
+    {
+      "id": "concept-cz",
+      "name": "Concept.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/ehub-partner-assets/concept.json",
+      "categories": ["domacnost", "spotrebice", "ventilatory", "cisticky-vzduchu", "zvlhcovace", "ochlazeni", "leto"],
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5"
+    },
+    {
+      "id": "proalergiky-cz",
+      "name": "Proalergiky.cz",
+      "status": "approved",
+      "sourceRegistry": "assets/ehub-partner-assets/proalergiky.json",
+      "categories": ["domacnost", "zdravi", "klimatizace", "ventilatory", "cisticky-vzduchu", "zvlhcovace", "merice", "leto"],
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=abc25217"
     }
   ]
 }
