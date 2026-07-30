@@ -1,0 +1,75 @@
+name: Vynutit nasazení článku Martina Kadlece
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/force-deploy-martin-kadlec-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit funkční SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${KEY1:-}" ]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [ -n "${KEY2:-}" ]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Okamžitě zkopírovat aktuální obsah na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo -n install -d -m 0755 /var/www/nasekadan/clanky
+          sudo -n install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo -n install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo -n install -m 0644 clanky/martin-kadlec-navrat-hokej-kadan-2026.html /var/www/nasekadan/clanky/martin-kadlec-navrat-hokej-kadan-2026.html
+          sudo -n install -m 0644 rss.xml sitemap.xml news-sitemap.xml /var/www/nasekadan/
+          sudo -n chmod -R a+rX /var/www/nasekadan
+          REMOTE
+
+      - name: Ověřit živý web
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 20); do
+            page="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?force=${GITHUB_SHA}-${n}" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?force=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home"; then
+              echo 'Článek je veřejný a na titulní stránce.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Veřejné ověření selhalo.' >&2
+          exit 1
