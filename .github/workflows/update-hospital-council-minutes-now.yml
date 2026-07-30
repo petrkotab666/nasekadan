@@ -1,0 +1,62 @@
+name: Doplnit zápis zastupitelstva k nemocnici
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-council-minutes-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-hospital-council-minutes
+  cancel-in-progress: true
+
+jobs:
+  update-deploy-verify:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit ověřené informace ze zastupitelstva
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 scripts/update_hospital_council_minutes_20260730.py
+          git config user.name 'Naše Kadaň aktualizace'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+          git commit -m 'Doplnit dvě opatření po 25 milionech a požadavek na mimořádné zastupitelstvo' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Nasadit kanonickou produkční verzi
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Veřejně ověřit článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 24); do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?council=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Dvě různá opatření po 25 milionech korun' <<<"$page" \
+              && grep -Fq 'Hlasování skončilo 15 pro' <<<"$page" \
+              && grep -Fq 'Požadavek zazněl už 25. června' <<<"$page" \
+              && grep -Fq '2026-07-30T11:51:00+02:00' <<<"$page"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
