@@ -1,0 +1,126 @@
+name: Zapojit společné statistiky také přes Caddy HTTPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-caddy-multisite-collector.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Doplnit HTTPS trasy do Caddy
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          SITE=/etc/caddy/sites-enabled/nasekadan.caddy
+          test -s "$SITE"
+          python3 - "$SITE" <<'PY'
+          from pathlib import Path
+          import datetime as dt,re,shutil,sys
+          path=Path(sys.argv[1]); text=path.read_text(encoding='utf-8'); original=text
+          marker='# BEGIN MULTISITE_COLLECTOR_PROXY_V1'
+          if marker not in text:
+              site=re.search(r'(?m)^(?P<indent>\s*)nasekadan\.cz\s*,\s*www\.nasekadan\.cz\s*\{\s*$',text)
+              if not site: raise SystemExit('Caddy blok nasekadan.cz nebyl nalezen')
+              block='''
+              # BEGIN MULTISITE_COLLECTOR_PROXY_V1
+              handle /_nkstats/* {
+                  reverse_proxy 127.0.0.1:80 {
+                      header_up Host nasekadan.cz
+                      header_up X-Real-IP {remote_host}
+                      header_up X-Forwarded-For {remote_host}
+                      header_up X-Forwarded-Proto https
+                  }
+              }
+
+              handle /statistiky-webu {
+                  reverse_proxy 127.0.0.1:80 {
+                      header_up Host nasekadan.cz
+                      header_up X-Real-IP {remote_host}
+                      header_up X-Forwarded-For {remote_host}
+                      header_up X-Forwarded-Proto https
+                  }
+              }
+
+              handle /statistiky-webu/* {
+                  reverse_proxy 127.0.0.1:80 {
+                      header_up Host nasekadan.cz
+                      header_up X-Real-IP {remote_host}
+                      header_up X-Forwarded-For {remote_host}
+                      header_up X-Forwarded-Proto https
+                  }
+              }
+              # END MULTISITE_COLLECTOR_PROXY_V1
+          '''
+              pos=site.end(); text=text[:pos]+'\n'+block+text[pos:]
+          if text!=original:
+              stamp=dt.datetime.now().strftime('%Y%m%d-%H%M%S')
+              backup=path.with_name(path.name+f'.bak-{stamp}')
+              shutil.copy2(path,backup); path.write_text(text,encoding='utf-8')
+              print('Caddy trasy doplněny, záloha:',backup)
+          else:
+              print('Caddy trasy již byly přítomné.')
+          PY
+
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          systemctl reload caddy
+
+          curl -kfsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 \
+            https://nasekadan.cz/_nkstats/tracker.js | grep -q 'nasekadan.cz/_nkstats/hit.gif'
+          curl -kfsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 \
+            'https://nasekadan.cz/_nkstats/hit.gif?site=collector-selftest.invalid&path=%2Fovereni-https&ref=' \
+            -o /tmp/collector-https.gif
+          test "$(wc -c < /tmp/collector-https.gif)" -gt 20
+
+          AUTH_USER=$(cut -d: -f1 /opt/multisite-stats/.htpasswd | head -n1)
+          AUTH_PASS=''
+          if [[ -s /opt/nasekadan-stats/access.txt ]]; then AUTH_PASS=$(sed -n '1{s/^[^:]*:[[:space:]]*//;p;}' /opt/nasekadan-stats/access.txt); fi
+          if [[ -z "$AUTH_PASS" && -s /opt/nasekadan-stats/login.txt ]]; then AUTH_PASS=$(sed -n -E 's/^Heslo:[[:space:]]*//p' /opt/nasekadan-stats/login.txt | head -n1); fi
+          test -n "$AUTH_USER" -a -n "$AUTH_PASS"
+          curl -kfsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 -u "$AUTH_USER:$AUTH_PASS" \
+            'https://nasekadan.cz/statistiky-webu/?site=collector-selftest.invalid' \
+            | grep -q 'Statistiky webu collector-selftest.invalid'
+          echo 'OVERENO: společný sběr a chráněný přehled fungují přes veřejné HTTPS.'
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[CADDY MULTISITE STATS] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+out.slice(-40000).replace(/```/g,'---')+'\n```'});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
