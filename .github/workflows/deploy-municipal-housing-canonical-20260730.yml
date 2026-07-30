@@ -52,7 +52,6 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          chmod +x deploy/sync-production.sh
           sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
           REMOTE
 
