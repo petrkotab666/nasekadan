@@ -13,10 +13,12 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-UA = "NaseKadanNationalMonitor/1.0 (+https://nasekadan.cz; info@nasekadan.cz)"
+UA = "NaseKadanNationalMonitor/1.1 (+https://nasekadan.cz; info@nasekadan.cz)"
+BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
 MAX_WORKERS = 8
 MAX_ITEMS_PER_SOURCE = 120
 MAX_SEEN = 5000
@@ -63,19 +65,29 @@ def normalize_url(value: object, base: str = "") -> str:
     return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, urlencode(query, doseq=True), ""))
 
 
-def fetch(url: str) -> tuple[str, str]:
+def _request(url: str, user_agent: str) -> tuple[str, str]:
     request = Request(
         url,
         headers={
-            "User-Agent": UA,
+            "User-Agent": user_agent,
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, application/xhtml+xml",
             "Accept-Language": "cs,en;q=0.7",
+            "Cache-Control": "no-cache",
         },
     )
     with urlopen(request, timeout=30) as response:
         content_type = response.headers.get_content_type() or ""
         charset = response.headers.get_content_charset() or "utf-8"
         return response.read().decode(charset, errors="replace"), content_type
+
+
+def fetch(url: str) -> tuple[str, str]:
+    try:
+        return _request(url, UA)
+    except HTTPError as exc:
+        if exc.code not in {403, 406, 429}:
+            raise
+        return _request(url, BROWSER_UA)
 
 
 def parse_datetime(value: object) -> datetime | None:
@@ -97,11 +109,7 @@ def parse_datetime(value: object) -> datetime | None:
         return parsed.astimezone(timezone.utc)
     except ValueError:
         pass
-    patterns = (
-        r"\b(20\d{2})[-./](\d{1,2})[-./](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?\b",
-        r"\b(\d{1,2})[. /](\d{1,2})[. /](20\d{2})(?:\s+(\d{1,2}):(\d{2}))?\b",
-    )
-    first = re.search(patterns[0], raw)
+    first = re.search(r"\b(20\d{2})[-./](\d{1,2})[-./](\d{1,2})(?:[ T](\d{1,2}):(\d{2}))?\b", raw)
     if first:
         year, month, day = map(int, first.group(1, 2, 3))
         hour = int(first.group(4) or 0)
@@ -110,7 +118,7 @@ def parse_datetime(value: object) -> datetime | None:
             return datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
         except ValueError:
             return None
-    second = re.search(patterns[1], raw)
+    second = re.search(r"\b(\d{1,2})[. /](\d{1,2})[. /](20\d{2})(?:\s+(\d{1,2}):(\d{2}))?\b", raw)
     if second:
         day, month, year = map(int, second.group(1, 2, 3))
         hour = int(second.group(4) or 0)
@@ -175,7 +183,9 @@ def parse_html(page: str, source: dict[str, Any]) -> list[dict[str, Any]]:
         url = normalize_url(match.group(1), str(source["url"]))
         if not url or url == normalize_url(source["url"]):
             continue
-        around_raw = page[max(0, match.start() - 300): min(len(page), match.end() + 850)]
+        # Bereme jen text od odkazu směrem dopředu. Text před odkazem často patří
+        # sousední zprávě a vytvářel falešné shody na slovo Kadaň.
+        around_raw = page[match.start(): min(len(page), match.end() + 650)]
         around = clean(around_raw)
         published = None
         datetime_match = re.search(r'<time\b[^>]*datetime=["\']([^"\']+)', around_raw, re.I)
@@ -220,11 +230,21 @@ def relevance(item: dict[str, Any], terms: list[str]) -> list[str]:
     return sorted({term for term in terms if term and term in haystack})
 
 
+def ignored_by_policy(item: dict[str, Any], patterns: list[re.Pattern[str]], current_year: int) -> bool:
+    if str(item.get("tier") or "") != "national_media":
+        return False
+    title = fold(item.get("title"))
+    if any(pattern.search(title) for pattern in patterns):
+        return True
+    years = {int(value) for value in re.findall(r"\b20\d{2}\b", title)}
+    if years and max(years) < current_year - 1:
+        return True
+    return False
+
+
 def severity_for(tier: str) -> str:
     if tier in {"government", "ministry", "parliament", "regulator", "fund"}:
         return "high"
-    if tier == "agency":
-        return "medium"
     return "medium"
 
 
@@ -248,6 +268,11 @@ def main() -> int:
     normalized_terms = sorted({fold(term) for term in config.get("relevanceTerms", []) if fold(term)}, key=len, reverse=True)
     if not any(term == "kadan" for term in normalized_terms):
         raise SystemExit("Konfigurace neobsahuje základní relevanční výraz Kadaň.")
+    exclude_patterns = [
+        re.compile(str(pattern), re.I)
+        for pattern in config.get("nationalMediaExcludePatterns", [])
+        if str(pattern).strip()
+    ]
 
     now = datetime.now(timezone.utc)
     bootstrap_hours = max(1, int(config.get("bootstrapHours") or 72))
@@ -260,6 +285,7 @@ def main() -> int:
 
     source_status: list[dict[str, Any]] = []
     candidates: list[dict[str, Any]] = []
+    ignored_items = 0
     for source, parsed, error in collected:
         status = {
             "name": source.get("name"),
@@ -279,6 +305,9 @@ def main() -> int:
                 "tier": source.get("tier"),
                 "category": source.get("category"),
             })
+            if ignored_by_policy(item, exclude_patterns, now.year):
+                ignored_items += 1
+                continue
             matched = relevance(item, normalized_terms)
             if not matched:
                 continue
@@ -341,6 +370,7 @@ def main() -> int:
         "checkedSources": len(sources) - len(failed),
         "failedSources": len(failed),
         "relevantItems": len(relevant_items),
+        "ignoredItems": ignored_items,
         "newAlerts": len(alerts),
         "sourceStatus": source_status,
     }
@@ -349,6 +379,7 @@ def main() -> int:
         "bootstrap": bootstrap,
         "sourceCount": len(sources),
         "failedSources": len(failed),
+        "ignoredItems": ignored_items,
         "alerts": alerts,
         "matches": relevant_items[:100],
     }
@@ -361,6 +392,7 @@ def main() -> int:
         "sources": len(sources),
         "failed": len(failed),
         "matches": len(relevant_items),
+        "ignored": ignored_items,
         "alerts": len(alerts),
     }, ensure_ascii=False))
     return 0
