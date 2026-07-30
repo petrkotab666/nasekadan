@@ -1,0 +1,55 @@
+name: Prověřit aktivní konfiguraci Caddy pro Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-caddy-nasekadan.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Načíst konfiguraci Caddy
+        shell: bash
+        run: |
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          echo '--- SERVICE ---'
+          sudo systemctl status caddy --no-pager -l || true
+          echo '--- EXECSTART ---'
+          sudo systemctl show caddy -p ExecStart -p FragmentPath -p DropInPaths --no-pager || true
+          echo '--- FILES ---'
+          sudo find /etc/caddy /var/lib/caddy /opt -maxdepth 3 -type f \( -iname '*caddy*' -o -name 'Caddyfile' -o -name '*.json' \) -printf '%p | %s B\n' 2>/dev/null | sort | head -n 150
+          echo '--- CADDYFILE ---'
+          sudo sed -n '1,260p' /etc/caddy/Caddyfile 2>/dev/null || true
+          echo '--- ADMIN CONFIG ROUTES ---'
+          curl -fsS --max-time 5 http://127.0.0.1:2019/config/ 2>/dev/null | python3 -m json.tool | head -n 500 || true
+          REMOTE
+      - name: Zapsat diagnostiku
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[CADDY NASEKADAN] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-50000).replace(/```/g,'---')+'\n```'});
