@@ -18,6 +18,14 @@
     "Elektrárna Prunéřov",
     "Elektrárna Tušimice"
   ],
+  "nationalMediaExcludePatterns": [
+    "\\beurovolby\\s+20\\d{2}\\b",
+    "\\bokrsek\\s+\\d+\\b",
+    "\\bapollo cup\\b",
+    "\\bporazil(?:a|y)?\\b",
+    "\\bpovinná,? ale utrápená výhra\\b",
+    "\\bvýsledky voleb\\b"
+  ],
   "sources": [
     {
       "name": "Vláda České republiky – aktuality",
@@ -49,7 +57,7 @@
     },
     {
       "name": "Ministerstvo životního prostředí – aktuality",
-      "url": "https://mzp.gov.cz/cz/news_aktuality",
+      "url": "https://mzp.gov.cz/cz/pro-media-a-verejnost/aktuality",
       "kind": "html",
       "tier": "ministry",
       "category": "Životní prostředí"
@@ -91,7 +99,7 @@
     },
     {
       "name": "Ministerstvo vnitra – tiskové zprávy",
-      "url": "https://mv.gov.cz/clanek/tiskove-zpravy.aspx",
+      "url": "https://mv.gov.cz/clanek/informacni-servis-tiskove-zpravy-tiskove-zpravy.aspx",
       "kind": "html",
       "tier": "ministry",
       "category": "Vnitro, obce a bezpečnost"
@@ -119,7 +127,7 @@
     },
     {
       "name": "Senát – tiskové zprávy",
-      "url": "https://www.senat.cz/informace/z_medii/tiskove_zpravy/index.php",
+      "url": "https://www.senat.cz/zpravodajstvi/zpravy.php?O=15&from=M",
       "kind": "html",
       "tier": "parliament",
       "category": "Parlament"
@@ -154,7 +162,7 @@
     },
     {
       "name": "Státní fond podpory investic – aktuality",
-      "url": "https://sfpi.cz/aktuality/",
+      "url": "https://sfpi.cz/category/aktuality/",
       "kind": "html",
       "tier": "fund",
       "category": "Bydlení a investice"
