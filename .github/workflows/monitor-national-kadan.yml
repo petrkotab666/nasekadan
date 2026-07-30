@@ -1,0 +1,209 @@
+name: Monitoring státu a celostátních zdrojů pro Kadaň
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */3 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'data/national-kadan-sources.json'
+      - 'scripts/monitor_national_kadan.py'
+      - '.github/workflows/monitor-national-kadan.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: national-kadan-monitoring
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Načíst aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zkontrolovat vládu, ministerstva, parlament a celostátní média
+        id: scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/monitor_national_kadan.py
+          python3 scripts/monitor_national_kadan.py \
+            --config data/national-kadan-sources.json \
+            --state data/national-kadan-monitoring-state.json \
+            --status data/national-kadan-monitoring-status.json \
+            --output "$RUNNER_TEMP/national-kadan-alerts.json" \
+            | tee "$RUNNER_TEMP/national-kadan-scan.log"
+
+      - name: Doručit nové relevantní zmínky jako redakční upozornění
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ALERT_FILE="$RUNNER_TEMP/national-kadan-alerts.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          payload = json.loads(Path(os.environ['ALERT_FILE']).read_text(encoding='utf-8'))
+          alerts = payload.get('alerts') or []
+          print(f'Nových upozornění k doručení: {len(alerts)}')
+
+          for alert in alerts:
+              title = str(alert.get('title') or 'Nová zmínka o Kadani').strip()
+              fingerprint = str(alert.get('fingerprint') or '').strip()
+              source_name = str(alert.get('sourceName') or 'Zdroj').strip()
+              source_url = str(alert.get('url') or '').strip()
+              category = str(alert.get('category') or 'Celostátní monitoring').strip()
+              tier = str(alert.get('tier') or '').strip()
+              severity = str(alert.get('severity') or 'medium').strip()
+              published = str(alert.get('published') or 'neuvedeno').strip()
+              description = str(alert.get('description') or '').strip()
+              matched = ', '.join(str(item) for item in (alert.get('matchedTerms') or []))
+
+              issue_title = f'[MONITORING STÁT → KADAŇ] {title[:115]} [{fingerprint}]'
+              body = [
+                  '## Nová zmínka na státní nebo celostátní úrovni',
+                  '',
+                  f'**Zdroj:** {source_name}',
+                  f'**Oblast:** {category}',
+                  f'**Typ zdroje:** {tier or "neuvedeno"}',
+                  f'**Publikováno:** {published}',
+                  f'**Závažnost:** {severity}',
+                  f'**Vazba na Kadaň:** {matched or "přímá textová shoda"}',
+                  '',
+                  f'### {title}',
+              ]
+              if description:
+                  body += ['', description[:1800]]
+              body += [
+                  '',
+                  '### Primární zdroj',
+                  f'- [{source_name}]({source_url})' if source_url else f'- {source_name}',
+                  '',
+                  '### Doporučený redakční krok',
+                  'Otevřít primární zdroj, ověřit datum a konkrétní dopad na Kadaň. U rozhodnutí vlády, ministerstva, parlamentu, regulátora nebo dotačního fondu dohledat také původní dokument či usnesení. Teprve potom rozhodnout o článku nebo aktualizaci.',
+                  '',
+                  '_Automatický monitoring kontroluje pouze položky s přímou textovou vazbou na Kadaň, Kadaňsko, Prunéřov, Tušimice, Nechranice nebo další nastavené místní názvy._',
+              ]
+
+              with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, suffix='.md') as handle:
+                  handle.write('\n'.join(body) + '\n')
+                  body_path = handle.name
+              try:
+                  subprocess.run([
+                      'python3', 'scripts/upsert_github_issue.py',
+                      '--fingerprint', fingerprint,
+                      '--title', issue_title,
+                      '--body-file', body_path,
+                      '--assignee', 'petrkotab666',
+                  ], check=True)
+              finally:
+                  Path(body_path).unlink(missing_ok=True)
+          PY
+
+      - name: Hlídání výpadků monitorovaných zdrojů
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          status = json.loads(Path('data/national-kadan-monitoring-status.json').read_text(encoding='utf-8'))
+          total = int(status.get('sourceCount') or 0)
+          failed = int(status.get('failedSources') or 0)
+          threshold = max(5, int(total * 0.4))
+          failures = [item for item in status.get('sourceStatus', []) if item.get('status') == 'failed']
+          lines = [
+              '## Stav státního a celostátního monitoringu pro Kadaň',
+              '',
+              f'- Kontrolováno zdrojů: **{total}**',
+              f'- Dostupných zdrojů: **{int(status.get("checkedSources") or 0)}**',
+              f'- Nedostupných zdrojů: **{failed}**',
+              f'- Relevantních položek v posledním běhu: **{int(status.get("relevantItems") or 0)}**',
+              f'- Nových upozornění: **{int(status.get("newAlerts") or 0)}**',
+              f'- Kontrola: `{status.get("checkedAt")}`',
+          ]
+          if failures:
+              lines += ['', '### Nedostupné zdroje']
+              for item in failures[:30]:
+                  lines.append(f'- {item.get("name")}: `{item.get("error", "chyba")}`')
+          lines += ['', '_Technický zdravotní dohled; nejde o redakční zprávu._']
+
+          with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, suffix='.md') as handle:
+              handle.write('\n'.join(lines) + '\n')
+              body_path = handle.name
+          try:
+              command = [
+                  'python3', 'scripts/upsert_github_issue.py',
+                  '--fingerprint', 'national-kadan-monitor-health',
+                  '--title', '[MONITORING STÁT → KADAŇ] Výpadek zdrojů [national-kadan-monitor-health]',
+                  '--body-file', body_path,
+                  '--assignee', 'petrkotab666',
+              ]
+              if failed < threshold:
+                  command += ['--close', '--comment-existing']
+              subprocess.run(command, check=True)
+          finally:
+              Path(body_path).unlink(missing_ok=True)
+          PY
+
+      - name: Uložit stav deduplikace a kontroly zdrojů
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/national-kadan-monitoring-state.json data/national-kadan-monitoring-status.json
+          if git diff --cached --quiet; then
+            echo 'Stav monitoringu se nezměnil.'
+            exit 0
+          fi
+          git commit -m 'Aktualizovat stav státního monitoringu pro Kadaň'
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "Pokus $attempt o uložení stavu selhal; opakuji."
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          echo 'Stav monitoringu se nepodařilo bezpečně uložit.' >&2
+          exit 1
+
+      - name: Souhrn běhu
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Monitoring státu a celostátních zdrojů pro Kadaň'
+            echo
+            if [ -f data/national-kadan-monitoring-status.json ]; then
+              python3 - <<'PY'
+          import json
+          data=json.load(open('data/national-kadan-monitoring-status.json',encoding='utf-8'))
+          print(f"- Zdroje: {data.get('checkedSources',0)}/{data.get('sourceCount',0)} dostupných")
+          print(f"- Relevantní položky: {data.get('relevantItems',0)}")
+          print(f"- Nová upozornění: {data.get('newAlerts',0)}")
+          print(f"- První zaváděcí běh: {'ano' if data.get('bootstrap') else 'ne'}")
+          PY
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
