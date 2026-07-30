@@ -1,0 +1,79 @@
+name: Nasadit letní rotaci reklam
+run-name: Zájezdy, klimatizace a ventilátory na Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'reklamy-oprava-obrazku.js'
+      - 'assets/affiliate-site-travel-overlay.json'
+      - 'scripts/ensure_summer_ad_rotation.py'
+      - 'scripts/normalize_articles.py'
+      - 'scripts/finalize_site.py'
+      - '.github/workflows/apply-summer-ad-rotation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-summer-ad-rotation
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit JavaScript a reklamní data
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check reklamy-oprava-obrazku.js
+          python3 -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('assets/affiliate-site-travel-overlay.json').read_text(encoding='utf-8'))
+          ids = {item.get('id') for item in data.get('partners', [])}
+          required = {
+              'lastminuteslevy-cz',
+              'atis-cz',
+              'ceskekormidlo-cz',
+              'excursia-cz',
+              'apollostore-cz',
+              'concept-cz',
+              'proalergiky-cz',
+          }
+          missing = sorted(required - ids)
+          if missing:
+              raise SystemExit(f'V letní rotaci chybí: {missing}')
+          print(f'Letní reklamní seznam obsahuje {len(ids)} partnerů.')
+          PY
+
+      - name: Přepsat veřejné stránky na novou verzi
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ensure_summer_ad_rotation.py --write --check
+
+      - name: Uložit aktualizované HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- '*.html' ':!nahled/**' ':!.github/**'
+          if git diff --cached --quiet; then
+            echo 'Všechny stránky už používají novou letní rotaci.'
+            exit 0
+          fi
+          git commit -m 'Aktivovat letní reklamní rotaci na veřejných stránkách'
+          git push origin HEAD:main
