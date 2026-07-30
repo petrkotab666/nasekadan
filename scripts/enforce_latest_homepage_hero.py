@@ -122,13 +122,13 @@ def main() -> int:
     latest = articles[0]
     home = HOME.read_text(encoding="utf-8")
     archive = ARCHIVE.read_text(encoding="utf-8")
-    article_list = home.split('<div class="article-list">', 1)[-1]
     archive_list = archive.split('<section class="archive-list"', 1)[-1]
-    if latest["href"] not in article_list:
-        raise RuntimeError(f"Nejnovější článek chybí v seznamu titulní stránky: {latest['href']}")
     if latest["href"] not in archive_list:
         raise RuntimeError(f"Nejnovější článek chybí v archivu: {latest['href']}")
 
+    # Nejnovější dva články se záměrně zobrazují v hero a vedlejším bloku,
+    # nikoli znovu v běžném seznamu karet. Starší kontrola vyžadovala nejnovější
+    # článek současně i v seznamu a byla v přímém rozporu s touto publikační zásadou.
     match = HERO_RE.search(home)
     if not match:
         raise RuntimeError("Na titulní stránce nebyl nalezen hlavní blok.")
