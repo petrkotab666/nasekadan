@@ -1,0 +1,165 @@
+name: Zveřejnit novou adresu TILIA Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-tilia-address-update.yml'
+      - 'scripts/add_tilia_address_update.py'
+      - 'data/organizations.json'
+      - 'data/city-sources.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-tilia-address
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Načíst hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit praktické oznámení
+        run: python3 scripts/add_tilia_address_update.py
+
+      - name: Ověřit data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          news = json.loads(Path('data/city-news.json').read_text(encoding='utf-8'))
+          orgs = json.loads(Path('data/organizations.json').read_text(encoding='utf-8'))
+          sources = json.loads(Path('data/city-sources.json').read_text(encoding='utf-8'))
+
+          assert news['items'][0]['id'] == 'tilia-kadan-postovni-953-20260730'
+          assert 'Poštovní 953' in news['items'][0]['description']
+          org_text = json.dumps(orgs, ensure_ascii=False)
+          source_text = json.dumps(sources, ensure_ascii=False)
+          assert 'TILIA Kadaň' in org_text and 'Jana Švermy 5' in org_text
+          assert 'TILIA Kadaň' in source_text
+          print('Data TILIA jsou připravena správně.')
+          PY
+
+      - name: Uložit změnu přehledu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- data/city-news.json; then
+            echo 'Přehled už obsahuje aktuální oznámení.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add data/city-news.json
+            git commit -m 'Doplnit změnu adresy TILIA do veřejného přehledu'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit adresář a veřejný přehled na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/organizations.json data/city-news.json data/city-sources.json \
+            ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/organizations.json /var/www/nasekadan/data/organizations.json
+          sudo install -m 0644 /tmp/city-news.json /var/www/nasekadan/data/city-news.json
+          sudo install -m 0644 /tmp/city-sources.json /var/www/nasekadan/data/city-sources.json
+          rm -f /tmp/organizations.json /tmp/city-news.json /tmp/city-sources.json
+          REMOTE
+
+      - name: Ověřit veřejný web
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s)"
+          curl -4 -kfsS --max-time 30 \
+            "https://nasekadan.cz/data/organizations.json?check=${token}" \
+            -o /tmp/organizations-live.json
+          curl -4 -kfsS --max-time 30 \
+            "https://nasekadan.cz/data/city-news.json?check=${token}" \
+            -o /tmp/city-news-live.json
+          python3 - <<'PY'
+          import json
+
+          organizations = json.load(open('/tmp/organizations-live.json', encoding='utf-8'))
+          news = json.load(open('/tmp/city-news-live.json', encoding='utf-8'))
+          org_text = json.dumps(organizations, ensure_ascii=False)
+          assert 'TILIA Kadaň' in org_text
+          assert 'Poštovní 953' in org_text
+          assert 'Jana Švermy 5' in org_text
+          assert news['items'][0]['id'] == 'tilia-kadan-postovni-953-20260730'
+          assert 'Poštovní 953' in news['items'][0]['description']
+          print('Veřejný adresář i přehled potvrzují změnu TILIA.')
+          PY
+          curl -4 -kfsS --max-time 30 \
+            "https://nasekadan.cz/organizace/?check=${token}" | grep -Fq 'Organizace v Kadani'
+
+      - name: Zapsat stav nasazení
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = '.github/tilia-address-live-status.json';
+            const status = {
+              status: process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success' ? 'passed' : 'failed',
+              checkedAtUtc: new Date().toISOString(),
+              runId: context.runId,
+              sourceSha: context.sha,
+              serverDeploy: process.env.DEPLOY_OUTCOME || 'skipped',
+              publicVerification: process.env.VERIFY_OUTCOME || 'skipped',
+              publicDirectory: 'https://nasekadan.cz/organizace/',
+              publicFeed: 'https://nasekadan.cz/prehled-zdroju/'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat nasazení změny adresy TILIA: ${status.status} [skip ci]`,
+              content,
+              ...(sha ? {sha} : {})
+            });
