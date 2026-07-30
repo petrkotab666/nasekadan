@@ -1,0 +1,72 @@
+name: Prověřit aktivní HTTPS vhost Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-nasekadan-active-vhosts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Načíst aktivní konfiguraci a odpovědi
+        shell: bash
+        run: |
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          sudo nginx -T 2>&1 > /tmp/nginx-all.txt
+          echo '--- SERVER BLOCKS NASEKADAN ---'
+          sudo python3 - <<'PY'
+          import re
+          text=open('/tmp/nginx-all.txt',encoding='utf-8',errors='replace').read()
+          for m in re.finditer(r'\bserver\s*\{',text):
+              start=m.start(); brace=text.find('{',m.start()); depth=0
+              for i in range(brace,len(text)):
+                  if text[i]=='{': depth+=1
+                  elif text[i]=='}':
+                      depth-=1
+                      if depth==0:
+                          block=text[start:i+1]
+                          if 'nasekadan.cz' in block:
+                              print(block[:12000]); print('\n--- BLOCK END ---\n')
+                          break
+          PY
+          echo '--- FILE LINKS ---'
+          ls -la /etc/nginx/sites-enabled /etc/nginx/sites-available /etc/nginx/conf.d
+          echo '--- HTTPS TRACKER VERBOSE ---'
+          curl -kvsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 https://nasekadan.cz/_nkstats/tracker.js -o /tmp/tracker.out || true
+          echo 'BODY:'; head -c 500 /tmp/tracker.out 2>/dev/null || true; echo
+          echo '--- HTTP TRACKER VERBOSE ---'
+          curl -vsS --max-time 12 --resolve nasekadan.cz:80:127.0.0.1 http://nasekadan.cz/_nkstats/tracker.js -o /tmp/tracker-http.out || true
+          echo 'BODY:'; head -c 500 /tmp/tracker-http.out 2>/dev/null || true; echo
+          REMOTE
+      - name: Zapsat diagnostiku
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[NASEKADAN VHOST] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-50000).replace(/```/g,'---')+'\n```'});
