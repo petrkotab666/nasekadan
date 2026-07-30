@@ -66,10 +66,11 @@ jobs:
             -o ConnectTimeout=25 \
             "ubuntu@$SERVER" 'bash -s' <<'REMOTE'
           set -euo pipefail
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
+          env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
           REMOTE
 
       - name: Zjistit přesný nasazený source commit
