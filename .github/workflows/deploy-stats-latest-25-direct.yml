@@ -1,0 +1,141 @@
+name: Přímé nasazení statistik posledních 25 článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/nasekadan-stats/stats_server_v6.py'
+      - '.github/scripts/nasekadan-stats/stats_metrics_v6.py'
+      - '.github/scripts/nasekadan-stats/stats_metrics_v7.py'
+      - '.github/scripts/nasekadan-stats/verify_stats_latest_25.py'
+      - '.github/workflows/deploy-stats-latest-25-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-stats-direct-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nahrát přesné soubory z tohoto commitu
+        run: |
+          set -euo pipefail
+          SRC=.github/scripts/nasekadan-stats
+          for f in stats_server_v6.py stats_metrics_v6.py stats_metrics_v7.py verify_stats_latest_25.py; do
+            test -s "$SRC/$f"
+          done
+          scp -i "$RUNNER_TEMP/key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$SRC/stats_server_v6.py" "$SRC/stats_metrics_v6.py" "$SRC/stats_metrics_v7.py" "$SRC/verify_stats_latest_25.py" \
+            ubuntu@57.129.43.215:/tmp/
+
+      - name: Aktivovat a ověřit běžící službu
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/deploy.txt"
+          set -Eeuo pipefail
+          sudo -n true
+          APP=/usr/local/lib/nasekadan-stats
+          REPO=/opt/nasekadan/.github/scripts/nasekadan-stats
+          sudo install -d -o root -g root -m 0755 "$APP" "$REPO"
+          for f in stats_server_v6.py stats_metrics_v6.py stats_metrics_v7.py verify_stats_latest_25.py; do
+            sudo install -o root -g root -m 0755 "/tmp/$f" "$APP/$f"
+            sudo install -o root -g root -m 0755 "/tmp/$f" "$REPO/$f"
+          done
+          sudo /usr/bin/python3 -m py_compile \
+            "$APP/stats_server_v6.py" "$APP/stats_metrics_v6.py" "$APP/stats_metrics_v7.py" \
+            "$REPO/verify_stats_latest_25.py"
+
+          echo '=== KONTROLNÍ SOUČTY ==='
+          sha256sum /tmp/stats_metrics_v7.py "$APP/stats_metrics_v7.py" "$REPO/stats_metrics_v7.py"
+          test "$(sha256sum /tmp/stats_metrics_v7.py | cut -d' ' -f1)" = "$(sha256sum "$APP/stats_metrics_v7.py" | cut -d' ' -f1)"
+
+          sudo systemctl daemon-reload
+          sudo systemctl restart nasekadan-stats-web.service
+          for _ in $(seq 1 40); do
+            if curl -fsS --max-time 3 http://127.0.0.1:3225/healthz >/tmp/stats-health.json 2>/dev/null; then break; fi
+            sleep 0.5
+          done
+          grep -Fq '"ok": true' /tmp/stats-health.json
+          systemctl is-active nasekadan-stats-web.service
+
+          echo '=== SKUTEČNĚ NAČTENÉ MODULY A HTML ==='
+          sudo -u www-data /usr/bin/python3 - <<'PY'
+          import json, sys
+          sys.path.insert(0, '/usr/local/lib/nasekadan-stats')
+          import stats_server as base
+          import stats_metrics_v5, stats_metrics_v6, stats_metrics_v7
+          stats_metrics_v5.install(base)
+          stats_metrics_v6.install(base)
+          stats_metrics_v7.install(base)
+          body=base.render_dashboard().decode('utf-8','replace')
+          result={
+            'v7_file': stats_metrics_v7.__file__,
+            'recent': 'Posledních 25 článků' in body,
+            'button': 'href="#poslednich-25-clanku"' in body,
+            'rows': body.split('<table id="recent-articles">',1)[1].split('</table>',1)[0].count('<tr>')-1,
+            'recent_position': body.find('id="poslednich-25-clanku"'),
+            'metrics_position': body.find('<section class="metrics">'),
+          }
+          print(json.dumps(result,ensure_ascii=False))
+          assert result['recent'] and result['button'] and result['rows']==25
+          assert 0 <= result['recent_position'] < result['metrics_position']
+          PY
+
+          echo '=== BĚŽÍCÍ PROCES ==='
+          pid="$(systemctl show -p MainPID --value nasekadan-stats-web.service)"
+          test "$pid" != 0
+          tr '\0' ' ' < "/proc/$pid/cmdline"; echo
+          grep -F 'stats_metrics_v7.py' "/proc/$pid/maps" 2>/dev/null || true
+          echo 'ÚSPĚCH: přesné soubory byly nahrány mimo chybný git checkout a služba byla restartována.'
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log='';
+            try { log=fs.readFileSync(`${process.env.RUNNER_TEMP}/deploy.txt`,'utf8'); } catch {}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({
+              owner:context.repo.owner,
+              repo:context.repo.repo,
+              title:`[PŘÍMÝ DEPLOY STATISTIK 25] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,
+              body:`- Commit: \`${process.env.SOURCE_SHA}\`\n- Výsledek: **${process.env.OUTCOME||'unknown'}**\n\n\`\`\`text\n${log.slice(-40000).replace(/\`\`\`/g,'---')}\n\`\`\``
+            });
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
