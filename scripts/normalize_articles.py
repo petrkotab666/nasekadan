@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 TEMPLATE_VERSION = "unified-v1"
-ASSET_VERSION = "20260730-ad-spacing-1"
+ASSET_VERSION = "20260730-summer-rotation-1"
 SCRIPT_BLOCK = (
     '<script src="/site.js" defer></script>\n'
     f'<script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script>\n'
@@ -141,6 +141,8 @@ def validate(path: Path, text: str) -> list[str]:
     ):
         if text.count(asset) != 1:
             errors.append(f"soubor {asset} není načten právě jednou")
+    if f'/reklamy-oprava-obrazku.js?v={ASSET_VERSION}' not in text:
+        errors.append("opravný reklamní balík nemá aktuální letní verzi")
     if "</body>" not in text.lower():
         errors.append("chybí ukončení body")
     return errors
