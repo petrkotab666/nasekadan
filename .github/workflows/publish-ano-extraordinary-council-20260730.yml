@@ -1,0 +1,164 @@
+name: Publikovat žádost ANO na mimořádné zastupitelstvo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/publish-ano-extraordinary-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-publish-ano-extraordinary-council
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html
+      SLUG: ano-mimoradne-zastupitelstvo-nemocnice-kadan
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zařadit článek do všech publikačních výstupů
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/ensure_recent_rss_entries.py
+          python3 scripts/finalize_launch.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/ensure_recent_rss_entries.py
+          grep -Fq '/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' index.html
+          grep -Fq '/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' clanky/index.html
+          grep -Fq 'https://nasekadan.cz/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' rss.xml
+          grep -Fq 'https://nasekadan.cz/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' sitemap.xml
+          grep -Fq 'https://nasekadan.cz/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' news-sitemap.xml
+          grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' "$ARTICLE"
+
+      - name: Uložit trvalou veřejnou verzi
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Publikační výstupy už jsou aktuální.'
+          else
+            git commit -m 'Publikovat: ANO žádá mimořádné zastupitelstvo kvůli nemocnici'
+            git pull --rebase --autostash origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH klíč
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit přímo na OVH a do aktivního Dockeru
+        id: deploy
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nk-ano-extraordinary"
+          mkdir -p "$RUNNER_TEMP/nk-ano-extraordinary/clanky" "$RUNNER_TEMP/nk-ano-extraordinary/social"
+          cp "$ARTICLE" "$RUNNER_TEMP/nk-ano-extraordinary/clanky/"
+          cp clanky/index.html "$RUNNER_TEMP/nk-ano-extraordinary/clanky/index.html"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$RUNNER_TEMP/nk-ano-extraordinary/"
+          cp -a social/. "$RUNNER_TEMP/nk-ano-extraordinary/social/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r \
+            "$RUNNER_TEMP/nk-ano-extraordinary" ubuntu@57.129.43.215:/tmp/nk-ano-extraordinary
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -m 0644 /tmp/nk-ano-extraordinary/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/nk-ano-extraordinary/clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 /tmp/nk-ano-extraordinary/index.html /tmp/nk-ano-extraordinary/rss.xml /tmp/nk-ano-extraordinary/sitemap.xml /tmp/nk-ano-extraordinary/news-sitemap.xml /tmp/nk-ano-extraordinary/llms.txt /tmp/nk-ano-extraordinary/robots.txt /var/www/nasekadan/
+          sudo cp -a /tmp/nk-ano-extraordinary/social/. /var/www/nasekadan/social/
+          sudo chmod -R a+rX /var/www/nasekadan
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          if [[ -n "$cid" ]]; then
+            sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp /tmp/nk-ano-extraordinary/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html "$cid:/usr/share/nginx/html/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html"
+            sudo docker cp /tmp/nk-ano-extraordinary/clanky/index.html "$cid:/usr/share/nginx/html/clanky/index.html"
+            for file in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
+              sudo docker cp "/tmp/nk-ano-extraordinary/$file" "$cid:/usr/share/nginx/html/$file"
+            done
+            sudo docker cp /tmp/nk-ano-extraordinary/social/. "$cid:/usr/share/nginx/html/social/"
+          fi
+          rm -rf /tmp/nk-ano-extraordinary
+          REMOTE
+
+      - name: Veřejně ověřit článek a všechny rozcestníky
+        id: verify
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(date +%s)"
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'ANO žádá mimořádné zastupitelstvo kvůli nemocnici' <<<"$article" \
+              && grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$article" \
+              && grep -Fq '/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' <<<"$home" \
+              && grep -Fq '/clanky/ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' <<<"$archive" \
+              && grep -Fq 'ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' <<<"$rss" \
+              && grep -Fq 'ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' <<<"$sitemap" \
+              && grep -Fq 'ano-mimoradne-zastupitelstvo-nemocnice-kadan.html' <<<"$news"; then
+              echo 'HOTOVO: samostatný článek je veřejný a propojený s průběžnou aktualizací nemocnice.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat stav nasazení
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = '.github/ano-extraordinary-publication-status.json';
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const state = {
+              status: ok ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              server_deploy: process.env.DEPLOY || 'skipped',
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(state, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner, repo: context.repo.repo, path, branch: 'main',
+              message: `Zapsat stav publikace článku ANO: ${state.status}`,
+              content, ...(sha ? {sha} : {})
+            });
