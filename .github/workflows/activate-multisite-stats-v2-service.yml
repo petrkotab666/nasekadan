@@ -1,0 +1,110 @@
+name: Spouštět skutečnou v2 službu společných statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/activate-multisite-stats-v2-service.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Přepnout službu na v2 a ověřit
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'sudo bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          APP=/usr/local/lib/multisite-stats/multisite_stats_v2.py
+          test -s "$APP"
+          python3 -m py_compile "$APP"
+          echo 'PŘED:'
+          systemctl show multisite-stats.service -p ExecStart --value || true
+          cat > /etc/systemd/system/multisite-stats.service <<UNIT
+          [Unit]
+          Description=Soukrome statistiky vsech webu v2
+          After=network.target nginx.service
+
+          [Service]
+          Type=simple
+          User=www-data
+          Group=www-data
+          WorkingDirectory=/usr/local/lib/multisite-stats
+          ExecStart=/usr/bin/python3 $APP
+          Restart=always
+          RestartSec=2
+          NoNewPrivileges=true
+          PrivateTmp=true
+          ProtectHome=true
+          ProtectSystem=strict
+          ReadWritePaths=/opt/multisite-stats
+          ReadOnlyPaths=/var/log/nginx
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable multisite-stats.service >/dev/null
+          systemctl restart multisite-stats.service
+          for _ in $(seq 1 30); do curl -fsS --max-time 2 http://127.0.0.1:3226/healthz >/dev/null 2>&1 && break; sleep .3; done
+          systemctl is-active multisite-stats.service
+          echo 'PO:'
+          systemctl show multisite-stats.service -p ExecStart --value
+
+          code=$(curl -sS --max-time 8 -A 'Mozilla/5.0 StatsVerifier/1.0' -o /tmp/direct.gif -w '%{http_code}' \
+            'http://127.0.0.1:3226/hit.gif?site=dobreklima.cz&path=%2Fv2-direct-overeni&ref=')
+          echo "DIRECT_CODE=$code DIRECT_SIZE=$(wc -c < /tmp/direct.gif)"
+          test "$code" = 200
+          test "$(wc -c < /tmp/direct.gif)" -gt 20
+
+          code=$(curl -kLsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 \
+            -A 'Mozilla/5.0 StatsVerifier/1.0' -o /tmp/public.gif -w '%{http_code}' \
+            'https://nasekadan.cz/_nkstats/hit.gif?site=dobreklima.cz&path=%2Fv2-public-overeni&ref=')
+          echo "PUBLIC_CODE=$code PUBLIC_SIZE=$(wc -c < /tmp/public.gif)"
+          test "$code" = 200
+          test "$(wc -c < /tmp/public.gif)" -gt 20
+
+          python3 - <<'PY'
+          import sqlite3
+          con=sqlite3.connect('/opt/multisite-stats/stats.sqlite3')
+          rows=con.execute("select path,count(*) from hits where host='dobreklima.cz' and path in ('/v2-direct-overeni','/v2-public-overeni') group by path order by path").fetchall()
+          print('DB_ROWS=',rows)
+          assert {r[0] for r in rows}=={'/v2-direct-overeni','/v2-public-overeni'}
+          PY
+          echo 'OVERENO: systemd spouští v2 a veřejný zápis funguje.'
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[MULTISITE V2 SERVICE] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+out.slice(-40000).replace(/```/g,'---')+'\n```'});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
