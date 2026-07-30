@@ -27,16 +27,16 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit zákonný práh devíti podpisů
+      - name: Doplnit OCR úvěrových a IT smluv
         shell: bash
         run: |
           set -euo pipefail
           git pull --rebase origin main
-          python3 scripts/update_hospital_nine_signatures_20260730.py
+          python3 scripts/update_hospital_ocr_contracts_20260730.py
           git config user.name 'Naše Kadaň nouzová aktualizace'
           git config user.email 'info@nasekadan.cz'
           git add "$ARTICLE"
-          git commit -m 'Doplnit devět podpisů pro mimořádné zastupitelstvo' || true
+          git commit -m 'Doplnit úvěrové a IT smlouvy z obrazové kontroly' || true
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -63,7 +63,7 @@ jobs:
             sudo docker exec "$cid" mkdir -p "/usr/share/nginx/html/$(dirname "$file")"
             sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
           done
-          curl -fsS http://127.0.0.1:3224/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html | grep -Fq 'Jedna třetina z 27 členů kadaňského zastupitelstva'
+          curl -fsS http://127.0.0.1:3224/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html | grep -Fq 'Co odhalily neindexované úvěrové a IT smlouvy'
           REMOTE
 
       - name: Veřejně ověřit aktualizaci
@@ -71,10 +71,11 @@ jobs:
         run: |
           set -euo pipefail
           for n in $(seq 1 24); do
-            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?nine=${GITHUB_SHA}-${n}" || true)"
-            if grep -Fq 'Jedna třetina z 27 členů kadaňského zastupitelstva' <<<"$page" \
-              && grep -Fq 'Zákonný práh</span><strong>9 podpisů' <<<"$page" \
-              && grep -Fq '2026-07-30T12:15:00+02:00' <<<"$page"; then
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?ocr-contracts=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Co odhalily neindexované úvěrové a IT smlouvy' <<<"$page" \
+              && grep -Fq '55 168 704,80 Kč' <<<"$page" \
+              && grep -Fq 'Pětiletý servis' <<<"$page" \
+              && grep -Fq '2026-07-30T13:24:00+02:00' <<<"$page"; then
               exit 0
             fi
             sleep 5
