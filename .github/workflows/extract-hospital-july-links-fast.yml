@@ -1,0 +1,68 @@
+name: Rychle vytáhnout odkazy červencových smluv nemocnice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-july-links-fast-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Stáhnout červencový dump a vypsat přesné záznamy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/nemocnice-kadan-neindexovane-20260730
+          python3 - <<'PY'
+          import json, re, urllib.request, xml.etree.ElementTree as ET
+          from pathlib import Path
+          url='https://data.smlouvy.gov.cz/dump_2026_07.xml'
+          tmp=Path('/tmp/dump_2026_07.xml')
+          req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-research/1.0'})
+          with urllib.request.urlopen(req,timeout=300) as r, tmp.open('wb') as f:
+              while True:
+                  b=r.read(1024*1024)
+                  if not b: break
+                  f.write(b)
+          def loc(t): return t.rsplit('}',1)[-1]
+          hits=[]
+          for _,e in ET.iterparse(tmp,events=('end',)):
+              if loc(e.tag).lower()!='zaznam': continue
+              x=ET.tostring(e,encoding='unicode')
+              low=x.casefold()
+              if ('25479300' in low or 'nemocnice kadaň' in low or 'nemocnice kadan' in low) and any(k in low for k in ['770 21 120','770/21-120','stapro','modernizace a interoperability nis','servisní smlouva']):
+                  vals=[]
+                  for n in e.iter():
+                      if n.text and n.text.strip(): vals.append((loc(n.tag),n.text.strip()))
+                      for a in n.attrib.values(): vals.append(('@attr',a))
+                  urls=sorted({v for _,v in vals if v.startswith('http')})
+                  hits.append({'values':vals,'urls':urls,'xml':x})
+              e.clear()
+          out=Path('research/nemocnice-kadan-neindexovane-20260730/cervenec-rychle-odkazy.json')
+          out.write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Rychlá extrakce červencových odkazů','',f'Nalezeno: **{len(hits)}** záznamů.','']
+          for i,h in enumerate(hits,1):
+              md += [f'## Záznam {i}','']
+              for k,v in h['values']:
+                  if len(v)<500: md.append(f'- **{k}:** {v}')
+              md.append('')
+          Path('research/nemocnice-kadan-neindexovane-20260730/cervenec-rychle-odkazy.md').write_text('\n'.join(md),encoding='utf-8')
+          print('nalezeno',len(hits))
+          PY
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add research/nemocnice-kadan-neindexovane-20260730/
+          git commit -m 'Vytáhnout přesné odkazy červencových smluv nemocnice' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
