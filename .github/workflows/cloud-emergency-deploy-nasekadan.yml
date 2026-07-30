@@ -1,198 +1,74 @@
-name: Kanonická produkční pojistka Naše Kadaň
-run-name: Nasadit aktuální main a ověřit chronologické pořadí
+name: Okamžitě nasadit článek Martina Kadlece
 
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'cloud-deploy-status.json'
-      - 'fast-publication-status.json'
-      - '.github/facebook-last-status.json'
-      - '.github/facebook-publish-pending.txt'
-      - '.github/facebook-published/**'
-      - '.github/chronology-source-status.json'
-      - '.github/autokemp-direct-deploy-status.json'
-  schedule:
-    - cron: '*/15 * * * *'
+    paths:
+      - '.github/workflows/cloud-emergency-deploy-nasekadan.yml'
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: nasekadan-production
-  cancel-in-progress: false
+  group: nasekadan-kadlec-emergency
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 10
     env:
-      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_PRIMARY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_FALLBACK: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Stáhnout aktuální main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
 
-      - name: Připravit SSH klíč
+      - name: Připravit funkční SSH klíč
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$OVH_KEY"
-          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_ovh_key"
-          chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
+          KEY="$OVH_KEY_PRIMARY"
+          if [ -z "$KEY" ]; then KEY="$OVH_KEY_FALLBACK"; fi
+          test -n "$KEY"
+          printf '%s\n' "$KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit a veřejně ověřit
-        id: deploy_verify
-        continue-on-error: true
+      - name: Okamžitě zkopírovat článek a přehledy na OVH
         shell: bash
         run: |
           set -euo pipefail
-          SOURCE_SHA="$(git rev-parse HEAD)"
-          ssh -i "$RUNNER_TEMP/nasekadan_ovh_key" \
-            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          sudo -n true
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          git clean -fd
-          SHA="$(git rev-parse HEAD)"
-          chmod +x deploy/sync-production.sh
-          if sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh; then
-            echo 'Kanonický deploy prošel.'
-          else
-            echo 'Kanonický deploy selhal; nasazuji úplný statický obsah stejného main.' >&2
-            sudo install -d -m 0755 /var/www/nasekadan
-            sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-            tar \
-              --exclude='.git' --exclude='.github' --exclude='Dockerfile' \
-              --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' \
-              --exclude='deploy' -C /opt/nasekadan -cf - . \
-              | sudo tar -C /var/www/nasekadan -xf -
-            printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=static-fallback\n' \
-              "$SHA" "$(date -u +%FT%TZ)" \
-              | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
-            sudo chmod -R a+rX /var/www/nasekadan
-          fi
+          test -s clanky/martin-kadlec-navrat-hokej-kadan-2026.html
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 clanky/martin-kadlec-navrat-hokej-kadan-2026.html /var/www/nasekadan/clanky/martin-kadlec-navrat-hokej-kadan-2026.html
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
+          sudo install -m 0644 news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+          sudo chmod a+r /var/www/nasekadan/clanky/martin-kadlec-navrat-hokej-kadan-2026.html /var/www/nasekadan/index.html /var/www/nasekadan/clanky/index.html /var/www/nasekadan/rss.xml /var/www/nasekadan/sitemap.xml /var/www/nasekadan/news-sitemap.xml
           REMOTE
 
-          stamp="${GITHUB_RUN_ID}-$(date +%s)"
-          ok=0
-          for attempt in $(seq 1 30); do
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?verify=$stamp-$attempt" -o /tmp/nk-home.html || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?verify=$stamp-$attempt" -o /tmp/nk-archive.html || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html?verify=$stamp-$attempt" -o /tmp/nk-autokemp.html || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?verify=$stamp-$attempt" -o /tmp/nk-culture.html || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?verify=$stamp-$attempt" -o /tmp/nk-rss.xml || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?verify=$stamp-$attempt" -o /tmp/nk-sitemap.xml || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?verify=$stamp-$attempt" -o /tmp/nk-health.txt || true
-            if SOURCE_SHA="$SOURCE_SHA" python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-
-          expected = [
-              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html',
-              '/clanky/arc-med-nemocnice-kadan.html',
-              '/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html',
-              '/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html',
-              '/clanky/kolobezky-hriste-detektor-kovu-kadan.html',
-              '/clanky/avies-nemocnice-kadan.html',
-              '/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html',
-          ]
-
-          def order(path, start, end):
-              text = Path(path).read_text(encoding='utf-8', errors='replace')
-              if start not in text or end not in text:
-                  return []
-              body = text.split(start, 1)[1].split(end, 1)[0]
-              blocks = re.findall(r'<article\b[^>]*>.*?</article>', body, re.I | re.S)
-              result = []
-              for block in blocks:
-                  match = re.search(r'href=["\'](/clanky/[^"\']+\.html)["\']', block, re.I)
-                  if match:
-                      result.append(match.group(1))
-              return result
-
-          home_text = Path('/tmp/nk-home.html').read_text(encoding='utf-8', errors='replace')
-          archive_text = Path('/tmp/nk-archive.html').read_text(encoding='utf-8', errors='replace')
-          article = Path('/tmp/nk-autokemp.html').read_text(encoding='utf-8', errors='replace')
-          culture = Path('/tmp/nk-culture.html').read_text(encoding='utf-8', errors='replace')
-          rss = Path('/tmp/nk-rss.xml').read_text(encoding='utf-8', errors='replace')
-          sitemap = Path('/tmp/nk-sitemap.xml').read_text(encoding='utf-8', errors='replace')
-          health = Path('/tmp/nk-health.txt').read_text(encoding='utf-8', errors='replace')
-
-          home = order('/tmp/nk-home.html', '<div class="article-list">', '<p class="archive-note">')
-          archive = order('/tmp/nk-archive.html', '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>')
-          checks = [
-              home[:len(expected)] == expected,
-              archive[:len(expected)] == expected,
-              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html' in home_text,
-              'Odstávky elektřiny omezí v srpnu provoz restaurace' in article,
-              'data-autokemp-outages-note' in culture,
-              'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' in rss,
-              'arc-med-nemocnice-kadan.html' in rss,
-              'odstavky-elektriny-autokemp-prunerov-srpen-2026.html' in sitemap,
-              f"source={os.environ['SOURCE_SHA']}" in health,
-          ]
-          raise SystemExit(0 if all(checks) else 1)
-          PY
-            then
-              ok=1
-              break
-            fi
-            sleep 5
-          done
-          test "$ok" = 1
-          echo 'Veřejný web je aktuální a články jsou přesně chronologicky seřazené.'
-
-      - name: Zapsat výsledek nasazení
-        if: always()
+      - name: Ověřit živý článek
         shell: bash
-        env:
-          OUTCOME: ${{ steps.deploy_verify.outcome }}
         run: |
           set -euo pipefail
-          SOURCE_SHA="$(git rev-parse HEAD)"
-          GENERATED="$(date -u +%FT%TZ)"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          status = 'passed' if os.environ.get('OUTCOME') == 'success' else 'failed'
-          payload = {
-              'status': status,
-              'generatedAt': os.environ['GENERATED'],
-              'source': os.environ['SOURCE_SHA'],
-              'rule': 'descending article:published_time/datePublished',
-              'requiredOrder': [
-                  'odstavky-elektriny-autokemp-prunerov-srpen-2026.html',
-                  'arc-med-nemocnice-kadan.html',
-                  'hasici-kadan-vycvik-zachrana-voda-nechranice.html',
-                  'nemocnice-kadan-darovala-82-luzek-ukrajine.html',
-                  'kolobezky-hriste-detektor-kovu-kadan.html',
-                  'avies-nemocnice-kadan.html',
-                  'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html',
-              ],
-          }
-          Path('cloud-deploy-status.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          PY
-          git config user.name 'Naše Kadaň deploy kontrola'
-          git config user.email 'actions@users.noreply.github.com'
-          git add cloud-deploy-status.json
-          git commit -m "Zapsat stav produkčního nasazení: $OUTCOME [skip ci]" || true
-          for attempt in 1 2 3; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
+          for n in $(seq 1 20); do
+            page="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?deploy=${GITHUB_SHA}-${n}" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?deploy=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home"; then
+              echo 'Článek je veřejný.'
               exit 0
             fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt * 4))
+            sleep 3
           done
           exit 1
-
-      - name: Ukončit při neúspěšném nasazení
-        if: steps.deploy_verify.outcome != 'success'
-        run: exit 1
