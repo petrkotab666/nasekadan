@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/force-deploy-martin-kadlec-final.yml'
+      - 'clanky/martin-kadlec-navrat-hokej-kadan-2026.html'
   workflow_dispatch:
 
 permissions:
@@ -74,4 +75,4 @@ jobs:
           echo 'Veřejné ověření rozšířené verze selhalo.' >&2
           exit 1
 
-# redeploy 2026-07-30 20:47 CEST
+# redeploy via merged PR 2026-07-30 20:49 CEST
