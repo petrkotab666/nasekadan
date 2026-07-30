@@ -87,9 +87,11 @@ def main() -> int:
     run("scripts/ensure_petition_document_details.py")
     run("scripts/link_hospital_series.py")
     run("scripts/normalize_footers.py", "--write", "--check")
+    run("scripts/normalize_articles.py", "--write", "--check")
+    run("scripts/ensure_summer_ad_rotation.py", "--write", "--check")
     run("scripts/validate_publication_integrity.py")
 
-    print("Finální kontrola webu je v pořádku; stará verze článku o petici se nemůže vrátit.")
+    print("Finální kontrola webu je v pořádku; stará verze článku o petici ani reklam se nemůže vrátit.")
     return 0
 
 
