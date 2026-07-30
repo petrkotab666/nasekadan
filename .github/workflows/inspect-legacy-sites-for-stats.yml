@@ -1,0 +1,41 @@
+name: Zjistit nasazení starších webů pro statistiky
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-legacy-sites-for-stats.yml'
+      - '.github/inspect-legacy-sites-trigger.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prohlédnout HTML, hlavičky a WordPress API
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/legacy-sites.txt"
+          for domain in vaseuklizecka.cz levnevyklidime.cz sirupyzbylinek.cz; do
+            echo "===== $domain =====" >> "$RUNNER_TEMP/legacy-sites.txt"
+            curl -kLsS -A 'Mozilla/5.0 StatsInspector' --max-time 25 -D /tmp/h "https://$domain/" -o /tmp/b || true
+            echo '--- HEADERS ---' >> "$RUNNER_TEMP/legacy-sites.txt"
+            grep -iE '^(HTTP/|server:|x-powered-by:|link:|location:|content-type:)' /tmp/h | head -n 30 >> "$RUNNER_TEMP/legacy-sites.txt" || true
+            echo '--- MARKERS ---' >> "$RUNNER_TEMP/legacy-sites.txt"
+            grep -Eio '<meta[^>]+generator[^>]*>|<script[^>]+src=[^>]+>|wp-content[^"'"'"' <]+' /tmp/b | head -n 120 >> "$RUNNER_TEMP/legacy-sites.txt" || true
+            echo '--- WP JSON ---' >> "$RUNNER_TEMP/legacy-sites.txt"
+            curl -kLsS -A 'Mozilla/5.0 StatsInspector' --max-time 15 -D /tmp/jh "https://$domain/wp-json/" -o /tmp/jb || true
+            head -n 1 /tmp/jh >> "$RUNNER_TEMP/legacy-sites.txt" || true
+            head -c 500 /tmp/jb >> "$RUNNER_TEMP/legacy-sites.txt" || true
+            echo >> "$RUNNER_TEMP/legacy-sites.txt"
+          done
+          cat "$RUNNER_TEMP/legacy-sites.txt"
+      - name: Uložit diagnostiku
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/legacy-sites.txt`,'utf8')}catch{};await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STARŠÍ WEBY STATISTIKY] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-30000).replace(/```/g,'---')+'\n```'});
