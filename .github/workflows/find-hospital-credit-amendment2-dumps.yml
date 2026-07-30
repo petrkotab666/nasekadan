@@ -1,0 +1,78 @@
+name: Dohledat úvěrový dodatek č. 2 v měsíčních datech
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-credit-amendment2-dumps-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Projít měsíce leden až květen 2026
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT='research/nemocnice-kadan-neindexovane-20260730/uver-dodatek-2-hledani'
+          mkdir -p "$OUT"
+          python3 - <<'PY'
+          from pathlib import Path
+          import urllib.request, xml.etree.ElementTree as ET, json, re
+          out=Path('research/nemocnice-kadan-neindexovane-20260730/uver-dodatek-2-hledani')
+          months=[f'2026_{m:02d}' for m in range(1,6)]
+          hits=[]
+          def loc(tag): return tag.rsplit('}',1)[-1]
+          for month in months:
+              url=f'https://data.smlouvy.gov.cz/dump_{month}.xml'
+              tmp=Path(f'/tmp/dump_{month}.xml')
+              req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-research/1.0'})
+              try:
+                  with urllib.request.urlopen(req,timeout=300) as r, tmp.open('wb') as f:
+                      while True:
+                          data=r.read(1024*1024)
+                          if not data: break
+                          f.write(data)
+              except Exception as exc:
+                  hits.append({'month':month,'download_error':str(exc)}); continue
+              found=0
+              for _,elem in ET.iterparse(tmp,events=('end',)):
+                  if loc(elem.tag).lower()!='zaznam': continue
+                  xml=ET.tostring(elem,encoding='unicode')
+                  low=xml.casefold()
+                  if ('25479300' in low or 'nemocnice kadaň' in low or 'nemocnice kadan' in low) and ('64948242' in low or 'unicredit bank' in low) and ('770/21-120' in low or '770 21 120' in low or '770-21-120' in low):
+                      vals=[]
+                      for n in elem.iter():
+                          if n.text and n.text.strip(): vals.append((loc(n.tag),n.text.strip()))
+                          for v in n.attrib.values(): vals.append(('@attr',v))
+                      urls=sorted({v for _,v in vals if v.startswith('http')})
+                      hits.append({'month':month,'values':vals,'urls':urls,'xml':xml}); found+=1
+                  elem.clear()
+              tmp.unlink(missing_ok=True)
+              print(month,'hits',found)
+          out.joinpath('vysledky.json').write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Hledání dodatku č. 2 – leden až květen 2026','']
+          for h in hits:
+              md.append(f"## {h.get('month')}")
+              if 'download_error' in h: md.append(f"- Chyba: {h['download_error']}")
+              else:
+                  for k,v in h['values']:
+                      if len(v)<600: md.append(f'- **{k}:** {v}')
+              md.append('')
+          out.joinpath('PREHLED-2026-01-05.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add "$OUT"
+          git commit -m 'Dohledat úvěrové dodatky nemocnice v datech leden až květen 2026' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
