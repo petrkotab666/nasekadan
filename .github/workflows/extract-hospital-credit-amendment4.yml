@@ -1,0 +1,90 @@
+name: Projít obrazový úvěrový dodatek č. 4 Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-credit-amendment4-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Instalovat PDF a OCR nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ces
+          python -m pip install --quiet Pillow
+      - name: Stáhnout, ověřit a převést každou stranu
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT='research/nemocnice-kadan-neindexovane-20260730/uver-dodatek-4'
+          TMP='/tmp/nemkadan-uver-dodatek4'
+          mkdir -p "$OUT" "$TMP"
+          URL='https://smlouvy.gov.cz/smlouva/soubor/46741252/Dodatek%20%C4%8D.%204%20ke%20smlouv%C4%9B%20o%20%C3%BAv%C4%9Bru%20%C4%8D.%20770%2021%20120%20ze%20dne%202.%20listopadu%202021.pdf'
+          EXPECTED='7cc7490c497f35f0919fbc9d9711ebd28df8e6ad053ea2e232268d920eeac5ab'
+          curl -k -L --fail --retry 4 --retry-delay 2 "$URL" -o "$TMP/dodatek4.pdf"
+          test "$(head -c 5 "$TMP/dodatek4.pdf")" = '%PDF-'
+          ACTUAL="$(sha256sum "$TMP/dodatek4.pdf" | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          pdfinfo "$TMP/dodatek4.pdf" > "$OUT/pdfinfo.txt"
+          pdftotext -layout "$TMP/dodatek4.pdf" "$OUT/textova-vrstva.txt" || true
+          PAGES="$(awk '/^Pages:/ {print $2}' "$OUT/pdfinfo.txt")"
+          pdftoppm -png -r 190 "$TMP/dodatek4.pdf" "$TMP/strana"
+          : > "$OUT/ocr-vsechny-strany.txt"
+          n=0
+          for image in "$TMP"/strana-*.png; do
+            n=$((n+1))
+            base="$TMP/ocr-$n"
+            tesseract "$image" "$base" -l ces+eng --psm 6 >/dev/null 2>&1 || true
+            printf '\n\n===== STRANA %s =====\n' "$n" >> "$OUT/ocr-vsechny-strany.txt"
+            cat "$base.txt" >> "$OUT/ocr-vsechny-strany.txt" 2>/dev/null || true
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw
+          out=Path('research/nemocnice-kadan-neindexovane-20260730/uver-dodatek-4')
+          tmp=Path('/tmp/nemkadan-uver-dodatek4')
+          images=sorted(tmp.glob('strana-*.png'))
+          for start in range(0,len(images),4):
+              sheet=Image.new('RGB',(1600,2200),'white')
+              batch=images[start:start+4]
+              for p,img_path in enumerate(batch):
+                  img=Image.open(img_path).convert('RGB')
+                  img.thumbnail((760,1020))
+                  x=(p%2)*800+(800-img.width)//2
+                  y=(p//2)*1100+30
+                  sheet.paste(img,(x,y))
+                  ImageDraw.Draw(sheet).text(((p%2)*800+20,(p//2)*1100+1060),f'Strana {start+p+1}',fill='black')
+              sheet.save(out/f'nahled-strany-{start+1:02d}-{start+len(batch):02d}.jpg',quality=86,optimize=True)
+          PY
+          cat > "$OUT/metadata.md" <<EOF
+          # Dodatek č. 4 k úvěrové smlouvě 770 21 120
+
+          - ID smlouvy: 36382532
+          - ID verze: 38715676
+          - Číslo smlouvy: 2026-75
+          - Datum uzavření: 9. července 2026
+          - Datum zveřejnění: 10. července 2026
+          - Počet stran: $PAGES
+          - SHA-256 dle Registru smluv: \`$EXPECTED\`
+          - SHA-256 staženého dokumentu: \`$ACTUAL\`
+          - Kontrola shody: **ano**
+          - Zdroj přílohy: $URL
+          EOF
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add "$OUT"
+          git commit -m 'Rozbalit obrazový úvěrový dodatek č. 4 Nemocnice Kadaň' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
