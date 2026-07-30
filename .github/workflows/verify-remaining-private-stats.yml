@@ -1,0 +1,52 @@
+name: Ověřit zbývající soukromé statistiky
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-remaining-private-stats.yml'
+      - '.github/verify-remaining-stats-trigger.txt'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Ověřit živé weby
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          : > "$RUNNER_TEMP/result.txt"
+          failed=0
+          for domain in nakupvakci.cz lastminuteslevy.cz sirupyzbylinek.cz testywebu.cz; do
+            ok=0
+            for n in $(seq 1 40); do
+              body=$(curl -kLsS -A 'Mozilla/5.0 RemainingStatsVerify' --max-time 25 "https://$domain/?verify=$n-$(date +%s)" || true)
+              sh=$(mktemp); sb=$(mktemp)
+              code=$(curl -kLsS -A 'Mozilla/5.0 RemainingStatsVerify' --max-time 25 -D "$sh" -o "$sb" -w '%{http_code}' "https://$domain/statistiky/?verify=$n-$(date +%s)" || true)
+              integrated=0; stats=0
+              if grep -q '_nkstats/tracker.js\|owned-promotion-renderer.js\|__NK_TESTYWEBU_STATS_V1__' <<<"$body"; then integrated=1; fi
+              if [ "$code" = 200 ] && grep -q 'statistiky-webu' "$sb"; then stats=1; fi
+              if grep -qi 'location:.*nasekadan.cz/statistiky-webu' "$sh"; then stats=1; fi
+              rm -f "$sh" "$sb"
+              if [ "$integrated" = 1 ] && [ "$stats" = 1 ]; then ok=1; break; fi
+              sleep 5
+            done
+            echo "$domain INTEGRACE=$integrated STATISTIKY=$stats HTTP=$code" | tee -a "$RUNNER_TEMP/result.txt"
+            [ "$ok" = 1 ] || failed=$((failed+1))
+          done
+          test "$failed" -eq 0
+          echo 'OVERENO: zbývající čtyři weby jsou živě zapojené.' | tee -a "$RUNNER_TEMP/result.txt"
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env: {OUTCOME: "${{ steps.check.outcome }}"}
+        with:
+          script: |
+            const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/result.txt`,'utf8')}catch{};const ok=process.env.OUTCOME==='success';const i=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[ZBÝVAJÍCÍ STATISTIKY] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+log.replace(/```/g,'---')+'\n```'});if(ok)await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:i.data.number,state:'closed',state_reason:'completed'});
+      - if: steps.check.outcome != 'success'
+        run: exit 1
