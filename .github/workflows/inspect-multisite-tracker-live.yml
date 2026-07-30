@@ -1,0 +1,45 @@
+name: Ověřit živý měřicí skript všech webů
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-multisite-tracker-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Načíst živý tracker a koncové body
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          {
+            echo '--- HTTPS TRACKER ---'
+            curl -kLsS --max-time 20 https://dilynazakazku.cz/_nkstats/tracker.js
+            echo
+            echo '--- TRACKER HEADERS ---'
+            curl -kLsSI --max-time 20 https://dilynazakazku.cz/_nkstats/tracker.js
+            echo '--- HIT TEST ---'
+            curl -kLsS --max-time 20 -D - 'https://dilynazakazku.cz/_nkstats/hit.gif?site=externi-test.invalid&path=%2Fzkouska&ref=' -o /tmp/hit.gif
+            wc -c /tmp/hit.gif
+          } > "$RUNNER_TEMP/out.txt" 2>&1
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out='';
+            try { out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8'); } catch {}
+            await github.rest.issues.create({
+              owner:context.repo.owner, repo:context.repo.repo,
+              title:`[MULTISITE TRACKER LIVE] ${new Date().toISOString()}`,
+              body:'```text\n'+out.slice(-30000).replace(/```/g,'---')+'\n```'
+            });
