@@ -1,0 +1,146 @@
+name: Rychlá síťová rešerše lávky u Shellu v8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deep-research-lavka-shell-v8-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Projít skryté odkazy a veřejná rozhraní
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          rm -rf .github/research/lavka-shell-v8
+          mkdir -p .github/research/lavka-shell-v8
+          cat > /tmp/v8.py <<'PY'
+          import json,re,time,unicodedata
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          R=Path('.github/research/lavka-shell-v8')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 NaseKadanResearch/1.0'
+          def get(u):
+              for i in range(4):
+                  try:
+                      r=s.get(u,timeout=60,allow_redirects=True); r.raise_for_status(); return r
+                  except Exception as e:
+                      if i==3: raise
+                      time.sleep(2+i)
+          def norm(x): return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+
+          out={'hlidac':[],'edesky':[],'frontends':[],'city':[],'errors':[]}
+          # Hlídač: exact title and city searches, preserve every href in matching table rows/cards.
+          urls=[
+           'https://www.hlidacstatu.cz/VerejneZakazky/Hledat?Order=1&Page=1&Q=ico%3A00261912&Zahajeny=False',
+           'https://www.hlidacstatu.cz/VerejneZakazky/Hledat?Order=1&Page=1&Q=%22L%C3%A1vka%20p%C5%99es%20silnici%20%C4%8D.%20568%22&Zahajeny=False'
+          ]
+          detail=set()
+          for u in urls:
+              try:r=get(u)
+              except Exception as e: out['errors'].append({'url':u,'error':repr(e)}); continue
+              soup=BeautifulSoup(r.text,'lxml')
+              for node in soup.select('tr, article, .search-result, .row'):
+                  tx=' '.join(node.stripped_strings)
+                  if 'lávka přes silnici' in tx.lower() or 'lavka pres silnici' in norm(tx):
+                      links=[urljoin(r.url,a.get('href')) for a in node.select('a[href]')]
+                      out['hlidac'].append({'source':r.url,'text':tx,'links':links})
+                      for v in links:
+                          if '/verejnezakazky/zakazka/' in v.lower(): detail.add(v)
+              # fallback all detail links near title in raw html
+              for m in re.finditer(r'href=["\']([^"\']*/(?:VerejneZakazky|verejnezakazky)/zakazka/[^"\']+)["\']',r.text,re.I): detail.add(urljoin(r.url,m.group(1)))
+          for u in sorted(detail):
+              try:r=get(u); soup=BeautifulSoup(r.text,'lxml'); tx=' '.join(soup.stripped_strings)
+              except Exception as e: out['errors'].append({'url':u,'error':repr(e)}); continue
+              if 'lávka' in tx.lower() or 'lavka' in norm(tx):
+                  out['hlidac'].append({'detail':r.url,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'text':tx[:30000], 'links':[urljoin(r.url,a.get('href')) for a in soup.select('a[href]')]})
+
+          # Edesky known Kadaň pages: find source-board link, paginate, collect bridge-related docs.
+          q=['https://edesky.cz/dokument/27599775','https://edesky.cz/dokument/22335309']
+          seen=set()
+          while q and len(seen)<120:
+              u=q.pop(0)
+              if u in seen: continue
+              seen.add(u)
+              try:r=get(u); soup=BeautifulSoup(r.text,'lxml')
+              except Exception as e: out['errors'].append({'url':u,'error':repr(e)}); continue
+              tx=' '.join(soup.stripped_strings); ntx=norm(tx)
+              links=[urljoin(r.url,a.get('href')) for a in soup.select('a[href]')]
+              if any(k in ntx for k in ['lavka','kopecek','shell','419/2026','523/2026','00066/ov','kolaud','predani','penale']):
+                  out['edesky'].append({'url':r.url,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'text':tx[:20000], 'links':links})
+              for v in links:
+                  if 'edesky.cz' not in urlparse(v).netloc: continue
+                  if ('/desky/' in v or '/dokument/' in v or 'page=' in v) and v not in seen:
+                      label=norm(v+' '+next((a.get_text(' ',strip=True) for a in soup.select('a[href]') if urljoin(r.url,a.get('href'))==v),''))
+                      if '/desky/' in v or any(k in label for k in ['kadan','2026','usneseni','zapis','lavka']): q.append(v.split('#')[0])
+
+          # Frontend bundles: extract API/search endpoints.
+          for base in ['https://zakazky.gov.cz/','https://tenderarena.cz/profil/MestoKadan']:
+              item={'base':base,'scripts':[],'endpoints':[]}
+              try:r=get(base); soup=BeautifulSoup(r.text,'lxml')
+              except Exception as e: out['errors'].append({'url':base,'error':repr(e)}); continue
+              for a in soup.select('script[src]'):
+                  su=urljoin(r.url,a.get('src')); item['scripts'].append(su)
+                  try:js=get(su).text
+                  except Exception: continue
+                  vals=set()
+                  for pat in [r'https?://[^"\'\s)]+',r'["\'](/[^"\']*(?:api|graphql|search|zakaz|procurement|profile|public)[^"\']*)["\']']:
+                      for m in re.finditer(pat,js,re.I): vals.add((m.group(1) if m.lastindex else m.group(0)).strip('"\''))
+                  item['endpoints'] += sorted(vals)
+              item['endpoints']=list(dict.fromkeys(item['endpoints']))[:500]
+              out['frontends'].append(item)
+
+          # City site, sitemap/robots and direct relevant linked docs.
+          seeds=['https://www.mesto-kadan.cz/','https://mesto-kadan.cz/']
+          visited=set()
+          for seed in seeds:
+              for suffix in ['','robots.txt','sitemap.xml','sitemap_index.xml']:
+                  u=urljoin(seed,suffix)
+                  if u in visited: continue
+                  visited.add(u)
+                  try:r=get(u)
+                  except Exception as e: out['errors'].append({'url':u,'error':repr(e)}); continue
+                  tx=r.text; ntx=norm(tx)
+                  if any(k in ntx for k in ['lavka','kopecek','shell','usneseni','uredni deska']): out['city'].append({'url':r.url,'text':tx[:30000]})
+                  for v in re.findall(r'https?://[^<\s"\']+',tx):
+                      if 'mesto-kadan.cz' in urlparse(v).netloc and any(k in norm(v) for k in ['sitemap','usneseni','zapis','lavka','uredni','pdf']):
+                          try:rr=get(v); nt=norm(rr.text)
+                          except Exception: continue
+                          if any(k in nt for k in ['lavka','kopecek','shell','419/2026','523/2026']): out['city'].append({'url':rr.url,'text':rr.text[:30000]})
+          (R/'results.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Rychlá síťová rešerše lávky u Shellu v8','']
+          for section in ['hlidac','edesky','frontends','city','errors']:
+              md += ['## '+section]
+              for x in out[section]: md.append('- '+json.dumps(x,ensure_ascii=False)[:5000])
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v8.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-shell-v8
+          git commit -m 'Dokončit rychlou síťovou rešerši lávky v8' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
