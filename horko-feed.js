@@ -1,7 +1,17 @@
 (()=>{
   'use strict';
 
+  // Odkazy a partnerství jsou převzaty z centrálních podkladů v pojistime.to.
   const ITEMS=[
+    {
+      id:'horko-apollostore',
+      title:'Klimatizace a ventilátory ApolloStore',
+      text:'Klimatizace, ventilátory, ochlazovače a odvlhčovače pro horké dny v bytě, domě nebo kanceláři.',
+      tag:'Klimatizace a ochlazení',
+      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=a883bbdd',
+      target:'apollostore.com/cz',
+      icon:'❄️'
+    },
     {
       id:'horko-concept',
       title:'Ventilátory Concept',
@@ -34,6 +44,15 @@
   const esc=value=>String(value??'').replace(/[&<>'"]/g,char=>({
     '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
   })[char]);
+
+  const hashSeed=value=>[...String(value)].reduce((sum,char)=>((sum*31)+char.charCodeAt(0))>>>0,0);
+
+  function rotatingItems(){
+    const day=new Date().toISOString().slice(0,10);
+    const shift=hashSeed(`${location.pathname}|${day}|heat-feed`)%ITEMS.length;
+    const rotated=[...ITEMS.slice(shift),...ITEMS.slice(0,shift)];
+    return rotated.slice(0,3);
+  }
 
   function styles(){
     if(document.getElementById('nk-horko-feed-style'))return;
@@ -68,7 +87,7 @@
     const section=document.createElement('section');
     section.className='nk-horko-feed';
     section.dataset.heatAffiliateFeed='1';
-    section.innerHTML=`<div class="nk-horko-feed-head"><div><small>REKLAMA · SEZÓNNÍ VÝBĚR</small><strong>Jak zvládnout horké dny doma</strong></div><span>Přímé odkazy do kategorií</span></div><div class="nk-horko-grid">${ITEMS.map(card).join('')}</div>`;
+    section.innerHTML=`<div class="nk-horko-feed-head"><div><small>REKLAMA · SEZÓNNÍ VÝBĚR</small><strong>Jak zvládnout horké dny doma</strong></div><span>Nabídky se průběžně střídají</span></div><div class="nk-horko-grid">${rotatingItems().map(card).join('')}</div>`;
     return section;
   }
 
