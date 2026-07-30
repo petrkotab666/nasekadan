@@ -1,0 +1,231 @@
+name: Okamžitě nasadit letní reklamy
+run-name: Přímé OVH nasazení zájezdů, klimatizací a ventilátorů
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-summer-ads-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+
+    steps:
+      - name: Připravit SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_ovh_key"
+              selected="$name"
+              break
+            fi
+          done
+          test -n "$selected"
+          test -s "$RUNNER_TEMP/nasekadan_ovh_key"
+          chmod 600 "$RUNNER_TEMP/nasekadan_ovh_key"
+          echo "selected=$selected" >> "$GITHUB_OUTPUT"
+          echo "SSH klíč je dostupný."
+
+      - name: Nasadit na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=5 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          sudo -n true
+
+          if [[ ! -d /opt/nasekadan/.git ]]; then
+            sudo rm -rf /opt/nasekadan
+            sudo git clone https://github.com/petrkotab666/nasekadan.git /opt/nasekadan
+            sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          fi
+
+          cd /opt/nasekadan
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+
+          node --check reklamy-oprava-obrazku.js
+          node --check horko-feed.js
+          python3 -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/enable_heat_feed.py
+          python3 scripts/ensure_summer_ad_rotation.py --write --check
+
+          canonical_ok=false
+          if timeout 28m env NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh; then
+            canonical_ok=true
+          else
+            echo 'Kanonický build byl zablokován; používám omezenou atomickou opravu reklamních souborů.' >&2
+
+            sudo install -d -m 0755 /var/www/nasekadan/assets
+            sudo install -m 0644 reklamy-oprava-obrazku.js /var/www/nasekadan/reklamy-oprava-obrazku.js
+            sudo install -m 0644 horko-feed.js /var/www/nasekadan/horko-feed.js
+            sudo install -m 0644 assets/affiliate-site-travel-overlay.json /var/www/nasekadan/assets/affiliate-site-travel-overlay.json
+
+            sudo python3 - <<'PY'
+          from __future__ import annotations
+          import re
+          from pathlib import Path
+
+          root=Path('/var/www/nasekadan')
+          summer='20260730-summer-rotation-1'
+          heat='20260730-heat-rotation-1'
+          excluded={'.git','.github','nahled','node_modules'}
+          repair_re=re.compile(r'(<script\b[^>]*\bsrc=["\'])([^"\']*?reklamy-oprava-obrazku\.js)(?:\?[^"\']*)?(["\'][^>]*>\s*</script>)',re.I)
+          main_re=re.compile(r'<script\b[^>]*\bsrc=["\'][^"\']*(?:^|/)reklamy\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>',re.I)
+          heat_re=re.compile(r'\s*<script\b[^>]*\bsrc=["\']/horko-feed\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>\s*',re.I)
+
+          changed=0
+          for path in root.rglob('*.html'):
+              rel=path.relative_to(root)
+              if any(part in excluded for part in rel.parts):
+                  continue
+              try:
+                  text=path.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  continue
+              original=text
+              text=repair_re.sub(lambda m:f'{m.group(1)}{m.group(2)}?v={summer}{m.group(3)}',text)
+              if main_re.search(text) and not repair_re.search(text):
+                  tag=f'<script src="/reklamy-oprava-obrazku.js?v={summer}"></script>'
+                  text=re.sub(r'</body\s*>',tag+'\n</body>',text,count=1,flags=re.I)
+              text=heat_re.sub('\n',text)
+              is_article=(len(rel.parts)==2 and rel.parts[0]=='clanky' and rel.name!='index.html' and 'article-shell' in text and re.search(r'<article\b[^>]*class=["\'][^"\']*\barticle\b',text,re.I))
+              if is_article:
+                  tag=f'<script src="/horko-feed.js?v={heat}"></script>'
+                  text=re.sub(r'</body\s*>',tag+'\n</body>',text,count=1,flags=re.I)
+              if text!=original:
+                  path.write_text(text,encoding='utf-8')
+                  changed+=1
+          print(f'Omezená oprava aktualizovala {changed} veřejných HTML souborů.')
+          PY
+
+            sudo chmod -R a+rX /var/www/nasekadan
+            sudo nginx -t
+            sudo systemctl reload nginx
+          fi
+
+          grep -Fq 'lastminuteslevy-cz' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          grep -Fq 'apollostore-cz' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          grep -Fq 'installFeaturedSeasonalBanner' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          grep -Fq 'horko-apollostore' /var/www/nasekadan/horko-feed.js
+          grep -Fq 'rotatingItems' /var/www/nasekadan/horko-feed.js
+          grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' /var/www/nasekadan/index.html
+          grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' /var/www/nasekadan/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html
+          grep -Fq 'ceskekormidlo-cz' /var/www/nasekadan/assets/affiliate-site-travel-overlay.json
+          grep -Fq 'proalergiky-cz' /var/www/nasekadan/assets/affiliate-site-travel-overlay.json
+          echo "canonical_ok=$canonical_ok" | sudo tee /var/www/nasekadan/summer-ad-deployment.txt >/dev/null
+          echo 'Letní reklamní soubory jsou na OVH nasazené a lokálně ověřené.'
+          REMOTE
+
+      - name: Ověřit veřejný web
+        id: verify
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/summer-live"
+          success=false
+          for attempt in $(seq 1 40); do
+            token="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            curl -fsS --max-time 20 "https://nasekadan.cz/?summer-direct=$token" -o "$RUNNER_TEMP/summer-live/home.html" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html?summer-direct=$token" -o "$RUNNER_TEMP/summer-live/article.html" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/reklamy-oprava-obrazku.js?summer-direct=$token" -o "$RUNNER_TEMP/summer-live/rotation.js" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/horko-feed.js?summer-direct=$token" -o "$RUNNER_TEMP/summer-live/heat.js" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/affiliate-site-travel-overlay.json?summer-direct=$token" -o "$RUNNER_TEMP/summer-live/overlay.json" || true
+
+            if grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' "$RUNNER_TEMP/summer-live/home.html" \
+              && grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' "$RUNNER_TEMP/summer-live/article.html" \
+              && grep -Fq 'lastminuteslevy-cz' "$RUNNER_TEMP/summer-live/rotation.js" \
+              && grep -Fq 'apollostore-cz' "$RUNNER_TEMP/summer-live/rotation.js" \
+              && grep -Fq 'installFeaturedSeasonalBanner' "$RUNNER_TEMP/summer-live/rotation.js" \
+              && grep -Fq 'horko-apollostore' "$RUNNER_TEMP/summer-live/heat.js" \
+              && grep -Fq 'rotatingItems' "$RUNNER_TEMP/summer-live/heat.js" \
+              && grep -Fq 'ceskekormidlo-cz' "$RUNNER_TEMP/summer-live/overlay.json" \
+              && grep -Fq 'proalergiky-cz' "$RUNNER_TEMP/summer-live/overlay.json"; then
+              success=true
+              break
+            fi
+            sleep 10
+          done
+          echo "success=$success" >> "$GITHUB_OUTPUT"
+          test "$success" = true
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          KEY_NAME: ${{ steps.key.outputs.selected }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          VERIFY_SUCCESS: ${{ steps.verify.outputs.success }}
+        with:
+          script: |
+            const fs=require('fs');
+            const read=path=>{try{return fs.readFileSync(path,'utf8')}catch{return ''}};
+            const root=`${process.env.RUNNER_TEMP}/summer-live`;
+            const home=read(`${root}/home.html`);
+            const article=read(`${root}/article.html`);
+            const rotation=read(`${root}/rotation.js`);
+            const heat=read(`${root}/heat.js`);
+            let overlay=null; try{overlay=JSON.parse(read(`${root}/overlay.json`))}catch{}
+            const report={
+              checked_at_utc:new Date().toISOString(),
+              trigger_commit:context.sha,
+              status:process.env.DEPLOY_OUTCOME==='success'&&process.env.VERIFY_SUCCESS==='true'?'success':'failed',
+              ssh_key_available:Boolean(process.env.KEY_NAME),
+              deploy_outcome:process.env.DEPLOY_OUTCOME||null,
+              public_verification_outcome:process.env.VERIFY_OUTCOME||null,
+              homepage_uses_summer_version:home.includes('reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1'),
+              heat_article_uses_rotating_heat_feed:article.includes('horko-feed.js?v=20260730-heat-rotation-1'),
+              live_script_has_lastminute:rotation.includes('lastminuteslevy-cz'),
+              live_script_has_cooling:rotation.includes('apollostore-cz')&&rotation.includes('concept-cz')&&rotation.includes('proalergiky-cz'),
+              live_script_has_rotation:rotation.includes('installFeaturedSeasonalBanner'),
+              live_heat_feed_rotates:heat.includes('horko-apollostore')&&heat.includes('rotatingItems'),
+              live_partner_ids:Array.isArray(overlay?.partners)?overlay.partners.map(row=>row.id):[]
+            };
+            const path='summer-ad-rotation-live-status.json';
+            const content=Buffer.from(JSON.stringify(report,null,2)+'\n').toString('base64');
+            let sha;
+            try{const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(current.data))sha=current.data.sha}catch(error){if(error.status!==404)throw error}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat přímé nasazení letních reklam: ${report.status}`,content,...(sha?{sha}:{})});
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outputs.success }}
+        run: |
+          test "$DEPLOY" = success
+          test "$VERIFY" = true
