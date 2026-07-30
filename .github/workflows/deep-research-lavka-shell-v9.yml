@@ -1,0 +1,205 @@
+name: Cílená rešerše lávky u Shellu v9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deep-research-lavka-shell-v9-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat nástroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+
+      - name: Vytáhnout zápis, první soutěž a veřejné API
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-shell-v9
+          mkdir -p .github/research/lavka-shell-v9/{html,text,pdf}
+          cat > /tmp/v9.py <<'PY'
+          from __future__ import annotations
+          import json,re,subprocess,time,unicodedata
+          from pathlib import Path
+          from urllib.parse import urljoin,urlencode,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+
+          R=Path('.github/research/lavka-shell-v9'); H=R/'html'; T=R/'text'; P=R/'pdf'
+          S=requests.Session(); S.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0; +https://nasekadan.cz)'
+          def get(u, **kw):
+              e=None
+              for i in range(5):
+                  try:
+                      r=S.get(u,timeout=kw.pop('timeout',60),allow_redirects=True,**kw); return r
+                  except Exception as x:e=x;time.sleep(2+i)
+              raise e
+          def norm(x): return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+          def slug(x): return re.sub(r'[^a-z0-9]+','-',norm(x)).strip('-')[:90] or 'x'
+          def run(c): return subprocess.run(c,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          out={'city':[],'edesky':[],'sledujdesky':[],'hlidac':[],'hlidac_api':[],'errors':[]}
+          target='Lávka přes silnici č. 568 včetně úpravy lokality svatý kopeček, Kadaň'
+
+          # Official city pages and every linked document around 2025-2026.
+          city_pages=[
+            'https://www.mesto-kadan.cz/cs/system/hlavni-menu-mesto/zastupitelstvo.html',
+            'https://www.mesto-kadan.cz/cs/system/hlavni-menu-mesto/rada-mesta.html',
+            'https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html',
+            'https://www.mesto-kadan.cz/cs/system/hlavni-menu/uredni-deska.html'
+          ]
+          links=set()
+          for u in city_pages:
+              try:r=get(u)
+              except Exception as e:out['errors'].append({'url':u,'error':repr(e)});continue
+              H.joinpath('city-'+slug(urlparse(u).path)+'.html').write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'lxml'); tx=' '.join(soup.stripped_strings)
+              out['city'].append({'url':r.url,'status':r.status_code,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'text':tx[:15000]})
+              for a in soup.select('a[href]'):
+                  v=urljoin(r.url,a.get('href')); lab=norm(a.get_text(' ',strip=True)+' '+v)
+                  if any(k in lab for k in ['2026','2025','usneseni','zapis','zastupitel','rada mesta','uredni deska','lavka','kopecek']) or v.lower().endswith(('.pdf','.doc','.docx')): links.add(v.split('#')[0])
+          for i,u in enumerate(sorted(links)):
+              if i>=500: break
+              try:r=get(u,timeout=45)
+              except Exception as e:continue
+              ct=r.headers.get('content-type','').lower(); nurl=norm(r.url)
+              if 'pdf' in ct or r.url.lower().endswith('.pdf'):
+                  p=P/f'city-{i:03d}.pdf'; p.write_bytes(r.content)
+                  tmp=Path('/tmp')/(p.name+'.txt'); run(['pdftotext','-layout',str(p),str(tmp)])
+                  txt=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else ''
+                  nt=norm(txt)
+                  if any(k in nt for k in ['lavka','kopecek','shell','419/2026','523/2026','25.6.2026','25. 6. 2026','predani','kolaud','penale']):
+                      tp=T/(p.name+'.txt'); tp.write_text(txt,encoding='utf-8'); out['city'].append({'url':r.url,'type':'pdf','text_file':str(tp),'text':txt[:30000]})
+              elif 'html' in ct:
+                  soup=BeautifulSoup(r.text,'lxml'); tx=' '.join(soup.stripped_strings); nt=norm(tx)
+                  if any(k in nt for k in ['lavka','kopecek','shell','419/2026','523/2026','25.6.2026','predani','kolaud','penale']): out['city'].append({'url':r.url,'type':'html','text':tx[:30000]})
+
+          # Edesky pages for Město Kadaň; source id 112 appears in indexed pages.
+          eurls=[]
+          for page in range(1,31):
+              eurls += [
+                f'https://edesky.cz/dokumenty?poradi=datum&zdroj=112&page={page}',
+                f'https://edesky.cz/dokumenty/240?poradi=datum&tag=Zastupitelstva&zdroj=112&page={page}'
+              ]
+          doclinks=set()
+          for u in eurls:
+              try:r=get(u,timeout=35)
+              except Exception as e:continue
+              if r.status_code!=200: continue
+              soup=BeautifulSoup(r.text,'lxml'); tx=' '.join(soup.stripped_strings); nt=norm(tx)
+              if 'zapis usneseni zastupitelstva mesta kadane ze dne 25.6.2026' in nt:
+                  out['edesky'].append({'url':r.url,'text':tx[:30000]})
+              for a in soup.select('a[href]'):
+                  lab=norm(a.get_text(' ',strip=True))
+                  if '25.6.2026' in lab and 'zapis' in lab and 'kadane' in lab: doclinks.add(urljoin(r.url,a.get('href')))
+          for u in sorted(doclinks):
+              try:r=get(u,timeout=45)
+              except Exception as e:continue
+              soup=BeautifulSoup(r.text,'lxml'); links2=[urljoin(r.url,a.get('href')) for a in soup.select('a[href]')]
+              out['edesky'].append({'url':r.url,'text':' '.join(soup.stripped_strings)[:40000],'links':links2})
+              for v in links2:
+                  if 'blob.core.windows.net' in v or v.lower().endswith('.pdf'):
+                      try:rr=get(v,timeout=60)
+                      except Exception:continue
+                      p=P/f'edesky-{slug(Path(urlparse(v).path).name)}.pdf'; p.write_bytes(rr.content)
+                      tmp=Path('/tmp')/(p.name+'.txt'); run(['pdftotext','-layout',str(p),str(tmp)])
+                      txt=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else ''
+                      if len(re.sub(r'\s+','',txt))<500:
+                          d=Path('/tmp')/('ocr-'+p.stem); d.mkdir(exist_ok=True)
+                          run(['pdftoppm','-r','240','-jpeg',str(p),str(d/'p')]); chunks=[]
+                          for im in sorted(d.glob('p-*.jpg')): chunks.append(run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+                          txt+='\n'.join(chunks)
+                      tp=T/(p.name+'.txt'); tp.write_text(txt,encoding='utf-8'); out['edesky'].append({'attachment':v,'text_file':str(tp),'text':txt[:60000]})
+
+          # Sledujdesky raw page and all links around the exact title.
+          su='https://sledujdesky.cz/oznameni/oblast/661899-bystrice-u-kadane'
+          try:
+              r=get(su,timeout=45); soup=BeautifulSoup(r.text,'lxml'); tx=' '.join(soup.stripped_strings)
+              H.joinpath('sledujdesky.html').write_bytes(r.content)
+              for a in soup.select('a[href]'):
+                  lab=norm(a.get_text(' ',strip=True))
+                  if 'zapis usneseni zastupitelstva mesta kadane ze dne 25.6.2026' in lab:
+                      out['sledujdesky'].append({'url':r.url,'title':a.get_text(' ',strip=True),'href':urljoin(r.url,a.get('href'))})
+              out['sledujdesky'].append({'url':r.url,'status':r.status_code,'text':tx[:25000]})
+          except Exception as e:out['errors'].append({'url':su,'error':repr(e)})
+
+          # Hlídač exact website query. Extract every URL in a wide context around exact title.
+          q='"Lávka přes silnici č. 568" AND icoZadavatel:00261912'
+          hu='https://www.hlidacstatu.cz/VerejneZakazky/Hledat?'+urlencode({'Q':q,'Zahajeny':'False','Order':'1','Page':'1'})
+          try:
+              r=get(hu,timeout=60); H.joinpath('hlidac.html').write_bytes(r.content); html=r.text; nh=norm(html)
+              out['hlidac'].append({'url':r.url,'status':r.status_code,'bytes':len(r.content)})
+              needle='lavka pres silnici c. 568'
+              pos=0
+              while True:
+                  pos=nh.find(needle,pos)
+                  if pos<0:break
+                  # Normalized offsets are approximate; also parse all anchors with relevant labels/parents.
+                  pos+=len(needle)
+              soup=BeautifulSoup(html,'lxml')
+              for a in soup.select('a[href]'):
+                  parent=a.find_parent(['tr','article','div'])
+                  tx=' '.join(parent.stripped_strings) if parent else a.get_text(' ',strip=True)
+                  if needle in norm(tx): out['hlidac'].append({'text':tx[:10000],'href':urljoin(r.url,a.get('href'))})
+              # Regex all VZ detail links from raw HTML.
+              for m in re.finditer(r'href=["\']([^"\']*(?:VerejneZakazky|verejnezakazky)/(?:zakazka|detail)/[^"\']+)["\']',html,re.I):
+                  out['hlidac'].append({'detail_candidate':urljoin(r.url,m.group(1))})
+          except Exception as e:out['errors'].append({'url':hu,'error':repr(e)})
+
+          # Inspect Swagger and call the exact API with its declared query parameter names.
+          sw='https://api.hlidacstatu.cz/swagger/v2/swagger.json'
+          try:
+              r=get(sw,timeout=60); spec=r.json(); op=spec['paths']['/api/v2/verejnezakazky/hledat']['get']; params=op.get('parameters',[])
+              out['hlidac_api'].append({'swagger_status':r.status_code,'parameters':params})
+              names={p['name'] for p in params}
+              args={}
+              for candidate in ['dotaz','query','q']:
+                  if candidate in names: args[candidate]=q
+              for candidate in ['strana','page']:
+                  if candidate in names: args[candidate]=1
+              if 'razeni' in names: args['razeni']='0'
+              au='https://api.hlidacstatu.cz/api/v2/verejnezakazky/hledat?'+urlencode(args)
+              ar=get(au,timeout=60); out['hlidac_api'].append({'url':ar.url,'status':ar.status_code,'body':ar.text[:100000]})
+          except Exception as e:out['errors'].append({'url':sw,'error':repr(e)})
+
+          (R/'results.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Cílená rešerše lávky u Shellu v9','']
+          for sec in out:
+              md += ['## '+sec]
+              for x in out[sec]:md.append('- '+json.dumps(x,ensure_ascii=False)[:12000])
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v9.py
+
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-shell-v9/pdf
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-shell-v9
+          git commit -m 'Dokončit cílenou rešerši lávky u Shellu v9' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
