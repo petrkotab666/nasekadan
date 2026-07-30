@@ -28,16 +28,48 @@ USER_AGENT = (
 )
 
 
+def valid_image(path: Path, minimum_size: int = 5_000) -> bool:
+    """Return True only for an existing, decodable, non-trivial image.
+
+    The generated WebP files are versioned in the repository. Reusing a verified
+    target makes the Docker build independent of old split base64 recovery chunks
+    and transient Facebook access, while still refusing corrupt output.
+    """
+    if not path.is_file() or path.stat().st_size < minimum_size:
+        return False
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        return True
+    except Exception as exc:
+        print(f"Existing image is unusable and will be rebuilt: {path}: {exc}")
+        return False
+
+
 def rebuild_webp(prefix: str, target: Path) -> None:
+    if valid_image(target):
+        print(f"Using verified repository image: {target.relative_to(ROOT)}")
+        return
+
     parts = sorted(CHUNKS.glob(f"{prefix}-*.txt"))
     if not parts:
-        raise RuntimeError(f"Chybí datové části pro {prefix}")
-    encoded = "".join(part.read_text(encoding="ascii").strip() for part in parts)
-    target.write_bytes(base64.b64decode(encoded, validate=True))
-    with Image.open(target) as image:
-        image.verify()
-    if target.stat().st_size < 5_000:
-        raise RuntimeError(f"Výsledný obrázek {target} je podezřele malý")
+        raise RuntimeError(f"Chybí datové části pro {prefix} a neexistuje platný cílový obrázek")
+    encoded = "".join(
+        re.sub(r"\s+", "", part.read_text(encoding="ascii")) for part in parts
+    )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Datové části pro {prefix} jsou poškozené a platný cílový obrázek není k dispozici"
+        ) from exc
+
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_bytes(payload)
+    if not valid_image(temporary):
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(f"Obnovený obrázek {target} není platný")
+    temporary.replace(target)
 
 
 def download(url: str) -> tuple[bytes, str]:
@@ -97,6 +129,9 @@ def load_main_photo() -> bytes:
 
 
 def build_main_photo(target: Path) -> None:
+    if valid_image(target):
+        print(f"Using verified repository image: {target.relative_to(ROOT)}")
+        return
     with Image.open(BytesIO(load_main_photo())) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
         image = ImageOps.fit(
@@ -109,6 +144,8 @@ def build_main_photo(target: Path) -> None:
             ImageFilter.UnsharpMask(radius=1.15, percent=125, threshold=2)
         )
         image.save(target, "WEBP", quality=88, method=6)
+    if not valid_image(target):
+        raise RuntimeError(f"Nově vytvořený obrázek {target} není platný")
 
 
 def update_article() -> None:
@@ -140,7 +177,7 @@ def main() -> None:
     )
     build_main_photo(IMAGES / "kadan-pretekajici-kos-facebook-ostry.webp")
     update_article()
-    print("Sharp bin-article images prepared.")
+    print("Sharp bin-article images prepared and verified.")
 
 
 if __name__ == "__main__":
