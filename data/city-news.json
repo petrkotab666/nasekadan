@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T04:25:27.206792+00:00",
+  "generatedAt": "2026-07-30T08:51:10.123709+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Kadaňské noviny (15)",
@@ -23,7 +23,6 @@
     "MŠ Žitná Kadaň (15)",
     "MŠ Písnička Kadaň (15)",
     "MŠ Hvězdička Kadaň (15)",
-    "ZŠ Rudolfa Koblice Kadaň (15)",
     "ZŠ Chomutovská Kadaň (15)",
     "ZŠ Na Podlesí Kadaň (15)",
     "ZŠ a MŠ při nemocnici Kadaň (15)",
@@ -58,10 +57,11 @@
   ],
   "errors": [
     "Městský GIS Kadaň: URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>",
-    "Registr smluv – Město Kadaň: URLError: <urlopen error _ssl.c:983: The handshake operation timed out>",
+    "Registr smluv – Město Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1000)>",
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "ZŠ Rudolfa Koblice Kadaň: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Muzeum a galerie Most – program: HTTPError: HTTP Error 403: Forbidden",
     "Let It Roll – akce: HTTPError: HTTP Error 404: Not Found",
@@ -111,17 +111,8 @@
       "title": "Pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více  Herní sada s brýlemi simulujícími účinky drog a alkoholu .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"ht",
+      "description": "ř akcí Materiály Facebook zobrazit více  Box LOGIKA II. .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s-duraze",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "289e9294845e",
-      "title": "Herní sada s brýlemi simulujícími účinky drog a alkoholu",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-for",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=1",
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
@@ -134,11 +125,20 @@
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
+      "id": "1acfce244f89",
+      "title": "Box LOGIKA II.",
+      "date": "2026-08-26",
+      "category": "Školství",
+      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář od Ph",
+      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=3",
+      "sourceName": "Vzdělávání na Kadaňsku"
+    },
+    {
       "id": "156f0e19ced0",
       "title": ".. další pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Herní sada s brýlemi simulujícími účinky drog a alkoholu  Kalendář 26.8.202610:00:00: <a href=\"ht",
+      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Box LOGIKA II.  Kalendář 26.8.202610:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s-duraze",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
       "sourceName": "Vzdělávání na Kadaňsku"
     },
@@ -150,6 +150,15 @@
       "description": "30&show=30.7.2026\" class=\"den_vkalendari aktualni_den vybrany_den\">30 31 od dnes dnes zítra tento víkend tento týden příští týden tento měsíc příští měsíc Rozšířené vyhledávání <li id=\"id_li_akce_ad",
       "source": "https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&",
       "sourceName": "Kultura Kadaň"
+    },
+    {
+      "id": "52b60804ad36",
+      "title": "Pítka a vodní prvky ve městě",
+      "date": "2026-07-30",
+      "category": "Zprávy",
+      "description": "pan> 30.07.2026 Nemocnice Kadaň mění model řízení.",
+      "source": "https://www.noviny-kadan.cz/l/pitka-a-vodni-prvky-ve-meste/",
+      "sourceName": "Kadaňské noviny"
     },
     {
       "id": "ab78e83fa607",
@@ -273,7 +282,7 @@
       "title": "POVÍDKA - Nevyjdu ven",
       "date": "2026-07-15",
       "category": "Zprávy",
-      "description": "sest Kadaně 15.07.2026 Fotogalerie k architektonické výstavě.  17",
+      "description": "sest Kadaně 15.07.2026 Fotogalerie k architektonické výstavě.  17.",
       "source": "https://www.noviny-kadan.cz/l/povidka-nevyjdu-ven/",
       "sourceName": "Kadaňské noviny"
     },
@@ -591,24 +600,6 @@
       "description": "li class=\"item-117\"> Informace o zpracovávání osobních údajů Sponzoři Úřední deska Prohlášení o přístupnosti  Školní řád Rozpočet a rozpočtový výhled Stravování Jídelníček Alergeny Termín plateb Vnitřní předpis pro školní stravování <div class=\"log",
       "source": "https://www.mshvezdicka.eu/dulezite-informace/skolni-vzdelavaci-program",
       "sourceName": "MŠ Hvězdička Kadaň"
-    },
-    {
-      "id": "0eeda6e66423",
-      "title": "Školní poradenské zařízení",
-      "date": "",
-      "category": "Základní školy",
-      "description": "> Medailonek Rudolfa Koblice Partnerství  Přijímací zkoušky na SŠ Strategický plán rozvoje školy 2023-2028 Školní klub – kroužky Školní parlament Školská rada <a href=\"https://www.2zskadan.cz/o-skole/z",
-      "source": "https://www.2zskadan.cz/poradenstvi/",
-      "sourceName": "ZŠ Rudolfa Koblice Kadaň"
-    },
-    {
-      "id": "ef4deca18f53",
-      "title": "Školní klub – kroužky",
-      "date": "",
-      "category": "Základní školy",
-      "description": "em-type-post_type menu-item-object-page menu-item-29067\"> Přijímací zkoušky na SŠ Strategický plán rozvoje školy 2023-2028  Školní parlament Školská rada Zaměstnanci školy Rozvrhy Тřídy 1.A <li class=\"menu-item menu-item-type",
-      "source": "https://www.2zskadan.cz/o-skole/skolni-klub-krouzky/",
-      "sourceName": "ZŠ Rudolfa Koblice Kadaň"
     },
     {
       "id": "d696cd343133",
@@ -939,7 +930,7 @@
       "title": "Ústecký krajský soud bude řešit tragický požár ve Vejprtech, dostal odvolání",
       "date": "",
       "category": "Regionální média",
-      "description": "class=\"badge badge--link flex items-center\" >Deník.cz Fake News • Deník proti fake news <div class=\"flex flex-col",
+      "description": "ref=\"/zpravy-region/\" class=\"badge badge--link flex items-center\" data-text=\"Chomutovsko \" >Chomutovsko • gallery 47 <div class=\"flex flex-col",
       "source": "https://chomutovsky.denik.cz/zpravy-region/ustecky-krajsky-soud-bude-resit-tragicky-pozar-ve-vejprtech-dostal-odvolani/",
       "sourceName": "Chomutovský deník"
     },
@@ -969,6 +960,15 @@
       "description": "Pro rodiče Akce pro děti Galerie Režim dne  Zápis do MŠ a přijaté děti Dokumenty ke stažení Důležité informace Informace Informace o zpracování GDPR Úřední deska Prohlášení o přístupnosti Školní řád Rozpočet a rozpočtový výhled <span class=\"separator \"",
       "source": "https://www.ms-pisnicka.cz/pro-rodice/uplata-za-predskolni-vzdelavani",
       "sourceName": "MŠ Písnička Kadaň"
+    },
+    {
+      "id": "2ec218b23d28",
+      "title": "Údržba zeleně a cyklostezek",
+      "date": "",
+      "category": "Městské služby",
+      "description": "href=\"/sekce/30/rozmisteni-kontejneru-\" title=\"Rozmístění kontejnerů \">Rozmístění kontejnerů Plán zimní údržby Odtahy vozidel a parkovné Blokové čištění města  Ochrana osobních údajů Povinně zveřejňované informace Žádosti o poskytnutí informací dle zákona č. 106/1999 Sb. <!",
+      "source": "https://www.tskadan.cz/sekce/25/udrzba-zelene-a-cyklostezek",
+      "sourceName": "Technické služby Kadaň"
     }
   ]
 }
