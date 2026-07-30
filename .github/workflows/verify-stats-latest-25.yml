@@ -40,11 +40,15 @@ jobs:
             -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/latest-25.txt"
-          set -u
+          set -Eeuo pipefail
           sudo -n true
           cd /opt/nasekadan
+
+          # Odstranit pouze osiřelý lock; na produkčním klonu neprobíhají ruční commity.
+          sudo rm -f .git/index.lock
           git fetch --prune origin main
           git reset --hard origin/main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 
           set +e
           sudo bash .github/scripts/nasekadan-stats/install-stats.sh
@@ -64,7 +68,7 @@ jobs:
           sudo -u www-data /usr/bin/python3 /opt/nasekadan/.github/scripts/nasekadan-stats/verify_stats_latest_25.py
           systemctl is-active nasekadan-stats-web.service
           curl -fsS --max-time 5 http://127.0.0.1:3225/healthz
-          echo 'ÚSPĚCH: statistiky obsahují přesně 25 posledních článků včetně data, zobrazení a podílů.'
+          echo 'ÚSPĚCH: nahoře je viditelné tlačítko a tabulka přesně 25 posledních článků.'
           REMOTE
 
       - name: Zapsat výsledek
