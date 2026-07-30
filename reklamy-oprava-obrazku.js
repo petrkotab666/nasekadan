@@ -3,9 +3,16 @@
 
   const IMAGE_SELECTOR='.promo-card img,.article-rail-card img';
   const GENERIC_COPY=/vybran[aá]\s+partnersk[aá]\s+nab[ií]dka|centr[aá]ln[ií]\s+datab[aá]z|propojen[yý]ch\s+web|partnersk[aá]\s+nab[ií]dka/i;
-  const SUMMER_TRAVEL_CONTEXTS=new Set(['general','local','sidebar','family','travel','finance','home','health','internet','auto','energy','pets','sport']);
-  const TRAVEL_IDS=new Set(['invia','invia-cz','atis','atis-cz','excursia','excursia-cz']);
-  const NO_IMAGE_IDS=new Set(['invia','invia-cz','atis','atis-cz']);
+  const SEASONAL_CONTEXTS=new Set(['general','local','sidebar','family','travel','summer','finance','home','health','internet','auto','energy','pets','sport']);
+  const TRAVEL_IDS=new Set([
+    'lastminuteslevy-cz','atis','atis-cz','ceskekormidlo','ceskekormidlo-cz','excursia','excursia-cz'
+  ]);
+  const HEAT_IDS=new Set([
+    'apollostore','apollostore-cz','concept','concept-cz','proalergiky','proalergiky-cz'
+  ]);
+  const NO_IMAGE_IDS=new Set([
+    'atis','atis-cz','apollostore','apollostore-cz','concept','concept-cz','proalergiky','proalergiky-cz'
+  ]);
   const COPY={
     pojistime:'Srovnání pojištění auta, domácnosti, cestování a dalších rizik na jednom místě.',
     csob:'Pojištění auta, majetku, odpovědnosti, cestování i podnikatelských rizik.',
@@ -23,19 +30,25 @@
     vyklidime:'Vyklízení bytů, domů, sklepů a pozůstalostí v Kadani a širokém okolí.',
     uklizecka:'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',
     'vase-uklizecka':'Úklid domácností, firem, kanceláří a bytových domů na Kadaňsku.',
+    'uklizecka-cisteni-rotating':'Hloubkové čištění koberců, sedaček a čalounění na Kadaňsku. Objednávky: 603 206 308.',
     haffit:'Krmivo pro psy připravené na míru podle potřeb konkrétního psa.',
     zonky:'Online půjčka s přehledným vyřízením a možností předčasného splacení.',
     'dobre-knihy':'Knihy, audioknihy a další čtení pro volný čas i celou rodinu.',
     biano:'Nábytek, dekorace a vybavení domácnosti z nabídky mnoha internetových obchodů.',
     nanospace:'České produkty pro zdravější domácnost, alergiky a kvalitnější spánek.',
-    concept:'Domácí spotřebiče a praktické vybavení pro každodenní provoz domácnosti.',
-    proalergiky:'Specializované produkty pro alergiky a zdravější prostředí v domácnosti.',
-    invia:'Invia.cz nabízí srovnání last minute i běžných zájezdů k moři, do hor a za poznáním.',
-    'invia-cz':'Invia.cz nabízí srovnání last minute i běžných zájezdů k moři, do hor a za poznáním.',
-    atis:'Atis.cz nabízí pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
-    'atis-cz':'Atis.cz nabízí pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
-    excursia:'Excursia.cz nabízí výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.',
-    'excursia-cz':'Excursia.cz nabízí výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.',
+    concept:'Ventilátory, čističky vzduchu, zvlhčovače a další spotřebiče pro příjemnější domácnost.',
+    'concept-cz':'Ventilátory, čističky vzduchu, zvlhčovače a další spotřebiče pro příjemnější domácnost.',
+    proalergiky:'Klimatizace, ventilátory, čističky vzduchu a další vybavení pro zdravější prostředí doma.',
+    'proalergiky-cz':'Klimatizace, ventilátory, čističky vzduchu a další vybavení pro zdravější prostředí doma.',
+    apollostore:'Klimatizace, ventilátory, odvlhčovače a další spotřebiče pro horké letní dny.',
+    'apollostore-cz':'Klimatizace, ventilátory, odvlhčovače a další spotřebiče pro horké letní dny.',
+    'lastminuteslevy-cz':'Aktuální last minute dovolené a zájezdy od propojených cestovních partnerů na jednom místě.',
+    atis:'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
+    'atis-cz':'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
+    ceskekormidlo:'Last minute, pobytové a poznávací zájezdy od Českého kormidla.',
+    'ceskekormidlo-cz':'Last minute, pobytové a poznávací zájezdy od Českého kormidla.',
+    excursia:'Výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.',
+    'excursia-cz':'Výlety, exkurze a zážitky pro volný čas v Česku i zahraničí.',
     brainmarket:'Sportovní výživa, zdravé potraviny, vitaminy a další produkty pro aktivní životní styl.',
     brainmax:'Vitaminy, minerály, zdravé potraviny a sportovní výživa značky BrainMax.',
     glami:'Vyhledávání módy, obuvi a doplňků z nabídky internetových obchodů.',
@@ -45,7 +58,8 @@
     'ceska-zahrada':'Rostliny, zahradnické potřeby a další vybavení pro pěstování.',
     barman:'Vybavení pro přípravu nápojů, domácí bar a gastronomii.'
   };
-  let summerTravelInserted=false;
+
+  let seasonalInsertCount=0;
 
   function normalizeToken(value){
     return String(value||'')
@@ -65,41 +79,95 @@
     return month>=5&&month<=9;
   }
 
+  function itemId(item){
+    return normalizeToken(item?.id||item?.title);
+  }
+
   function copyFromTag(title,tag){
     const value=normalizeToken(tag);
+    if(/klimatiz|ventilator|ochlaz|vzduch|spotrebice|domacnost/.test(value))return `${title} nabízí vybavení pro příjemnější domácnost během horkých dnů.`;
     if(/dovolen|cestov|zajezd|pobyt|vylet|zazit/.test(value))return `${title} nabízí dovolené, zájezdy, pobyty nebo další služby pro cestování a volný čas.`;
     if(/internet|televize|mobil/.test(value))return `${title} nabízí internetové, televizní nebo mobilní služby podle aktuálních podmínek.`;
     if(/pojist|finance|srovnavac/.test(value))return `${title} nabízí finanční nebo pojistné služby s možností ověřit aktuální podmínky online.`;
     if(/energie/.test(value))return `${title} nabízí energie nebo související služby pro domácnosti.`;
     if(/zdravi|sport/.test(value))return `${title} nabízí produkty zaměřené na zdraví, péči o tělo nebo aktivní životní styl.`;
-    if(/domacnost|bydleni|spotrebice/.test(value))return `${title} nabízí vybavení, produkty nebo služby pro domácnost a bydlení.`;
     if(/mazlicci|chovatel/.test(value))return `${title} nabízí produkty nebo služby pro domácí mazlíčky.`;
     if(/knihy|volny-cas|rodina/.test(value))return `${title} nabízí produkty a služby pro rodinu a volný čas.`;
     return `Nabídka produktů nebo služeb od ${title}.`;
   }
 
   function itemCopy(item){
-    const id=normalizeToken(item?.id||item?.title);
-    return COPY[id]||copyFromTag(String(item?.title||'Inzerent'),String(item?.tag||''));
+    return COPY[itemId(item)]||copyFromTag(String(item?.title||'Inzerent'),String(item?.tag||''));
   }
 
   function normalizePromoItems(){
     if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return;
     for(const item of promoItems){
       if(!item||typeof item!=='object')continue;
-      const id=normalizeToken(item.id||item.title);
+      const id=itemId(item);
       if(!String(item.text||'').trim()||GENERIC_COPY.test(String(item.text)))item.text=itemCopy(item);
       if(NO_IMAGE_IDS.has(id))item.banner='';
       if(TRAVEL_IDS.has(id)){
-        item.tag=id.startsWith('excursia')?'Výlety a zážitky':id.startsWith('atis')?'Dovolená a pobyty':'Dovolená a zájezdy';
-        item.contexts=[...new Set([...(item.contexts||[]),'travel','family','general'])];
+        item.tag=id.startsWith('excursia')?'Výlety a zážitky':id.startsWith('atis')?'Dovolená a pobyty':'Last minute a zájezdy';
+        item.contexts=[...new Set([...(item.contexts||[]),'travel','family','general','sidebar'])];
+        item.weight=Math.max(2,Number(item.weight)||1);
+      }
+      if(HEAT_IDS.has(id)){
+        item.tag='Léto a ochlazení';
+        item.contexts=[...new Set([...(item.contexts||[]),'summer','home','health','general','sidebar'])];
+        item.weight=Math.max(3,Number(item.weight)||1);
       }
     }
+  }
+
+  function seasonalGroupFor(context,seed){
+    if(context==='travel')return TRAVEL_IDS;
+    if(['summer','home','health','energy'].includes(context))return HEAT_IDS;
+    return seed%2===0?TRAVEL_IDS:HEAT_IDS;
+  }
+
+  function installFeaturedSeasonalBanner(){
+    if(document.querySelector('.featured-cleaning-ad'))return;
+    if(typeof promoItems==='undefined'||!Array.isArray(promoItems)||typeof renderBannerCard!=='function')return;
+    normalizePromoItems();
+
+    const cleaning=promoItems.filter(item=>itemId(item)==='uklizecka-cisteni-rotating');
+    const seasonal=isSummerSeason()?promoItems.filter(item=>TRAVEL_IDS.has(itemId(item))||HEAT_IDS.has(itemId(item))):[];
+    const candidates=[...cleaning,...seasonal].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);
+    if(!candidates.length)return;
+
+    const weighted=candidates.flatMap(item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item));
+    const day=new Date().toISOString().slice(0,10);
+    const item=weighted[localHash(`${location.pathname}|${day}|featured-seasonal`)%weighted.length];
+    const section=document.createElement('section');
+    section.className='featured-cleaning-ad featured-rotating-ad';
+    section.setAttribute('aria-label',`Reklama: ${item.title}`);
+    section.innerHTML=`<div class="promo-label">REKLAMA</div>${renderBannerCard(item)}`;
+    try{if(typeof usedPromoIds!=='undefined'&&usedPromoIds?.add)usedPromoIds.add(item.id);}catch{}
+
+    const article=document.querySelector('article.article');
+    if(article){
+      const anchor=article.querySelector('.hero-visual')||article.querySelector('.leadtext')||article.querySelector('h1');
+      if(anchor){anchor.after(section);return;}
+    }
+    const homeHero=document.querySelector('main .hero');
+    if(homeHero){homeHero.after(section);return;}
+    const main=document.querySelector('main');
+    if(main)main.prepend(section);
   }
 
   function patchPromoEngine(){
     try{
       if(typeof partnerCopy==='object'&&partnerCopy)Object.assign(partnerCopy,COPY);
+
+      if(typeof promoItems!=='undefined'&&Array.isArray(promoItems)){
+        const cleaning=promoItems.find(item=>item.id==='uklizecka-cisteni');
+        if(cleaning)cleaning.id='uklizecka-cisteni-rotating';
+      }
+      if(typeof towerCreativeItems!=='undefined'&&Array.isArray(towerCreativeItems)){
+        const cleaningTower=towerCreativeItems.find(item=>item.id==='uklizecka-cisteni-tower');
+        if(cleaningTower){cleaningTower.id='uklizecka-cisteni-tower-rotating';cleaningTower.weight=2;}
+      }
 
       if(typeof contextsFromCategories==='function'){
         const original=contextsFromCategories;
@@ -107,6 +175,9 @@
           const contexts=new Set(original(categories));
           const text=(categories||[]).map(normalizeToken).join(' ');
           if(/cestov|dovolen|zajezd|last-minute|pobyt|hotel|wellness|eurovikend|plavb|vylet|exkurz|zazitk/.test(text))contexts.add('travel');
+          if(/klimatiz|ventilator|ochlaz|odvlhcov|cisticky-vzduchu|zvlhcov|vedra|leto|spotrebice/.test(text)){
+            contexts.add('summer');contexts.add('home');
+          }
           if(/rodina/.test(text))contexts.add('family');
           return [...contexts];
         };
@@ -116,8 +187,19 @@
         const original=tagFromContexts;
         tagFromContexts=function(contexts,categories){
           const text=(categories||[]).map(normalizeToken).join(' ');
+          if(/klimatiz|ventilator|ochlaz|odvlhcov|cisticky-vzduchu|zvlhcov|vedra|leto/.test(text))return 'Léto a ochlazení';
           if(/cestov|dovolen|zajezd|last-minute|pobyt|hotel|wellness|vylet|exkurz|zazitk/.test(text))return 'Dovolená a cestování';
           return original(contexts,categories);
+        };
+      }
+
+      if(typeof inferPromoContext==='function'){
+        const original=inferPromoContext;
+        inferPromoContext=function(text){
+          const value=String(text||'').toLocaleLowerCase('cs');
+          if(/vedr|hork|trop|léto|letní|koupališt|klimatiz|ventilátor|ochlaz|slunce|teplot|sucho/.test(value))return 'summer';
+          if(/dovolen|zájezd|cestov|hotel|letišt|moř|pláž|prázdnin|výlet|pobyt/.test(value))return 'travel';
+          return original(text);
         };
       }
 
@@ -132,10 +214,15 @@
             const response=await fetch(url,{cache:'no-store',headers:{Accept:'application/json'}});
             if(response.ok)mergeSnapshotPartners(await response.json());
           }catch(error){
-            console.warn('Cestovní reklamní data se nepodařilo načíst.',error);
+            console.warn('Letní reklamní data se nepodařilo načíst.',error);
           }
           normalizePromoItems();
+          installFeaturedSeasonalBanner();
         };
+      }
+
+      if(typeof installGuaranteedCleaningBanner==='function'){
+        installGuaranteedCleaningBanner=function(){};
       }
 
       if(typeof pickPromos==='function'){
@@ -143,20 +230,22 @@
         pickPromos=function(context,count,offset){
           normalizePromoItems();
           const selected=originalPick(context,count,offset);
-          if(!isSummerSeason()||!count||!SUMMER_TRAVEL_CONTEXTS.has(context))return selected;
+          if(!isSummerSeason()||!count||!SEASONAL_CONTEXTS.has(context)||seasonalInsertCount>=4)return selected;
           if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return selected;
-          const alreadyTravel=selected.some(item=>TRAVEL_IDS.has(normalizeToken(item?.id||item?.title)));
-          if(alreadyTravel){summerTravelInserted=true;return selected;}
+
           const day=new Date().toISOString().slice(0,10);
-          const seed=localHash(`${location.pathname}|${day}|${context}|${offset}|summer-travel`);
-          if(context!=='travel'&&summerTravelInserted&&seed%3!==0)return selected;
-          const pool=promoItems.filter(item=>TRAVEL_IDS.has(normalizeToken(item?.id||item?.title))&&!selected.some(entry=>entry.id===item.id));
+          const seed=localHash(`${location.pathname}|${day}|${context}|${offset}|seasonal`);
+          const group=seasonalGroupFor(context,seed+seasonalInsertCount);
+          if(selected.some(item=>group.has(itemId(item))))return selected;
+          if(context!=='travel'&&context!=='summer'&&seasonalInsertCount>0&&seed%3===0)return selected;
+
+          const pool=promoItems.filter(item=>group.has(itemId(item))&&!selected.some(entry=>entry.id===item.id));
           if(!pool.length)return selected;
-          const travel=pool[seed%pool.length];
-          if(selected.length<count)selected.push(travel);
-          else selected[Math.max(0,selected.length-1)]=travel;
-          summerTravelInserted=true;
-          try{if(typeof usedPromoIds!=='undefined'&&usedPromoIds?.add)usedPromoIds.add(travel.id);}catch{}
+          const seasonal=pool[seed%pool.length];
+          if(selected.length<count)selected.push(seasonal);
+          else selected[Math.max(0,selected.length-1)]=seasonal;
+          seasonalInsertCount++;
+          try{if(typeof usedPromoIds!=='undefined'&&usedPromoIds?.add)usedPromoIds.add(seasonal.id);}catch{}
           return selected;
         };
       }
