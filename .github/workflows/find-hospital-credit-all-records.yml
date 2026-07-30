@@ -25,7 +25,7 @@ jobs:
           set -euo pipefail
           OUT='research/nemocnice-kadan-neindexovane-20260730/uver-vsechny-zaznamy'
           mkdir -p "$OUT"
-          URL='https://smlouvy.gov.cz/vyhledavani?subject_idnum=25479300&party_idnum=64948242&do=searchResultList-setLimit&searchResultList-limit=500'
+          URL='https://smlouvy.gov.cz/vyhledavani?subject_idnum=25479300&party_idnum=64948242&search_type=1&search=Vyhledat&do=detailedSearchForm-submit'
           curl -k -L --fail --retry 4 -A 'Mozilla/5.0 NaseKadanResearch' "$URL" -o "$OUT/vysledky.html"
           python3 - <<'PY'
           from pathlib import Path
@@ -34,7 +34,7 @@ jobs:
           out=Path('research/nemocnice-kadan-neindexovane-20260730/uver-vsechny-zaznamy')
           html=out.joinpath('vysledky.html').read_text(encoding='utf-8',errors='replace')
           ids=[]
-          for m in re.finditer(r'href=["\'](?:https://smlouvy\.gov\.cz)?/smlouva/(\d+)["\']',html,re.I):
+          for m in re.finditer(r'href=["\'](?:https://smlouvy\.gov\.cz)?/smlouva/(\d+)[^"\']*["\']',html,re.I):
               if m.group(1) not in ids: ids.append(m.group(1))
           ctx=ssl._create_unverified_context()
           records=[]
