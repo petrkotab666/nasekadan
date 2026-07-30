@@ -1,0 +1,66 @@
+name: Zjistit bezpečně úložiště hesla statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-stats-auth-storage-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst pouze strukturu autentizace bez tajných hodnot
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; selected="$name"; break; fi
+          done
+          test -n "$selected"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/auth.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          echo '--- EXECSTART ---'
+          sudo systemctl show nasekadan-stats-web.service -p ExecStart --value
+          echo '--- FILES ---'
+          sudo find /opt/nasekadan-stats /usr/local/lib/nasekadan-stats -maxdepth 2 -type f -printf '%p | %s B\n' | sort
+          echo '--- AUTH SOURCE REFERENCES ---'
+          for f in /usr/local/lib/nasekadan-stats/*.py; do
+            sudo grep -nEi 'password|heslo|login|auth|hashlib|pbkdf|scrypt|bcrypt|secret-salt|reset' "$f" 2>/dev/null \
+              | sed -E 's/(password|heslo|token|secret)([[:space:]]*=[[:space:]]*)[^, )]+/\1\2[REDACTED]/Ig' \
+              | head -n 160 || true
+          done
+          echo '--- STATE KEYS ONLY ---'
+          sudo find /opt/nasekadan-stats -maxdepth 2 -type f \( -name '*.json' -o -name '*.env' -o -name '*.txt' \) -print | while read -r f; do
+            echo "FILE $f"
+            sudo sed -E 's/(=|:).*/\1 [REDACTED]/' "$f" 2>/dev/null | head -n 80 || true
+          done
+          REMOTE
+
+      - name: Zapsat diagnostiku
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs'); let log='';
+            try { log=fs.readFileSync(`${process.env.RUNNER_TEMP}/auth.txt`,'utf8'); } catch {}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,
+              title:`[STATISTIKY AUTH STORAGE] ${new Date().toISOString()}`,
+              body:'```text\n'+log.slice(-28000).replace(/```/g,'---')+'\n```'});
