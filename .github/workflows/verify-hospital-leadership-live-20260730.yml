@@ -1,0 +1,68 @@
+name: Ověřit živou aktualizaci vedení Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-leadership-live-check-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ověřit veřejný článek
+        id: check
+        shell: bash
+        run: |
+          set -u
+          ok=false
+          for n in $(seq 1 30); do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?live-check=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Co přesně ukazuje výroční zpráva za rok 2025' <<<"$page" \
+              && grep -Fq '2026-07-30T11:29:00+02:00' <<<"$page" \
+              && grep -Fq 'Částka 6,48 milionu není odstupné' <<<"$page"; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          test "$ok" = true
+
+      - name: Zapsat stav veřejné kontroly
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          CHECK_RESULT: ${{ steps.check.outputs.ok }}
+        with:
+          script: |
+            const path = '.github/hospital-leadership-live-status.json';
+            const payload = {
+              status: process.env.CHECK_RESULT === 'true' ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              public_article: process.env.CHECK_RESULT === 'true'
+            };
+            const content = Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat veřejnou kontrolu článku nemocnice: ${payload.status}`,
+              content,
+              ...(sha ? {sha} : {})
+            });
