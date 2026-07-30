@@ -1,0 +1,112 @@
+name: Nasadit opravený přihlášený dashboard statistik v8
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-stats-http-v8-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nahrát přesné soubory
+        run: |
+          set -euo pipefail
+          SRC=.github/scripts/nasekadan-stats
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            "$SRC/stats_server_v6.py" "$SRC/stats_metrics_v7.py" "$SRC/stats_metrics_v8.py" \
+            ubuntu@57.129.43.215:/tmp/
+
+      - name: Restartovat službu a ověřit skutečné HTTP
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/deploy-v8.txt"
+          set -Eeuo pipefail
+          sudo -n true
+          sudo install -o root -g root -m 0755 /tmp/stats_server_v6.py /usr/local/lib/nasekadan-stats/stats_server_v6.py
+          sudo install -o root -g root -m 0755 /tmp/stats_metrics_v7.py /usr/local/lib/nasekadan-stats/stats_metrics_v7.py
+          sudo install -o root -g root -m 0755 /tmp/stats_metrics_v8.py /usr/local/lib/nasekadan-stats/stats_metrics_v8.py
+          sudo install -d -o root -g root -m 0755 /opt/nasekadan/.github/scripts/nasekadan-stats
+          sudo install -o root -g root -m 0755 /tmp/stats_server_v6.py /opt/nasekadan/.github/scripts/nasekadan-stats/stats_server_v6.py
+          sudo install -o root -g root -m 0755 /tmp/stats_metrics_v7.py /opt/nasekadan/.github/scripts/nasekadan-stats/stats_metrics_v7.py
+          sudo install -o root -g root -m 0755 /tmp/stats_metrics_v8.py /opt/nasekadan/.github/scripts/nasekadan-stats/stats_metrics_v8.py
+          sudo python3 -m py_compile \
+            /usr/local/lib/nasekadan-stats/stats_server_v6.py \
+            /usr/local/lib/nasekadan-stats/stats_metrics_v7.py \
+            /usr/local/lib/nasekadan-stats/stats_metrics_v8.py
+          sudo systemctl restart nasekadan-stats-web.service
+          for _ in $(seq 1 30); do
+            curl -fsS --max-time 3 http://127.0.0.1:3225/healthz >/dev/null 2>&1 && break
+            sleep 0.5
+          done
+          systemctl is-active nasekadan-stats-web.service
+
+          TOKEN="$(cd /usr/local/lib/nasekadan-stats && sudo -u www-data /usr/bin/python3 - <<'PY'
+          import stats_server
+          print(stats_server.session_token())
+          PY
+          )"
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 \
+            -H "Cookie: nkstats_session=$TOKEN" \
+            'https://nasekadan.cz/statistiky/' > /tmp/stats-auth-v8.html
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json
+          text=Path('/tmp/stats-auth-v8.html').read_text(errors='replace')
+          table=re.search(r'<table id="recent-articles">(.*?)</table>', text, re.S)
+          result={
+            'length':len(text),
+            'login':'Přihlášení ke statistikám' in text,
+            'recent':'Posledních 25 článků' in text,
+            'button':'href="#poslednich-25-clanku"' in text,
+            'recent_rows': table.group(1).count('<tr>')-1 if table else -1,
+            'recent_position':text.find('Posledních 25 článků'),
+            'title':text[text.find('<title>'):text.find('</title>')+8],
+          }
+          print(json.dumps(result,ensure_ascii=False))
+          assert not result['login']
+          assert result['recent']
+          assert result['button']
+          assert result['recent_rows']==25
+          PY
+          echo 'ÚSPĚCH: skutečná přihlášená HTTP stránka obsahuje přehled 25 článků.'
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let log='';
+            try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/deploy-v8.txt`,'utf8')}catch{}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY HTTP V8] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:`- Commit: \`${context.sha}\`\n\n\`\`\`text\n${log.slice(-40000).replace(/```/g,'---')}\n\`\`\``});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
