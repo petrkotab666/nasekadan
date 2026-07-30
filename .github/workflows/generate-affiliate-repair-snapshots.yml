@@ -1,0 +1,102 @@
+name: Jednorázově vygenerovat kanonické affiliate snapshoty
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/affiliate-repair-trigger.txt'
+      - '.github/workflows/generate-affiliate-repair-snapshots.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: affiliate-repair-snapshot-generator
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: [self-hosted, ovh]
+    timeout-minutes: 20
+    steps:
+      - name: Načíst generátor
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat přesné snapshoty cílových webů
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/affiliate-repair"
+          rm -rf "$root"
+          mkdir -p "$root/nakupvakci/assets" "$root/testywebu/assets"
+
+          cat > "$root/nakupvakci/assets/affiliate-site-config.json" <<'JSON'
+          {
+            "schemaVersion": 1,
+            "syncRevision": 8,
+            "site": "nakupvakci.cz",
+            "mode": "all_active",
+            "aliases": ["nakupvakci", "nakupvakci.cz"],
+            "allowedPartnerIds": [],
+            "allowedCategories": [],
+            "autoPublish": true,
+            "centralSyncReason": "Audit 28. 7. 2026: veřejný přehled všech aktivních programů; Vodafone je povolený spotřebitel a snapshot musí převzít tři aktuální veřejné kampaně z centrální databáze bez interní partnerské soutěže."
+          }
+          JSON
+
+          cat > "$root/testywebu/assets/affiliate-site-config.json" <<'JSON'
+          {
+            "schemaVersion": 1,
+            "syncRevision": 7,
+            "site": "testywebu.cz",
+            "mode": "filtered",
+            "aliases": ["testywebu", "testywebu.cz"],
+            "allowedPartnerIds": ["gearup", "vodafone", "poda", "nejpripojeni", "uvtnet"],
+            "allowedCategories": ["internet", "gaming", "software", "online-sluzby", "mobilni-tarify", "televize", "iptv"],
+            "autoPublish": false,
+            "centralSyncReason": "Audit 28. 7. 2026: Vodafone je schválený spotřebitel pro testy mobilních tarifů, pevného internetu a televize; snapshot musí převzít aktuální veřejné kampaně z centrální databáze bez interní soutěžní informace."
+          }
+          JSON
+
+          AFFILIATE_REPO_ROOT="$root/nakupvakci" python3 scripts/sync-public-affiliate-snapshot.py
+          AFFILIATE_REPO_ROOT="$root/testywebu" python3 scripts/sync-public-affiliate-snapshot.py
+
+          out="reports/affiliate-repair-generated"
+          rm -rf "$out"
+          mkdir -p "$out/nakupvakci" "$out/testywebu"
+          cp "$root/nakupvakci/assets/affiliate-site-snapshot.json" "$out/nakupvakci/affiliate-site-snapshot.json"
+          cp "$root/nakupvakci/assets/affiliate-site-snapshot.js" "$out/nakupvakci/affiliate-site-snapshot.js"
+          cp "$root/testywebu/assets/affiliate-site-snapshot.json" "$out/testywebu/affiliate-site-snapshot.json"
+          cp "$root/testywebu/assets/affiliate-site-snapshot.js" "$out/testywebu/affiliate-site-snapshot.js"
+
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          base = Path('reports/affiliate-repair-generated')
+          data = {'schemaVersion': 1, 'files': {}}
+          for path in sorted(base.glob('*/*')):
+              raw = path.read_bytes()
+              data['files'][str(path.relative_to(base))] = {
+                  'bytes': len(raw),
+                  'sha256': hashlib.sha256(raw).hexdigest(),
+              }
+          (base / 'manifest.json').write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Uložit vygenerované podklady
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reports/affiliate-repair-generated
+          if git diff --cached --quiet; then
+            echo 'Vygenerované podklady se nezměnily.'
+            exit 0
+          fi
+          git commit -m 'Vygenerovat kanonické affiliate snapshoty pro bezpečnou opravu [skip ci]'
+          git push origin HEAD:main
