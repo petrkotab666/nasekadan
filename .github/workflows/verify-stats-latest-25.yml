@@ -40,16 +40,31 @@ jobs:
             -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/latest-25.txt"
-          set -Eeuo pipefail
+          set -u
           sudo -n true
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
+
+          set +e
           sudo bash .github/scripts/nasekadan-stats/install-stats.sh
+          install_code=$?
+          set -e
+
+          if [[ "$install_code" -ne 0 ]]; then
+            echo '=== STAV SLUŽBY PO NEÚSPĚŠNÉ INSTALACI ==='
+            systemctl status nasekadan-stats-web.service --no-pager -l || true
+            echo '=== POSLEDNÍ LOGY SLUŽBY ==='
+            journalctl -u nasekadan-stats-web.service -n 120 --no-pager || true
+            echo '=== RUČNÍ SPUŠTĚNÍ SERVERU ==='
+            timeout 8 sudo -u www-data /usr/bin/python3 /usr/local/lib/nasekadan-stats/stats_server_v6.py || true
+            exit "$install_code"
+          fi
+
           sudo -u www-data /usr/bin/python3 /opt/nasekadan/.github/scripts/nasekadan-stats/verify_stats_latest_25.py
           systemctl is-active nasekadan-stats-web.service
           curl -fsS --max-time 5 http://127.0.0.1:3225/healthz
-          echo 'ÚSPĚCH: statistiky obsahují přesně 25 posledních publikovaných článků včetně data, zobrazení a podílů.'
+          echo 'ÚSPĚCH: statistiky obsahují přesně 25 posledních článků včetně data, zobrazení a podílů.'
           REMOTE
 
       - name: Zapsat výsledek
