@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "20260730-summer-rotation-1"
+VERSION = "20260730-pojistime-rotation-3"
 SCRIPT_SRC = f"/reklamy-oprava-obrazku.js?v={VERSION}"
 
 EXCLUDED_PARTS = {".git", ".github", "nahled", "node_modules"}

@@ -5,11 +5,12 @@
   const GENERIC_COPY=/vybran[aá]\s+partnersk[aá]\s+nab[ií]dka|centr[aá]ln[ií]\s+datab[aá]z|propojen[yý]ch\s+web|partnersk[aá]\s+nab[ií]dka/i;
   const SEASONAL_CONTEXTS=new Set(['general','local','sidebar','family','travel','summer','finance','home','health','internet','auto','energy','pets','sport']);
   const TRAVEL_IDS=new Set([
-    'lastminuteslevy-cz','atis','atis-cz','ceskekormidlo','ceskekormidlo-cz','excursia','excursia-cz'
+    'atis','atis-cz','ceskekormidlo','ceskekormidlo-cz','excursia','excursia-cz'
   ]);
   const HEAT_IDS=new Set([
     'apollostore','apollostore-cz','concept','concept-cz','proalergiky','proalergiky-cz'
   ]);
+  const POJISTIME_IDS=new Set(['pojistime-family-wide-a','pojistime-family-wide-b','pojistime-family-square']);
   const NO_IMAGE_IDS=new Set([
     'atis','atis-cz','apollostore','apollostore-cz','concept','concept-cz','proalergiky','proalergiky-cz'
   ]);
@@ -42,7 +43,6 @@
     'proalergiky-cz':'Klimatizace, ventilátory, čističky vzduchu a další vybavení pro zdravější prostředí doma.',
     apollostore:'Klimatizace, ventilátory, odvlhčovače a další spotřebiče pro horké letní dny.',
     'apollostore-cz':'Klimatizace, ventilátory, odvlhčovače a další spotřebiče pro horké letní dny.',
-    'lastminuteslevy-cz':'Aktuální last minute dovolené a zájezdy od propojených cestovních partnerů na jednom místě.',
     atis:'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
     'atis-cz':'Pobytové, poznávací a wellness zájezdy po Česku, Slovensku i Evropě.',
     ceskekormidlo:'Last minute, pobytové a poznávací zájezdy od Českého kormidla.',
@@ -102,6 +102,15 @@
 
   function normalizePromoItems(){
     if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return;
+    for(let i=promoItems.length-1;i>=0;i--){if(itemId(promoItems[i])==='lastminuteslevy-cz')promoItems.splice(i,1);}
+    const url='https://pojistime.to/?utm_source=nasekadan&utm_medium=banner&utm_campaign=pojistime_rotation_2026';
+    const additions=[
+      {id:'pojistime-family-wide-a',title:'Pojistime.to – jistota pro každý den',text:'Srovnání pojištění auta, bydlení, cestování i dalších rizik přehledně online.',url,banner:'/assets/reklamy/pojistime-family-wide-a.svg',wideBanner:'/assets/reklamy/pojistime-family-wide-a.svg',tag:'Pojištění online',contexts:['general','local','sidebar','finance','auto','home','travel'],weight:3},
+      {id:'pojistime-family-wide-b',title:'Pojistime.to – pojištění jednoduše',text:'Porovnejte nabídky pojištění online a vyberte vhodnou cenu i podmínky.',url,banner:'/assets/reklamy/pojistime-family-wide-b.svg',wideBanner:'/assets/reklamy/pojistime-family-wide-b.svg',tag:'Chytré pojištění',contexts:['general','local','sidebar','finance','auto','home','travel'],weight:3},
+      {id:'pojistime-family-square',title:'Pojistime.to – porovnat nabídky',text:'Auto, bydlení, cestování a další druhy pojištění na jednom místě.',url,banner:'/assets/reklamy/pojistime-family-square.svg',tag:'Srovnání pojištění',contexts:['general','local','sidebar','finance','auto','home','travel'],weight:2}
+    ];
+    for(const item of additions){if(!promoItems.some(row=>itemId(row)===item.id))promoItems.push(item);}
+    if(typeof towerCreativeItems!=='undefined'&&!towerCreativeItems.some(row=>row.id==='pojistime-family-tower'))towerCreativeItems.push({id:'pojistime-family-tower',title:'Pojistime.to',url,image:'/assets/reklamy/pojistime-family-tower.svg',width:300,height:600,contexts:['general','local','finance','auto','home','travel','sidebar'],weight:4});
     for(const item of promoItems){
       if(!item||typeof item!=='object')continue;
       const id=itemId(item);
@@ -132,7 +141,7 @@
     normalizePromoItems();
 
     const cleaning=promoItems.filter(item=>itemId(item)==='uklizecka-cisteni-rotating');
-    const seasonal=isSummerSeason()?promoItems.filter(item=>TRAVEL_IDS.has(itemId(item))||HEAT_IDS.has(itemId(item))):[];
+    const seasonal=isSummerSeason()?promoItems.filter(item=>TRAVEL_IDS.has(itemId(item))||HEAT_IDS.has(itemId(item))||POJISTIME_IDS.has(itemId(item))):[];
     const candidates=[...cleaning,...seasonal].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);
     if(!candidates.length)return;
 
