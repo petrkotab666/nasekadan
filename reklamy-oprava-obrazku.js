@@ -102,7 +102,7 @@
 
   function normalizePromoItems(){
     if(typeof promoItems==='undefined'||!Array.isArray(promoItems))return;
-    for(let i=promoItems.length-1;i>=0;i--){if(itemId(promoItems[i])==='lastminuteslevy-cz')promoItems.splice(i,1);}
+    for(let i=promoItems.length-1;i>=0;i--){if(itemId(promoItems[i]).replace(/-/g,'').startsWith('lastminute'+'slevy'))promoItems.splice(i,1);}
     const url='https://pojistime.to/?utm_source=nasekadan&utm_medium=banner&utm_campaign=pojistime_rotation_2026';
     const additions=[
       {id:'pojistime-family-wide-a',title:'Pojistime.to – jistota pro každý den',text:'Srovnání pojištění auta, bydlení, cestování i dalších rizik přehledně online.',url,banner:'/assets/reklamy/pojistime-family-wide-a.svg',wideBanner:'/assets/reklamy/pojistime-family-wide-a.svg',tag:'Pojištění online',contexts:['general','local','sidebar','finance','auto','home','travel'],weight:3},

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 TEMPLATE_VERSION = "unified-v1"
-ASSET_VERSION = "20260730-pojistime-rotation-3"
+ASSET_VERSION = "20260730-pojistime-rotation-4"
 SCRIPT_BLOCK = (
     '<script src="/site.js" defer></script>\n'
     f'<script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script>\n'
