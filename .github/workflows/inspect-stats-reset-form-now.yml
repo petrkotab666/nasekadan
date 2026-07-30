@@ -1,0 +1,61 @@
+name: Zjistit formulář obnovy hesla statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-stats-reset-form-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst a bezpečně popsat formulář
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' > "$RUNNER_TEMP/form.txt"
+          set -Eeuo pipefail
+          url='https://nasekadan.cz/statistiky/zapomenute-heslo'
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$url" -o /tmp/reset-form.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          import re
+
+          html=Path('/tmp/reset-form.html').read_text(encoding='utf-8',errors='replace')
+          class P(HTMLParser):
+              def handle_starttag(self,tag,attrs):
+                  if tag in ('form','input','button'):
+                      safe=[]
+                      for k,v in attrs:
+                          if k.lower() in ('value','token','csrf') and v:
+                              v='[HIDDEN]'
+                          safe.append((k,v))
+                      print(tag, safe)
+          P().feed(html)
+          text=re.sub(r'<[^>]+>',' ',html)
+          print('TEXT:',re.sub(r'\s+',' ',text).strip()[:1600])
+          PY
+          rm -f /tmp/reset-form.html
+          REMOTE
+
+      - name: Zapsat zjištění
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let log='';
+            try {log=fs.readFileSync(`${process.env.RUNNER_TEMP}/form.txt`,'utf8')} catch {}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY RESET FORM] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-12000).replace(/```/g,'---')+'\n```'});
