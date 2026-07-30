@@ -1,0 +1,91 @@
+name: Ověřit skutečnou přihlášenou stránku statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-authenticated-stats-page-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Stáhnout stránku s platnou interní relací
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' 2>&1 | tee "$RUNNER_TEMP/auth-http.txt"
+          set -Eeuo pipefail
+          sudo -n true
+          TOKEN="$(cd /usr/local/lib/nasekadan-stats && sudo -u www-data /usr/bin/python3 - <<'PY'
+          import stats_server
+          print(stats_server.session_token())
+          PY
+          )"
+          test -n "$TOKEN"
+
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 \
+            -H "Cookie: nkstats_session=$TOKEN" \
+            'https://nasekadan.cz/statistiky/' > /tmp/stats-auth-public.html
+          curl -fsS --max-time 15 \
+            -H "Cookie: nkstats_session=$TOKEN" \
+            'http://127.0.0.1:3225/statistiky/' > /tmp/stats-auth-local.html
+
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('public','local'):
+              text=Path(f'/tmp/stats-auth-{name}.html').read_text(errors='replace')
+              print(name, {
+                'length': len(text),
+                'login': 'Přihlášení ke statistikám' in text,
+                'recent': 'Posledních 25 článků' in text,
+                'button': 'href="#poslednich-25-clanku"' in text,
+                'rows': text.count('<tr>'),
+                'recent_position': text.find('Posledních 25 článků'),
+                'metrics_position': text.find('Dnes – zobrazení'),
+                'title': text[text.find('<title>'):text.find('</title>')+8],
+              })
+          pub=Path('/tmp/stats-auth-public.html').read_text(errors='replace')
+          assert 'Přihlášení ke statistikám' not in pub, 'Veřejná přihlášená stránka stále vrací login'
+          assert 'Posledních 25 článků' in pub, 'Veřejná přihlášená stránka neobsahuje sekci'
+          assert 'href="#poslednich-25-clanku"' in pub, 'Veřejná přihlášená stránka neobsahuje tlačítko'
+          print('=== ZAČÁTEK SKUTEČNÉHO BODY ===')
+          body=pub[pub.find('<body'):]
+          clean=' '.join(body.split())
+          print(clean[:2500])
+          PY
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let log='';
+            try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/auth-http.txt`,'utf8')}catch{}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[PŘIHLÁŠENÁ STRÁNKA STATISTIK] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:`\`\`\`text\n${log.slice(-40000).replace(/```/g,'---')}\n\`\`\``});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neověřené stránce
+        if: steps.verify.outcome != 'success'
+        run: exit 1
