@@ -1,0 +1,107 @@
+name: Jednorázově ověřit letní reklamy
+run-name: Nezrušitelná kontrola živé rotace po nasazení
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-summer-ad-rotation-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - name: Čekat na úplné veřejné nasazení
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/nk-summer-once
+          success=false
+          for attempt in $(seq 1 72); do
+            token="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            curl -fsS --max-time 20 "https://nasekadan.cz/?summer-once=$token" -o /tmp/nk-summer-once/home.html 2>/dev/null || :
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html?summer-once=$token" -o /tmp/nk-summer-once/article.html 2>/dev/null || :
+            curl -fsS --max-time 20 "https://nasekadan.cz/reklamy-oprava-obrazku.js?summer-once=$token" -o /tmp/nk-summer-once/rotation.js 2>/dev/null || :
+            curl -fsS --max-time 20 "https://nasekadan.cz/horko-feed.js?summer-once=$token" -o /tmp/nk-summer-once/heat.js 2>/dev/null || :
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/affiliate-site-travel-overlay.json?summer-once=$token" -o /tmp/nk-summer-once/overlay.json 2>/dev/null || :
+
+            if grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' /tmp/nk-summer-once/home.html \
+              && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' /tmp/nk-summer-once/article.html \
+              && grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' /tmp/nk-summer-once/article.html \
+              && grep -Fq 'lastminuteslevy-cz' /tmp/nk-summer-once/rotation.js \
+              && grep -Fq 'apollostore-cz' /tmp/nk-summer-once/rotation.js \
+              && grep -Fq 'installFeaturedSeasonalBanner' /tmp/nk-summer-once/rotation.js \
+              && grep -Fq 'horko-apollostore' /tmp/nk-summer-once/heat.js \
+              && grep -Fq 'rotatingItems' /tmp/nk-summer-once/heat.js \
+              && python3 - <<'PY'
+          import json
+          from pathlib import Path
+          try:
+              data=json.loads(Path('/tmp/nk-summer-once/overlay.json').read_text(encoding='utf-8'))
+          except Exception:
+              raise SystemExit(1)
+          ids={row.get('id') for row in data.get('partners', [])}
+          required={'lastminuteslevy-cz','atis-cz','ceskekormidlo-cz','excursia-cz','apollostore-cz','concept-cz','proalergiky-cz'}
+          raise SystemExit(0 if required <= ids else 1)
+          PY
+            then
+              success=true
+              break
+            fi
+            sleep 15
+          done
+          echo "success=$success" >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat nezávislý výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          SUCCESS: ${{ steps.check.outputs.success }}
+          OUTCOME: ${{ steps.check.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const read = path => { try { return fs.readFileSync(path, 'utf8'); } catch { return ''; } };
+            const home=read('/tmp/nk-summer-once/home.html');
+            const article=read('/tmp/nk-summer-once/article.html');
+            const rotation=read('/tmp/nk-summer-once/rotation.js');
+            const heat=read('/tmp/nk-summer-once/heat.js');
+            let overlay=null;
+            try { overlay=JSON.parse(read('/tmp/nk-summer-once/overlay.json')); } catch {}
+            const report={
+              checked_at_utc:new Date().toISOString(),
+              trigger_commit:context.sha,
+              status:process.env.SUCCESS==='true'?'success':'failed',
+              workflow_outcome:process.env.OUTCOME||null,
+              homepage_uses_summer_version:home.includes('reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1'),
+              heat_article_uses_summer_version:article.includes('reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1'),
+              heat_article_uses_rotating_heat_feed:article.includes('horko-feed.js?v=20260730-heat-rotation-1'),
+              live_script_has_lastminute:rotation.includes('lastminuteslevy-cz'),
+              live_script_has_cooling:rotation.includes('apollostore-cz')&&rotation.includes('concept-cz')&&rotation.includes('proalergiky-cz'),
+              live_script_has_rotation:rotation.includes('installFeaturedSeasonalBanner'),
+              live_heat_feed_has_apollostore:heat.includes('horko-apollostore'),
+              live_heat_feed_rotates:heat.includes('rotatingItems'),
+              live_partner_ids:Array.isArray(overlay?.partners)?overlay.partners.map(row=>row.id):[]
+            };
+            const path='summer-ad-rotation-live-status.json';
+            const content=Buffer.from(JSON.stringify(report,null,2)+'\n').toString('base64');
+            let sha;
+            try {
+              const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});
+              if(!Array.isArray(current.data))sha=current.data.sha;
+            } catch(error){if(error.status!==404)throw error;}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat nezávislou kontrolu letních reklam: ${report.status}`,content,...(sha?{sha}:{})});
+
+      - name: Vyhodnotit
+        if: always()
+        shell: bash
+        env:
+          SUCCESS: ${{ steps.check.outputs.success }}
+        run: test "$SUCCESS" = true
