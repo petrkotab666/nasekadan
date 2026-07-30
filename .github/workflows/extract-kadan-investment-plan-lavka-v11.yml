@@ -1,0 +1,105 @@
+name: Vytěžit investiční plán Kadaně k lávce v11
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-kadan-investment-plan-lavka-v11-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nainstalovat OCR
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+      - name: Stáhnout detail a přílohy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-investment-plan-v11
+          mkdir -p .github/research/lavka-investment-plan-v11/{html,text}
+          cat > /tmp/v11.py <<'PY'
+          import json,re,subprocess,time,unicodedata
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          R=Path('.github/research/lavka-investment-plan-v11'); H=R/'html'; T=R/'text'
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0)'
+          def get(u):
+              e=None
+              for i in range(5):
+                  try:
+                      r=s.get(u,timeout=60,allow_redirects=True); r.raise_for_status(); return r
+                  except Exception as x:e=x;time.sleep(2+i)
+              raise e
+          def norm(x):return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+          def slug(x):return re.sub(r'[^a-z0-9]+','-',norm(x)).strip('-')[:100] or 'file'
+          def run(c):return subprocess.run(c,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          urls=[
+            'https://www.mesto-kadan.cz/redakce/index.php?as4uOriginalDomain=www.mesto-kadan.cz&as4u_protocol=https&clanek=274670&detail_claim=293079&lanG=cs&slozka=219380',
+            'https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html'
+          ]
+          pages=[]; candidates=set()
+          for u in urls:
+              r=get(u); soup=BeautifulSoup(r.content,'lxml'); text=' '.join(soup.stripped_strings)
+              H.joinpath(f'page-{len(pages)}.html').write_bytes(r.content)
+              links=[]
+              for a in soup.select('a[href]'):
+                  v=urljoin(r.url,a.get('href')); label=a.get_text(' ',strip=True); links.append({'label':label,'url':v})
+                  nv=norm(label+' '+v)
+                  if any(k in nv for k in ['investicni','vystavby','293079','priloha','soubor','download']) or v.lower().endswith(('.pdf','.doc','.docx','.xls','.xlsx')): candidates.add(v)
+              pages.append({'url':r.url,'status':r.status_code,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'text':text[:50000],'links':links})
+          docs=[]
+          for i,u in enumerate(sorted(candidates)):
+              try:r=get(u)
+              except Exception as e:docs.append({'url':u,'error':repr(e)});continue
+              ct=r.headers.get('content-type','').lower(); final=r.url
+              if 'pdf' in ct or final.lower().endswith('.pdf'):
+                  p=Path('/tmp')/f'doc-{i}.pdf'; p.write_bytes(r.content); tmp=Path('/tmp')/f'doc-{i}.txt'; run(['pdftotext','-layout',str(p),str(tmp)])
+                  txt=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else ''
+                  d=Path('/tmp')/f'ocr-{i}';d.mkdir(exist_ok=True);run(['pdftoppm','-r','240','-jpeg',str(p),str(d/'p')]);chunks=[]
+                  for im in sorted(d.glob('p-*.jpg')):chunks.append(run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+                  txt+='\n\n===== OCR =====\n'+'\n\n'.join(chunks)
+                  tp=T/f'doc-{i}.txt';tp.write_text(txt,encoding='utf-8'); docs.append({'url':final,'content_type':ct,'bytes':len(r.content),'text_file':str(tp),'text':txt[:100000]})
+              elif 'html' in ct:
+                  soup=BeautifulSoup(r.content,'lxml');tx=' '.join(soup.stripped_strings);docs.append({'url':final,'content_type':ct,'text':tx[:50000],'links':[{'label':a.get_text(' ',strip=True),'url':urljoin(final,a.get('href'))} for a in soup.select('a[href]')]})
+              else:
+                  fp=Path('/tmp')/f'doc-{i}-{slug(Path(urlparse(final).path).name)}';fp.write_bytes(r.content); docs.append({'url':final,'content_type':ct,'bytes':len(r.content)})
+          out={'pages':pages,'candidates':sorted(candidates),'documents':docs}
+          (R/'results.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Investiční plán Kadaně – lávka v11','']
+          for d in docs:
+              md.append('## '+d.get('url',''))
+              md.append(d.get('text','')[:30000])
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v11.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-investment-plan-v11
+          git commit -m 'Vytěžit investiční plán Kadaně k lávce v11' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
