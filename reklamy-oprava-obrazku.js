@@ -141,8 +141,9 @@
     normalizePromoItems();
 
     const cleaning=promoItems.filter(item=>itemId(item)==='uklizecka-cisteni-rotating');
+    const reality=promoItems.filter(item=>['realitykadan-byt','realitykadan-garaz'].includes(itemId(item)));
     const seasonal=isSummerSeason()?promoItems.filter(item=>TRAVEL_IDS.has(itemId(item))||HEAT_IDS.has(itemId(item))||POJISTIME_IDS.has(itemId(item))):[];
-    const candidates=[...cleaning,...seasonal].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);
+    const candidates=[...reality,...cleaning,...seasonal].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);
     if(!candidates.length)return;
 
     const weighted=candidates.flatMap(item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item));

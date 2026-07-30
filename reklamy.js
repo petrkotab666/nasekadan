@@ -1,4 +1,6 @@
 const promoItems=[
+  {id:'realitykadan-byt',title:'Prodáváte byt v Kadani nebo v Klášterci?',text:'Rychlá nabídka bez zbytečného čekání. Férově, nezávazně a bez provize.',url:'https://realitykadan.cz',banner:'/assets/reklamy/realitykadan-byt-wide-v1.svg',wideBanner:'/assets/reklamy/realitykadan-byt-wide-v1.svg',tag:'Výkup nemovitostí',contexts:['home','local','sidebar','general','finance'],weight:6,fullBleed:true},
+  {id:'realitykadan-garaz',title:'Prodáváte garáž v Kadani nebo v Klášterci?',text:'Rychlá nabídka, minimum formalit a férové podmínky.',url:'https://realitykadan.cz',banner:'/assets/reklamy/realitykadan-garaz-wide-v1.svg',wideBanner:'/assets/reklamy/realitykadan-garaz-wide-v1.svg',tag:'Výkup nemovitostí',contexts:['home','local','sidebar','general'],weight:5,fullBleed:true},
   {id:'pojistime',title:'Pojistime.to',text:'Srovnání pojištění auta, domácnosti, cestování a dalších rizik na jednom místě.',url:'https://pojistime.to',tag:'Pojištění',contexts:['finance','auto','home','travel','sidebar','general']},
   {id:'csob',title:'ČSOB Pojišťovna',text:'Pojištění auta, majetku, odpovědnosti, cestování i podnikatelských rizik.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=f5e0f8fb',banner:'https://doc.ehub.cz/b/174174d6/041e34d5.jpg',tag:'Pojištění',contexts:['finance','auto','home','travel','general']},
   {id:'mutumutu',title:'Mutumutu.cz',text:'Životní pojištění a ochrana příjmu pro každodenní život.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=74eab778',banner:'https://doc.ehub.cz/b/706fc994/00043bad.png',tag:'Život a příjem',contexts:['finance','health','general']},
@@ -322,6 +324,10 @@ function ensurePromoStyles(){
   style.textContent=`
     .promo-label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .promo-grid-banner{grid-template-columns:minmax(0,1fr)!important}
+    .promo-card-full-image{display:block!important;padding:0!important;min-height:0!important;overflow:hidden}
+    .promo-card-full-image .promo-banner{display:block!important;height:auto!important;min-height:0!important;margin:0!important;border:0!important}
+    .promo-card-full-image .promo-banner img{display:block!important;width:100%!important;height:auto!important;max-width:none!important;max-height:none!important;object-fit:contain!important;padding:0!important;background:#fff}
+    .promo-card-full-image .promo-wide-copy{display:none!important}
     .promo-card-wide{display:grid!important;grid-template-columns:minmax(210px,34%) minmax(0,1fr);padding:0!important;min-height:154px!important}
     .promo-card-wide .promo-banner{height:100%!important;min-height:154px;margin:0!important;border:0;border-right:1px solid var(--line)}
     .promo-card-wide .promo-banner img{width:100%;height:100%;max-width:none!important;max-height:none!important;object-fit:contain;padding:10px;background:#fff}
@@ -374,6 +380,7 @@ function ensurePromoStyles(){
     @media(max-width:700px){
       .promo-card-wide{grid-template-columns:1fr}
       .promo-card-wide .promo-banner{height:112px!important;min-height:112px;border-right:0;border-bottom:1px solid var(--line)}
+      .promo-card-full-image .promo-banner{height:auto!important;min-height:0!important;border:0!important}
       .promo-wide-copy strong{font-size:23px}
       .article-ad-auto{margin:44px 0}
     }
@@ -394,7 +401,8 @@ function renderBannerCard(item){
   const visual=banner
     ?`<span class="promo-banner"><img src="${escapeHtml(banner)}" alt="${title}" loading="lazy" decoding="async"></span>`
     :`<span class="promo-banner promo-banner-fallback">${title}</span>`;
-  return `<a class="promo-card promo-card-wide" href="${escapeHtml(safeHttpUrl(item.url))}" target="_blank" rel="nofollow sponsored noopener noreferrer">${visual}<span class="promo-wide-copy"><small>${escapeHtml(item.tag)}</small><strong>${title}</strong><span class="promo-description">${escapeHtml(item.text)}</span><b>Zjistit více →</b></span></a>`;
+  const fullClass=item.fullBleed?' promo-card-full-image':'';
+  return `<a class="promo-card promo-card-wide${fullClass}" href="${escapeHtml(safeHttpUrl(item.url))}" target="_blank" rel="nofollow sponsored noopener noreferrer">${visual}<span class="promo-wide-copy"><small>${escapeHtml(item.tag)}</small><strong>${title}</strong><span class="promo-description">${escapeHtml(item.text)}</span><b>Zjistit více →</b></span></a>`;
 }
 
 function renderPromos(){
