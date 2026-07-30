@@ -1,0 +1,217 @@
+name: Nasadit bannery Pojistime.to
+run-name: Pojistime.to do rotace bez LastMinuteSlevy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/install_pojistime_banner_rotation.py'
+      - '.github/workflows/install-pojistime-banner-rotation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-pojistime-banner-install
+  cancel-in-progress: false
+
+jobs:
+  install-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit bannery a přestavět rotaci
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 -m py_compile scripts/install_pojistime_banner_rotation.py
+          python3 scripts/install_pojistime_banner_rotation.py
+          node --check reklamy-oprava-obrazku.js
+          python3 -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null
+          python3 -m json.tool assets/affiliate-site-config.json >/dev/null
+          python3 scripts/ensure_summer_ad_rotation.py --write --check
+          test -s assets/reklamy/pojistime-family-wide-a.svg
+          test -s assets/reklamy/pojistime-family-wide-b.svg
+          test -s assets/reklamy/pojistime-family-square.svg
+          test -s assets/reklamy/pojistime-family-tower.svg
+          grep -Fq 'pojistime-family-wide-a' reklamy-oprava-obrazku.js
+          grep -Fq 'pojistime-family-tower' reklamy-oprava-obrazku.js
+          ! grep -Fq 'lastminuteslevy-cz' reklamy-oprava-obrazku.js
+          ! grep -Fq 'lastminuteslevy-cz' assets/affiliate-site-travel-overlay.json
+
+      - name: Uložit vytvořené bannery a konfiguraci
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          python3 scripts/install_pojistime_banner_rotation.py
+          python3 scripts/ensure_summer_ad_rotation.py --write --check
+          git add assets/reklamy/pojistime-family-*.svg \
+                  assets/affiliate-site-travel-overlay.json \
+                  assets/affiliate-site-config.json \
+                  reklamy-oprava-obrazku.js \
+                  scripts/ensure_summer_ad_rotation.py \
+                  scripts/normalize_articles.py \
+                  Dockerfile \
+                  .github/workflows/apply-summer-ad-rotation.yml \
+                  .github/workflows/verify-summer-ad-rotation-live.yml \
+                  .github/workflows/verify-summer-ad-rotation-once.yml \
+                  .github/workflows/deploy-summer-ads-now.yml \
+                  -- '*.html' ':!nahled/**' ':!.github/**'
+          if git diff --cached --quiet; then
+            echo 'Repozitář už obsahuje požadovanou rotaci.'
+          else
+            git commit -m 'Nasadit bannery Pojistime.to a odložit LastMinuteSlevy'
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"
+              break
+            fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nasadit přímo na OVH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          sudo -n true
+          if [[ ! -d /opt/nasekadan/.git ]]; then
+            sudo rm -rf /opt/nasekadan
+            sudo git clone https://github.com/petrkotab666/nasekadan.git /opt/nasekadan
+            sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          fi
+          cd /opt/nasekadan
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          python3 scripts/install_pojistime_banner_rotation.py
+          node --check reklamy-oprava-obrazku.js
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -d -m 0755 /var/www/nasekadan/assets
+          sudo install -m 0644 assets/reklamy/pojistime-family-*.svg /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 reklamy-oprava-obrazku.js /var/www/nasekadan/reklamy-oprava-obrazku.js
+          sudo install -m 0644 assets/affiliate-site-travel-overlay.json /var/www/nasekadan/assets/affiliate-site-travel-overlay.json
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('/var/www/nasekadan')
+          version='20260730-pojistime-rotation-1'
+          pattern=re.compile(r'(<script\b[^>]*\bsrc=["\'])([^"\']*?reklamy-oprava-obrazku\.js)(?:\?[^"\']*)?(["\'][^>]*>\s*</script>)',re.I)
+          changed=0
+          for path in root.rglob('*.html'):
+              if any(part in {'.git','.github','nahled','node_modules'} for part in path.relative_to(root).parts):
+                  continue
+              try:text=path.read_text(encoding='utf-8')
+              except UnicodeDecodeError:continue
+              updated=pattern.sub(lambda m:f'{m.group(1)}{m.group(2)}?v={version}{m.group(3)}',text)
+              if updated!=text:
+                  path.write_text(updated,encoding='utf-8')
+                  changed+=1
+          print(f'Verze reklamního skriptu změněna v {changed} HTML souborech.')
+          PY
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo nginx -t
+          sudo systemctl reload nginx
+          grep -Fq 'pojistime-family-wide-a' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          grep -Fq 'pojistime-family-tower' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          ! grep -Fq 'lastminuteslevy-cz' /var/www/nasekadan/reklamy-oprava-obrazku.js
+          ! grep -Fq 'lastminuteslevy-cz' /var/www/nasekadan/assets/affiliate-site-travel-overlay.json
+          REMOTE
+
+      - name: Ověřit živý web
+        id: verify
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p "$RUNNER_TEMP/live"
+          success=false
+          for attempt in $(seq 1 30); do
+            token="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            curl -fsS --max-time 20 "https://nasekadan.cz/?pojistime-check=$token" -o "$RUNNER_TEMP/live/home.html" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/reklamy-oprava-obrazku.js?pojistime-check=$token" -o "$RUNNER_TEMP/live/rotation.js" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/affiliate-site-travel-overlay.json?pojistime-check=$token" -o "$RUNNER_TEMP/live/overlay.json" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/pojistime-family-wide-a.svg?pojistime-check=$token" -o "$RUNNER_TEMP/live/wide.svg" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/pojistime-family-square.svg?pojistime-check=$token" -o "$RUNNER_TEMP/live/square.svg" || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/assets/reklamy/pojistime-family-tower.svg?pojistime-check=$token" -o "$RUNNER_TEMP/live/tower.svg" || true
+            if grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-pojistime-rotation-1' "$RUNNER_TEMP/live/home.html" \
+              && grep -Fq 'pojistime-family-wide-a' "$RUNNER_TEMP/live/rotation.js" \
+              && grep -Fq 'pojistime-family-tower' "$RUNNER_TEMP/live/rotation.js" \
+              && ! grep -Fq 'lastminuteslevy-cz' "$RUNNER_TEMP/live/rotation.js" \
+              && ! grep -Fq 'lastminuteslevy-cz' "$RUNNER_TEMP/live/overlay.json" \
+              && grep -Fq '<svg' "$RUNNER_TEMP/live/wide.svg" \
+              && grep -Fq '<svg' "$RUNNER_TEMP/live/square.svg" \
+              && grep -Fq '<svg' "$RUNNER_TEMP/live/tower.svg"; then
+              success=true
+              break
+            fi
+            sleep 10
+          done
+          echo "success=$success" >> "$GITHUB_OUTPUT"
+          test "$success" = true
+
+      - name: Zapsat veřejný výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          LIVE_SUCCESS: ${{ steps.verify.outputs.success }}
+        with:
+          script: |
+            const fs=require('fs');
+            const read=p=>{try{return fs.readFileSync(p,'utf8')}catch{return ''}};
+            const root=`${process.env.RUNNER_TEMP}/live`;
+            const rotation=read(`${root}/rotation.js`);
+            const overlay=read(`${root}/overlay.json`);
+            const report={
+              checked_at_utc:new Date().toISOString(),
+              trigger_commit:context.sha,
+              status:process.env.LIVE_SUCCESS==='true'?'success':'failed',
+              homepage_uses_pojistime_version:read(`${root}/home.html`).includes('20260730-pojistime-rotation-1'),
+              live_rotation_has_wide:rotation.includes('pojistime-family-wide-a')&&rotation.includes('pojistime-family-wide-b'),
+              live_rotation_has_square:rotation.includes('pojistime-family-square'),
+              live_rotation_has_tower:rotation.includes('pojistime-family-tower'),
+              lastminuteslevy_absent:!rotation.includes('lastminuteslevy-cz')&&!overlay.includes('lastminuteslevy-cz'),
+              assets_public:['wide.svg','square.svg','tower.svg'].every(name=>read(`${root}/${name}`).includes('<svg'))
+            };
+            const path='pojistime-banner-live-status.json';
+            const content=Buffer.from(JSON.stringify(report,null,2)+'\n').toString('base64');
+            let sha;
+            try{const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(current.data))sha=current.data.sha}catch(error){if(error.status!==404)throw error}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat živou kontrolu bannerů Pojistime.to: ${report.status}`,content,...(sha?{sha}:{})});
+
+      - name: Vyhodnotit
+        if: always()
+        env:
+          LIVE_SUCCESS: ${{ steps.verify.outputs.success }}
+        run: test "$LIVE_SUCCESS" = true
