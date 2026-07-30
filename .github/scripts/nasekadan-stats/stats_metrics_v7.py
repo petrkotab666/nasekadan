@@ -78,6 +78,19 @@ def published_from_html(text: str) -> dt.datetime | None:
     return None
 
 
+def cached_article_titles() -> dict[str, str]:
+    with v6.DB_LOCK, v6.connect() as con:
+        return {
+            str(row["path"]): str(row["title"])
+            for row in con.execute("SELECT path,title FROM article_titles")
+        }
+
+
+def fallback_title(path: str) -> str:
+    slug = path.rsplit("/", 1)[-1].removesuffix(".html").replace("-", " ")
+    return slug[:1].upper() + slug[1:]
+
+
 def latest_published_articles(limit: int = RECENT_LIMIT) -> list[dict[str, Any]]:
     articles: dict[str, dict[str, Any]] = {}
     for root in v6.STATIC_ARTICLE_ROOTS:
@@ -95,18 +108,51 @@ def latest_published_articles(limit: int = RECENT_LIMIT) -> list[dict[str, Any]]
             except OSError:
                 continue
             published = published_from_html(text)
-            if published is None:
-                published = dt.datetime.min.replace(tzinfo=v6.TZ)
             articles[path] = {
                 "path": path,
                 "title": v6.title_from_file(path),
-                "published": published,
+                "published": published or dt.datetime.min.replace(tzinfo=v6.TZ),
+                "historical": published is None,
+                "views": 0,
             }
-    return sorted(
-        articles.values(),
+
+    persisted = v6.read_persisted()
+    pages = v6.normalize_counter(persisted.get("pages"))
+    for item in articles.values():
+        item["views"] = int(pages.get(item["path"], 0) or 0)
+
+    dated = sorted(
+        (item for item in articles.values() if not item["historical"]),
         key=lambda item: (item["published"], item["path"]),
         reverse=True,
-    )[:limit]
+    )
+    undated = sorted(
+        (item for item in articles.values() if item["historical"]),
+        key=lambda item: (-item["views"], item["path"]),
+    )
+
+    if len(dated) + len(undated) < limit:
+        cached = cached_article_titles()
+        missing_paths = [
+            path
+            for path in pages
+            if v6.ARTICLE_RE.match(path) and path not in articles
+        ]
+        missing_paths.sort(key=lambda path: (-pages.get(path, 0), path))
+        for path in missing_paths:
+            undated.append(
+                {
+                    "path": path,
+                    "title": cached.get(path) or fallback_title(path),
+                    "published": dt.datetime.min.replace(tzinfo=v6.TZ),
+                    "historical": True,
+                    "views": int(pages.get(path, 0) or 0),
+                }
+            )
+            if len(dated) + len(undated) >= limit:
+                break
+
+    return (dated + undated)[:limit]
 
 
 def render_recent_articles() -> str:
@@ -116,6 +162,7 @@ def render_recent_articles() -> str:
     recent = latest_published_articles()
     recent_views = sum(pages.get(item["path"], 0) for item in recent)
     average = recent_views / len(recent) if recent else 0
+    historical_count = sum(1 for item in recent if item.get("historical"))
 
     rows: list[str] = []
     for rank, item in enumerate(recent, 1):
@@ -125,7 +172,11 @@ def render_recent_articles() -> str:
         views = int(pages.get(path, 0) or 0)
         share_recent = views / recent_views * 100 if recent_views else 0
         share_site = views / total_views * 100 if total_views else 0
-        published_text = published.strftime("%d.%m.%Y %H:%M") if published.year > 1 else "datum neuvedeno"
+        published_text = (
+            "historický záznam"
+            if item.get("historical")
+            else published.strftime("%d.%m.%Y %H:%M")
+        )
         rows.append(
             '<tr>'
             f'<td class="rank">{rank}</td>'
@@ -138,14 +189,19 @@ def render_recent_articles() -> str:
         )
 
     if not rows:
-        rows.append('<tr><td colspan="6" class="empty">Na serveru nebyly nalezeny publikované články.</td></tr>')
+        rows.append('<tr><td colspan="6" class="empty">Nebyly nalezeny žádné články.</td></tr>')
 
+    history_note = (
+        f" · {historical_count} starší záznamy doplněné z trvalé databáze"
+        if historical_count
+        else ""
+    )
     return (
         '<section class="panel" id="poslednich-25-clanku">'
-        '<h2>Posledních 25 publikovaných článků</h2>'
-        '<p class="panel-note">Řazeno od nejnovějšího podle data publikace v článku. Přehled zahrnuje i nové články, které zatím mají nula zobrazení.</p>'
+        '<h2>Posledních 25 článků</h2>'
+        '<p class="panel-note">Nejnovější články jsou řazené podle data publikace. Pokud už starší soubor není v aktuálním webu, doplní se zachovaný historický údaj z databáze.</p>'
         '<div class="article-tools">'
-        f'<span><b>{len(recent)}</b> článků · <b>{v6.fmt(recent_views)}</b> zobrazení · průměr <b>{v6.fmt(average)}</b> na článek</span>'
+        f'<span><b>{len(recent)}</b> článků · <b>{v6.fmt(recent_views)}</b> zobrazení · průměr <b>{v6.fmt(average)}</b> na článek{v6.esc(history_note)}</span>'
         '</div>'
         '<div class="table-wrap"><table id="recent-articles">'
         '<thead><tr><th>#</th><th>Publikováno</th><th>Článek</th><th class="num">Zobrazení</th><th class="num">Podíl posledních 25</th><th class="num">Podíl webu</th></tr></thead>'
