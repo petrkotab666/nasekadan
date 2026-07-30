@@ -1,0 +1,104 @@
+name: Opravit skutečnou cestu zápisu statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/final-fix-multisite-hit-path.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Opravit cestu a ověřit celý tok
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'sudo bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          SNIPPET=/etc/nginx/snippets/nasekadan-multisite-collector.conf
+          test -s "$SNIPPET"
+          cp -a "$SNIPPET" "$SNIPPET.bak-$(date +%Y%m%d-%H%M%S)"
+          python3 - "$SNIPPET" <<'PY'
+          from pathlib import Path
+          import re,sys
+          path=Path(sys.argv[1]); text=path.read_text(encoding='utf-8')
+          start=text.index('location = /_nkstats/hit.gif {')
+          end=text.index('\n}',start)+2
+          block=text[start:end]
+          new=re.sub(r'proxy_pass\s+http://127\.0\.0\.1:3226[^;]*;', 'proxy_pass http://127.0.0.1:3226/hit.gif;', block)
+          if new==block: raise SystemExit('Řádek proxy_pass nebyl změněn')
+          text=text[:start]+new+text[end:]
+          path.write_text(text,encoding='utf-8')
+          PY
+          nginx -t
+          systemctl reload nginx
+
+          before=$(python3 - <<'PY'
+          import sqlite3
+          con=sqlite3.connect('/opt/multisite-stats/stats.sqlite3')
+          print(con.execute("select count(*) from hits where host='dobreklima.cz' and path='/overeni-statistik' ").fetchone()[0])
+          PY
+          )
+          code=$(curl -kLsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 \
+            -A 'Mozilla/5.0 StatsVerificationBrowser/1.0' -o /tmp/hit.gif -w '%{http_code}' \
+            'https://nasekadan.cz/_nkstats/hit.gif?site=dobreklima.cz&path=%2Fovereni-statistik&ref=https%3A%2F%2Fgoogle.cz%2F')
+          after=$(python3 - <<'PY'
+          import sqlite3
+          con=sqlite3.connect('/opt/multisite-stats/stats.sqlite3')
+          print(con.execute("select count(*) from hits where host='dobreklima.cz' and path='/overeni-statistik' ").fetchone()[0])
+          PY
+          )
+          echo "HIT_CODE=$code HIT_SIZE=$(wc -c < /tmp/hit.gif) BEFORE=$before AFTER=$after"
+          test "$code" = 200
+          test "$(wc -c < /tmp/hit.gif)" -gt 20
+          test "$after" -gt "$before"
+
+          AUTH_USER=$(cut -d: -f1 /opt/multisite-stats/.htpasswd | head -n1)
+          AUTH_PASS=''
+          if [[ -s /opt/nasekadan-stats/access.txt ]]; then AUTH_PASS=$(sed -n '1{s/^[^:]*:[[:space:]]*//;p;}' /opt/nasekadan-stats/access.txt); fi
+          if [[ -z "$AUTH_PASS" && -s /opt/nasekadan-stats/login.txt ]]; then AUTH_PASS=$(sed -n -E 's/^Heslo:[[:space:]]*//p' /opt/nasekadan-stats/login.txt | head -n1); fi
+          test -n "$AUTH_USER" -a -n "$AUTH_PASS"
+          code=$(curl -kLsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 \
+            -u "$AUTH_USER:$AUTH_PASS" -o /tmp/dash.html -w '%{http_code}' \
+            'https://nasekadan.cz/statistiky-webu/?site=dobreklima.cz')
+          echo "DASH_CODE=$code DASH_SIZE=$(wc -c < /tmp/dash.html)"
+          test "$code" = 200
+          grep -q 'Statistiky webu dobreklima.cz' /tmp/dash.html
+          grep -q '/overeni-statistik' /tmp/dash.html
+          echo 'OVERENO: veřejný HTTPS tracker, zápis do databáze a chráněný přehled fungují.'
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[MULTISITE HIT PATH] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+out.slice(-40000).replace(/```/g,'---')+'\n```'});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
