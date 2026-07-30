@@ -1,0 +1,102 @@
+name: Nouzově opravit článek o zákazu odběru vody
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-fix-water-article-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: emergency-fix-water-article-live
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sjednotit titulku a archiv
+        run: |
+          set -euo pipefail
+          python3 scripts/enforce_article_visibility.py
+          git config user.name 'Naše Kadaň nouzová oprava'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html
+          git commit -m 'Vrátit nejnovější články na titulku a do archivu' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Přepsat aktivní Docker i statický adresář
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          python3 scripts/enforce_article_visibility.py
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          test -n "$cid"
+
+          files=(
+            index.html
+            clanky/index.html
+            clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html
+            clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+            rss.xml
+            sitemap.xml
+            news-sitemap.xml
+          )
+
+          for file in "${files[@]}"; do
+            test -f "$file"
+            sudo install -d -m 0755 "/var/www/nasekadan/$(dirname "$file")"
+            sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
+            sudo docker exec "$cid" mkdir -p "/usr/share/nginx/html/$(dirname "$file")"
+            sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+          done
+
+          if [[ -d social ]]; then
+            sudo install -d -m 0755 /var/www/nasekadan/social
+            sudo cp -a social/. /var/www/nasekadan/social/
+            sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/social
+            sudo docker cp social/. "$cid:/usr/share/nginx/html/social/"
+          fi
+
+          curl -fsS http://127.0.0.1:3224/clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html | grep -Fq 'Kvůli suchu platí na Kadaňsku zákaz odběru vody'
+          curl -fsS http://127.0.0.1:3224/index.html | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          curl -fsS http://127.0.0.1:3224/clanky/index.html | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          REMOTE
+
+      - name: Veřejně ověřit opravu
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 20); do
+            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html?repair=${GITHUB_SHA}-${n}" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?repair=${GITHUB_SHA}-${n}" || true)"
+            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?repair=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Kvůli suchu platí na Kadaňsku zákaz odběru vody' <<<"$article" \
+              && grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html' <<<"$home" \
+              && grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html' <<<"$archive"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
