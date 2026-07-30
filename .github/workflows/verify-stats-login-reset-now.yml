@@ -1,0 +1,78 @@
+name: Ověřit živou opravu přihlášení a resetu statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-stats-login-reset-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Ověřit živou službu a vyžádat reset
+        id: check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          umask 077
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/verify-stats-reset.log"
+          set -Eeuo pipefail
+          sudo systemctl is-active --quiet nasekadan-stats-web.service
+          health="$(curl -fsS --max-time 5 http://127.0.0.1:3225/healthz)"
+          python3 - "$health" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1])
+          assert data.get('ok') is True, data
+          assert data.get('smtpConfigured') is True, data
+          print('Healthcheck statistik i SMTP je v pořádku.')
+          PY
+          url='https://nasekadan.cz/statistiky/zapomenute-heslo'
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$url" -o /tmp/reset-get.html
+          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data '' "$url" -o /tmp/reset-post.html
+          ! grep -Eqi 'nepodařilo odeslat|zkontrolujte nastavení odesílací schránky' /tmp/reset-post.html
+          grep -Eqi 'odeslán|odeslali|zkontrolujte.{0,20}(e-mail|email)|obnovovací odkaz' /tmp/reset-post.html
+          rm -f /tmp/reset-get.html /tmp/reset-post.html
+          echo 'Živá aplikace potvrdila odeslání obnovovacího odkazu.'
+          REMOTE
+
+      - name: Zapsat výsledek do issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.check.outcome }}
+          SOURCE_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/verify-stats-reset.log`, 'utf8'); } catch {}
+            const ok = process.env.OUTCOME === 'success';
+            const title = `[STATISTIKY LOGIN/RESET] ${ok ? 'Opraveno' : 'Selhalo'} ${new Date().toISOString()}`;
+            const body = [
+              `- Commit: \`${process.env.SOURCE_SHA}\``,
+              `- Výsledek: **${process.env.OUTCOME}**`,
+              '',
+              '```text',
+              log.slice(-20000).replace(/```/g, '---'),
+              '```'
+            ].join('\n');
+            const issue = await github.rest.issues.create({owner: context.repo.owner, repo: context.repo.repo, title, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.data.number, state: 'closed', state_reason: 'completed'});
+
+      - name: Vyhodnotit
+        if: steps.check.outcome != 'success'
+        run: exit 1
