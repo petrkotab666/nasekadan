@@ -1,0 +1,54 @@
+name: Zjistit pád služby při obnově hesla statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-stats-reset-crash-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Vyvolat chybu a načíst bezpečný výpis služby
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' > "$RUNNER_TEMP/crash.txt" 2>&1
+          set -Eeuo pipefail
+          sudo systemctl restart nasekadan-stats-web.service
+          sleep 1
+          since="$(date -u '+%Y-%m-%d %H:%M:%S')"
+          curl -kisS -L --max-time 20 --resolve nasekadan.cz:443:127.0.0.1 \
+            -H 'Content-Type: application/x-www-form-urlencoded' --data '' \
+            https://nasekadan.cz/statistiky/zapomenute-heslo >/tmp/reset-response.txt || true
+          sleep 1
+          echo '--- RESPONSE STATUS ---'
+          head -n 1 /tmp/reset-response.txt || true
+          echo '--- SERVICE STATUS ---'
+          sudo systemctl status nasekadan-stats-web.service --no-pager || true
+          echo '--- JOURNAL ---'
+          sudo journalctl -u nasekadan-stats-web.service --since "$since" --no-pager -n 160 \
+            | sed -E 's/(SMTP_PASSWORD|password|heslo)=?[^ ]*/\1=[REDACTED]/Ig; s/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/[EMAIL]/g'
+          rm -f /tmp/reset-response.txt
+          REMOTE
+
+      - name: Zapsat traceback
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let log='';
+            try {log=fs.readFileSync(`${process.env.RUNNER_TEMP}/crash.txt`,'utf8')} catch {}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY RESET CRASH] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-24000).replace(/```/g,'---')+'\n```'});
