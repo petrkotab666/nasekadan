@@ -28,6 +28,21 @@ def main() -> int:
             raise RuntimeError('V reklamy.js chybí CSS marker.')
         text = text.replace(css_marker, css_marker + css, 1)
 
+    # Staré obecné pravidlo .promo-card-wide je níže v CSS a přepisovalo
+    # display:block i rozměry obrázku. Silnější pravidla proto vkládáme až
+    # za obecné styly a používáme kombinovaný selektor obou tříd.
+    full_width_marker = "    .promo-card-wide .promo-banner img{width:100%;height:100%;max-width:none!important;max-height:none!important;object-fit:contain;padding:10px;background:#fff}\n"
+    full_width_css = """    .promo-card-wide.promo-card-full-image{display:block!important;grid-template-columns:none!important;width:100%!important;max-width:1180px!important;min-height:0!important;padding:0!important}
+    .promo-card-wide.promo-card-full-image>.promo-banner{display:block!important;width:100%!important;height:auto!important;min-height:0!important;margin:0!important;border:0!important}
+    .promo-card-wide.promo-card-full-image>.promo-banner img{display:block!important;width:100%!important;height:auto!important;max-width:none!important;max-height:none!important;object-fit:contain!important;padding:0!important;background:#fff}
+    .promo-card-wide.promo-card-full-image>.promo-wide-copy{display:none!important}
+    .featured-cleaning-ad>a.promo-card-full-image{max-width:1180px!important}
+"""
+    if '.promo-card-wide.promo-card-full-image{' not in text:
+        if full_width_marker not in text:
+            raise RuntimeError('V reklamy.js chybí obecný styl široké reklamy.')
+        text = text.replace(full_width_marker, full_width_marker + full_width_css, 1)
+
     old_return = "  return `<a class=\"promo-card promo-card-wide\" href=\"${escapeHtml(safeHttpUrl(item.url))}\" target=\"_blank\" rel=\"nofollow sponsored noopener noreferrer\">${visual}<span class=\"promo-wide-copy\"><small>${escapeHtml(item.tag)}</small><strong>${title}</strong><span class=\"promo-description\">${escapeHtml(item.text)}</span><b>Zjistit více →</b></span></a>`;"
     new_return = "  const fullClass=item.fullBleed?' promo-card-full-image':'';\n  return `<a class=\"promo-card promo-card-wide${fullClass}\" href=\"${escapeHtml(safeHttpUrl(item.url))}\" target=\"_blank\" rel=\"nofollow sponsored noopener noreferrer\">${visual}<span class=\"promo-wide-copy\"><small>${escapeHtml(item.tag)}</small><strong>${title}</strong><span class=\"promo-description\">${escapeHtml(item.text)}</span><b>Zjistit více →</b></span></a>`;"
     if 'const fullClass=item.fullBleed' not in text:
@@ -68,7 +83,10 @@ def main() -> int:
         if '<svg' not in data or '2400' not in data or phrase not in data:
             raise RuntimeError(f'Neplatný banner {name}.')
 
-    print('Reality Kadaň: oba bannery jsou zapojené do běžné i hlavní rotace.')
+    if '.promo-card-wide.promo-card-full-image{' not in text:
+        raise RuntimeError('Chybí finální pravidlo pro plnou šířku banneru.')
+
+    print('Reality Kadaň: oba bannery jsou zapojené a vyplní celou šířku reklamní karty.')
     return 0
 
 
