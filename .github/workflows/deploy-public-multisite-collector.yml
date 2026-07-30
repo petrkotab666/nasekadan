@@ -1,0 +1,171 @@
+name: Zpřístupnit společné statistiky přes Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-public-multisite-collector.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: public-multisite-collector
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nasadit veřejný sběr a chráněný přehled
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          test -s /opt/multisite-stats/.htpasswd
+          curl -fsS --max-time 3 http://127.0.0.1:3226/healthz >/dev/null
+
+          cat > /etc/nginx/snippets/nasekadan-multisite-collector.conf <<'NGINX'
+          location = /_nkstats/tracker.js {
+            default_type application/javascript;
+            add_header Cache-Control "public, max-age=3600" always;
+            add_header X-Content-Type-Options nosniff always;
+            return 200 '(function(){"use strict";try{if(navigator.webdriver)return;var s=(location.hostname||"").toLowerCase().replace(/^www\./,"");if(!s||s.indexOf(".")<0)return;var u=new URL("https://nasekadan.cz/_nkstats/hit.gif");u.searchParams.set("site",s);u.searchParams.set("path",location.pathname||"/");u.searchParams.set("ref",document.referrer||"");u.searchParams.set("t",String(Date.now()));var i=new Image();i.referrerPolicy="strict-origin-when-cross-origin";i.src=u.toString()}catch(e){}})();';
+          }
+
+          location = /_nkstats/hit.gif {
+            proxy_http_version 1.1;
+            proxy_set_header Host nasekadan.cz;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_pass http://127.0.0.1:3226/hit.gif$is_args$args;
+            add_header Cache-Control "no-store" always;
+            add_header Access-Control-Allow-Origin "*" always;
+          }
+
+          location = /statistiky-webu {
+            return 301 /statistiky-webu/$is_args$args;
+          }
+
+          location ^~ /statistiky-webu/ {
+            auth_basic "Soukrome statistiky webu";
+            auth_basic_user_file /opt/multisite-stats/.htpasswd;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Stats-Host $arg_site;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_pass http://127.0.0.1:3226/;
+          }
+          NGINX
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          marker = 'include /etc/nginx/snippets/nasekadan-multisite-collector.conf;'
+          roots = [Path('/etc/nginx/sites-enabled'), Path('/etc/nginx/conf.d')]
+          paths=[]; seen=set()
+          for root in roots:
+              if not root.exists(): continue
+              for p in sorted(root.glob('*')):
+                  try: real=p.resolve()
+                  except OSError: continue
+                  if real in seen or not real.is_file(): continue
+                  seen.add(real); paths.append(real)
+
+          def blocks(text):
+              for m in re.finditer(r'\bserver\s*\{', text):
+                  start=m.start(); brace=text.find('{',m.start()); depth=0
+                  for i in range(brace,len(text)):
+                      if text[i]=='{': depth+=1
+                      elif text[i]=='}':
+                          depth-=1
+                          if depth==0:
+                              yield start,i+1,text[start:i+1]; break
+
+          matched=0
+          for path in paths:
+              try: text=path.read_text(encoding='utf-8')
+              except (OSError,UnicodeDecodeError): continue
+              inserts=[]
+              for start,end,block in blocks(text):
+                  if not re.search(r'server_name\s+[^;]*\bnasekadan\.cz\b[^;]*;',block): continue
+                  matched+=1
+                  if marker in block or 'location = /_nkstats/tracker.js' in block: continue
+                  line=re.search(r'(^[ \t]*server_name\s+[^;]+;)',block,re.M)
+                  if not line: continue
+                  pos=start+line.end(); indent=re.match(r'[ \t]*',line.group(1)).group(0)
+                  inserts.append((pos,'\n\n'+indent+marker))
+              if inserts:
+                  for pos,addition in reversed(inserts): text=text[:pos]+addition+text[pos:]
+                  path.write_text(text,encoding='utf-8')
+                  print('Doplněn veřejný sběr do',path)
+          if matched==0: raise SystemExit('Nenalezen vhost nasekadan.cz')
+          PY
+
+          nginx -t
+          systemctl reload nginx
+
+          curl -kfsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 https://nasekadan.cz/_nkstats/tracker.js | grep -q 'nasekadan.cz/_nkstats/hit.gif'
+          curl -kfsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 \
+            'https://nasekadan.cz/_nkstats/hit.gif?site=collector-selftest.invalid&path=%2Fovereni&ref=' \
+            -o /tmp/collector.gif
+          test "$(wc -c < /tmp/collector.gif)" -gt 20
+
+          AUTH_USER=$(cut -d: -f1 /opt/multisite-stats/.htpasswd | head -n1)
+          AUTH_PASS=''
+          if [[ -s /opt/nasekadan-stats/access.txt ]]; then AUTH_PASS=$(sed -n '1{s/^[^:]*:[[:space:]]*//;p;}' /opt/nasekadan-stats/access.txt); fi
+          if [[ -z "$AUTH_PASS" && -s /opt/nasekadan-stats/login.txt ]]; then AUTH_PASS=$(sed -n -E 's/^Heslo:[[:space:]]*//p' /opt/nasekadan-stats/login.txt | head -n1); fi
+          test -n "$AUTH_USER" -a -n "$AUTH_PASS"
+          curl -kfsS --max-time 12 --resolve nasekadan.cz:443:127.0.0.1 -u "$AUTH_USER:$AUTH_PASS" \
+            'https://nasekadan.cz/statistiky-webu/?site=collector-selftest.invalid' \
+            | grep -q 'Statistiky webu collector-selftest.invalid'
+
+          echo 'OVERENO: veřejný sběr i chráněný přehled fungují přes nasekadan.cz.'
+          REMOTE
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs=require('fs'); let out='';
+            try { out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8'); } catch {}
+            const ok=process.env.OUTCOME==='success';
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,
+              title:`[VEŘEJNÝ SBĚR STATISTIK] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,
+              body:'```text\n'+out.slice(-40000).replace(/```/g,'---')+'\n```'});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
