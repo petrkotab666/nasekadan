@@ -1,0 +1,170 @@
+name: Nasadit bannery Reality Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-realitykadan-banners.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-realitykadan-banners
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zapojit bannery do reklamní rotace
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ads = Path('reklamy.js')
+          text = ads.read_text(encoding='utf-8')
+
+          if "id:'realitykadan-byt'" not in text:
+              marker = "const promoItems=[\n"
+              block = """  {id:'realitykadan-byt',title:'Prodáváte byt v Kadani nebo v Klášterci?',text:'Rychlá nabídka bez zbytečného čekání. Férově, nezávazně a bez provize.',url:'https://realitykadan.cz',banner:'/assets/reklamy/realitykadan-byt-wide-v1.svg',wideBanner:'/assets/reklamy/realitykadan-byt-wide-v1.svg',tag:'Výkup nemovitostí',contexts:['home','local','sidebar','general','finance'],weight:6,fullBleed:true},
+  {id:'realitykadan-garaz',title:'Prodáváte garáž v Kadani nebo v Klášterci?',text:'Rychlá nabídka, minimum formalit a férové podmínky.',url:'https://realitykadan.cz',banner:'/assets/reklamy/realitykadan-garaz-wide-v1.svg',wideBanner:'/assets/reklamy/realitykadan-garaz-wide-v1.svg',tag:'Výkup nemovitostí',contexts:['home','local','sidebar','general'],weight:5,fullBleed:true},
+"""
+              if marker not in text:
+                  raise SystemExit('V reklamy.js chybí začátek promoItems.')
+              text = text.replace(marker, marker + block, 1)
+
+          css_marker = "    .promo-grid-banner{grid-template-columns:minmax(0,1fr)!important}\n"
+          if '.promo-card-full-image{' not in text:
+              css = """    .promo-card-full-image{display:block!important;padding:0!important;min-height:0!important;overflow:hidden}
+    .promo-card-full-image .promo-banner{display:block!important;height:auto!important;min-height:0!important;margin:0!important;border:0!important}
+    .promo-card-full-image .promo-banner img{display:block!important;width:100%!important;height:auto!important;max-width:none!important;max-height:none!important;object-fit:contain!important;padding:0!important;background:#fff}
+    .promo-card-full-image .promo-wide-copy{display:none!important}
+"""
+              if css_marker not in text:
+                  raise SystemExit('V reklamy.js chybí CSS marker promo-grid-banner.')
+              text = text.replace(css_marker, css_marker + css, 1)
+
+          old_return = "  return `<a class=\"promo-card promo-card-wide\" href=\"${escapeHtml(safeHttpUrl(item.url))}\" target=\"_blank\" rel=\"nofollow sponsored noopener noreferrer\">${visual}<span class=\"promo-wide-copy\"><small>${escapeHtml(item.tag)}</small><strong>${title}</strong><span class=\"promo-description\">${escapeHtml(item.text)}</span><b>Zjistit více →</b></span></a>`;"
+          new_return = "  const fullClass=item.fullBleed?' promo-card-full-image':'';\n  return `<a class=\"promo-card promo-card-wide${fullClass}\" href=\"${escapeHtml(safeHttpUrl(item.url))}\" target=\"_blank\" rel=\"nofollow sponsored noopener noreferrer\">${visual}<span class=\"promo-wide-copy\"><small>${escapeHtml(item.tag)}</small><strong>${title}</strong><span class=\"promo-description\">${escapeHtml(item.text)}</span><b>Zjistit více →</b></span></a>`;"
+          if 'const fullClass=item.fullBleed' not in text:
+              if old_return not in text:
+                  raise SystemExit('V reklamy.js nebyla nalezena původní návratová hodnota renderBannerCard.')
+              text = text.replace(old_return, new_return, 1)
+
+          mobile_marker = "      .promo-card-wide .promo-banner{height:112px!important;min-height:112px;border-right:0;border-bottom:1px solid var(--line)}\n"
+          if '.promo-card-full-image .promo-banner{height:auto!important' not in text:
+              if mobile_marker not in text:
+                  raise SystemExit('V reklamy.js chybí mobilní CSS marker.')
+              text = text.replace(mobile_marker, mobile_marker + "      .promo-card-full-image .promo-banner{height:auto!important;min-height:0!important;border:0!important}\n", 1)
+
+          ads.write_text(text, encoding='utf-8', newline='\n')
+
+          fix = Path('reklamy-oprava-obrazku.js')
+          ftext = fix.read_text(encoding='utf-8')
+          cleaning = "    const cleaning=promoItems.filter(item=>itemId(item)==='uklizecka-cisteni-rotating');\n"
+          reality = "    const reality=promoItems.filter(item=>['realitykadan-byt','realitykadan-garaz'].includes(itemId(item)));\n"
+          if reality not in ftext:
+              if cleaning not in ftext:
+                  raise SystemExit('V reklamním opraváři chybí marker cleaning.')
+              ftext = ftext.replace(cleaning, cleaning + reality, 1)
+          ftext = ftext.replace(
+              "    const candidates=[...cleaning,...seasonal].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);",
+              "    const candidates=[...reality,...cleaning,...seasonal].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);",
+              1,
+          )
+          fix.write_text(ftext, encoding='utf-8', newline='\n')
+
+          for path in (
+              Path('assets/reklamy/realitykadan-byt-wide-v1.svg'),
+              Path('assets/reklamy/realitykadan-garaz-wide-v1.svg'),
+          ):
+              content = path.read_text(encoding='utf-8')
+              assert '<svg' in content and '2400' in content and 'realitykadan.cz' in content, path
+
+          assert "id:'realitykadan-byt'" in text
+          assert "id:'realitykadan-garaz'" in text
+          assert 'promo-card-full-image' in text
+          assert '[...reality,...cleaning,...seasonal]' in ftext
+          print('Bannery jsou zapojené do běžné i hlavní rotace.')
+          PY
+
+      - name: Uložit změny do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add reklamy.js reklamy-oprava-obrazku.js assets/reklamy/realitykadan-byt-wide-v1.svg assets/reklamy/realitykadan-garaz-wide-v1.svg
+          git commit -m 'Nasadit rotační bannery Reality Kadaň' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit bannery přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/rk-banner-upload"
+          mkdir -p "$RUNNER_TEMP/rk-banner-upload/assets/reklamy"
+          cp reklamy.js reklamy-oprava-obrazku.js "$RUNNER_TEMP/rk-banner-upload/"
+          cp assets/reklamy/realitykadan-*-wide-v1.svg "$RUNNER_TEMP/rk-banner-upload/assets/reklamy/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/rk-banner-upload" ubuntu@57.129.43.215:/tmp/rk-banner-upload
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/assets/reklamy
+          sudo install -m 0644 /tmp/rk-banner-upload/reklamy.js /var/www/nasekadan/reklamy.js
+          sudo install -m 0644 /tmp/rk-banner-upload/reklamy-oprava-obrazku.js /var/www/nasekadan/reklamy-oprava-obrazku.js
+          sudo install -m 0644 /tmp/rk-banner-upload/assets/reklamy/realitykadan-byt-wide-v1.svg /var/www/nasekadan/assets/reklamy/
+          sudo install -m 0644 /tmp/rk-banner-upload/assets/reklamy/realitykadan-garaz-wide-v1.svg /var/www/nasekadan/assets/reklamy/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/assets/reklamy
+            sudo docker cp /tmp/rk-banner-upload/reklamy.js nasekadan-web:/usr/share/nginx/html/reklamy.js
+            sudo docker cp /tmp/rk-banner-upload/reklamy-oprava-obrazku.js nasekadan-web:/usr/share/nginx/html/reklamy-oprava-obrazku.js
+            sudo docker cp /tmp/rk-banner-upload/assets/reklamy/realitykadan-byt-wide-v1.svg nasekadan-web:/usr/share/nginx/html/assets/reklamy/realitykadan-byt-wide-v1.svg
+            sudo docker cp /tmp/rk-banner-upload/assets/reklamy/realitykadan-garaz-wide-v1.svg nasekadan-web:/usr/share/nginx/html/assets/reklamy/realitykadan-garaz-wide-v1.svg
+          fi
+          rm -rf /tmp/rk-banner-upload
+          grep -Fq "id:'realitykadan-byt'" /var/www/nasekadan/reklamy.js
+          grep -Fq "id:'realitykadan-garaz'" /var/www/nasekadan/reklamy.js
+          grep -Fq 'promo-card-full-image' /var/www/nasekadan/reklamy.js
+          grep -Fq '<svg' /var/www/nasekadan/assets/reklamy/realitykadan-byt-wide-v1.svg
+          grep -Fq '<svg' /var/www/nasekadan/assets/reklamy/realitykadan-garaz-wide-v1.svg
+          REMOTE
+
+      - name: Ověřit veřejný web bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/reklamy.js?v=$stamp")"
+          fix="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/reklamy-oprava-obrazku.js?v=$stamp")"
+          byt="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/assets/reklamy/realitykadan-byt-wide-v1.svg?v=$stamp")"
+          garaz="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/assets/reklamy/realitykadan-garaz-wide-v1.svg?v=$stamp")"
+          grep -Fq "id:'realitykadan-byt'" <<<"$js"
+          grep -Fq "id:'realitykadan-garaz'" <<<"$js"
+          grep -Fq 'promo-card-full-image' <<<"$js"
+          grep -Fq '[...reality,...cleaning,...seasonal]' <<<"$fix"
+          grep -Fq 'KOUPÍME HO.' <<<"$byt"
+          grep -Fq 'KOUPÍME JI.' <<<"$garaz"
+          grep -Fq 'https://realitykadan.cz' <<<"$js"
+          echo 'HOTOVO: oba bannery jsou veřejné, ostré, proklikové a zapojené do reklamní rotace.'
