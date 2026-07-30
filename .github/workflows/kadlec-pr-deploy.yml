@@ -1,0 +1,68 @@
+name: Okamžitě nasadit článek Martina Kadlece
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/kadlec-pr-trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kadlec-pr-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Nahrát hotové soubory přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          test -f clanky/martin-kadlec-navrat-hokej-kadan-2026.html
+          grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' index.html
+          grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' clanky/index.html
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            index.html clanky/index.html clanky/martin-kadlec-navrat-hokej-kadan-2026.html \
+            rss.xml sitemap.xml news-sitemap.xml ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 /tmp/index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 /tmp/martin-kadlec-navrat-hokej-kadan-2026.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/rss.xml /tmp/sitemap.xml /tmp/news-sitemap.xml /var/www/nasekadan/
+          # scp zploští oba indexy pod stejným názvem; archiv proto vezmeme přímo z main na serveru
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
+          REMOTE
+
+      - name: Ověřit živý web bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for n in $(seq 1 20); do
+            page="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?verify=$stamp-$n" || true)"
+            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?verify=$stamp-$n" || true)"
+            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?verify=$stamp-$n" || true)"
+            if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$archive"; then
+              echo 'Článek je živý na stránce, titulce i v archivu.'
+              exit 0
+            fi
+            sleep 4
+          done
+          exit 1
