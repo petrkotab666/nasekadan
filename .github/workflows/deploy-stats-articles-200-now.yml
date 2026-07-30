@@ -76,7 +76,7 @@ jobs:
           import json, re
           text = Path('/tmp/stats-auth-200.html').read_text(errors='replace')
           table = re.search(r'<table id="articles-200">(.*?)</table>', text, re.S)
-          rows = table.group(1).count('<tr>') - 1 if table else -1
+          rows = len(re.findall(r'<tr\b', table.group(1))) - 1 if table else -1
           result = {
               'length': len(text),
               'login': 'Přihlášení ke statistikám' in text,
