@@ -1,0 +1,36 @@
+name: Publish surface water ban article
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/publish_surface_water_ban_20260730.py"
+      - ".github/workflows/publish-surface-water-ban-20260730.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate and register article
+        run: python3 scripts/publish_surface_water_ban_20260730.py
+
+      - name: Commit generated site changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml production-content-manifest.json
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+            exit 0
+          fi
+          git commit -m "Zveřejnit zákaz odběru povrchových vod na Kadaňsku"
+          git push
