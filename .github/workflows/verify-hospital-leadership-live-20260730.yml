@@ -23,9 +23,9 @@ jobs:
           ok=false
           for n in $(seq 1 30); do
             page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?live-check=${GITHUB_SHA}-${n}" || true)"
-            if grep -Fq 'Co přesně ukazuje výroční zpráva za rok 2025' <<<"$page" \
-              && grep -Fq '2026-07-30T11:29:00+02:00' <<<"$page" \
-              && grep -Fq 'Částka 6,48 milionu není odstupné' <<<"$page"; then
+            if grep -Fq 'Registr smluv: 47 milionů přímých provozních dotací' <<<"$page" \
+              && grep -Fq 'Dvě zveřejnění neznamenají dvě dotace po 25 milionech' <<<"$page" \
+              && grep -Fq '2026-07-30T12:04:00+02:00' <<<"$page"; then
               ok=true
               break
             fi
@@ -47,7 +47,8 @@ jobs:
               checked_at_utc: new Date().toISOString(),
               trigger_commit: context.sha,
               run_id: context.runId,
-              public_article: process.env.CHECK_RESULT === 'true'
+              public_article: process.env.CHECK_RESULT === 'true',
+              expected_modified: '2026-07-30T12:04:00+02:00'
             };
             const content = Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64');
             let sha;
