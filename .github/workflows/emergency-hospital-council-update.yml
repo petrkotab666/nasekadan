@@ -1,4 +1,4 @@
-name: Přímé nasazení zápisu zastupitelstva k nemocnici
+name: Přímá aktualizace článku o vedení nemocnice
 
 on:
   push:
@@ -27,16 +27,16 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Upravit článek a zapsat změnu
+      - name: Doplnit registr smluv a zapsat změnu
         shell: bash
         run: |
           set -euo pipefail
           git pull --rebase origin main
-          python3 scripts/update_hospital_council_minutes_20260730.py
+          python3 scripts/update_hospital_registry_grants_20260730.py
           git config user.name 'Naše Kadaň nouzová aktualizace'
           git config user.email 'info@nasekadan.cz'
           git add "$ARTICLE"
-          git commit -m 'Doplnit dvě opatření po 25 milionech a červnovou debatu zastupitelstva' || true
+          git commit -m 'Doplnit 47 milionů provozních dotací z registru smluv' || true
           git pull --rebase origin main
           git push origin HEAD:main
 
@@ -67,7 +67,7 @@ jobs:
             sudo docker exec "$cid" mkdir -p "/usr/share/nginx/html/$(dirname "$file")"
             sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
           done
-          curl -fsS http://127.0.0.1:3224/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html | grep -Fq 'Dvě různá opatření po 25 milionech korun'
+          curl -fsS http://127.0.0.1:3224/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html | grep -Fq 'Registr smluv: 47 milionů přímých provozních dotací'
           REMOTE
 
       - name: Veřejně ověřit aktualizaci
@@ -75,10 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           for n in $(seq 1 24); do
-            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?emergency=${GITHUB_SHA}-${n}" || true)"
-            if grep -Fq 'Dvě různá opatření po 25 milionech korun' <<<"$page" \
-              && grep -Fq 'Hlasování skončilo 15 pro' <<<"$page" \
-              && grep -Fq 'Požadavek zazněl už 25. června' <<<"$page"; then
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?registry=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Registr smluv: 47 milionů přímých provozních dotací' <<<"$page" \
+              && grep -Fq 'Dvě zveřejnění neznamenají dvě dotace po 25 milionech' <<<"$page" \
+              && grep -Fq '2026-07-30T12:04:00+02:00' <<<"$page"; then
               exit 0
             fi
             sleep 5
