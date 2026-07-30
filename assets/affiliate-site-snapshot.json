@@ -8,11 +8,11 @@
   ],
   "centralUpdatedAt": "2026-07-28",
   "centralSha256": "4f964cfef69e9efa955156b89f8fba1d3b5625a0499a959fbf7e689cb00b9d95",
-  "configSha256": "e2f858b9a264a932960554d43834c8388e00f0a236fb02212ff483f27ed24272",
-  "generatedAt": "2026-07-29T08:51:05+00:00",
+  "configSha256": "14dcf09f21c960b0ff6dbf8b743974038dd97587b17dac404e3b08ca87d51840",
+  "generatedAt": "2026-07-30T20:01:19+00:00",
   "sourceProgramCount": 105,
-  "partnerCount": 34,
-  "feedCount": 14,
+  "partnerCount": 35,
+  "feedCount": 16,
   "bannerCount": 197,
   "autoPublish": false,
   "partners": [
@@ -73,6 +73,80 @@
       ],
       "sourceAsset": "assets/impact-partner-assets/airalo.json",
       "_centralLayer": "partners"
+    },
+    {
+      "order": 58,
+      "id": "ehub-a883bbdd",
+      "name": "apollostore.cz",
+      "network": "eHUB",
+      "programStatus": "active",
+      "defaultLinkId": "a883bbdd",
+      "baseClickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=a883bbdd",
+      "defaultTargetUrl": "https://www.apollostore.com/cz/",
+      "linkPolicy": "default_available",
+      "assetAudit": {
+        "defaultLink": "recorded",
+        "secondaryLinks": "not_recorded",
+        "banners": "archived_indexed",
+        "feeds": "recorded",
+        "sourceFiles": [
+          "assets/affiliate-legacy-archive-index.json",
+          "assets/ehub-partner-assets/apollostore.json"
+        ],
+        "nextAction": "restore_exact_assets_from_file_library_archive_when_needed",
+        "reviewedAt": "2026-07-24"
+      },
+      "legacyArchive": {
+        "creativeCount": 5,
+        "feedCount": 2,
+        "status": "indexed_in_central_database",
+        "exactAssetStorage": "ChatGPT File Library",
+        "sourceArchiveIds": [
+          "file_00000000917872468168332def894e2a",
+          "file_00000000066c71f4a17a1099def6a4b0",
+          "file_00000000b75472439ece35f18786b6bb"
+        ],
+        "restorePolicy": "Při nasazení partnera obnovit přesné položky do assets/ehub-partner-assets/*.json; nevyžadovat opětovné zaslání od uživatele."
+      },
+      "programCode": "",
+      "assetsUpdatedAt": "2026-07-12",
+      "links": [
+        {
+          "id": "a883bbdd",
+          "name": "Defaultní odkaz ApolloStore.cz",
+          "type": "default",
+          "clickUrl": "https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=a883bbdd",
+          "targetUrl": "https://www.apollostore.com/cz/"
+        }
+      ],
+      "banners": [],
+      "feeds": [
+        {
+          "name": "ApolloStore.cz – Heureka",
+          "url": "https://data.e-feed.eu/apollo/Heureka_CZ.xml",
+          "providerFormat": "Ostatní",
+          "catalogFormat": "heureka",
+          "market": "CZ"
+        },
+        {
+          "name": "ApolloStore.cz – Google",
+          "url": "https://data.e-feed.eu/apollo/Upgates_Google.xml",
+          "providerFormat": "Ostatní",
+          "catalogFormat": "google",
+          "market": "CZ"
+        }
+      ],
+      "actions": [],
+      "recommendedUse": [
+        "dobreklima.cz",
+        "vaseterasy",
+        "odvlhčovače, klimatizace, ventilátory, topení a domácí spotřebiče"
+      ],
+      "sourceNotes": [
+        "Přesné XML feedy byly dohledány ve starším kompletním exportu eHUB uloženém ve File Library.",
+        "Pro DobréKlima používat primárně Heureka feed; Google feed ponechat jako záložní zdroj."
+      ],
+      "_centralLayer": "inventory"
     },
     {
       "order": 97,
