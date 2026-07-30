@@ -23,9 +23,9 @@ jobs:
           ok=false
           for n in $(seq 1 30); do
             page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?live-check=${GITHUB_SHA}-${n}" || true)"
-            if grep -Fq 'Pavel Marek odešel z České Lípy dobrovolně při fúzi' <<<"$page" \
-              && grep -Fq 'ÚOHS neshledal důvod zasáhnout do zakázky na lůžka' <<<"$page" \
-              && grep -Fq '2026-07-30T12:09:00+02:00' <<<"$page"; then
+            if grep -Fq 'Jedna třetina z 27 členů kadaňského zastupitelstva' <<<"$page" \
+              && grep -Fq 'Zákonný práh</span><strong>9 podpisů' <<<"$page" \
+              && grep -Fq '2026-07-30T12:15:00+02:00' <<<"$page"; then
               ok=true
               break
             fi
@@ -48,7 +48,7 @@ jobs:
               trigger_commit: context.sha,
               run_id: context.runId,
               public_article: process.env.CHECK_RESULT === 'true',
-              expected_modified: '2026-07-30T12:09:00+02:00'
+              expected_modified: '2026-07-30T12:15:00+02:00'
             };
             const content = Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64');
             let sha;
