@@ -1,0 +1,234 @@
+name: Hluboká rešerše lávky u Shellu v7
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deep-research-lavka-shell-v7-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deep-research-lavka-shell-v7
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat nástroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces python3-bs4 python3-lxml file chromium-browser chromium-chromedriver || \
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces python3-bs4 python3-lxml file chromium chromium-driver
+          python3 -m pip install --quiet requests selenium
+
+      - name: Stáhnout, OCR a obejít skryté zdroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-shell-v7
+          mkdir -p .github/research/lavka-shell-v7/{pdf,text,html,raw}
+          cat > /tmp/lavka_v7.py <<'PY'
+          from __future__ import annotations
+          import json, os, re, subprocess, time, unicodedata
+          from pathlib import Path
+          from urllib.parse import urljoin, urlparse, unquote
+          import requests
+          from bs4 import BeautifulSoup
+
+          ROOT=Path('.github/research/lavka-shell-v7'); PDF=ROOT/'pdf'; TEXT=ROOT/'text'; HTML=ROOT/'html'; RAW=ROOT/'raw'
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadanResearch/1.0; +https://nasekadan.cz)'})
+          def get(url, timeout=90):
+              err=None
+              for i in range(5):
+                  try:
+                      r=S.get(url,timeout=timeout,allow_redirects=True); r.raise_for_status(); return r
+                  except Exception as e: err=e; time.sleep(2+i*2)
+              raise err
+          def norm(s): return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',s or '').encode('ascii','ignore').decode().lower()).strip()
+          def slug(s): return re.sub(r'[^a-z0-9]+','-',norm(s)).strip('-')[:100] or 'soubor'
+          def run(cmd): return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+
+          known={
+            'hlavni-smlouva':'https://smlouvy.gov.cz/smlouva/soubor/41890109/252018_M%C3%9A%20Kada%C5%88_l%C3%A1vka%20sv.%20kope%C4%8Dek_SoD_ele%20podpis.pdf',
+            'dodatek-2':'https://smlouvy.gov.cz/smlouva/soubor/46416266/Dodatek%20%C4%8D.2%20Kada%C5%88%20L%C3%A1vka%20akt_el%20podpis.pdf',
+            'zmenovy-list':'https://smlouvy.gov.cz/smlouva/soubor/46416270/Dodatek%20%C4%8D.2%20Kada%C5%88%20L%C3%A1vka%20akt_ZL.pdf',
+            'rozpocet-zmen':'https://smlouvy.gov.cz/smlouva/soubor/46416274/Dodatek%20%C4%8D.2%20Kada%C5%88%20L%C3%A1vka%20akt_ZL%20rozpo%C4%8Det.pdf',
+            'paragraf-222':'https://smlouvy.gov.cz/smlouva/soubor/46416278/Dodatek%20%C4%8D.2%20Kada%C5%88%20L%C3%A1vka%20akt_ZL%20%C2%A7222.pdf',
+            'vyporadani':'https://smlouvy.gov.cz/smlouva/soubor/46417158/M%C3%9A%20Kada%C5%88_l%C3%A1vka%20sv.%20kope%C4%8Dek_SML%20o%20vypo%C5%99%C3%A1d%C3%A1n%C3%AD_EL.pdf',
+            'tds-dodatek':'https://smlouvy.gov.cz/smlouva/soubor/46877026/D1%20TDS%20L%C3%A1vka.pdf',
+            'bozp-dodatek':'https://smlouvy.gov.cz/smlouva/soubor/46877238/D1%20BOZP%20L%C3%A1vka.pdf',
+            'osvetleni':'https://smlouvy.gov.cz/smlouva/soubor/46311454/Nasv%C4%9Btlen%C3%AD%20l%C3%A1vky_PDFA.pdf',
+          }
+          docs=[]
+          for name,url in known.items():
+              p=PDF/f'{name}.pdf'
+              try:
+                  data=get(url).content; p.write_bytes(data)
+              except Exception as e:
+                  docs.append({'name':name,'url':url,'error':repr(e)}); continue
+              txtp=TEXT/f'{name}.txt'; tmp=Path('/tmp')/f'{name}.txt'
+              run(['pdftotext','-layout',str(p),str(tmp)])
+              txt=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else ''
+              method='pdftotext'
+              # OCR always for scanned/complex appendices; merge OCR with text layer for maximum recall.
+              info=run(['pdfinfo',str(p)]).stdout; m=re.search(r'^Pages:\s+(\d+)',info,re.M); pages=min(int(m.group(1)) if m else 1,90)
+              ocrdir=Path('/tmp')/f'ocr-{name}'; ocrdir.mkdir(exist_ok=True)
+              run(['pdftoppm','-f','1','-l',str(pages),'-r','220','-jpeg',str(p),str(ocrdir/'p')])
+              chunks=[]
+              for im in sorted(ocrdir.glob('p-*.jpg')):
+                  chunks.append(run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6']).stdout)
+              ocr='\n\n'.join(chunks)
+              if ocr.strip():
+                  txt += '\n\n===== OCR =====\n'+ocr; method='pdftotext+ocr'
+              txtp.write_text(txt,encoding='utf-8')
+              docs.append({'name':name,'url':url,'pages':pages,'method':method,'chars':len(txt),'text':str(txtp)})
+          (ROOT/'documents.json').write_text(json.dumps(docs,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Search hidden text and collect contexts.
+          keys=['predavaci protokol','predani dila','prevzeti dila','kolaudac','predcasne uzivani','stavebni denik','kontrolni den','smluvni pokuta','penale','zadrzne','pozastavka','bankovni zaruka','faktura','konecne vyuctovani','15. 7. 2026','15.07.2026','31. 8. 2026','31.08.2026','30. 7. 2026','30.07.2026','preruseni praci','zastaveni praci','vada','nedodelek','shell','myci linka','statika','geolog','mikropilot','policie','semafor','osvetleni','harmonogram','zruseni zadavaciho rizeni','jedina nabidka','nabidka','podruhe']
+          hits=[]
+          for d in docs:
+              if not d.get('text'): continue
+              raw=Path(d['text']).read_text(encoding='utf-8',errors='ignore'); n=norm(raw)
+              hh=[]
+              for k in keys:
+                  nk=norm(k); pos=0; count=0
+                  while True:
+                      pos=n.find(nk,pos)
+                      if pos<0 or count>=20: break
+                      hh.append({'key':k,'snippet':n[max(0,pos-700):min(len(n),pos+1700)]}); pos+=len(nk); count+=1
+              if hh: hits.append({'document':d['name'],'hits':hh})
+          (ROOT/'document-hits.json').write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Crawl city and e-desky pages, including documents no longer linked prominently.
+          starts=['https://www.mesto-kadan.cz/','https://mesto-kadan.cz/','https://edesky.cz/dokument/27599775','https://edesky.cz/dokument/22335309']
+          queue=list(starts); seen=set(); page_hits=[]; discovered=[]
+          target=['lavka','kopecek','shell','silnici c. 568','silnici č. 568','419/2026','523/2026','00066/ov','predani','kolaud','penale','zadrzne']
+          while queue and len(seen)<450:
+              u=queue.pop(0)
+              if u in seen: continue
+              seen.add(u)
+              try:r=get(u,timeout=45)
+              except Exception as e:
+                  discovered.append({'url':u,'error':repr(e)}); continue
+              ct=r.headers.get('content-type','').lower(); final=r.url
+              if 'pdf' in ct or final.lower().endswith('.pdf'):
+                  p=PDF/f'web-{len(discovered):04d}-{slug(Path(urlparse(final).path).name)}.pdf'; p.write_bytes(r.content)
+                  tmp=Path('/tmp')/(p.name+'.txt'); run(['pdftotext','-layout',str(p),str(tmp)])
+                  txt=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else ''
+                  n=norm(txt)
+                  if any(norm(x) in n for x in target):
+                      tp=TEXT/(p.name+'.txt'); tp.write_text(txt,encoding='utf-8'); page_hits.append({'url':final,'title':p.name,'snippet':n[:5000],'text':str(tp)})
+                  discovered.append({'url':final,'type':'pdf','bytes':len(r.content)}); continue
+              text=r.text; soup=BeautifulSoup(text,'lxml'); title=soup.title.get_text(' ',strip=True) if soup.title else ''
+              n=norm(' '.join(soup.stripped_strings))
+              if any(norm(x) in n for x in target):
+                  fn=HTML/f'page-{len(page_hits):04d}.html'; fn.write_text(text,encoding='utf-8'); page_hits.append({'url':final,'title':title,'snippet':n[:8000],'html':str(fn)})
+              discovered.append({'url':final,'type':'html','title':title})
+              host=urlparse(final).netloc.lower()
+              for a in soup.select('a[href]'):
+                  v=urljoin(final,a.get('href'))
+                  pu=urlparse(v); vh=pu.netloc.lower()
+                  if pu.scheme not in ('http','https'): continue
+                  if ('mesto-kadan.cz' in vh or 'edesky.cz' in vh) and v not in seen:
+                      label=norm(a.get_text(' ',strip=True)+' '+v)
+                      if ('edesky.cz' in vh and ('dokument' in v or 'desky' in v or 'page=' in v)) or any(x in label for x in ['usneseni','zapis','lavka','kopecek','shell','2026','uredni deska','verejne zakazky']):
+                          queue.append(v.split('#')[0])
+          (ROOT/'web-discovered.json').write_text(json.dumps(discovered,ensure_ascii=False,indent=2),encoding='utf-8')
+          (ROOT/'web-hits.json').write_text(json.dumps(page_hits,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Inspect public frontend bundles and capture network traffic from Zakázky GOV / Tender Arena.
+          frontend=[]; endpoints=[]
+          for base in ['https://zakazky.gov.cz/','https://tenderarena.cz/profil/MestoKadan']:
+              try:r=get(base,timeout=60)
+              except Exception as e: frontend.append({'base':base,'error':repr(e)}); continue
+              soup=BeautifulSoup(r.text,'lxml'); scripts=[]
+              for sc in soup.select('script[src]'):
+                  su=urljoin(r.url,sc.get('src')); scripts.append(su)
+                  try:
+                      js=get(su,timeout=90).text
+                      jp=RAW/f'{slug(urlparse(su).netloc)}-{slug(Path(urlparse(su).path).name)}.js'; jp.write_text(js,encoding='utf-8')
+                      for pat in [r'https?://[^"\'\s)]+',r'["\'](/[^"\']*(?:api|graphql|search|zakaz|profile|procurement)[^"\']*)["\']']:
+                          for m in re.finditer(pat,js,re.I):
+                              val=m.group(0).strip('"\'') if m.lastindex is None else m.group(1)
+                              if val not in endpoints: endpoints.append(val)
+                  except Exception: pass
+              frontend.append({'base':base,'final':r.url,'scripts':scripts})
+          (ROOT/'frontend.json').write_text(json.dumps(frontend,ensure_ascii=False,indent=2),encoding='utf-8')
+          (ROOT/'frontend-endpoints.json').write_text(json.dumps(endpoints,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          network=[]
+          try:
+              from selenium import webdriver
+              from selenium.webdriver.chrome.options import Options
+              opts=Options(); opts.add_argument('--headless=new'); opts.add_argument('--no-sandbox'); opts.add_argument('--disable-dev-shm-usage'); opts.add_argument('--window-size=1440,1200'); opts.set_capability('goog:loggingPrefs',{'performance':'ALL','browser':'ALL'})
+              drv=webdriver.Chrome(options=opts)
+              for u in ['https://zakazky.gov.cz/','https://tenderarena.cz/profil/MestoKadan']:
+                  try:
+                      drv.get(u); time.sleep(12)
+                      # Enter target phrase in likely search inputs and submit.
+                      for el in drv.find_elements('css selector','input'):
+                          ph=(el.get_attribute('placeholder') or '').lower()
+                          if 'hled' in ph or 'search' in ph or 'zeptejte' in ph:
+                              try:
+                                  el.clear(); el.send_keys('Lávka přes silnici č. 568 Kadaň'); el.send_keys('\n'); time.sleep(12); break
+                              except Exception: pass
+                      src=drv.page_source; (HTML/f'browser-{slug(urlparse(u).netloc)}.html').write_text(src,encoding='utf-8')
+                      logs=drv.get_log('performance')
+                      for x in logs:
+                          try:
+                              msg=json.loads(x['message'])['message']
+                              if msg.get('method')=='Network.requestWillBeSent':
+                                  ru=msg['params']['request']['url']
+                                  if any(k in ru.lower() for k in ['api','graphql','search','zakaz','procurement','profile']): network.append({'page':u,'url':ru,'method':msg['params']['request']['method']})
+                          except Exception: pass
+                  except Exception as e: network.append({'page':u,'error':repr(e)})
+              drv.quit()
+          except Exception as e: network.append({'browser_error':repr(e)})
+          # de-duplicate
+          uniq=[]; seen_net=set()
+          for x in network:
+              key=json.dumps(x,sort_keys=True,ensure_ascii=False)
+              if key not in seen_net: seen_net.add(key); uniq.append(x)
+          (ROOT/'network.json').write_text(json.dumps(uniq,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Focused search through captured pages and API traces.
+          summary=['# Hluboká rešerše lávky u Shellu v7','',time.strftime('Zpracováno: %Y-%m-%d %H:%M:%S UTC',time.gmtime()),'',f'- Dokumenty OCR: {len([d for d in docs if d.get("text")])}',f'- Procházené webové adresy: {len(seen)}',f'- Relevantní webové nálezy: {len(page_hits)}',f'- Zachycená síťová volání: {len(uniq)}','','## Dokumenty']
+          for d in docs: summary.append(f"- {d.get('name')}: {d.get('pages','?')} stran, {d.get('chars',0)} znaků, {d.get('method',d.get('error'))}")
+          summary += ['','## Webové nálezy']
+          for x in page_hits[:100]: summary.append(f"- {x['title']} — {x['url']} — {x['snippet'][:1200]}")
+          summary += ['','## Síťová volání a endpointy']
+          for x in uniq[:150]: summary.append('- '+json.dumps(x,ensure_ascii=False))
+          for x in endpoints[:150]: summary.append('- '+x)
+          (ROOT/'README.md').write_text('\n'.join(summary),encoding='utf-8')
+          PY
+          python3 /tmp/lavka_v7.py
+
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-shell-v7/pdf .github/research/lavka-shell-v7/raw
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-shell-v7
+          git commit -m 'Dokončit hlubokou rešerši lávky u Shellu v7' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
