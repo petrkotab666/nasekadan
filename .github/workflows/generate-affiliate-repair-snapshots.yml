@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   generate:
-    runs-on: [self-hosted, ovh]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Načíst generátor
