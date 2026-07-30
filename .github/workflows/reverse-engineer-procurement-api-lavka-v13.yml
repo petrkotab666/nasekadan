@@ -1,0 +1,121 @@
+name: Rozebrat veřejné API zakázek lávky v13
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/reverse-engineer-procurement-api-lavka-v13-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Stáhnout frontendové balíčky a vytěžit API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          rm -rf .github/research/lavka-procurement-api-v13
+          mkdir -p .github/research/lavka-procurement-api-v13
+          cat > /tmp/v13.py <<'PY'
+          import json,re,time
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          R=Path('.github/research/lavka-procurement-api-v13')
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0)'
+          def get(u):
+              e=None
+              for i in range(5):
+                  try:
+                      r=s.get(u,timeout=90,allow_redirects=True);r.raise_for_status();return r
+                  except Exception as x:e=x;time.sleep(2+i)
+              raise e
+          bases=['https://zakazky.gov.cz/','https://tenderarena.cz/profil/MestoKadan']
+          report=[];all_candidates=[]
+          for base in bases:
+              r=get(base);soup=BeautifulSoup(r.text,'lxml');scripts=[urljoin(r.url,x.get('src')) for x in soup.select('script[src]')]
+              item={'base':base,'final':r.url,'scripts':scripts,'matches':[]}
+              for su in scripts:
+                  if any(x in su for x in ['googletagmanager','cloudflare','thumbmark','youtube']):continue
+                  try:js=get(su).text
+                  except Exception as e:item['matches'].append({'script':su,'error':repr(e)});continue
+                  # try source map as well
+                  texts=[('js',js)]
+                  try:
+                      mr=get(su+'.map')
+                      if mr.status_code==200 and len(mr.content)>100:texts.append(('map',mr.text))
+                  except Exception:pass
+                  for kind,txt in texts:
+                      hits=[]
+                      patterns=[
+                        r'["\']([^"\']{0,180}(?:api|graphql|procurement|public-procurement|tender|zakazk|profile|search|notice|contract)[^"\']{0,220})["\']',
+                        r'https?://[^"\'\s)<>]{5,300}',
+                        r'/[A-Za-z0-9_{}?=&.\-/]{0,160}(?:api|graphql|procurement|tender|zakazk|search|notice|profile)[A-Za-z0-9_{}?=&.\-/]{0,180}'
+                      ]
+                      for pat in patterns:
+                          for m in re.finditer(pat,txt,re.I):
+                              val=m.group(1) if m.lastindex else m.group(0)
+                              if len(val)>3 and val not in hits:hits.append(val)
+                              if len(hits)>=1200:break
+                          if len(hits)>=1200:break
+                      # contextual snippets around target UUID/title terms
+                      contexts=[]
+                      for needle in ['apiUrl','baseUrl','environment','procurement','publicProcurement','searchProcurement','zakazky','tenderarena','graphql']:
+                          for m in list(re.finditer(needle,txt,re.I))[:50]:contexts.append(txt[max(0,m.start()-500):m.end()+1000])
+                      item['matches'].append({'script':su,'kind':kind,'hits':hits,'contexts':contexts[:300]})
+                      for h in hits:
+                          if h not in all_candidates:all_candidates.append(h)
+              report.append(item)
+          # Probe plausible absolute/relative endpoints using the known UUID and notice ID.
+          targets=['217c4d5e-db8d-4603-83a4-550bd55fc02d','Z2025-049246']
+          probes=[]
+          hosts=['https://zakazky.gov.cz','https://tenderarena.cz','https://api.zakazky.gov.cz','https://api.tenderarena.cz']
+          templates=[
+            '/api/procurements/{id}','/api/public-procurements/{id}','/api/v1/procurements/{id}','/api/v1/public-procurements/{id}',
+            '/api/v2/procurements/{id}','/api/v2/public-procurements/{id}','/api/procurement/{id}','/api/tenders/{id}',
+            '/api/v1/tenders/{id}','/api/search?query={id}','/api/procurements/search?query={id}','/api/public/procurements/{id}',
+            '/procurement/{id}','/public/procurement/{id}','/zakazka/{id}'
+          ]
+          for host in hosts:
+              for t in targets:
+                  for template in templates:
+                      u=host+template.format(id=t)
+                      try:
+                          rr=s.get(u,timeout=20,allow_redirects=True,headers={'Accept':'application/json, text/plain, */*'})
+                          ct=rr.headers.get('content-type','');body=rr.text[:10000]
+                          if rr.status_code not in [404,405] or t.lower() in body.lower() or 'lavka' in body.lower():probes.append({'url':u,'final':rr.url,'status':rr.status_code,'content_type':ct,'body':body})
+                      except Exception:pass
+          (R/'results.json').write_text(json.dumps({'frontends':report,'candidates':all_candidates,'probes':probes},ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Veřejné API zakázek lávky v13','',f'Kandidátní řetězce: {len(all_candidates)}',f'Zajímavé sondy: {len(probes)}','']
+          for x in probes:md.append('- '+json.dumps(x,ensure_ascii=False)[:12000])
+          md+=['','## API řetězce']
+          for h in all_candidates[:3000]:md.append('- '+h[:2000])
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v13.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-procurement-api-v13
+          git commit -m 'Rozebrat veřejné API zakázek lávky v13' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
