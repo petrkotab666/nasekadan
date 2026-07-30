@@ -1,0 +1,83 @@
+name: Detail obou zakázek lávky v10
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deep-research-lavka-shell-v10-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Stáhnout oba detaily a jejich zdrojové odkazy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          rm -rf .github/research/lavka-shell-v10
+          mkdir -p .github/research/lavka-shell-v10/html
+          cat > /tmp/v10.py <<'PY'
+          import json,re,time
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse,parse_qs
+          import requests
+          from bs4 import BeautifulSoup
+          R=Path('.github/research/lavka-shell-v10'); H=R/'html'
+          s=requests.Session(); s.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadanResearch/1.0)','Accept-Language':'cs-CZ,cs;q=0.9'})
+          ids=['b0e39d2422904383998cb6a591781fe1','aa81c27ebdce4e34b6f1c7553f10314c']
+          out=[]
+          for id in ids:
+              u=f'https://www.hlidacstatu.cz/verejnezakazky/zakazka/{id}'
+              r=s.get(u,timeout=60,allow_redirects=True)
+              H.joinpath(id+'.html').write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'lxml')
+              text=' '.join(soup.stripped_strings)
+              links=[]
+              for a in soup.select('a[href]'):
+                  v=urljoin(r.url,a.get('href')); label=a.get_text(' ',strip=True)
+                  if any(k in (label+' '+v).lower() for k in ['zdroj','tender','nipez','vvz','zakaz','profil','e-zak','nen','vestnik','smlouv']):
+                      links.append({'label':label,'url':v})
+              # structured metadata/scripts, forms and data attributes
+              structured=[]
+              for tag in soup.select('script[type="application/ld+json"], meta, [data-id], [data-value], input'):
+                  item={'tag':tag.name}
+                  for k in ['name','property','content','data-id','data-value','value','id']:
+                      if tag.get(k):item[k]=tag.get(k)
+                  if len(item)>1:structured.append(item)
+              # all identifiers and dates visible in response
+              tokens=sorted(set(re.findall(r'(?:Z\d{4}-\d+|[0-9a-f]{8}-[0-9a-f-]{27,}|[0-9a-f]{32}|P\d{2}V\d+|N\d{3}/\d{4}|\b\d{1,2}\.\d{1,2}\.\d{4}\b)',text,re.I)))
+              out.append({'id':id,'url':r.url,'status':r.status_code,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'text':text[:70000], 'links':links,'tokens':tokens,'structured':structured[:300]})
+          Path(R/'results.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Detail obou zakázek lávky v10','']
+          for x in out:
+              md += ['## '+x['id'],f"- URL: {x['url']}",f"- status: {x['status']}",f"- title: {x['title']}",'- tokens: '+', '.join(x['tokens']),'- links:']
+              for l in x['links']:md.append('  - '+l['label']+' — '+l['url'])
+              md += ['- text: '+x['text'][:20000],'']
+          Path(R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v10.py
+      - name: Uložit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-shell-v10
+          git commit -m 'Dokončit detail obou zakázek lávky v10' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
