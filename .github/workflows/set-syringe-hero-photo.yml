@@ -1,0 +1,155 @@
+name: Nastavit fotografii do úvodního okna článku o stříkačkách
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/syringe-hero-photo-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-syringe-hero-photo
+  cancel-in-progress: true
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/strikacky-vchody-drogy-kadan.html
+      DRAFT: .github/drafts/strikacky-vchody-drogy-kadan.html
+      IMAGE: assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přesunout fotografii do pozadí úvodního okna
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          paths = [Path('clanky/strikacky-vchody-drogy-kadan.html'), Path('.github/drafts/strikacky-vchody-drogy-kadan.html')]
+          image = '/assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp'
+          modified = '2026-07-30T06:32:00+02:00'
+
+          new_css = (
+              ".hero-visual{min-height:420px;border-radius:24px;"
+              "background-image:linear-gradient(180deg,rgba(8,20,26,.08) 15%,rgba(8,20,26,.88) 100%),"
+              f"url('{image}');background-position:center;background-size:cover;background-repeat:no-repeat;"
+              "display:flex;align-items:flex-end;padding:30px;color:#fff;margin:30px 0;position:relative;"
+              "overflow:hidden;box-shadow:0 16px 38px #132b3630}"
+              ".hero-visual strong{font:800 31px/1.25 Georgia,serif;position:relative;z-index:2;max-width:720px;"
+              "text-shadow:0 2px 18px rgba(0,0,0,.75)}"
+              ".hero-visual .hero-kicker{position:absolute;left:22px;top:20px;z-index:2;padding:7px 11px;"
+              "border-radius:999px;background:rgba(159,38,38,.94);color:#fff;font-size:12px;font-weight:900;"
+              "letter-spacing:.08em;text-transform:uppercase;box-shadow:0 5px 15px rgba(0,0,0,.25)}"
+          )
+
+          for path in paths:
+              if not path.exists():
+                  continue
+              text = path.read_text(encoding='utf-8')
+              text = re.sub(
+                  r'<figure class="article-photo"[^>]*data-syringe-illustration="1"[^>]*>.*?</figure>\s*',
+                  '', text, count=1, flags=re.I | re.S,
+              )
+              text = re.sub(
+                  r'\.hero-visual\{.*?\}\.hero-visual strong\{.*?\}',
+                  new_css, text, count=1, flags=re.S,
+              )
+              text = re.sub(
+                  r'\.article-photo\{.*?\}\.article-photo img\{.*?\}\.article-photo figcaption\{.*?\}',
+                  '', text, count=1, flags=re.S,
+              )
+              text = re.sub(
+                  r'<div class="hero-visual"(?:\s+data-syringe-hero="1")?>\s*<strong>',
+                  '<div class="hero-visual" data-syringe-hero="1"><span class="hero-kicker">Ilustrační foto</span><strong>',
+                  text, count=1, flags=re.I,
+              )
+              text = re.sub(
+                  r'<meta property="article:modified_time" content="[^"]+">',
+                  f'<meta property="article:modified_time" content="{modified}">', text,
+              )
+              text = re.sub(r'("dateModified"\s*:\s*")[^"]+', rf'\g<1>{modified}', text)
+              path.write_text(text, encoding='utf-8', newline='\n')
+
+          article = Path('clanky/strikacky-vchody-drogy-kadan.html').read_text(encoding='utf-8')
+          assert 'data-syringe-hero="1"' in article
+          assert image in article
+          assert 'data-syringe-illustration="1"' not in article
+          print('Fotografie je v pozadí úvodního okna a samostatný obrázek byl odstraněn.')
+          PY
+
+      - name: Uložit trvalou opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE" "$DRAFT"
+          git commit -m 'Přesunout ilustraci stříkačky do úvodního okna článku'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit článek a obrázek přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/nk-syringe-hero"
+          mkdir -p "$RUNNER_TEMP/nk-syringe-hero/clanky" "$RUNNER_TEMP/nk-syringe-hero/assets/clanky"
+          cp "$ARTICLE" "$RUNNER_TEMP/nk-syringe-hero/clanky/"
+          cp "$IMAGE" "$RUNNER_TEMP/nk-syringe-hero/assets/clanky/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r \
+            "$RUNNER_TEMP/nk-syringe-hero" ubuntu@57.129.43.215:/tmp/nk-syringe-hero
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/assets/clanky
+          sudo install -m 0644 /tmp/nk-syringe-hero/clanky/strikacky-vchody-drogy-kadan.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/nk-syringe-hero/assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp /var/www/nasekadan/assets/clanky/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-syringe-hero/clanky/strikacky-vchody-drogy-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/strikacky-vchody-drogy-kadan.html
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/assets/clanky
+            sudo docker cp /tmp/nk-syringe-hero/assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp nasekadan-web:/usr/share/nginx/html/assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp
+          fi
+          rm -rf /tmp/nk-syringe-hero
+          REMOTE
+
+      - name: Veřejně ověřit úvodní okno
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for attempt in $(seq 1 20); do
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/strikacky-vchody-drogy-kadan.html?v=${stamp}-${attempt}" -o /tmp/article.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp?v=${stamp}-${attempt}" -o /tmp/image.webp || true
+            if grep -Fq 'data-syringe-hero="1"' /tmp/article.html \
+              && grep -Fq "url('/assets/clanky/strikacky-vchody-drogy-kadan-ilustrace.webp')" /tmp/article.html \
+              && ! grep -Fq 'data-syringe-illustration="1"' /tmp/article.html \
+              && test -s /tmp/image.webp; then
+              echo 'HOTOVO: ilustrační fotografie je v pozadí úvodního okna článku.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
