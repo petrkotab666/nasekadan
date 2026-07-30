@@ -1,0 +1,77 @@
+name: Publikovat úplnou rešerši vedení Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-leadership-all-sources-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hospital-leadership-all-sources-20260730
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit úplnou rešerši
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 scripts/update_hospital_leadership_evidence_20260730.py
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE"
+          git commit -m 'Doplnit úplnou rešerši změny vedení nemocnice' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Nasadit článek přímo do aktivního webu
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          file='clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html'
+          test -f "$file"
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 "$file" "/var/www/nasekadan/$file"
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          test -n "$cid"
+          sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky
+          sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
+          curl -fsS "http://127.0.0.1:3224/$file" | grep -Fq 'Částka 6,48 milionu není odstupné'
+          REMOTE
+
+      - name: Veřejně ověřit aktualizaci
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 20); do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/$ARTICLE?all-sources=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq 'Částka 6,48 milionu není odstupné' <<<"$page" \
+              && grep -Fq 'Další veřejné stopy' <<<"$page" \
+              && grep -Fq '2026-07-30T11:20:00+02:00' <<<"$page"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
