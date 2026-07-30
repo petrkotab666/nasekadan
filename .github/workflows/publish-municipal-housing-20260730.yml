@@ -1,0 +1,65 @@
+name: Zveřejnit nabídku městských bytů v Kadani
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/publish_municipal_housing_20260730.py"
+      - ".github/workflows/publish-municipal-housing-20260730.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-municipal-housing-20260730
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit článek a registrační výstupy
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/publish_municipal_housing_20260730.py
+          python3 scripts/publish_municipal_housing_20260730.py
+
+      - name: Ověřit úplnost publikace
+        run: |
+          set -euo pipefail
+          slug='mestske-byty-kadan-nabidka-srpen-2026.html'
+          test -s "clanky/$slug"
+          grep -Fq '/clanky/mestske-byty-kadan-nabidka-srpen-2026.html' index.html
+          grep -Fq '/clanky/mestske-byty-kadan-nabidka-srpen-2026.html' clanky/index.html
+          grep -Fq 'https://nasekadan.cz/clanky/mestske-byty-kadan-nabidka-srpen-2026.html' rss.xml
+          grep -Fq 'https://nasekadan.cz/clanky/mestske-byty-kadan-nabidka-srpen-2026.html' sitemap.xml
+          grep -Fq 'Město Kadaň nabízí šest bytů' "clanky/$slug"
+
+      - name: Uložit článek, titulku, archiv, RSS a sitemapy
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automatická redakce'
+          git config user.email 'info@nasekadan.cz'
+          git add \
+            clanky/mestske-byty-kadan-nabidka-srpen-2026.html \
+            index.html \
+            clanky/index.html \
+            rss.xml \
+            sitemap.xml \
+            news-sitemap.xml \
+            production-content-manifest.json
+          if git diff --cached --quiet; then
+            echo 'Publikační soubory jsou již aktuální.'
+            exit 0
+          fi
+          git commit -m 'Zveřejnit nabídku šesti městských bytů v Kadani'
+          git pull --rebase origin main
+          git push origin HEAD:main
