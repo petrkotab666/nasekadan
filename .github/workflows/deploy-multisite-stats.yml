@@ -1,0 +1,98 @@
+name: Nasadit statistiky na všechny weby
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/scripts/multisite-stats/**'
+      - '.github/workflows/deploy-multisite-stats.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: deploy-multisite-stats
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Připravit přístup k serveru
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"
+              selected="$name"
+              break
+            fi
+          done
+          [[ -n "$selected" ]]
+          chmod 600 "$RUNNER_TEMP/key"
+          echo "Použit dostupný SSH klíč."
+
+      - name: Nahrát instalační soubory
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          SRC=.github/scripts/multisite-stats
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$SRC/multisite_stats.py" "$SRC/patch_nginx.py" "$SRC/install.sh" \
+            ubuntu@57.129.43.215:/tmp/
+
+      - name: Nasadit, zapojit a ověřit statistiky
+        id: deploy
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'sudo bash /tmp/install.sh' 2>&1 | tee "$RUNNER_TEMP/multisite-stats.log"
+
+      - name: Zapsat ověřený výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OUTCOME: ${{ steps.deploy.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/multisite-stats.log`, 'utf8'); } catch {}
+            const ok = process.env.OUTCOME === 'success';
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[STATISTIKY VŠECH WEBŮ] ${ok ? 'Úspěch' : 'Selhání'} ${new Date().toISOString()}`,
+              body: `- Commit: \`${context.sha}\`\n- Výsledek: **${ok ? 'ověřeno' : 'neověřeno'}**\n\n\`\`\`text\n${log.slice(-45000).replace(/```/g, '---')}\n\`\`\``
+            });
+            if (ok) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.data.number,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }
+
+      - name: Ukončit při neověřeném nasazení
+        if: steps.deploy.outcome != 'success'
+        run: exit 1
