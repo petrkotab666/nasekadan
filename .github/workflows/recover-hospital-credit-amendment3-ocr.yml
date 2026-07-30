@@ -1,0 +1,86 @@
+name: Obnovit nečitelný úvěrový dodatek č. 3 vícevrstvým OCR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-credit-amendment3-recovery-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Instalovat renderovací a OCR nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ces mupdf-tools ghostscript imagemagick
+      - name: Renderovat několika enginy a zvolit nejčitelnější výstup
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT='research/nemocnice-kadan-neindexovane-20260730/uver-dodatek-3-obnova'
+          TMP='/tmp/nemkadan-d3-recovery'
+          mkdir -p "$OUT" "$TMP"
+          URL='https://smlouvy.gov.cz/smlouva/soubor/46556632/Dodatek%20%C4%8D.%203%20ke%20smlouv%C4%9B%20o%20%C3%BAv%C4%9Bru%20reg.%20%C4%8C.%20770%2021%20120%20ze%20dne%202.11.2021.pdf'
+          EXPECTED='fcc791eba364d46b5dc7e5ac8286888e0f649e453bcf6b39c4e4f6d993aef54e'
+          curl -k -L --fail --retry 4 "$URL" -o "$TMP/doc.pdf"
+          ACTUAL="$(sha256sum "$TMP/doc.pdf"|awk '{print $1}')"; test "$ACTUAL" = "$EXPECTED"
+          {
+            echo '=== PDFINFO ==='; pdfinfo "$TMP/doc.pdf" || true
+            echo '=== PDFIMAGES ==='; pdfimages -list "$TMP/doc.pdf" || true
+            echo '=== PDF FONTS ==='; pdffonts "$TMP/doc.pdf" || true
+            echo '=== MUTool INFO ==='; mutool info "$TMP/doc.pdf" || true
+          } > "$OUT/diagnostika.txt" 2>&1
+
+          mkdir -p "$TMP/cairo" "$TMP/mutool" "$TMP/gs" "$TMP/variants"
+          pdftocairo -png -r 300 "$TMP/doc.pdf" "$TMP/cairo/page" || true
+          mutool draw -r 300 -o "$TMP/mutool/page-%d.png" "$TMP/doc.pdf" >/dev/null 2>&1 || true
+          gs -q -dNOPAUSE -dBATCH -sDEVICE=png16m -r300 -o "$TMP/gs/page-%d.png" "$TMP/doc.pdf" || true
+
+          : > "$OUT/ocr-kandidati.txt"
+          best_file=''; best_size=0
+          for img in "$TMP"/cairo/*.png "$TMP"/mutool/*.png "$TMP"/gs/*.png; do
+            test -f "$img" || continue
+            key="$(basename "$(dirname "$img")")-$(basename "$img" .png)"
+            identify -verbose "$img" > "$OUT/statistika-$key.txt" 2>&1 || true
+            cp "$img" "$TMP/variants/$key-original.png"
+            convert "$img" -alpha off -colorspace Gray -auto-level -contrast-stretch 1%x1% -sharpen 0x1 "$TMP/variants/$key-gray.png"
+            convert "$img" -alpha off -colorspace Gray -auto-level -threshold 70% "$TMP/variants/$key-th70.png"
+            convert "$img" -alpha off -colorspace Gray -negate -auto-level -threshold 55% "$TMP/variants/$key-neg-th55.png"
+            convert "$img" -alpha off -colorspace Gray -lat 25x25+10% "$TMP/variants/$key-lat.png" || true
+          done
+
+          for img in "$TMP"/variants/*.png; do
+            test -f "$img" || continue
+            name="$(basename "$img" .png)"
+            for psm in 3 6 11 12; do
+              base="$TMP/$name-psm$psm"
+              tesseract "$img" "$base" -l ces+eng --psm "$psm" >/dev/null 2>&1 || true
+              txt="$base.txt"
+              size=0; test -f "$txt" && size="$(wc -c < "$txt")"
+              printf '\n===== %s psm=%s bytes=%s =====\n' "$name" "$psm" "$size" >> "$OUT/ocr-kandidati.txt"
+              cat "$txt" >> "$OUT/ocr-kandidati.txt" 2>/dev/null || true
+              if [ "$size" -gt "$best_size" ]; then best_size="$size"; best_file="$txt"; fi
+            done
+          done
+          if [ -n "$best_file" ]; then cp "$best_file" "$OUT/ocr-nejlepsi.txt"; fi
+          printf 'best_file=%s\nbest_size=%s\nexpected_sha256=%s\nactual_sha256=%s\n' "$best_file" "$best_size" "$EXPECTED" "$ACTUAL" > "$OUT/vysledek.txt"
+
+          # Malé diagnostické náhledy všech originálních renderů.
+          montage "$TMP"/variants/*-original.png -thumbnail 700x1000 -tile 2x -geometry +10+10 "$OUT/renderovaci-metody.jpg" || true
+
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add "$OUT"
+          git commit -m 'Obnovit text nečitelného úvěrového dodatku č. 3' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
