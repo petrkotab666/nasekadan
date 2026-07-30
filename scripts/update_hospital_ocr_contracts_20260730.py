@@ -14,8 +14,8 @@ for old in ('Poslední ověřená aktualizace 30. července 2026 v 12:15.', 'Pos
     text = text.replace(old, 'Poslední ověřená aktualizace 30. července 2026 v 13:24.')
 
 box_1215 = '<div class="update-box"><strong>Aktualizace 30. července v 12:15</strong><p>Kadaň má v tomto volebním období 27 zastupitelů. Zákonná žádost o mimořádné zasedání proto musí mít podpis nejméně devíti členů zastupitelstva. Veřejný požadavek Jiřího Kulhánka ze zasedání 25. června je doložen, ale veřejný dokument s devíti podpisy, datem doručení a navrženým programem jsme zatím nenašli. Město dosud nezveřejnilo ani pozvánku na mimořádné zasedání.</p></div>'
-box_1315 = '<div class="update-box"><strong>Aktualizace 30. července v 13:15</strong><p>Prošli jsme také přílohy Registru smluv, které běžný fulltext nečte, a ověřili jejich SHA-256 proti otevřeným datům registru. Červnový dodatek s metadatovou hodnotou 170 milionů nebyl novým úvěrem: pouze prodloužil čerpání dříve sníženého rámce. Červencový dodatek potvrzuje aktuální limit 80 milionů a vyčerpání 55,169 milionu. U smluv STAPRO jsme ověřili, že dodatek za 4,722 milionu není další zakázkou navíc, ale snížením původní ceny po vypuštění položky C1.</p></div>'
-new_box = '<div class="update-box"><strong>Aktualizace 30. července v 13:24</strong><p>Prošli jsme i přílohy Registru smluv, které běžný fulltext nečetl. Červnový dodatek s metadatovou hodnotou 170 milionů nebyl novým úvěrem: pouze prodloužil čerpání dříve sníženého rámce. Červencový dodatek potvrzuje aktuální limit 80 milionů a vyčerpání 55,169 milionu. U smluv STAPRO jsme ověřili, že dodatek za 4,722 milionu není další zakázkou navíc, ale snížením původní ceny po vypuštění položky C1. Pevný základ implementace a pětiletého servisu činí 7,376 milionu korun bez DPH. Ani tyto dokumenty neobsahují odstupné Martina Krušiny.</p></div>'
+box_1315 = '<div class="update-box"><strong>Aktualizace 30. července v 13:15</strong><p>Červnový dodatek s uvedenou hodnotou 170 milionů nebyl novým úvěrem: pouze prodloužil čerpání dříve sníženého rámce. Červencový dodatek potvrzuje aktuální limit 80 milionů a vyčerpání 55,169 milionu. U smluv STAPRO jsme ověřili, že dodatek za 4,722 milionu není další zakázkou navíc, ale snížením původní ceny po vypuštění položky C1.</p></div>'
+new_box = '<div class="update-box"><strong>Aktualizace 30. července v 13:24</strong><p>Červnový dodatek s uvedenou hodnotou 170 milionů nebyl novým úvěrem: pouze prodloužil čerpání dříve sníženého rámce. Červencový dodatek potvrzuje aktuální limit 80 milionů a vyčerpání 55,169 milionu. U smluv STAPRO jsme ověřili, že dodatek za 4,722 milionu není další zakázkou navíc, ale snížením původní ceny po vypuštění položky C1. Pevný základ implementace a pětiletého servisu činí 7,376 milionu korun bez DPH. Ani tyto dokumenty neobsahují odstupné Martina Krušiny.</p></div>'
 if box_1215 in text:
     text = text.replace(box_1215, new_box)
 elif box_1315 in text:
@@ -23,9 +23,20 @@ elif box_1315 in text:
 elif 'Aktualizace 30. července v 13:24' not in text:
     raise SystemExit('Nenalezen očekávaný aktualizační box')
 
+text = text.replace('Co odhalily neindexované úvěrové a IT smlouvy', 'Co ukazují úvěrové a IT smlouvy')
+text = text.replace('Co odhalily neindexované a obrazové smlouvy', 'Co ukazují úvěrové a IT smlouvy')
+text = text.replace(
+    'Redakce prošla šest příloh Registru smluv, včetně dokumentů bez použitelné textové vrstvy. Stažené soubory jsme ověřili proti SHA-256 otiskům zveřejněným Registrem smluv a nečitelné stránky převedli obrazově.',
+    'Úvěrové a IT smlouvy zpřesňují výši investičního úvěru, jeho čerpání i náklady projektu nemocničního informačního systému.'
+)
+text = text.replace(
+    'Registr smluv – dodatek č. 3 k úvěrové smlouvě č. 770/21-120</a>, obrazová příloha ověřena podle SHA-256.',
+    'Registr smluv – dodatek č. 3 k úvěrové smlouvě č. 770/21-120</a>.'
+)
+
 anchor = '  <h2>Dokumenty ukazují, že změna se připravovala nejméně od června</h2>'
-section = '''  <h2>Co odhalily neindexované úvěrové a IT smlouvy</h2>
-  <p>Redakce prošla šest příloh Registru smluv, včetně dokumentů bez použitelné textové vrstvy. Stažené soubory jsme ověřili proti SHA-256 otiskům zveřejněným Registrem smluv a nečitelné stránky převedli obrazově.</p>
+section = '''  <h2>Co ukazují úvěrové a IT smlouvy</h2>
+  <p>Úvěrové a IT smlouvy zpřesňují výši investičního úvěru, jeho čerpání i náklady projektu nemocničního informačního systému.</p>
   <div class="fact-grid">
     <div class="fact-card"><span>Investiční úvěr</span><strong>80 mil. Kč</strong><p>Původní úvěr z roku 2021 činil 270 milionů korun. Dodatky jej postupně snížily nejprve na 170 milionů a poté na 80 milionů korun.</p></div>
     <div class="fact-card"><span>Čerpání k 9. červenci</span><strong>55,169 mil. Kč</strong><p>Z limitu 80 milionů bylo podle dodatku č. 4 vyčerpáno 55 168 704,80 Kč. Nevyčerpaný prostor tak činil přibližně 24,831 milionu korun.</p></div>
@@ -41,13 +52,13 @@ section = '''  <h2>Co odhalily neindexované úvěrové a IT smlouvy</h2>
   <div class="callout"><strong>Co tyto smlouvy neprokazují</strong><p>Úvěrové ani IT smlouvy neobsahují rozhodnutí o odchodovém plnění Martina Krušiny. Přinášejí ale přesnější obraz investičního financování, smluvních závazků a projektů, které nové vedení přebírá.</p></div>
 
 '''
-if 'Co odhalily neindexované úvěrové a IT smlouvy' not in text and 'Co odhalily neindexované a obrazové smlouvy' not in text:
+if 'Co ukazují úvěrové a IT smlouvy' not in text:
     if anchor not in text:
         raise SystemExit('Nenalezen bod vložení nové sekce')
     text = text.replace(anchor, section + anchor)
 
 source_anchor = '    <li><a href="https://smlouvy.gov.cz/vyhledavani?party_idnum=25479300" target="_blank" rel="noopener noreferrer">Registr smluv – vyhledávání smluv Nemocnice Kadaň, IČO 25479300</a>, kontrola 30. července 2026.</li>\n'
-source_add = '''    <li><a href="https://smlouvy.gov.cz/smlouva/38556652" target="_blank" rel="noopener noreferrer">Registr smluv – dodatek č. 3 k úvěrové smlouvě č. 770/21-120</a>, obrazová příloha ověřena podle SHA-256.</li>
+source_add = '''    <li><a href="https://smlouvy.gov.cz/smlouva/38556652" target="_blank" rel="noopener noreferrer">Registr smluv – dodatek č. 3 k úvěrové smlouvě č. 770/21-120</a>.</li>
     <li><a href="https://smlouvy.gov.cz/smlouva/38715676" target="_blank" rel="noopener noreferrer">Registr smluv – dodatek č. 4 k úvěrové smlouvě č. 770/21-120</a>, včetně výše aktuálního čerpání.</li>
     <li><a href="https://smlouvy.gov.cz/smlouva/38532420" target="_blank" rel="noopener noreferrer">Registr smluv – modernizace a interoperabilita NIS se společností STAPRO</a>, smlouva č. 2026-34.</li>
     <li><a href="https://smlouvy.gov.cz/smlouva/38590016" target="_blank" rel="noopener noreferrer">Registr smluv – dodatek č. 1 k modernizaci NIS</a>, snížení ceny a nový harmonogram.</li>
@@ -63,10 +74,13 @@ text = text.replace(
     '<li>Rok 2025 skončil ztrátou 46,139 mil. Kč</li><li>Investiční úvěr: limit 80 mil., čerpáno 55,169 mil. Kč</li><li>STAPRO: pevný základ 7,376 mil. Kč bez DPH</li>'
 )
 
+for forbidden in ('fulltext', 'SHA-256', 'OCR', 'neindexované'):
+    if forbidden in text:
+        raise SystemExit(f'V článku zůstal technický výraz: {forbidden}')
 if '55 168 704,80 Kč' not in text or '7,376 milionu korun bez DPH' not in text:
     raise SystemExit('Nové smluvní podklady se nevložily')
 if '2026-07-30T13:24:00+02:00' not in text:
     raise SystemExit('Čas aktualizace nebyl změněn')
 
 PATH.write_text(text, encoding='utf-8', newline='\n')
-print('Článek doplněn o OCR úvěrových a IT smluv.')
+print('Článek doplněn o úvěrové a IT smlouvy bez technického popisu dohledávání.')
