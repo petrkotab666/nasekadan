@@ -18,7 +18,7 @@ jobs:
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Načíst formulář a bezpečně popsat odpověď POST
+      - name: Načíst formulář a bezpečně popsat odpověď POST po stabilizaci
         shell: bash
         run: |
           set -euo pipefail
@@ -68,4 +68,4 @@ jobs:
           script: |
             const fs=require('fs'); let log='';
             try {log=fs.readFileSync(`${process.env.RUNNER_TEMP}/form.txt`,'utf8')} catch {}
-            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY RESET RESPONSE] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-12000).replace(/```/g,'---')+'\n```'});
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[STATISTIKY RESET RESPONSE STABLE] ${new Date().toISOString()}`,body:'```text\n'+log.slice(-12000).replace(/```/g,'---')+'\n```'});
