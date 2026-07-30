@@ -1,0 +1,92 @@
+name: Finální audit soukromých statistik všech webů
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/final-audit-all-private-stats.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY1: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY2: ${{ secrets.OVH_SSH_KEY }}
+      KEY3: ${{ secrets.SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail; umask 077
+          for value in "$KEY1" "$KEY2" "$KEY3"; do if [ -n "$value" ]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Zkontrolovat živé weby a databázi
+        id: audit
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          DOMAINS=(nasekadan.cz dobreklima.cz koupime.to nakupvakci.cz ocenime.to pojistime.to prodame.to proverime.to realitykadan.cz uklidavyklizeni.cz vaseuklizecka.cz vaseterasy.cz vyklidime.to levnevyklidime.cz lastminuteslevy.cz sirupyzbylinek.cz dilynazakazku.cz)
+          : > "$RUNNER_TEMP/final-stats-audit.log"
+          shared=$(curl -kLsS --max-time 20 https://pojistime.to/assets/owned-promotion-renderer.js || true)
+          grep -q '__NK_NETWORK_STATS_V1__' <<<"$shared" || { echo 'CHYBA: sdílený síťový tracker není živý' | tee -a "$RUNNER_TEMP/final-stats-audit.log"; exit 1; }
+          central_code=$(curl -kLsS --max-time 20 -o /tmp/central.js -w '%{http_code}' https://nasekadan.cz/_nkstats/tracker.js || true)
+          test "$central_code" = 200
+          echo 'DOMENA|HOME|INTEGRACE|STATISTIKY' >> "$RUNNER_TEMP/final-stats-audit.log"
+          failed=0
+          for domain in "${DOMAINS[@]}"; do
+            home_code=$(curl -kLsS -A 'Mozilla/5.0 FinalStatsAudit' --max-time 20 -o "/tmp/home-${domain//./_}" -w '%{http_code}' "https://$domain/" || true)
+            body=$(cat "/tmp/home-${domain//./_}" 2>/dev/null || true)
+            integration='server'
+            case "$domain" in
+              nasekadan.cz|dilynazakazku.cz) integration='server' ;;
+              dobreklima.cz|nakupvakci.cz|lastminuteslevy.cz)
+                if grep -q 'owned-promotion-renderer.js\|_nkstats/tracker.js' <<<"$body"; then integration='ano'; else integration='ne'; fi ;;
+              sirupyzbylinek.cz)
+                if grep -q '_nkstats/tracker.js' <<<"$body"; then integration='ano'; else integration='ne'; fi ;;
+              *)
+                if grep -q '_nkstats/tracker.js\|owned-promotion-renderer.js' <<<"$body"; then integration='ano'; else integration='ne'; fi ;;
+            esac
+            stats_code=$(curl -kLsS -A 'Mozilla/5.0 FinalStatsAudit' --max-time 20 -D /tmp/stats-h -o /tmp/stats-b -w '%{http_code}' "https://$domain/statistiky/" || true)
+            stats='ne'
+            if [ "$domain" = 'nasekadan.cz' ] || [ "$domain" = 'dilynazakazku.cz' ]; then
+              [ "$stats_code" = 200 ] || [ "$stats_code" = 401 ] && stats='ano'
+            elif [ "$stats_code" = 200 ] && grep -q 'statistiky-webu' /tmp/stats-b; then
+              stats='ano'
+            elif grep -qi 'location:.*statistiky-webu' /tmp/stats-h; then
+              stats='ano'
+            fi
+            echo "$domain|$home_code|$integration|$stats" >> "$RUNNER_TEMP/final-stats-audit.log"
+            if [ "$integration" = ne ] || [ "$stats" = ne ]; then failed=$((failed+1)); fi
+            token="final-audit-${GITHUB_RUN_ID}-${domain}"
+            curl -kLsS -A 'Mozilla/5.0 FinalStatsHuman' --max-time 20 -o /dev/null "https://nasekadan.cz/_nkstats/hit.gif?site=${domain}&path=%2F${token}&ref=" || true
+          done
+          sleep 4
+          DOMAINS_TEXT=$(printf '%s\n' "${DOMAINS[@]}")
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 \
+            "sudo -u www-data env DOMAINS_TEXT='$DOMAINS_TEXT' RUN_ID='$GITHUB_RUN_ID' python3 -" <<'PY' >> "$RUNNER_TEMP/final-stats-audit.log"
+          import os,sqlite3
+          domains=[x for x in os.environ['DOMAINS_TEXT'].splitlines() if x]
+          run=os.environ['RUN_ID']; c=sqlite3.connect('/opt/multisite-stats/stats.sqlite3')
+          missing=[]
+          for d in domains:
+              path=f'/final-audit-{run}-{d}'
+              n=c.execute('select count(*) from hits where host=? and path=?',(d,path)).fetchone()[0]
+              print(f'DB|{d}|{n}')
+              if n<1: missing.append(d)
+          if missing: raise SystemExit('Chybí DB zápis: '+','.join(missing))
+          PY
+          cat "$RUNNER_TEMP/final-stats-audit.log"
+          test "$failed" -eq 0
+          echo 'OVERENO: všechny známé aktivní weby mají měření, oddělený zápis a adresu /statistiky/.' | tee -a "$RUNNER_TEMP/final-stats-audit.log"
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env: {OUTCOME: "${{ steps.audit.outcome }}"}
+        with:
+          script: |
+            const fs=require('fs');let log='';try{log=fs.readFileSync(`${process.env.RUNNER_TEMP}/final-stats-audit.log`,'utf8')}catch{};const ok=process.env.OUTCOME==='success';const i=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[FINÁLNÍ STATISTIKY VŠECH WEBŮ] ${ok?'Úspěch':'Selhání'} ${new Date().toISOString()}`,body:'```text\n'+log.slice(-45000).replace(/```/g,'---')+'\n```'});if(ok)await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:i.data.number,state:'closed',state_reason:'completed'});
+      - if: steps.audit.outcome != 'success'
+        run: exit 1
