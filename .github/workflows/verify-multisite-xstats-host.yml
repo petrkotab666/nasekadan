@@ -1,0 +1,48 @@
+name: Ověřit vlastní hlavičku domény statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-multisite-xstats-host.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        run: |
+          set -Eeuo pipefail; umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do value="${!name:-}"; if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi; done
+          test -s "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+      - name: Ověřit hlavičku přímo i přes proxy
+        run: |
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/out.txt" 2>&1 <<'REMOTE'
+          set -Eeuo pipefail
+          probe(){ label="$1"; shift; code=$(curl -ksS --max-time 10 -o /tmp/b -w '%{http_code}' "$@" || true); echo "$label CODE=$code SIZE=$(wc -c < /tmp/b) BODY=$(head -c 120 /tmp/b)"; }
+          probe APP_TRACKER_X -H 'X-Stats-Host: dobreklima.cz' http://127.0.0.1:3226/tracker.js
+          probe APP_HIT_X -H 'X-Stats-Host: dobreklima.cz' 'http://127.0.0.1:3226/hit.gif?path=%2Ftest&ref='
+          probe APP_HIT_X_SITE -H 'X-Stats-Host: dobreklima.cz' 'http://127.0.0.1:3226/hit.gif?site=dobreklima.cz&path=%2Ftest&ref='
+          probe NGINX_HIT_KNOWN -H 'Host: nasekadan.cz' 'http://127.0.0.1/_nkstats/hit.gif?site=dobreklima.cz&path=%2Ftest&ref='
+          probe HTTPS_HIT_KNOWN --resolve nasekadan.cz:443:127.0.0.1 'https://nasekadan.cz/_nkstats/hit.gif?site=dobreklima.cz&path=%2Ftest&ref='
+          echo '--- CURRENT SNIPPET ---'; sudo cat /etc/nginx/snippets/nasekadan-multisite-collector.conf
+          REMOTE
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let out=''; try{out=fs.readFileSync(`${process.env.RUNNER_TEMP}/out.txt`,'utf8')}catch{}
+            await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[MULTISITE X-STATS-HOST] ${new Date().toISOString()}`,body:'```text\n'+out.slice(-40000).replace(/```/g,'---')+'\n```'});
