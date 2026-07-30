@@ -1,0 +1,58 @@
+name: Aktualizovat článek o vedení nemocnice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hospital-leadership-evidence-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-hospital-leadership-evidence
+  cancel-in-progress: true
+
+jobs:
+  update-and-deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit ověřené podklady
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          python3 scripts/update_hospital_leadership_evidence_20260730.py
+          git config user.name 'Naše Kadaň aktualizace'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+          git commit -m 'Doplnit časovou osu změny vedení nemocnice' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Nasadit kanonickou produkční verzi
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Ověřit aktualizovaný článek
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 20); do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?evidence=${GITHUB_SHA}-${n}" || true)"
+            if grep -Fq '46,139 milionu korun' <<<"$page" \
+              && grep -Fq 'mimořádná rada města' <<<"$page" \
+              && grep -Fq '2026-07-30T10:25:00+02:00' <<<"$page"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
