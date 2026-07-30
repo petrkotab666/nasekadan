@@ -1,0 +1,157 @@
+name: Okamžitě opravit přihlášení a obnovu hesla statistik
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-stats-login-and-reset-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-stats-login-reset-emergency
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SMTP_PASSWORD: ${{ secrets.NEWSLETTER_SMTP_PASSWORD }}
+    steps:
+      - name: Ověřit dostupnost tajných údajů
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${OVH_KEY:-}" || { echo 'Chybí OVH_SSH_PRIVATE_KEY.' >&2; exit 20; }
+          test -n "${SMTP_PASSWORD:-}" || { echo 'Chybí NEWSLETTER_SMTP_PASSWORD.' >&2; exit 21; }
+
+      - name: Připravit SSH a bezpečný SMTP soubor
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh-key"
+          cat > "$RUNNER_TEMP/nasekadan-stats-email.env" <<EOF
+          SMTP_HOST=smtp.seznam.cz
+          SMTP_PORT=465
+          SMTP_USER=info@nasekadan.cz
+          SMTP_PASSWORD=$SMTP_PASSWORD
+          SMTP_TLS=ssl
+          EOF
+          chmod 600 "$RUNNER_TEMP/ovh-key" "$RUNNER_TEMP/nasekadan-stats-email.env"
+
+      - name: Opravit SMTP statistik, restartovat službu a odeslat obnovovací odkaz
+        shell: bash
+        run: |
+          set -euo pipefail
+          SSH=(ssh -i "$RUNNER_TEMP/ovh-key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215)
+          SCP=(scp -i "$RUNNER_TEMP/ovh-key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+
+          "${SCP[@]}" "$RUNNER_TEMP/nasekadan-stats-email.env" ubuntu@57.129.43.215:/tmp/nasekadan-stats-email.env
+
+          "${SSH[@]}" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          sudo -n true
+
+          sudo install -o root -g root -m 0600 /tmp/nasekadan-stats-email.env /etc/nasekadan-stats-email.env
+          rm -f /tmp/nasekadan-stats-email.env
+
+          # Druhý EnvironmentFile statistik přepisoval aktuální newsletterové heslo
+          # starou hodnotou. Po sjednocení konfigurace službu restartujeme; restart
+          # současně zruší případný dočasný zámek po neúspěšných přihlášeních.
+          sudo systemctl daemon-reload
+          sudo systemctl restart nasekadan-stats-web.service
+          sudo systemctl is-active --quiet nasekadan-stats-web.service
+
+          for _ in $(seq 1 30); do
+            curl -fsS --max-time 3 http://127.0.0.1:3225/healthz >/tmp/nasekadan-stats-health.json 2>/dev/null && break
+            sleep 0.5
+          done
+
+          python3 - <<'PY'
+          import json
+          import smtplib
+          import ssl
+          from pathlib import Path
+
+          values = {}
+          for raw in Path('/etc/nasekadan-stats-email.env').read_text(encoding='utf-8').splitlines():
+              line = raw.strip()
+              if line and not line.startswith('#') and '=' in line:
+                  key, value = line.split('=', 1)
+                  values[key.strip()] = value
+
+          required = ('SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD')
+          missing = [key for key in required if not values.get(key)]
+          if missing:
+              raise SystemExit(f'Chybí SMTP proměnné: {missing}')
+
+          context = ssl.create_default_context()
+          with smtplib.SMTP_SSL(values['SMTP_HOST'], int(values['SMTP_PORT']), timeout=20, context=context) as smtp:
+              smtp.login(values['SMTP_USER'], values['SMTP_PASSWORD'])
+          print('SMTP přihlášení statistik je funkční.')
+
+          health = json.loads(Path('/tmp/nasekadan-stats-health.json').read_text(encoding='utf-8'))
+          assert health.get('ok') is True, health
+          assert health.get('smtpConfigured') is True, health
+          print('Healthcheck potvrdil aktivní SMTP konfiguraci.')
+          PY
+
+          reset_url='https://nasekadan.cz/statistiky/zapomenute-heslo'
+          curl -kfsS --max-time 15 --resolve nasekadan.cz:443:127.0.0.1 "$reset_url" -o /tmp/nasekadan-reset-get.html
+
+          python3 - <<'PY' >/tmp/nasekadan-reset-data.txt
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlencode
+
+          class FormParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.in_post_form = False
+                  self.fields = []
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if tag == 'form':
+                      self.in_post_form = attrs.get('method', 'get').lower() == 'post'
+                  elif tag == 'input' and self.in_post_form:
+                      name = attrs.get('name')
+                      if not name:
+                          return
+                      kind = attrs.get('type', 'text').lower()
+                      value = attrs.get('value', '')
+                      if kind == 'hidden':
+                          self.fields.append((name, value))
+                      elif kind in ('email', 'text') and ('mail' in name.lower() or 'email' in name.lower()):
+                          self.fields.append((name, 'petrkotab@seznam.cz'))
+              def handle_endtag(self, tag):
+                  if tag == 'form':
+                      self.in_post_form = False
+
+          parser = FormParser()
+          parser.feed(Path('/tmp/nasekadan-reset-get.html').read_text(encoding='utf-8', errors='replace'))
+          print(urlencode(parser.fields))
+          PY
+
+          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-binary @/tmp/nasekadan-reset-data.txt \
+            "$reset_url" -o /tmp/nasekadan-reset-post.html
+
+          if grep -Eqi 'nepodařilo odeslat|zkontrolujte nastavení odesílací schránky' /tmp/nasekadan-reset-post.html; then
+            echo 'Aplikace po opravě stále hlásí chybu odeslání.' >&2
+            exit 31
+          fi
+          grep -Eqi 'odeslán|odeslali|zkontrolujte.{0,20}(e-mail|email)|obnovovací odkaz' /tmp/nasekadan-reset-post.html || {
+            echo 'Odpověď resetu nepotvrdila odeslání odkazu.' >&2
+            sed -E 's/<[^>]+>/ /g' /tmp/nasekadan-reset-post.html | tr -s ' ' | head -c 1200 >&2
+            exit 32
+          }
+
+          rm -f /tmp/nasekadan-reset-get.html /tmp/nasekadan-reset-post.html /tmp/nasekadan-reset-data.txt /tmp/nasekadan-stats-health.json
+          echo 'HOTOVO: SMTP je opravené, služba restartovaná a obnovovací odkaz byl vyžádán na petrkotab@seznam.cz.'
+          REMOTE
