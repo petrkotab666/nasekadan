@@ -46,7 +46,7 @@ jobs:
             'https://nasekadan.cz/statistiky/' > /tmp/stats-auth-public.html
           curl -fsS --max-time 15 \
             -H "Cookie: nkstats_session=$TOKEN" \
-            'http://127.0.0.1:3225/statistiky/' > /tmp/stats-auth-local.html
+            'http://127.0.0.1:3225/' > /tmp/stats-auth-local.html
 
           python3 - <<'PY'
           from pathlib import Path
@@ -69,7 +69,7 @@ jobs:
           print('=== ZAČÁTEK SKUTEČNÉHO BODY ===')
           body=pub[pub.find('<body'):]
           clean=' '.join(body.split())
-          print(clean[:2500])
+          print(clean[:3000])
           PY
           REMOTE
 
