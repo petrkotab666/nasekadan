@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     env:
-      SMTP_PASSWORD: ${{ secrets.NEWSLETTER_SMTP_PASSWORD }}
       KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
       KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -39,7 +38,6 @@ jobs:
           set -Eeuo pipefail
           umask 077
           exec > >(tee "$RUNNER_TEMP/result.txt") 2>&1
-          test -n "${SMTP_PASSWORD:-}" || { echo 'Chybí NEWSLETTER_SMTP_PASSWORD.'; exit 19; }
 
           selected=''
           for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
@@ -54,51 +52,90 @@ jobs:
           chmod 600 "$RUNNER_TEMP/key"
           echo "Použit dostupný SSH secret: $selected"
 
-          python3 - <<'PY'
-          import os, smtplib, ssl
-          from email.message import EmailMessage
-          from email.utils import formatdate, make_msgid
-
-          password = os.environ['SMTP_PASSWORD']
-          context = ssl.create_default_context()
-          with smtplib.SMTP_SSL('smtp.seznam.cz', 465, timeout=25, context=context) as smtp:
-              smtp.login('info@nasekadan.cz', password)
-              msg = EmailMessage()
-              msg['From'] = 'info@nasekadan.cz'
-              msg['To'] = 'petrkotab@seznam.cz'
-              msg['Subject'] = 'Kontrola doručení – Naše Kadaň statistiky'
-              msg['Date'] = formatdate(localtime=False)
-              msg['Message-ID'] = make_msgid(domain='nasekadan.cz')
-              msg.set_content('Odesílání ze statistik bylo opraveno. Samostatný obnovovací odkaz následuje v dalším e-mailu.')
-              refused = smtp.send_message(msg, from_addr='info@nasekadan.cz', to_addrs=['petrkotab@seznam.cz'])
-              if refused:
-                  raise SystemExit(f'SMTP odmítlo příjemce: {list(refused)}')
-          print('Funkční účet info@nasekadan.cz: SMTP přijalo kontrolní e-mail bez odmítnutého příjemce.')
-          PY
-
-          cat > "$RUNNER_TEMP/stats-email.env" <<EOF
-          SMTP_HOST=smtp.seznam.cz
-          SMTP_PORT=465
-          SMTP_USER=info@nasekadan.cz
-          SMTP_PASSWORD=$SMTP_PASSWORD
-          SMTP_TLS=ssl
-          NEWSLETTER_FROM=info@nasekadan.cz
-          SMTP_FROM=info@nasekadan.cz
-          EMAIL_FROM=info@nasekadan.cz
-          RESET_EMAIL=petrkotab@seznam.cz
-          ADMIN_EMAIL=petrkotab@seznam.cz
-          EOF
-          chmod 600 "$RUNNER_TEMP/stats-email.env"
-
-          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            "$RUNNER_TEMP/stats-email.env" ubuntu@57.129.43.215:/tmp/nasekadan-stats-email.env
-
           ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -Eeuo pipefail
           sudo -n true
-          sudo install -o root -g root -m 0600 /tmp/nasekadan-stats-email.env /etc/nasekadan-stats-email.env
-          rm -f /tmp/nasekadan-stats-email.env
+
+          sudo python3 - <<'PY'
+          from __future__ import annotations
+          import os, shlex, smtplib, ssl, tempfile
+          from email.message import EmailMessage
+          from email.utils import formatdate, make_msgid
+          from pathlib import Path
+
+          source = Path('/etc/nasekadan-newsletter.env')
+          target = Path('/etc/nasekadan-stats-email.env')
+          if not source.exists():
+              raise SystemExit('Chybí serverová SMTP konfigurace newsletteru.')
+
+          def parse_env(path: Path) -> dict[str, str]:
+              result: dict[str, str] = {}
+              for raw in path.read_text(encoding='utf-8', errors='strict').splitlines():
+                  line = raw.strip()
+                  if not line or line.startswith('#') or '=' not in line:
+                      continue
+                  if line.startswith('export '): line = line[7:].lstrip()
+                  key, value = line.split('=', 1)
+                  value = value.strip()
+                  try:
+                      parts = shlex.split(value, posix=True)
+                      value = parts[0] if len(parts) == 1 else value
+                  except Exception:
+                      value = value.strip('"').strip("'")
+                  result[key.strip()] = value
+              return result
+
+          env = parse_env(source)
+          host = env.get('SMTP_HOST') or env.get('MAIL_HOST')
+          user = env.get('SMTP_USER') or env.get('SMTP_USERNAME') or env.get('MAIL_USER')
+          password = env.get('SMTP_PASSWORD') or env.get('SMTP_PASS') or env.get('MAIL_PASSWORD')
+          port = int(env.get('SMTP_PORT') or env.get('MAIL_PORT') or '465')
+          mode = (env.get('SMTP_TLS') or env.get('SMTP_SECURITY') or 'ssl').lower()
+          sender = env.get('NEWSLETTER_FROM') or env.get('SMTP_FROM') or user
+          if not (host and user and password):
+              raise SystemExit('Serverová SMTP konfigurace newsletteru není úplná.')
+
+          context = ssl.create_default_context()
+          if mode == 'ssl' or port == 465:
+              client = smtplib.SMTP_SSL(host, port, timeout=25, context=context)
+          else:
+              client = smtplib.SMTP(host, port, timeout=25); client.ehlo()
+              if mode in {'starttls','tls','true','1'} or port == 587:
+                  client.starttls(context=context); client.ehlo()
+          with client:
+              client.login(user, password)
+              msg = EmailMessage()
+              msg['From'] = sender
+              msg['To'] = 'petrkotab@seznam.cz'
+              msg['Subject'] = 'Kontrola doručení – Naše Kadaň statistiky'
+              msg['Date'] = formatdate(localtime=False)
+              msg['Message-ID'] = make_msgid(domain='nasekadan.cz')
+              msg.set_content('Odesílání ze statistik bylo znovu nastaveno. Samostatný obnovovací odkaz následuje v dalším e-mailu.')
+              refused = client.send_message(msg, from_addr=user, to_addrs=['petrkotab@seznam.cz'])
+              if refused:
+                  raise SystemExit(f'SMTP odmítlo příjemce: {list(refused)}')
+          print(f'Serverová schránka {user}: SMTP přijalo kontrolní e-mail bez odmítnutého příjemce.')
+
+          values = {
+              'SMTP_HOST': host, 'SMTP_PORT': str(port), 'SMTP_USER': user,
+              'SMTP_PASSWORD': password, 'SMTP_TLS': mode,
+              'NEWSLETTER_FROM': sender, 'SMTP_FROM': sender, 'EMAIL_FROM': sender,
+              'RESET_EMAIL': 'petrkotab@seznam.cz', 'ADMIN_EMAIL': 'petrkotab@seznam.cz',
+          }
+          fd, tmp_name = tempfile.mkstemp(prefix='.nasekadan-stats-email.', dir='/etc', text=True)
+          try:
+              with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                  for key, value in values.items():
+                      escaped = value.replace('\\', '\\\\').replace('"', '\\"')
+                      handle.write(f'{key}="{escaped}"\n')
+              os.chmod(tmp_name, 0o600); os.chown(tmp_name, 0, 0); os.replace(tmp_name, target)
+          finally:
+              try: os.unlink(tmp_name)
+              except FileNotFoundError: pass
+          print('Stejná živě ověřená konfigurace byla zapsána pouze pro statistiky.')
+          PY
+
           sudo systemctl daemon-reload
           sudo systemctl restart nasekadan-stats-web.service
           sudo systemctl is-active --quiet nasekadan-stats-web.service
@@ -122,7 +159,7 @@ jobs:
           fi
           grep -Eqi 'odeslán|odeslali|obnovovací odkaz|zkontrolujte.{0,40}(schránku|e-mail|email)' /tmp/reset-post.html || exit 33
           rm -f /tmp/reset-get.html /tmp/reset-post.html /tmp/stats-health.json
-          echo 'HOTOVO: kontrolní e-mail i nový reset byly vyžádány na petrkotab@seznam.cz přes info@nasekadan.cz.'
+          echo 'HOTOVO: kontrolní e-mail i nový reset byly vyžádány na petrkotab@seznam.cz.'
           REMOTE
 
       - name: Zapsat skutečný výsledek
