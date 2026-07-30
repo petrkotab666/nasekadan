@@ -1,0 +1,107 @@
+name: Vytěžit radu Kadaně k lávce v14
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-kadan-rada-lavka-v14-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nainstalovat OCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests
+      - name: Stáhnout a vytěžit obě rady
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-rada-v14
+          mkdir -p .github/research/lavka-rada-v14/text
+          cat > /tmp/v14.py <<'PY'
+          import json,re,subprocess,time,unicodedata
+          from pathlib import Path
+          import requests
+          R=Path('.github/research/lavka-rada-v14');T=R/'text'
+          s=requests.Session();s.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0)'
+          def get(u):
+              e=None
+              for i in range(6):
+                  try:
+                      r=s.get(u,timeout=90,allow_redirects=True);r.raise_for_status();return r
+                  except Exception as x:e=x;time.sleep(3+i*2)
+              raise e
+          def run(c):return subprocess.run(c,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          def norm(x):return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',x or '').encode('ascii','ignore').decode().lower()).strip()
+          docs={
+            'rada-2026-06-25':'https://www.mesto-kadan.cz/filemanager/files/5090957.pdf',
+            'rada-2026-07-15':'https://www.mesto-kadan.cz/filemanager/files/5105200.pdf',
+          }
+          results=[]
+          keys=['lávka','lavka','shell','svatý kopeček','svaty kopecek','silnici č. 568','silnici c. 568','00066/ov','silnice group','dodatek','předání','predani','převzetí','prevzeti','kolaud','předčasné užívání','predcasne uzivani','vada','nedodělek','nedodelek','penále','penale','smluvní pokuta','smluvni pokuta','zádržné','zadrzne','bankovní záruka','bankovni zaruka','osvětlení','osvetleni','mikropilot','15.7.2026','15. 7. 2026','31.8.2026','31. 8. 2026']
+          for name,url in docs.items():
+              try:r=get(url)
+              except Exception as e:results.append({'name':name,'url':url,'error':repr(e)});continue
+              p=Path('/tmp')/(name+'.pdf');p.write_bytes(r.content)
+              tmp=Path('/tmp')/(name+'.txt');run(['pdftotext','-layout',str(p),str(tmp)])
+              text=tmp.read_text(encoding='utf-8',errors='ignore') if tmp.exists() else ''
+              info=run(['pdfinfo',str(p)]).stdout;m=re.search(r'^Pages:\s+(\d+)',info,re.M);pages=int(m.group(1)) if m else 0
+              # OCR only pages whose extracted text contains likely contexts or all pages if no text.
+              ocr_pages=[]
+              for page in range(1,pages+1):
+                  page_txt=run(['pdftotext','-f',str(page),'-l',str(page),'-layout',str(p),'-']).stdout
+                  n=norm(page_txt)
+                  if len(re.sub(r'\s+','',page_txt))<120 or any(norm(k) in n for k in keys):ocr_pages.append(page)
+              chunks=[]
+              for page in ocr_pages:
+                  out=Path('/tmp')/f'{name}-p{page}'
+                  run(['pdftoppm','-f',str(page),'-l',str(page),'-r','260','-png','-singlefile',str(p),str(out)])
+                  im=str(out)+'.png'
+                  chunks.append(f'\n===== OCR PAGE {page} =====\n'+run(['tesseract',im,'stdout','-l','ces+eng','--psm','6']).stdout)
+              merged=text+'\n'.join(chunks)
+              tp=T/(name+'.txt');tp.write_text(merged,encoding='utf-8')
+              n=norm(merged);hits=[]
+              for k in keys:
+                  nk=norm(k);pos=0;count=0
+                  while True:
+                      pos=n.find(nk,pos)
+                      if pos<0 or count>=20:break
+                      hits.append({'key':k,'snippet':n[max(0,pos-700):min(len(n),pos+2000)]});pos+=len(nk);count+=1
+              results.append({'name':name,'url':url,'status':r.status_code,'bytes':len(r.content),'pages':pages,'ocr_pages':ocr_pages,'text_file':str(tp),'chars':len(merged),'hits':hits})
+          (R/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Rada Kadaně - lávka v14','']
+          for d in results:
+              md += ['## '+d.get('name',''),f"- URL: {d.get('url')}",f"- Strany: {d.get('pages')}",f"- OCR strany: {d.get('ocr_pages')}"]
+              for h in d.get('hits',[]):md.append(f"- **{h['key']}** — {h['snippet']}")
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v14.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-rada-v14
+          git commit -m 'Vytěžit radu Kadaně k lávce v14' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
