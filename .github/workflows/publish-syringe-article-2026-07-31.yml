@@ -3,6 +3,10 @@ name: Publikovat článek o stříkačkách v Kadani
 on:
   schedule:
     - cron: '0 2 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/syringe-publish-trigger.txt'
   workflow_dispatch:
     inputs:
       force:
@@ -64,6 +68,7 @@ jobs:
           python3 scripts/finalize_launch.py
           python3 scripts/prepare_discovery.py
           python3 scripts/normalize_search_snippets.py
+          python3 scripts/enforce_article_visibility.py
           python3 scripts/sort_articles_chronologically.py
           grep -Fq "/clanky/${SLUG}.html" index.html
           grep -Fq "/clanky/${SLUG}.html" clanky/index.html
@@ -127,7 +132,7 @@ jobs:
             sudo docker cp /tmp/nk-syringe-publication/social/. nasekadan-web:/usr/share/nginx/html/social/
           fi
           rm -rf /tmp/nk-syringe-publication
-          grep -Fq 'stříkač' /var/www/nasekadan/clanky/strikacky-vchody-drogy-kadan.html
+          grep -Fqi 'stříkač' /var/www/nasekadan/clanky/strikacky-vchody-drogy-kadan.html
           grep -Fq '/clanky/strikacky-vchody-drogy-kadan.html' /var/www/nasekadan/index.html
           REMOTE
 
@@ -157,3 +162,38 @@ jobs:
             sleep 6
           done
           exit 1
+
+      - name: Zapsat stav nasazení
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          CHANGED: ${{ steps.prepare.outputs.changed }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'syringe-publication-status.json';
+            const changed = process.env.CHANGED === 'true';
+            const ok = changed && process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const status = {
+              status: ok ? 'success' : (changed ? 'failed' : 'skipped'),
+              checked_at_utc: new Date().toISOString(),
+              trigger_commit: context.sha,
+              run_id: context.runId,
+              article_prepared: process.env.CHANGED || 'unknown',
+              server_deploy: process.env.DEPLOY || 'skipped',
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',
+              message:`Zapsat stav nasazení článku o stříkačkách: ${status.status}`,
+              content,...(sha?{sha}:{})
+            });
