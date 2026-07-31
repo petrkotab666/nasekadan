@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "checkedAt": "2026-07-31T21:58:44.525175+00:00",
-  "bootstrap": true,
+  "checkedAt": "2026-07-31T23:30:51.106740+00:00",
+  "bootstrap": false,
   "sourceCount": 102,
   "checkedSources": 89,
   "failedSources": 13,
-  "itemsParsed": 6476,
-  "uniqueItems": 3691,
-  "newAlerts": 50,
-  "alertsCapped": false,
+  "itemsParsed": 6543,
+  "uniqueItems": 3734,
+  "newAlerts": 80,
+  "alertsCapped": true,
   "coverage": {
     "directoryOrganizations": 63,
     "directoryOrganizationsWithUrl": 63,
@@ -82,9 +82,8 @@
       "url": "https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&xuser=",
       "category": "Kultura",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 106
     },
     {
       "name": "Liďák Kadaň – kulturní program",
@@ -247,7 +246,7 @@
       "category": "Školství",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 41
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -392,7 +391,7 @@
       "category": "Regionální kultura – Most",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 126
+      "itemsParsed": 124
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -457,7 +456,7 @@
       "category": "Regionální kultura – Most a Litvínov",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 228
+      "itemsParsed": 227
     },
     {
       "name": "Městská knihovna Litvínov",
@@ -522,7 +521,7 @@
       "category": "Elektřina a odstávky",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 30
+      "itemsParsed": 29
     },
     {
       "name": "Povodí Ohře",
@@ -732,8 +731,9 @@
       "url": "https://karateklubkadan.cz/wp2/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 41
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 401: Unauthorized"
     },
     {
       "name": "BK DDM Kadaň",
@@ -831,7 +831,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 13
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -847,7 +847,7 @@
       "category": "Média – Krušné hory a Ohře",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 0
+      "itemsParsed": 1
     },
     {
       "name": "Google News – Pětipsy, Radonice, Rokle, Veliká Ves a Vilémov",
@@ -863,7 +863,7 @@
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 0
+      "itemsParsed": 1
     },
     {
       "name": "Google News – kadaňské organizace a služby",
@@ -871,7 +871,7 @@
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 4
+      "itemsParsed": 6
     }
   ]
 }
