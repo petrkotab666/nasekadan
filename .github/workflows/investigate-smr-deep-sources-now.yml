@@ -3,8 +3,7 @@ name: Prověřit hlubší zdroje SMR Tušimice
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/investigate-smr-deep-sources-now.yml'
+    paths: ['.github/workflows/investigate-smr-deep-sources-now.yml']
   workflow_dispatch:
 
 permissions:
@@ -17,206 +16,105 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
-
-      - name: Připravit nástroje
-        run: |
-          set -euo pipefail
+      - run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq poppler-utils file unzip
-          mkdir -p "$RUNNER_TEMP/smr-deep/raw" "$RUNNER_TEMP/smr-deep/text"
-
-      - name: Stáhnout a rozebrat zdroje
-        id: collect
+          sudo apt-get install -y -qq poppler-utils
+          mkdir -p "$RUNNER_TEMP/deep/raw" "$RUNNER_TEMP/deep/text"
+      - id: collect
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
-          python3 - "$RUNNER_TEMP/smr-deep" <<'PY'
-          from __future__ import annotations
-          import html, json, re, subprocess, sys, urllib.request
+          python3 - "$RUNNER_TEMP/deep" <<'PY'
+          import html,json,re,subprocess,sys,urllib.request,zipfile
           from pathlib import Path
-          from urllib.parse import urljoin, urlsplit
-
+          from urllib.parse import urljoin,urlsplit
+          from xml.etree import ElementTree as ET
           root=Path(sys.argv[1]); raw=root/'raw'; text=root/'text'
-          raw.mkdir(parents=True,exist_ok=True); text.mkdir(parents=True,exist_ok=True)
-          ua='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
-          log=[]; records=[]; seen=set()
-
-          def slug(value:str)->str:
-              value=re.sub(r'[^A-Za-z0-9._-]+','_',value).strip('_')
-              return value[-180:] or 'file'
-
-          def get(url:str, label:str, referer:str=''):
-              if url in seen: return None
-              seen.add(url)
-              headers={'User-Agent':ua,'Accept-Language':'cs,en;q=0.7'}
-              if referer: headers['Referer']=referer
-              req=urllib.request.Request(url,headers=headers)
-              try:
-                  with urllib.request.urlopen(req,timeout=80) as r:
-                      data=r.read(); ctype=r.headers.get_content_type() or ''
-                      final=r.geturl()
-              except Exception as exc:
-                  log.append(f'FAILED {label} {url}: {type(exc).__name__}: {exc}')
-                  return None
-              suffix=Path(urlsplit(final).path).suffix.lower()
-              if not suffix:
-                  suffix='.html' if 'html' in ctype else '.bin'
-              path=raw/(slug(label)+suffix)
-              path.write_bytes(data)
-              records.append({'label':label,'url':url,'final':final,'path':str(path),'bytes':len(data),'content_type':ctype})
-              log.append(f'OK {label}: {len(data)} B {ctype} {final}')
-              return path
-
-          def hrefs(page:Path, base:str):
-              content=page.read_text(encoding='utf-8',errors='replace')
-              out=[]
-              for m in re.finditer(r'href=["\']([^"\']+)',content,re.I):
-                  href=html.unescape(m.group(1)).strip()
-                  if href and not href.startswith(('#','javascript:','mailto:')):
-                      out.append(urljoin(base,href))
-              return out
-
-          # Registr smluv: stáhnout skutečné přílohy objednávek ČHMÚ a zdravotní studie.
-          rs_ids=['26034643','26035439','28998080','32064228','32245712','26176155']
-          for rid in rs_ids:
-              page_url=f'https://smlouvy.gov.cz/smlouva/{rid}'
-              page=get(page_url,f'registr_{rid}')
-              if not page: continue
-              for idx,url in enumerate(hrefs(page,page_url),1):
-                  low=url.lower()
-                  if any(x in low for x in ('.pdf','.docx','.xlsx','.zip')) and ('smlouvy.gov.cz' in low):
-                      get(url,f'registr_{rid}_attachment_{idx}',page_url)
-
-          # Přenosová soustava ČEPS / ERÚ 2025-2034.
-          get('https://eru.gov.cz/sites/default/files/obsah/prilohy/desetilety-plan-rozvoje-prenosove-soustavy-ceske-republiky-2025-205642346567.pdf','ceps_plan_2025_2034')
-
-          # Připomínky k vládnímu materiálu Libouš/Bílina.
-          get('https://www.spcr.cz/sites/default/files/2026-05/pripominky%20SP%20CR%20lomy%20Libous%20a%20Bilina.pdf','spcr_libous_bilina')
-          secr_url='https://www.svazenergetiky.cz/novinky/stanovisko-secr-k-navrhu-optimalniho-zpusobu-vyuziti-uzemi-zbytkovych-jam-lomu-l'
-          secr=get(secr_url,'secr_libous_page')
-          if secr:
-              for idx,url in enumerate(hrefs(secr,secr_url),1):
-                  if any(x in url.lower() for x in ('.pdf','.docx')):
-                      get(url,f'secr_libous_attachment_{idx}',secr_url)
-
-          # Usnesení Března 2024-2026 a přílohy, které mohou obsahovat SMR/Tušimice.
-          brezno_url='https://www.obecbrezno.cz/samosprava-obce/usneseni-ze-zasedani-zastupitelstva-obce-brezno/'
-          brezno=get(brezno_url,'brezno_usneseni_index')
-          if brezno:
-              candidates=[]
-              for url in hrefs(brezno,brezno_url):
-                  low=url.lower()
-                  if any(y in low for y in ('2024','2025','2026')) and ('usnes' in low or low.endswith('.pdf')):
-                      candidates.append(url)
-              for idx,url in enumerate(dict.fromkeys(candidates),1):
-                  p=get(url,f'brezno_candidate_{idx}',brezno_url)
-                  if p and p.suffix.lower()=='.html':
-                      for j,att in enumerate(hrefs(p,url),1):
-                          if any(x in att.lower() for x in ('.pdf','.docx')):
-                              get(att,f'brezno_candidate_{idx}_attachment_{j}',url)
-
-          # Úřední deska a sitemap města Kadaně – hledání neveřejně indexovaných stop.
-          for label,url in [
-              ('kadan_uredni_deska','https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html'),
-              ('kadan_sitemap','https://www.mesto-kadan.cz/sitemap.xml'),
-              ('kadan_gis_up','https://gis.mesto-kadan.cz/portal/upd-kadan')]:
-              get(url,label)
-
-          # Převod PDF a DOCX na text.
-          for item in records:
-              p=Path(item['path']); suffix=p.suffix.lower(); out=text/(p.name+'.txt')
-              try:
-                  if suffix=='.pdf':
-                      subprocess.run(['pdftotext','-layout',str(p),str(out)],check=False,timeout=180)
-                  elif suffix=='.docx':
-                      import zipfile
-                      from xml.etree import ElementTree as ET
-                      chunks=[]
-                      with zipfile.ZipFile(p) as z:
-                          for name in z.namelist():
-                              if name.startswith('word/') and name.endswith('.xml'):
-                                  node=ET.fromstring(z.read(name))
-                                  chunks.append(' '.join(e.text or '' for e in node.iter() if e.tag.endswith('}t')))
-                      out.write_text('\n'.join(chunks),encoding='utf-8')
-                  elif suffix in {'.html','.xml'}:
-                      s=p.read_text(encoding='utf-8',errors='replace')
-                      s=re.sub(r'<script\b.*?</script>|<style\b.*?</style>',' ',s,flags=re.I|re.S)
-                      s=re.sub(r'<[^>]+>',' ',s)
-                      out.write_text(re.sub(r'\s+',' ',html.unescape(s)),encoding='utf-8')
-              except Exception as exc:
-                  log.append(f'EXTRACT_FAILED {p.name}: {type(exc).__name__}: {exc}')
-
-          keywords=[
-            'Tušimice','SMR','malý modulární','jaderný','Hradec','400 kV','V411','V412','V413','V414',
-            'ČEPS','připojen','vyvedení výkonu','nadrozměr','těžkých komponent','Nechranice','Libouš',
-            'AQUATIS','ČHMÚ','klimat','ovzduší','rozptylov','poddodavatel','harmonogram','přečerpávací',
-            'štěrbin','štolov','vlastnick','majetkopráv','zastupitelstvo','Kadaň'
-          ]
-          findings=[]
+          ua='Mozilla/5.0 Chrome/126'; records=[]; log=[]; seen=set()
+          def safe(s): return re.sub(r'[^A-Za-z0-9._-]+','_',s).strip('_')[-160:]
+          def fetch(url,label,ref=''):
+            if url in seen:return None
+            seen.add(url); h={'User-Agent':ua,'Accept-Language':'cs,en;q=.7'}
+            if ref:h['Referer']=ref
+            try:
+              with urllib.request.urlopen(urllib.request.Request(url,headers=h),timeout=90) as r:
+                data=r.read(); final=r.geturl(); ctype=r.headers.get_content_type() or ''
+              ext=Path(urlsplit(final).path).suffix.lower() or ('.html' if 'html' in ctype else '.bin')
+              p=raw/(safe(label)+ext); p.write_bytes(data)
+              records.append({'label':label,'url':url,'final':final,'bytes':len(data),'file':p.name,'type':ctype})
+              log.append(f'OK {label} {len(data)} {ctype} {final}'); return p
+            except Exception as e:
+              log.append(f'FAIL {label} {url}: {type(e).__name__}: {e}'); return None
+          def links(p,base):
+            s=p.read_text('utf-8',errors='replace'); out=[]
+            for x in re.findall(r'href=["\']([^"\']+)',s,re.I):
+              x=html.unescape(x)
+              if not x.startswith(('#','javascript:','mailto:')):out.append(urljoin(base,x))
+            return out
+          for rid in ['26034643','26035439','28998080','32064228','32245712','26176155']:
+            u=f'https://smlouvy.gov.cz/smlouva/{rid}'; p=fetch(u,f'rs_{rid}')
+            if p:
+              for n,x in enumerate(links(p,u)):
+                if 'smlouvy.gov.cz' in x and any(e in x.lower() for e in ('.pdf','.docx','.xlsx','.zip')):fetch(x,f'rs_{rid}_att_{n}',u)
+          fetch('https://eru.gov.cz/sites/default/files/obsah/prilohy/desetilety-plan-rozvoje-prenosove-soustavy-ceske-republiky-2025-205642346567.pdf','ceps_2025_2034')
+          fetch('https://www.spcr.cz/sites/default/files/2026-05/pripominky%20SP%20CR%20lomy%20Libous%20a%20Bilina.pdf','spcr_libous')
+          for label,u in [
+            ('secr','https://www.svazenergetiky.cz/novinky/stanovisko-secr-k-navrhu-optimalniho-zpusobu-vyuziti-uzemi-zbytkovych-jam-lomu-l'),
+            ('brezno','https://www.obecbrezno.cz/samosprava-obce/usneseni-ze-zasedani-zastupitelstva-obce-brezno/'),
+            ('kadan_deska','https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html'),
+            ('kadan_sitemap','https://www.mesto-kadan.cz/sitemap.xml'),
+            ('kadan_up','https://gis.mesto-kadan.cz/portal/upd-kadan')]:
+            p=fetch(u,label)
+            if not p:continue
+            for n,x in enumerate(links(p,u)):
+              low=x.lower()
+              take=any(e in low for e in ('.pdf','.docx'))
+              if label=='brezno':take=take and any(y in low for y in ('2024','2025','2026'))
+              if take:fetch(x,f'{label}_att_{n}',u)
+          for r in records:
+            p=raw/r['file']; out=text/(p.name+'.txt')
+            try:
+              if p.suffix.lower()=='.pdf':subprocess.run(['pdftotext','-layout',str(p),str(out)],timeout=240)
+              elif p.suffix.lower()=='.docx':
+                chunks=[]
+                with zipfile.ZipFile(p) as z:
+                  for n in z.namelist():
+                    if n.startswith('word/') and n.endswith('.xml'):
+                      node=ET.fromstring(z.read(n)); chunks.append(' '.join(e.text or '' for e in node.iter() if e.tag.endswith('}t')))
+                out.write_text('\n'.join(chunks),encoding='utf-8')
+              elif p.suffix.lower() in ('.html','.xml'):
+                s=p.read_text('utf-8',errors='replace'); s=re.sub(r'<script\b.*?</script>|<style\b.*?</style>',' ',s,flags=re.I|re.S); s=re.sub(r'<[^>]+>',' ',s)
+                out.write_text(re.sub(r'\s+',' ',html.unescape(s)),encoding='utf-8')
+            except Exception as e:log.append(f'EXTRACT {p.name}: {e}')
+          keys=['Tušimice','SMR','jaderný','Hradec','400 kV','V411','V412','ČEPS','připojen','vyvedení výkonu','nadrozměr','těžkých komponent','Nechranice','Libouš','AQUATIS','ČHMÚ','přečerpávací','štolov','majetkopráv','Kadaň']
+          md=['# Hloubkový průchod zdrojů SMR Tušimice','']
           for p in sorted(text.glob('*.txt')):
-              content=p.read_text(encoding='utf-8',errors='replace')
-              lines=content.splitlines()
-              snippets=[]
-              for i,line in enumerate(lines):
-                  if any(k.casefold() in line.casefold() for k in keywords):
-                      sn=' '.join(lines[max(0,i-2):min(len(lines),i+3)])
-                      sn=re.sub(r'\s+',' ',sn).strip()
-                      if sn and sn not in snippets: snippets.append(sn[:1400])
-                  if len(snippets)>=80: break
-              findings.append({'file':p.name,'chars':len(content),'snippets':snippets})
-
+            s=p.read_text('utf-8',errors='replace'); ls=s.splitlines(); hits=[]
+            for i,l in enumerate(ls):
+              if any(k.casefold() in l.casefold() for k in keys):
+                q=re.sub(r'\s+',' ',' '.join(ls[max(0,i-2):i+3])).strip()[:1300]
+                if q and q not in hits:hits.append(q)
+              if len(hits)>=60:break
+            md += [f'## {p.name}',f'Text: {len(s)} znaků','']+[f'- {h}' for h in hits]+['']
           (root/'records.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),encoding='utf-8')
-          (root/'findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
-          (root/'download.log').write_text('\n'.join(log)+'\n',encoding='utf-8')
-          md=['# Hloubkový průchod veřejných zdrojů SMR Tušimice','']
-          for f in findings:
-              md += [f"## {f['file']}",f"Text: {f['chars']} znaků",'']
-              if f['snippets']:
-                  md += [f'- {s}' for s in f['snippets']]
-              else:
-                  md.append('- Bez shody s nastavenými výrazy nebo bez strojově čitelného textu.')
-              md.append('')
           (root/'report.md').write_text('\n'.join(md),encoding='utf-8')
-          print(json.dumps({'downloads':len(records),'text_files':len(findings),'matched_files':sum(bool(x['snippets']) for x in findings)},ensure_ascii=False))
+          (root/'download.log').write_text('\n'.join(log),encoding='utf-8')
+          print(json.dumps({'downloads':len(records),'texts':len(list(text.glob("*.txt")))},ensure_ascii=False))
           PY
-
-      - name: Uložit artefakt
-        if: always()
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: smr-tusimice-deep-sources
-          path: |
-            ${{ runner.temp }}/smr-deep/download.log
-            ${{ runner.temp }}/smr-deep/records.json
-            ${{ runner.temp }}/smr-deep/findings.json
-            ${{ runner.temp }}/smr-deep/report.md
+          path: ${{ runner.temp }}/deep/
           retention-days: 30
-
-      - name: Zapsat výsledek do issue
-        if: always()
+      - if: always()
         uses: actions/github-script@v7
         env:
-          COLLECT: ${{ steps.collect.outcome }}
+          RESULT: ${{ steps.collect.outcome }}
         with:
           script: |
-            const fs=require('fs');
-            const base=process.env.RUNNER_TEMP+'/smr-deep';
-            const read=(p,n)=>{try{return fs.readFileSync(p,'utf8').slice(0,n)}catch{return ''}};
-            const report=read(base+'/report.md',52000);
-            const records=read(base+'/records.json',8000);
-            const log=read(base+'/download.log',5000);
-            const body=[
-              `- Commit: \`${context.sha}\``,
-              `- Sběr: **${process.env.COLLECT}**`,
-              '',report,'',
-              '## Stažené zdroje','```json',records,'```','',
-              '## Diagnostika','```text',log,'```','',
-              '_Úplný výstup je v artefaktu `smr-tusimice-deep-sources`._'
-            ].join('\n').slice(0,65000);
-            const issue=await github.rest.issues.create({
-              owner:context.repo.owner,repo:context.repo.repo,
-              title:`[SMR TUŠIMICE HLOUBKOVĚ] ${process.env.COLLECT==='success'?'Výsledek':'Částečný výsledek'} ${new Date().toISOString()}`,
-              body
-            });
-            if(process.env.COLLECT==='success') await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+            const fs=require('fs'), b=process.env.RUNNER_TEMP+'/deep/';
+            const read=(p,n)=>{try{return fs.readFileSync(b+p,'utf8').slice(0,n)}catch{return ''}};
+            const body=[`- Commit: \`${context.sha}\``,`- Výsledek: **${process.env.RESULT}**`,'',read('report.md',53000),'','## Zdroje','```json',read('records.json',7000),'```','','## Diagnostika','```text',read('download.log',3500),'```'].join('\n').slice(0,65000);
+            const x=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[SMR TUŠIMICE HLOUBKOVĚ] ${process.env.RESULT} ${new Date().toISOString()}`,body});
+            if(process.env.RESULT==='success')await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:x.data.number,state:'closed',state_reason:'completed'});
