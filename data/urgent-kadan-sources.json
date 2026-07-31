@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-31",
+  "bootstrapHours": 12,
+  "maxAlertAgeHours": 72,
+  "localTerms": [
+    "Kadaň",
+    "Kadaňsko",
+    "Prunéřov",
+    "Tušimice",
+    "Nechranice",
+    "Úhošť",
+    "Úhošťany",
+    "Pokutice",
+    "Bystřice u Kadaně",
+    "Mikulovice u Kadaně",
+    "Hradiště u Kadaně",
+    "Nemocnice Kadaň",
+    "Elektrárna Prunéřov",
+    "Elektrárna Tušimice"
+  ],
+  "incidentTerms": [
+    "požár",
+    "hoří",
+    "hořel",
+    "hořela",
+    "hasiči",
+    "nehoda",
+    "havárie",
+    "zranění",
+    "zraněn",
+    "zraněna",
+    "vrtulník",
+    "evakuace",
+    "evakuován",
+    "výbuch",
+    "kouř",
+    "pátrání",
+    "pohřešovan",
+    "policie",
+    "kriminalisté",
+    "uzavírka",
+    "uzavřena",
+    "neprůjezdná",
+    "výpadek",
+    "odstávka",
+    "bez elektřiny",
+    "bez vody",
+    "únik",
+    "nebezpečí",
+    "výstraha",
+    "zásah",
+    "mimořádná událost"
+  ],
+  "sources": [
+    {
+      "name": "HZS Ústeckého kraje – RSS",
+      "url": "https://hzscr.gov.cz/SCRIPT/rss.aspx?nid=16363",
+      "kind": "rss",
+      "tier": "emergency",
+      "category": "Hasiči a mimořádné události",
+      "alertAllLocal": true
+    },
+    {
+      "name": "HZS Ústeckého kraje – zpravodajství",
+      "url": "https://hzscr.gov.cz/hzs-usteckeho-kraje.aspx",
+      "kind": "html",
+      "tier": "emergency",
+      "category": "Hasiči a mimořádné události",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Policie Ústeckého kraje – RSS",
+      "url": "https://policie.gov.cz/SCRIPT/rss.aspx?nid=161",
+      "kind": "rss",
+      "tier": "police",
+      "category": "Policie a bezpečnost",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Policie Ústeckého kraje – zpravodajství",
+      "url": "https://policie.gov.cz/ustecky-kraj.aspx",
+      "kind": "html",
+      "tier": "police",
+      "category": "Policie a bezpečnost",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Chomutovský deník – regionální zprávy RSS",
+      "url": "https://chomutovsky.denik.cz/rss/zpravy_region.html",
+      "kind": "rss",
+      "tier": "regional_media",
+      "category": "Regionální média",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Chomutovský deník – titulní stránka",
+      "url": "https://chomutovsky.denik.cz/",
+      "kind": "html",
+      "tier": "regional_media",
+      "category": "Regionální média",
+      "alertAllLocal": true
+    },
+    {
+      "name": "e-Chomutovsko",
+      "url": "https://www.e-chomutovsko.cz/",
+      "kind": "html",
+      "tier": "regional_media",
+      "category": "Regionální média",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Chomutovky.cz",
+      "url": "https://www.chomutovky.cz/",
+      "kind": "html",
+      "tier": "regional_media",
+      "category": "Regionální média",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Ústecký kraj – aktuality",
+      "url": "https://www.kr-ustecky.cz/aktuality/",
+      "kind": "html",
+      "tier": "regional_authority",
+      "category": "Ústecký kraj",
+      "alertAllLocal": true
+    },
+    {
+      "name": "Google News – akutní události Kadaňska",
+      "url": "https://news.google.com/rss/search?q=(%22Kada%C5%88%22+OR+Prun%C3%A9%C5%99ov+OR+Tu%C5%A1imice+OR+Nechranice)+(po%C5%BE%C3%A1r+OR+nehoda+OR+hasi%C4%8Di+OR+policie+OR+v%C3%BDpadek+OR+uzav%C3%ADrka)+when%3A2d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Záložní agregátor",
+      "alertAllLocal": false
+    }
+  ]
+}
