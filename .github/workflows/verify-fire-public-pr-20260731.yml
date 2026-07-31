@@ -1,0 +1,93 @@
+name: Veřejně ověřit požární článek po nasazení
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/fire-public-verify-trigger.txt'
+      - '.github/workflows/verify-fire-public-pr-20260731.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fire-public-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ověřit živý web přes HTTPS bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug='nebezpeci-pozaru-ustecky-kraj-kadan-2026'
+          fire_path="/clanky/${slug}.html"
+          pool_path='/clanky/koupaliste-kadan-pozemky-skluzavka-provoz-2026.html'
+          title='Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna'
+
+          for attempt in $(seq 1 48); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+            rm -f /tmp/fire-article /tmp/fire-home /tmp/fire-archive /tmp/fire-rss /tmp/fire-sitemap /tmp/fire-news /tmp/fire-health /tmp/fire-image
+
+            article_ok=no; home_ok=no; archive_ok=no; rss_ok=no; sitemap_ok=no; news_ok=no; health_ok=no; image_ok=no
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz${fire_path}?v=${stamp}" -o /tmp/fire-article && article_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}" -o /tmp/fire-home && home_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}" -o /tmp/fire-archive && archive_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}" -o /tmp/fire-rss && rss_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}" -o /tmp/fire-sitemap && sitemap_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}" -o /tmp/fire-news && news_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=${stamp}" -o /tmp/fire-health && health_ok=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/social/${slug}.png?v=${stamp}" -o /tmp/fire-image && image_ok=yes || true
+
+            if [[ "$article_ok" == yes ]] && grep -Fq "<h1>${title}</h1>" /tmp/fire-article \
+              && [[ "$home_ok" == yes ]] \
+              && python3 - /tmp/fire-home "$fire_path" "$pool_path" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          fire=text.find(sys.argv[2]); pool=text.find(sys.argv[3])
+          raise SystemExit(0 if fire >= 0 and pool >= 0 and fire < pool else 1)
+          PY
+            then
+              home_order=yes
+            else
+              home_order=no
+            fi
+
+            if [[ "$archive_ok" == yes ]] && grep -Fq "$fire_path" /tmp/fire-archive; then archive_has=yes; else archive_has=no; fi
+            if [[ "$rss_ok" == yes ]] && grep -Fq "https://nasekadan.cz${fire_path}" /tmp/fire-rss; then rss_has=yes; else rss_has=no; fi
+            if [[ "$sitemap_ok" == yes ]] && grep -Fq "https://nasekadan.cz${fire_path}" /tmp/fire-sitemap; then sitemap_has=yes; else sitemap_has=no; fi
+            if [[ "$news_ok" == yes ]] && grep -Fq "https://nasekadan.cz${fire_path}" /tmp/fire-news; then news_has=yes; else news_has=no; fi
+            if [[ "$health_ok" == yes ]] && grep -Fq "source=${main_sha}" /tmp/fire-health; then health_matches=yes; else health_matches=no; fi
+            if [[ "$image_ok" == yes ]] && python3 - /tmp/fire-image <<'PY'
+          import struct, sys
+          from pathlib import Path
+          data=Path(sys.argv[1]).read_bytes()
+          ok=(data.startswith(b'\x89PNG\r\n\x1a\n') and len(data)>10000 and struct.unpack('>II',data[16:24])==(1200,630))
+          raise SystemExit(0 if ok else 1)
+          PY
+            then image_valid=yes; else image_valid=no; fi
+
+            echo "attempt=$attempt main=$main_sha article=$article_ok home_order=$home_order archive=$archive_has rss=$rss_has sitemap=$sitemap_has news=$news_has health=$health_matches image=$image_valid"
+
+            if [[ "$article_ok" == yes && "$home_order" == yes && "$archive_has" == yes \
+              && "$rss_has" == yes && "$sitemap_has" == yes && "$news_has" == yes \
+              && "$health_matches" == yes && "$image_valid" == yes ]]; then
+              echo "HOTOVO: veřejný web podává požární článek jako nejnovější, koupaliště jako druhé a source=${main_sha}."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo 'Veřejné ověření v časovém limitu neprošlo.' >&2
+          echo 'Poslední deployment-health:' >&2
+          cat /tmp/fire-health >&2 2>/dev/null || true
+          exit 1
