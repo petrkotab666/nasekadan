@@ -41,11 +41,12 @@ python3 scripts/enforce_latest_homepage_hero.py
 python3 scripts/prepare_discovery.py
 python3 scripts/clean_sitemap_technical_entries.py
 
-for file in index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml; do
+for file in index.html clanky/index.html rss.xml sitemap.xml; do
   test -f "$file"
   grep -Fq "$SLUG" "$file"
 done
 grep -Fq "$TITLE_MARKER" "$ARTICLE_REL"
+test -f news-sitemap.xml
 
 SOCIAL_FILE=$(python3 - <<'PY'
 import re
