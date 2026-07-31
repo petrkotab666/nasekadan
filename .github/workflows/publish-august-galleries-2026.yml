@@ -145,7 +145,7 @@ jobs:
           grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' clanky/index.html
           grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' rss.xml
           grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' sitemap.xml
-          timeout 30m env NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
+          timeout 30m sudo env NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
           REMOTE
 
       - name: Ověřit živou doménu bez cache
