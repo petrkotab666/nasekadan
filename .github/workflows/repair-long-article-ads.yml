@@ -1,0 +1,123 @@
+name: Opravit reklamy v dlouhých článcích
+run-name: Průběžné bannery podle délky článku
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/repair_long_article_ad_distribution.py'
+      - '.github/workflows/repair-long-article-ads.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-long-article-ads
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit motor a vytvořit audit
+        run: |
+          set -euo pipefail
+          python3 scripts/repair_long_article_ad_distribution.py
+          node --check reklamy.js
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('reports/article-ad-distribution-audit.json').read_text())
+          assert report['articleCount'] > 10
+          assert report['longArticles'] > 0
+          assert '20260731-long-articles-1' == report['version']
+          print('Nejdelší články:')
+          for row in report['articles'][:12]:
+              print(row['path'], row['textCharacters'], row['expectedAutomaticSlots'], row['hasSourceList'])
+          PY
+
+      - name: Uložit opravu do main
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reklamy.js reports/article-ad-distribution-audit.json -- '*.html'
+          if ! git diff --cached --quiet; then
+            git commit -m 'Rozmístit reklamy průběžně v dlouhých článcích'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nasadit opravený reklamní motor na OVH
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          node --check reklamy.js
+          sudo install -m 0644 reklamy.js /var/www/nasekadan/reklamy.js
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('/var/www/nasekadan')
+          excluded={'.git','.github','nahled','sdilet'}
+          changed=0
+          for path in root.rglob('*.html'):
+              rel=path.relative_to(root)
+              if any(part in excluded for part in rel.parts): continue
+              try: raw=path.read_text(encoding='utf-8')
+              except UnicodeDecodeError: continue
+              text=re.sub(r'reklamy\.js(?:\?v=[^"\']*)?', 'reklamy.js?v=20260731-long-articles-1', raw)
+              if text!=raw:
+                  path.write_text(text,encoding='utf-8')
+                  changed+=1
+          print('Aktualizováno HTML:',changed)
+          PY
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo nginx -t
+          sudo systemctl reload nginx
+          REMOTE
+
+      - name: Ověřit živý web
+        run: |
+          set -euo pipefail
+          token="${GITHUB_SHA}-$(date +%s)"
+          for attempt in $(seq 1 30); do
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?ad-audit=$token-$attempt" -o /tmp/article.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/reklamy.js?ad-audit=$token-$attempt" -o /tmp/reklamy.js || true
+            if grep -Fq 'reklamy.js?v=20260731-long-articles-1' /tmp/article.html \
+              && grep -Fq 'textLength>=26000' /tmp/reklamy.js \
+              && grep -Fq 'explicitEnd||children[children.length-1]' /tmp/reklamy.js; then
+              echo 'Živý web používá opravené průběžné reklamy.'
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'Živá kontrola neprošla.' >&2
+          exit 1
