@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "updatedAt": "2026-07-31T23:46:00+02:00",
+  "scope": {
+    "name": "Správní obvod ORP Kadaň a bezprostředně související region",
+    "municipalities": [
+      "Domašín",
+      "Chbany",
+      "Kadaň",
+      "Klášterec nad Ohří",
+      "Kovářská",
+      "Libědice",
+      "Mašťov",
+      "Měděnec",
+      "Okounov",
+      "Perštejn",
+      "Pětipsy",
+      "Kryštofovy Hamry",
+      "Radonice",
+      "Rokle",
+      "Vejprty",
+      "Veliká Ves",
+      "Vilémov",
+      "Loučná pod Klínovcem",
+      "Račetice"
+    ]
+  },
+  "sources": [
+    {
+      "name": "Město Kadaň – úřední deska",
+      "url": "https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html",
+      "kind": "html",
+      "tier": "municipality",
+      "category": "Úřední deska a rozhodnutí"
+    },
+    {
+      "name": "Město Kadaň – příspěvkové organizace a společnosti",
+      "url": "https://www.mesto-kadan.cz/cs/system/hlavni-menu-mesto/prispevkova-organizace-a-obchodni-spolecnosti-mesta.html",
+      "kind": "html",
+      "tier": "directory",
+      "category": "Registr městských organizací"
+    },
+    {
+      "name": "Vzdělávání na Kadaňsku – seznam subjektů",
+      "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
+      "kind": "html",
+      "tier": "directory",
+      "category": "Registr škol a školských zařízení"
+    },
+    {
+      "name": "Obec Březno – aktuality, dokumenty a zastupitelstvo",
+      "url": "https://www.obecbrezno.cz/",
+      "kind": "html",
+      "tier": "municipality",
+      "category": "Okolní obce"
+    },
+    {
+      "name": "Klášterec nad Ohří – městský web",
+      "url": "https://www.klasterec.cz/",
+      "kind": "html",
+      "tier": "municipality",
+      "category": "Okolní města"
+    },
+    {
+      "name": "Chomutov – městský web",
+      "url": "https://www.mesto-chomutov.cz/",
+      "kind": "html",
+      "tier": "municipality",
+      "category": "Okolní města"
+    },
+    {
+      "name": "Google News – Kadaň a Klášterec",
+      "url": "https://news.google.com/rss/search?q=(%22Kada%C5%88%22+OR+%22Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22)+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Média – Kadaň a Klášterec"
+    },
+    {
+      "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
+      "url": "https://news.google.com/rss/search?q=(Doma%C5%A1%C3%ADn+OR+Chbany+OR+Lib%C4%9Bdice+OR+Ma%C5%A1%C5%A5ov+OR+Ra%C4%8Detice)+(Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Média – jižní část Kadaňska"
+    },
+    {
+      "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
+      "url": "https://news.google.com/rss/search?q=(Kov%C3%A1%C5%99sk%C3%A1+OR+M%C4%9Bd%C4%9Bnec+OR+Okounov+OR+Per%C5%A1tejn+OR+%22Kry%C5%A1tofovy+Hamry%22)+(%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Média – Krušné hory a Ohře"
+    },
+    {
+      "name": "Google News – Pětipsy, Radonice, Rokle, Veliká Ves a Vilémov",
+      "url": "https://news.google.com/rss/search?q=(P%C4%9Btipsy+OR+Radonice+OR+Rokle+OR+%22Velik%C3%A1+Ves%22+OR+Vil%C3%A9mov)+(Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Média – východní část Kadaňska"
+    },
+    {
+      "name": "Google News – Vejprty a Loučná pod Klínovcem",
+      "url": "https://news.google.com/rss/search?q=(Vejprty+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22)+(%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Média – horská část Kadaňska"
+    },
+    {
+      "name": "Google News – kadaňské organizace a služby",
+      "url": "https://news.google.com/rss/search?q=(%22Nemocnice+Kada%C5%88%22+OR+%22Technick%C3%A9+slu%C5%BEby+Kada%C5%88%22+OR+%22Kultura+Kada%C5%88%22+OR+%22M%C4%9Bstsk%C3%A1+policie+Kada%C5%88%22+OR+%22Sportovn%C3%AD+za%C5%99%C3%ADzen%C3%AD+Kada%C5%88%22)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "kind": "rss",
+      "tier": "aggregator",
+      "category": "Média – organizace a služby"
+    }
+  ]
+}
