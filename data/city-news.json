@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30T19:51:42.158857+00:00",
+  "generatedAt": "2026-07-31T03:49:45.235933+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (0)",
@@ -8,9 +8,9 @@
     "Kultura Kadaň (15)",
     "Liďák Kadaň – kulturní program (0)",
     "Kino Hvězda (0)",
-    "Městská knihovna (12)",
-    "Turistický portál Kadaň (15)",
-    "Městské muzeum v Kadani (15)",
+    "Městská knihovna (0)",
+    "Turistický portál Kadaň (0)",
+    "Městské muzeum v Kadani (0)",
     "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
@@ -72,10 +72,10 @@
     "Chomutovský deník (15)",
     "Úřad práce ČR – kontaktní pracoviště Kadaň (7)",
     "Kultura Kadaň (15)",
-    "Turistické informační centrum Kadaň (15)",
-    "Galerie Josefa Lieslera (11)",
-    "Františkánský klášter Kadaň (15)",
-    "Kadaňský hrad (12)",
+    "Turistické informační centrum Kadaň (0)",
+    "Galerie Josefa Lieslera (0)",
+    "Františkánský klášter Kadaň (0)",
+    "Kadaňský hrad (0)",
     "Vzdělávání na Kadaňsku (15)",
     "Nemocnice Kadaň (15)",
     "Městská správa sociálních služeb Kadaň (15)",
@@ -95,6 +95,9 @@
   "errors": [
     "Městský GIS Kadaň: URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>",
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
+    "Městská knihovna: URLError: <urlopen error timed out>",
+    "Turistický portál Kadaň: URLError: <urlopen error timed out>",
+    "Městské muzeum v Kadani: URLError: <urlopen error timed out>",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
@@ -103,6 +106,10 @@
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
+    "Turistické informační centrum Kadaň: URLError: <urlopen error timed out>",
+    "Galerie Josefa Lieslera: URLError: <urlopen error timed out>",
+    "Františkánský klášter Kadaň: URLError: <urlopen error timed out>",
+    "Kadaňský hrad: URLError: <urlopen error timed out>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Římskokatolická farnost Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
   ],
@@ -170,24 +177,27 @@
       "url": "https://www.knihovnakadan.cz/",
       "category": "Knihovna",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 12
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Turistický portál Kadaň",
       "url": "https://kadan.eu/",
       "category": "Turistika",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Městské muzeum v Kadani",
       "url": "https://kadan.eu/informace/mestske-muzeum/",
       "category": "Muzeum a památky",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Městské muzeum v Kadani – veřejný Facebook",
@@ -690,32 +700,36 @@
       "url": "https://kadan.eu/informace/tic/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Galerie Josefa Lieslera",
       "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 11
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Františkánský klášter Kadaň",
       "url": "https://kadan.eu/pamatky/frantiskansky-klaster/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Kadaňský hrad",
       "url": "https://kadan.eu/pamatky/kadansky-hrad/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 12
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Vzdělávání na Kadaňsku",
@@ -939,7 +953,7 @@
       "title": "Všechny akce",
       "date": "2026-07-30",
       "category": "Kultura",
-      "description": "30&show=30.7.2026\" class=\"den_vkalendari aktualni_den vybrany_den\">30 31 od dnes dnes zítra tento víkend tento týden příští týden tento měsíc příští měsíc Rozšířené vyhledávání <li id=\"id_li_akce_ad",
+      "description": "esic=7&den=30&show=30.7.2026\" class=\"den_vkalendari \">30 31 od dnes dnes zítra tento víkend tento týden příští týden tento měsíc příští měsíc Rozšířené vyhledávání <li id=\"id_li_akce_ad",
       "source": "https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&",
       "sourceName": "Kultura Kadaň"
     },
@@ -1142,12 +1156,12 @@
       "sourceName": "Město Most – kalendář akcí"
     },
     {
-      "id": "3c6874513778",
+      "id": "9a765cf499de",
       "title": "Srpen 2026 >>",
       "date": "2026-06-30",
       "category": "Regionální kultura – Most",
       "description": "f=\"/vismo/kalendar-akci.asp?kdy=-1&kaNM=1&id_org=9959&kaDateO=30.6.2026&datum_od=01.06.2026&datum_do=30.06.2026#kaListing\" title=\"Předchozí měsíc\" class=\"c-before-month\"> << Červen 2026 Červenec 2026  týden Po Út St Čt Pá So Ne 26. týden 29 počet akcí 9 30 počet akcí",
-      "source": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?kdy=-1&amp;kaNM=1&amp;id_org=9959&amp;kaDateO=30.8.2026&amp;datum_od=01.08.2026&amp;datum_do=31.08.2026#kaListing",
+      "source": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?kdy=-1&amp;kaNM=1&amp;id_org=9959&amp;kaDateO=31.8.2026&amp;datum_od=01.08.2026&amp;datum_do=31.08.2026#kaListing",
       "sourceName": "Město Most – kalendář akcí"
     },
     {
@@ -1722,7 +1736,7 @@
       "title": "Řidiče v Chomutově čekají v následujících týdnech komplikace. Na frekventovaných místech ve městě začaly práce na modernizaci trakčního vedení, které omezí dopravu.",
       "date": "",
       "category": "Regionální média",
-      "description": "https://www.denik.cz/cesko/vetsina-lidi-mysli-na-rodinu-uz-pri-seznamovani-vysledky-ankety-prekvapily/\" class=\"js-article-card-related text-inky text-base-ui sm:text-lg-ui\" data-id=\"4547937\" > Většina lidí myslí na rodinu už při seznamování. Výsledky ankety překvapily <div class=\"flex flex-col items",
+      "description": "lex items-center\" >• Deník pro dobrou náladu • gallery 20 <div class=\"flex flex-col items",
       "source": "https://chomutovsky.denik.cz/zpravy-region/ridice-v-chomutove-cekaji-omezeni-duvodem-je-modernizace-trakcniho-vedeni/",
       "sourceName": "Chomutovský deník"
     },
@@ -1731,7 +1745,7 @@
       "title": "Řidiče v Chomutově čekají omezení. Důvodem je modernizace trakčního vedení",
       "date": "",
       "category": "Regionální média",
-      "description": "https://www.denik.cz/cesko/vetsina-lidi-mysli-na-rodinu-uz-pri-seznamovani-vysledky-ankety-prekvapily/\" class=\"js-article-card-related text-inky text-base-ui sm:text-lg-ui\" data-id=\"4547937\" > Většina lidí myslí na rodinu už při seznamování. Výsledky ankety překvapily <div class=\"flex flex-col items",
+      "description": "lex items-center\" >• Deník pro dobrou náladu • gallery 20 <div class=\"flex flex-col items",
       "source": "https://chomutovsky.denik.cz/zpravy-region/ridice-v-chomutove-cekaji-omezeni-duvodem-je-modernizace-trakcniho-vedeni/",
       "sourceName": "Chomutovský deník"
     },
