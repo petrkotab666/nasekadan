@@ -1,0 +1,95 @@
+name: Přímo nasadit reklamy do dlouhých článků
+run-name: Více bannerů v dlouhých textech
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'long-article-ads.js'
+      - '.github/workflows/deploy-long-article-ads-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Ověřit skript
+        run: node --check long-article-ads.js
+
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Přenést skript
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new long-article-ads.js ubuntu@57.129.43.215:/tmp/long-article-ads.js
+
+      - name: Nasadit a vložit do všech článků
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/long-article-ads.js /var/www/nasekadan/long-article-ads.js
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root=Path('/var/www/nasekadan')
+          changed=0
+          tag='<script src="/long-article-ads.js?v=20260731-long-articles-2"></script>'
+          pattern=re.compile(r'\s*<script\b[^>]*src=["\']/long-article-ads\.js(?:\?[^"\']*)?["\'][^>]*></script>\s*',re.I)
+          for path in (root/'clanky').glob('*.html'):
+              if path.name=='index.html': continue
+              raw=path.read_text(encoding='utf-8')
+              if 'article-shell' not in raw: continue
+              text=pattern.sub('\n',raw)
+              text=re.sub(r'</body\s*>',tag+'\n</body>',text,count=1,flags=re.I)
+              if text!=raw:
+                  path.write_text(text,encoding='utf-8')
+                  changed+=1
+          print('Článků s novým rozmístěním reklam:',changed)
+          if changed < 10:
+              raise SystemExit('Bylo upraveno podezřele málo článků.')
+          PY
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo nginx -t
+          sudo systemctl reload nginx
+          REMOTE
+
+      - name: Veřejná kontrola
+        run: |
+          set -euo pipefail
+          token="${GITHUB_SHA}-$(date +%s)"
+          for attempt in $(seq 1 30); do
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html?longads=$token-$attempt" -o /tmp/article.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/long-article-ads.js?longads=$token-$attempt" -o /tmp/longads.js || true
+            if grep -Fq 'long-article-ads.js?v=20260731-long-articles-2' /tmp/article.html \
+              && grep -Fq 'chars>=26000' /tmp/longads.js \
+              && grep -Fq 'article.dataset.longArticleAds' /tmp/longads.js; then
+              echo 'Průběžné reklamy v dlouhých článcích jsou nasazené.'
+              exit 0
+            fi
+            sleep 8
+          done
+          exit 1
