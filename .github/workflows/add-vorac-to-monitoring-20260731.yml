@@ -1,5 +1,5 @@
 # dočasné nouzové využití ověřeného OVH kanálu
-# spuštění opraveného přímého přenosu: 2026-07-31 18:33 Europe/Prague
+# finální paralelní spuštění s kopírováním do Dockeru: 2026-07-31 18:43 Europe/Prague
 name: Okamžitě nasadit srpnový program galerií
 
 on:
@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: nasekadan-august-galleries-emergency
+  group: nasekadan-august-galleries-final-20260731
   cancel-in-progress: false
 
 jobs:
