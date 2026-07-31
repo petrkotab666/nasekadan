@@ -1,0 +1,269 @@
+name: Vytěžit zbytek internetu k lávce v15
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-lavka-internet-v15-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml pypdf playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Vytěžit městský web, filemanager, archivy a zakázkové portály
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/lavka-internet-v15
+          mkdir -p .github/research/lavka-internet-v15/{raw,pdf,text,json}
+          cat > /tmp/lavka_v15.py <<'PY'
+          import concurrent.futures, hashlib, json, os, re, subprocess, time
+          from pathlib import Path
+          from urllib.parse import urljoin, urlparse
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('.github/research/lavka-internet-v15')
+          RAW=OUT/'raw'; PDF=OUT/'pdf'; TXT=OUT/'text'; JS=OUT/'json'
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadanInvestigace/1.0; +https://nasekadan.cz)'})
+          keywords=['lávka','lavka','shell','svatý kopeček','svaty kopecek','silnice group','00066/ov/2025','252018','15.7.2026','15. 7. 2026','penále','smluvní pokuta','předávací protokol','kolaud','mikropilot','zádržné','bankovní záruka']
+
+          def get(url, timeout=40, **kw):
+              last=None
+              for i in range(4):
+                  try:
+                      r=S.get(url,timeout=timeout,allow_redirects=True,**kw)
+                      return r
+                  except Exception as e:
+                      last=e; time.sleep(1.5+i)
+              raise last
+
+          def norm(s): return re.sub(r'\s+',' ',s or '').strip()
+          def slug(s):
+              s=re.sub(r'[^A-Za-z0-9._-]+','-',s)[:130].strip('-')
+              return s or hashlib.sha1(s.encode()).hexdigest()[:12]
+          def extract_text_pdf(path):
+              out=TXT/(path.name+'.txt')
+              subprocess.run(['pdftotext','-layout',str(path),str(out)],check=False)
+              txt=out.read_text(errors='ignore') if out.exists() else ''
+              if len(txt.strip())<250:
+                  od=OUT/'ocr'/path.stem; od.mkdir(parents=True,exist_ok=True)
+                  subprocess.run(['pdftoppm','-f','1','-l','3','-r','200','-png',str(path),str(od/'p')],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                  parts=[]
+                  for img in sorted(od.glob('p-*.png')):
+                      base=img.with_suffix('')
+                      subprocess.run(['tesseract',str(img),str(base),'-l','ces+eng','--psm','6'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                      tp=base.with_suffix('.txt')
+                      if tp.exists(): parts.append(tp.read_text(errors='ignore'))
+                  if parts:
+                      txt += '\n\n===== OCR =====\n'+'\n'.join(parts)
+                      out.write_text(txt,encoding='utf-8')
+              return txt
+
+          pages=[
+            'https://www.mesto-kadan.cz/cs/mesto/rada-mesta/usneseni-rady-mesta-1.html',
+            'https://www.mesto-kadan.cz/cs/mesto/rada-mesta/terminy-schuze-rady.html',
+            'https://www.mesto-kadan.cz/cs/mesto/zastupitelstvo-mesta/zapisy-zastupitelstva-mesta.html',
+            'https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html',
+            'https://www.mesto-kadan.cz/cs/mesto/hospodareni-mesta/rozpocet-mesta.html',
+            'https://www.mesto-kadan.cz/cs/mesto/hospodareni-mesta/ucetni-zaverka-mesta.html',
+            'https://www.mesto-kadan.cz/cs/mestsky-urad/zadosti-o-poskytnuti-informaci-dle-zakona-c-106-1999-sb/',
+            'https://www.mesto-kadan.cz/rss.xml',
+            'https://www.mesto-kadan.cz/sitemap.xml',
+          ]
+          discovered=set(); page_report=[]; claim_urls=[]
+          for u in pages:
+              try:
+                  r=get(u); body=r.content
+                  fn=RAW/(slug(urlparse(r.url).path or 'home')+'.html')
+                  fn.write_bytes(body)
+                  soup=BeautifulSoup(body,'lxml')
+                  text=norm(soup.get_text(' '))
+                  links=[]
+                  for a in soup.select('a[href]'):
+                      v=urljoin(r.url,a['href']); links.append(v); discovered.add(v)
+                      if 'detail_claim=' in v: claim_urls.append(v)
+                  page_report.append({'url':u,'final':r.url,'status':r.status_code,'chars':len(text),'hits':[k for k in keywords if k.lower() in text.lower()],'links':links})
+              except Exception as e: page_report.append({'url':u,'error':repr(e)})
+
+          # Rozbalit skryté detail_claim stránky z úřední desky a stáhnout jejich přílohy.
+          claim_report=[]
+          for u in list(dict.fromkeys(claim_urls)):
+              try:
+                  r=get(u); soup=BeautifulSoup(r.content,'lxml'); text=norm(soup.get_text(' ')); links=[]
+                  for a in soup.select('a[href]'):
+                      v=urljoin(r.url,a['href']); links.append(v); discovered.add(v)
+                  claim_report.append({'url':u,'final':r.url,'status':r.status_code,'title':norm(soup.title.get_text()) if soup.title else '', 'hits':[k for k in keywords if k.lower() in text.lower()],'links':links,'text':text[:20000]})
+              except Exception as e: claim_report.append({'url':u,'error':repr(e)})
+
+          # Stáhnout všechny objevené PDF z relevantních městských stránek.
+          attachments=[]
+          for u in sorted(discovered):
+              if 'mesto-kadan.cz' not in urlparse(u).netloc: continue
+              if not (u.lower().endswith('.pdf') or 'filemanager/files' in u or 'file.php?file=' in u): continue
+              try:
+                  r=get(u,timeout=80)
+                  ct=r.headers.get('content-type','').lower()
+                  if r.status_code==200 and (r.content[:4]==b'%PDF' or 'pdf' in ct):
+                      name=slug(urlparse(r.url).path.rsplit('/',1)[-1] or hashlib.sha1(u.encode()).hexdigest())+'.pdf'
+                      p=PDF/name; p.write_bytes(r.content); txt=extract_text_pdf(p)
+                      attachments.append({'url':u,'final':r.url,'file':str(p),'bytes':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest(),'hits':[k for k in keywords if k.lower() in txt.lower()]})
+              except Exception as e: attachments.append({'url':u,'error':repr(e)})
+
+          # Zjistit nejvyšší aktuální filemanager ID a šetrně prověřit úzké pásmo nad ním.
+          ids=[]
+          for u in discovered:
+              m=re.search(r'/filemanager/files/(?:file\.php\?file=)?(\d+)',u)
+              if m: ids.append(int(m.group(1)))
+          max_id=max(ids) if ids else 5105200
+          scan_start=max(5105201,max_id-50); scan_end=max_id+1400
+          def probe_id(i):
+              url=f'https://www.mesto-kadan.cz/filemanager/files/{i}.pdf'
+              try:
+                  r=S.get(url,timeout=12,allow_redirects=True,headers={'Range':'bytes=0-4095'})
+                  if r.status_code in (200,206) and (r.content.startswith(b'%PDF') or 'pdf' in r.headers.get('content-type','').lower()):
+                      return i,url,int(r.headers.get('content-length') or len(r.content))
+              except Exception: pass
+              return None
+          found_ids=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+              for res in ex.map(probe_id, range(scan_start,scan_end+1)):
+                  if res: found_ids.append(res)
+          scanned=[]
+          for i,u,_ in found_ids:
+              try:
+                  r=get(u,timeout=80)
+                  p=PDF/f'filemanager-{i}.pdf'; p.write_bytes(r.content); txt=extract_text_pdf(p)
+                  low=txt.lower(); hits=[k for k in keywords if k.lower() in low]
+                  # Uložit v reportu všechny, ale PDF ponechat jen pokud obsahuje relevantní termín/klíčové slovo nebo je výpis rady z konce července.
+                  relevant=bool(hits or ('29.7.2026' in low) or ('29. 7. 2026' in low) or ('výpis usnesení' in low and '2026' in low))
+                  scanned.append({'id':i,'url':u,'bytes':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest(),'hits':hits,'relevant':relevant,'preview':norm(txt)[:2500]})
+                  if not relevant:
+                      p.unlink(missing_ok=True); (TXT/(p.name+'.txt')).unlink(missing_ok=True)
+              except Exception as e: scanned.append({'id':i,'url':u,'error':repr(e)})
+
+          # Wayback CDX pro profily, zakázkové ID a městské stránky.
+          archive_queries=[
+            'tenderarena.cz/profil/MestoKadan*',
+            'www.tenderarena.cz/profil/MestoKadan*',
+            '*217c4d5e-db8d-4603-83a4-550bd55fc02d*',
+            '*Z2025-049246*',
+            'mesto-kadan.cz/*lavk*',
+            'noviny-kadan.cz/*lavk*'
+          ]
+          archives=[]
+          for q in archive_queries:
+              try:
+                  u='https://web.archive.org/cdx/search/cdx'
+                  r=get(u,params={'url':q,'output':'json','filter':'statuscode:200','fl':'timestamp,original,mimetype,statuscode,digest,length','collapse':'digest','from':'2023','to':'2026'},timeout=90)
+                  archives.append({'query':q,'status':r.status_code,'data':r.json() if r.text.lstrip().startswith('[') else r.text[:3000]})
+              except Exception as e: archives.append({'query':q,'error':repr(e)})
+
+          (JS/'static.json').write_text(json.dumps({'pages':page_report,'claims':claim_report,'attachments':attachments,'max_file_id':max_id,'scan_range':[scan_start,scan_end],'scanned':scanned,'archives':archives},ensure_ascii=False,indent=2),encoding='utf-8')
+          PY
+          python3 /tmp/lavka_v15.py
+
+          cat > /tmp/browser_v15.py <<'PY'
+          import asyncio,json,re
+          from pathlib import Path
+          from playwright.async_api import async_playwright
+          OUT=Path('.github/research/lavka-internet-v15/json')
+          needles=['lávka','lavka','svatý kopeček','svaty kopecek','217c4d5e-db8d-4603-83a4-550bd55fc02d','z2025-049246','00261912']
+          async def inspect(url,name):
+              captures=[]; errors=[]
+              async with async_playwright() as p:
+                  browser=await p.chromium.launch(headless=True,args=['--disable-blink-features=AutomationControlled'])
+                  ctx=await browser.new_context(locale='cs-CZ',user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/125 Safari/537.36')
+                  page=await ctx.new_page()
+                  async def on_response(resp):
+                      try:
+                          ct=(await resp.header_value('content-type') or '').lower()
+                          if any(x in ct for x in ['json','text','javascript']) or any(x in resp.url.lower() for x in ['api','graphql','search','procurement','tender','zakaz']):
+                              body=await resp.text()
+                              low=body.lower()
+                              if any(n in low for n in needles) or any(x in resp.url.lower() for x in ['api','graphql','procurement','tender','zakaz']):
+                                  captures.append({'url':resp.url,'status':resp.status,'content_type':ct,'body':body[:500000]})
+                      except Exception as e: pass
+                  page.on('response',on_response)
+                  try:
+                      await page.goto(url,wait_until='domcontentloaded',timeout=90000)
+                      await page.wait_for_timeout(12000)
+                      # Vyzkoušet veřejné vyhledávací vstupy.
+                      for inp in await page.locator('input').all():
+                          try:
+                              if await inp.is_visible():
+                                  await inp.fill('Lávka přes silnici č. 568')
+                                  await inp.press('Enter')
+                                  await page.wait_for_timeout(8000)
+                                  break
+                          except Exception: pass
+                      captures.append({'page_url':page.url,'title':await page.title(),'text':(await page.locator('body').inner_text())[:100000]})
+                  except Exception as e: errors.append(repr(e))
+                  await browser.close()
+              (OUT/f'{name}.json').write_text(json.dumps({'captures':captures,'errors':errors},ensure_ascii=False,indent=2),encoding='utf-8')
+          async def main():
+              await inspect('https://tenderarena.cz/profil/MestoKadan','tenderarena')
+              await inspect('https://zakazky.gov.cz/verejne-zakazky','zakazky-gov')
+          asyncio.run(main())
+          PY
+          python3 /tmp/browser_v15.py || true
+
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          R=Path('.github/research/lavka-internet-v15')
+          st=json.loads((R/'json/static.json').read_text())
+          md=['# Vytěžení zbytku internetu k lávce v15','',f"Rozsah filemanageru: {st['scan_range'][0]}–{st['scan_range'][1]}",f"Nalezené PDF ID v pásmu: {len(st['scanned'])}",'']
+          md.append('## Relevantní nově prozkoumané filemanager PDF')
+          for x in st['scanned']:
+              if x.get('relevant'):
+                  md.append(f"- {x['id']} — {x.get('hits',[])} — {x.get('preview','')[:1200]}")
+          md.append('\n## Nálezy v přílohách městských stránek')
+          for x in st['attachments']:
+              if x.get('hits'): md.append(f"- {x.get('url')} — {x.get('hits')} — {x.get('sha256')}")
+          md.append('\n## Archivní záznamy')
+          for x in st['archives']:
+              data=x.get('data'); count=len(data)-1 if isinstance(data,list) and data else 0
+              md.append(f"- {x['query']}: {count} unikátních záznamů")
+          for name in ['tenderarena','zakazky-gov']:
+              p=R/f'json/{name}.json'
+              if p.exists():
+                  d=json.loads(p.read_text());md.append(f"\n## {name}: {len(d.get('captures',[]))} zachycených odpovědí")
+                  for c in d.get('captures',[])[:80]:
+                      if 'url' in c: md.append(f"- {c['status']} {c['url']} — {c.get('body','')[:800].replace(chr(10),' ')}")
+                      else: md.append(f"- stránka {c.get('page_url')} — {c.get('text','')[:1800].replace(chr(10),' ')}")
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-internet-v15
+          git commit -m 'Vytěžit zbytek internetu k lávce v15' || true
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 4
+          done
+          exit 1
