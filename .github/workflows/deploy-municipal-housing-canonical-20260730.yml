@@ -1,20 +1,17 @@
-name: Kanonicky nasadit článek o městských bytech
+name: Kanonicky nasadit článek MVE Hradiště
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/deploy-municipal-housing-canonical-20260730.yml'
-      - 'scripts/enforce_latest_homepage_hero.py'
-      - 'scripts/ensure_recent_rss_entries.py'
-      - 'scripts/prepare_kos_sharp_images.py'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: nasekadan-canonical-production-fallback-housing
+  group: nasekadan-canonical-production-mve-hradiste
   cancel-in-progress: true
 
 jobs:
@@ -24,8 +21,9 @@ jobs:
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       SERVER: 57.129.43.215
-      ARTICLE_SLUG: mestske-byty-kadan-nabidka-srpen-2026.html
-      ARTICLE_H1: Město Kadaň nabízí šest bytů. Žádat mohou mladí, domácnosti v nouzi, samoživitelé i senioři
+      ARTICLE_SLUG: mve-hradiste-nova-vodni-elektrarna-2026.html
+      ARTICLE_H1: U Hradiště má vzniknout nová malá vodní elektrárna. Vodu přivede potrubí dlouhé 520 metrů
+      SOCIAL_IMAGE: mve-hradiste-nova-vodni-elektrarna-2026.png
     steps:
       - name: Načíst aktuální main
         uses: actions/checkout@v4
@@ -70,7 +68,7 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
-          env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
           REMOTE
 
       - name: Zjistit přesný nasazený source commit
@@ -95,19 +93,34 @@ jobs:
           test -n "$SOURCE_SHA"
           for attempt in $(seq 1 30); do
             key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${attempt}"
-            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/$ARTICLE_SLUG?housing=$key" || true)"
-            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?housing=$key" || true)"
-            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?housing=$key" || true)"
-            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?housing=$key" || true)"
-            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?housing=$key" || true)"
-            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?housing=$key" || true)"
-            if grep -Fq "$ARTICLE_H1" <<<"$article" \
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/$ARTICLE_SLUG?mve=$key" || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?mve=$key" || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?mve=$key" || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?mve=$key" || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?mve=$key" || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?mve=$key" || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?mve=$key" || true)"
+            image_file="$RUNNER_TEMP/mve-social-${attempt}.png"
+            rm -f "$image_file"
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/social/$SOCIAL_IMAGE?mve=$key" -o "$image_file" || true
+            image_ok=no
+            if [ -s "$image_file" ] && python3 - "$image_file" <<'PY'
+          import struct, sys
+          from pathlib import Path
+          data = Path(sys.argv[1]).read_bytes()
+          ok = data.startswith(b'\x89PNG\r\n\x1a\n') and len(data) > 10000 and struct.unpack('>II', data[16:24]) == (1200, 630)
+          raise SystemExit(0 if ok else 1)
+          PY
+            then image_ok=yes; fi
+            if grep -Fq "<h1>$ARTICLE_H1</h1>" <<<"$article" \
               && grep -Fq "/clanky/$ARTICLE_SLUG" <<<"$home" \
               && grep -Fq "/clanky/$ARTICLE_SLUG" <<<"$archive" \
               && grep -Fq "$ARTICLE_SLUG" <<<"$rss" \
               && grep -Fq "$ARTICLE_SLUG" <<<"$sitemap" \
-              && grep -Fq "source=$SOURCE_SHA" <<<"$health"; then
-              echo "Veřejně ověřeno: článek, titulka, archiv, RSS, sitemap a source=$SOURCE_SHA."
+              && grep -Fq "$ARTICLE_SLUG" <<<"$news" \
+              && grep -Fq "source=$SOURCE_SHA" <<<"$health" \
+              && [ "$image_ok" = yes ]; then
+              echo "Veřejně ověřeno: článek, titulka, archiv, RSS, obě sitemapy, PNG a source=$SOURCE_SHA."
               exit 0
             fi
             sleep 8
@@ -127,7 +140,7 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         with:
           script: |
-            const path = '.github/municipal-housing-deploy-failure.json';
+            const path = '.github/mve-hradiste-deploy-failure.json';
             const state = {
               status: 'failed',
               checked_at_utc: new Date().toISOString(),
@@ -153,7 +166,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: 'Zapsat selhání kanonického nasazení článku o bytech',
+              message: 'Zapsat selhání kanonického nasazení MVE Hradiště',
               content,
               ...(sha ? {sha} : {})
             });
