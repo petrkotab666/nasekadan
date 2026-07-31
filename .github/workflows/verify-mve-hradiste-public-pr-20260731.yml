@@ -1,0 +1,88 @@
+name: Veřejně ověřit článek MVE Hradiště
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/mve-hradiste-public-verify-trigger.txt'
+      - '.github/workflows/verify-mve-hradiste-public-pr-20260731.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mve-hradiste-public-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ověřit živý web přes HTTPS bez cache
+        shell: bash
+        run: |
+          set -u
+          slug='mve-hradiste-nova-vodni-elektrarna-2026'
+          article_path="/clanky/${slug}.html"
+          fire_path='/clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html'
+          title='U Hradiště má vzniknout nová malá vodní elektrárna. Vodu přivede potrubí dlouhé 520 metrů'
+
+          for attempt in $(seq 1 60); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+            rm -f /tmp/mve-{article,home,archive,rss,sitemap,news,health,image}
+
+            article_http=no; home_http=no; archive_http=no; rss_http=no; sitemap_http=no; news_http=no; health_http=no; image_http=no
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz${article_path}?v=${stamp}" -o /tmp/mve-article && article_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}" -o /tmp/mve-home && home_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}" -o /tmp/mve-archive && archive_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}" -o /tmp/mve-rss && rss_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}" -o /tmp/mve-sitemap && sitemap_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}" -o /tmp/mve-news && news_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=${stamp}" -o /tmp/mve-health && health_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/social/${slug}.png?v=${stamp}" -o /tmp/mve-image && image_http=yes || true
+
+            article_h1=no; home_order=no; archive_has=no; rss_has=no; sitemap_has=no; news_has=no; health_matches=no; image_valid=no
+            if [[ "$article_http" == yes ]] && grep -Fq "<h1>${title}</h1>" /tmp/mve-article; then article_h1=yes; fi
+            if [[ "$home_http" == yes ]] && python3 - /tmp/mve-home "$article_path" "$fire_path" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          newest=text.find(sys.argv[2]); second=text.find(sys.argv[3])
+          raise SystemExit(0 if newest >= 0 and second >= 0 and newest < second else 1)
+          PY
+            then home_order=yes; fi
+            if [[ "$archive_http" == yes ]] && grep -Fq "$article_path" /tmp/mve-archive; then archive_has=yes; fi
+            if [[ "$rss_http" == yes ]] && grep -Fq "https://nasekadan.cz${article_path}" /tmp/mve-rss; then rss_has=yes; fi
+            if [[ "$sitemap_http" == yes ]] && grep -Fq "https://nasekadan.cz${article_path}" /tmp/mve-sitemap; then sitemap_has=yes; fi
+            if [[ "$news_http" == yes ]] && grep -Fq "https://nasekadan.cz${article_path}" /tmp/mve-news; then news_has=yes; fi
+            if [[ "$health_http" == yes ]] && grep -Fq "source=${main_sha}" /tmp/mve-health; then health_matches=yes; fi
+            if [[ "$image_http" == yes ]] && python3 - /tmp/mve-image <<'PY'
+          import struct, sys
+          from pathlib import Path
+          data=Path(sys.argv[1]).read_bytes()
+          ok=(data.startswith(b'\x89PNG\r\n\x1a\n') and len(data)>10000 and struct.unpack('>II',data[16:24])==(1200,630))
+          raise SystemExit(0 if ok else 1)
+          PY
+            then image_valid=yes; fi
+
+            echo "attempt=$attempt main=$main_sha article_http=$article_http h1=$article_h1 home_order=$home_order archive=$archive_has rss=$rss_has sitemap=$sitemap_has news=$news_has health=$health_matches image=$image_valid"
+
+            if [[ "$article_h1" == yes && "$home_order" == yes && "$archive_has" == yes \
+              && "$rss_has" == yes && "$sitemap_has" == yes && "$news_has" == yes \
+              && "$health_matches" == yes && "$image_valid" == yes ]]; then
+              echo "HOTOVO: veřejný web je kompletně ověřený, source=${main_sha}."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo 'Veřejné ověření v časovém limitu neprošlo.' >&2
+          echo 'Poslední deployment-health:' >&2
+          cat /tmp/mve-health >&2 2>/dev/null || true
+          exit 1
