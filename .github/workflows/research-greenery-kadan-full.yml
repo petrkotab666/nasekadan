@@ -8,6 +8,7 @@ on:
       - '.github/greenery-research-trigger.txt'
       - '.github/workflows/research-greenery-kadan-full.yml'
       - 'scripts/research_greenery_kadan_full.py'
+      - 'scripts/fetch_kadan_greenery_gis_legacy.py'
 
 permissions:
   contents: write
@@ -34,13 +35,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ces tesseract-ocr-eng
           python3 -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 shapely pyproj matplotlib
 
-      - name: Opravit aktuální adresu ceníku
+      - name: Použít aktuální adresu ceníku TS
         shell: bash
         run: |
           set -euo pipefail
-          sed -i 's#https://www.tskadan.cz/dokumenty/cenik-sluzeb-vcetne-kalkulaci-2026.pdf#https://www.tskadan.cz/dokumenty/cenik2026.pdf#g' scripts/research_greenery_kadan_full.py
+          sed -i 's#https://www.tskadan.cz/dokumenty/cenik-sluzeb-vcetne-kalkulaci-2026.pdf#https://www.tskadan.cz/dokumenty/ceik2026_02.pdf#g' scripts/research_greenery_kadan_full.py
 
-      - name: Stáhnout mapy, GIS, smlouvy a skenované přílohy
+      - name: Stáhnout smlouvy a skenované přílohy
         shell: bash
         run: |
           set -euo pipefail
@@ -48,6 +49,14 @@ jobs:
           test -s .github/research/greenery-kadan-2026/REPORT.md
           test -s .github/research/greenery-kadan-2026/status.json
           cat .github/research/greenery-kadan-2026/status.json
+
+      - name: Stáhnout veřejnou GIS vrstvu správců zeleně
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fetch_kadan_greenery_gis_legacy.py
+          test -s .github/research/greenery-kadan-2026/GIS-REPORT.md
+          test -s .github/research/greenery-kadan-2026/gis-summary.json
 
       - name: Odstranit velké dočasné soubory
         shell: bash
@@ -57,6 +66,7 @@ jobs:
           rm -rf .github/research/greenery-kadan-2026/raw
           rm -rf .github/research/greenery-kadan-2026/ocr-work
           find .github/research/greenery-kadan-2026 -type f -size +20M -delete
+          git restore scripts/research_greenery_kadan_full.py
 
       - name: Uložit ověřitelné výsledky do hlavní větve
         shell: bash
@@ -65,9 +75,13 @@ jobs:
           git config user.name 'Naše Kadaň – hloubková rešerše zeleně'
           git config user.email 'info@nasekadan.cz'
           git add .github/research/greenery-kadan-2026/REPORT.md \
+                  .github/research/greenery-kadan-2026/GIS-REPORT.md \
                   .github/research/greenery-kadan-2026/status.json \
                   .github/research/greenery-kadan-2026/contracts.json \
                   .github/research/greenery-kadan-2026/gis-summary.json \
+                  .github/research/greenery-kadan-2026/gis-layer.json \
+                  .github/research/greenery-kadan-2026/gis-legend.json \
+                  .github/research/greenery-kadan-2026/gis-features.geojson \
                   .github/research/greenery-kadan-2026/errors.log
           test ! -d .github/research/greenery-kadan-2026/texts || git add .github/research/greenery-kadan-2026/texts
           test ! -d .github/research/greenery-kadan-2026/images || git add .github/research/greenery-kadan-2026/images
@@ -75,7 +89,7 @@ jobs:
             echo 'Výsledky jsou beze změny.'
           else
             git commit -m 'Doplnit OCR a mapovou rešerši správců zeleně v Kadani'
-            git pull --rebase origin main
+            git pull --rebase --autostash origin main
             git push origin HEAD:main
           fi
 
@@ -87,7 +101,7 @@ jobs:
         with:
           script: |
             const path='.github/greenery-research-live-status.json';
-            const status={status:process.env.JOB_STATUS,checkedAtUtc:new Date().toISOString(),runId:context.runId,sourceSha:context.sha,reportPath:'.github/research/greenery-kadan-2026/REPORT.md'};
+            const status={status:process.env.JOB_STATUS,checkedAtUtc:new Date().toISOString(),runId:context.runId,sourceSha:context.sha,reportPath:'.github/research/greenery-kadan-2026/REPORT.md',gisReportPath:'.github/research/greenery-kadan-2026/GIS-REPORT.md'};
             const content=Buffer.from(JSON.stringify(status,null,2)+'\n').toString('base64');
             let sha;
             try{const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(current.data))sha=current.data.sha;}catch(error){if(error.status!==404)throw error;}
