@@ -1,0 +1,231 @@
+name: Opravit a dokončit publikaci článku ÚSES
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-publish-uses-kadan-now.yml'
+  workflow_dispatch:
+  schedule:
+    - cron: '30 18 31 7 *'
+    - cron: '0 19 31 7 *'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-publish-uses-kadan-now
+  cancel-in-progress: false
+
+env:
+  ARTICLE: clanky/plan-uses-kadan-krajina-zakazky-2026.html
+  SLUG: plan-uses-kadan-krajina-zakazky-2026
+  ARTICLE_H1: Další plán krajiny pro Kadaň za 1,45 milionu. Co se překrývá se starší studií za téměř tři miliony?
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  SERVER: 57.129.43.215
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Omezit jednorázový harmonogram na 31. července 2026
+        id: timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == schedule && "$(date -u +%F)" != 2026-07-31 ]]; then
+            echo active=false >> "$GITHUB_OUTPUT"
+          else
+            echo active=true >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Kolizně odolně zapsat článek, obrázek a všechny přehledy
+        id: source
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          git config user.name 'Naše Kadaň publikační oprava'
+          git config user.email 'info@nasekadan.cz'
+
+          build_all() {
+            test -f "$ARTICLE"
+            python3 scripts/normalize_articles.py --write --check
+            python3 scripts/generate_social_cards.py --write --check
+            python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('clanky/plan-uses-kadan-krajina-zakazky-2026.html')
+          t=p.read_text(encoding='utf-8')
+          m=re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']https://nasekadan\.cz/social/([^"\']+)',t,re.I)
+          if not m: raise SystemExit('Chybí og:image')
+          fn=m.group(1)
+          if not (Path('social')/fn).is_file(): raise SystemExit('Chybí sociální PNG')
+          t=re.sub(r'src=["\']\.\./social/plan-uses-kadan-krajina-zakazky-2026(?:-[a-f0-9]{{10}})?\.png["\']',f'src="../social/{fn}"',t,count=1)
+          p.write_text(t,encoding='utf-8',newline='\n')
+          Path('/tmp/uses-image.txt').write_text(fn,encoding='utf-8')
+          PY
+            python3 scripts/finalize_launch.py
+            python3 scripts/prepare_discovery.py
+            python3 scripts/normalize_search_snippets.py
+            python3 scripts/enforce_article_visibility.py
+            python3 scripts/sort_articles_chronologically.py
+            python3 scripts/ensure_recent_rss_entries.py
+            image="$(cat /tmp/uses-image.txt)"
+            grep -Fq "<h1>$ARTICLE_H1</h1>" "$ARTICLE"
+            grep -Fq "/clanky/${SLUG}.html" index.html
+            grep -Fq "/clanky/${SLUG}.html" clanky/index.html
+            grep -Fq "${SLUG}.html" rss.xml
+            grep -Fq "${SLUG}.html" sitemap.xml
+            grep -Fq "${SLUG}.html" news-sitemap.xml
+            python3 - "$image" <<'PY'
+          import struct,sys
+          from pathlib import Path
+          d=(Path('social')/sys.argv[1]).read_bytes()
+          raise SystemExit(0 if d.startswith(b'\x89PNG\r\n\x1a\n') and len(d)>10000 and struct.unpack('>II',d[16:24])==(1200,630) else 1)
+          PY
+          }
+
+          success=false
+          for attempt in 1 2 3 4 5; do
+            git fetch --prune origin main
+            git reset --hard origin/main
+            build_all
+            git add -A -- "$ARTICLE" social index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt style.css
+            if git diff --cached --quiet; then
+              success=true
+              break
+            fi
+            git commit -m 'Dokončit publikaci článku o plánu ÚSES'
+            if git push origin HEAD:main; then
+              success=true
+              break
+            fi
+            sleep $((attempt * 6))
+          done
+          [[ "$success" == true ]]
+          git fetch origin main
+          echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+          echo "image=$(cat /tmp/uses-image.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit SSH klíč
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/key";
+          elif [[ -n "${KEY2:-}" ]]; then printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/key";
+          else exit 1; fi
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Kanonicky nasadit nejnovější main na OVH
+        id: deploy
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "ubuntu@$SERVER" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
+          REMOTE
+
+      - name: Veřejně ověřit všechny publikační plochy
+        id: verify
+        if: steps.timing.outputs.active == 'true'
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 30); do
+            q="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$n"
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/${SLUG}.html?q=$q" || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?q=$q" || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?q=$q" || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?q=$q" || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?q=$q" || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?q=$q" || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?q=$q" || true)"
+            img="$(sed -n 's/.*property="og:image" content="\([^"]*\)".*/\1/p' <<<"$article" | head -1)"
+            file="$RUNNER_TEMP/img-$n.png"; rm -f "$file"
+            [[ "$img" == https://nasekadan.cz/social/* ]] && curl -4 -kfsS --max-time 25 "$img?q=$q" -o "$file" || true
+            image_ok=no
+            if [[ -s "$file" ]] && python3 - "$file" <<'PY'
+          import struct,sys
+          from pathlib import Path
+          d=Path(sys.argv[1]).read_bytes()
+          raise SystemExit(0 if d.startswith(b'\x89PNG\r\n\x1a\n') and len(d)>10000 and struct.unpack('>II',d[16:24])==(1200,630) else 1)
+          PY
+            then image_ok=yes; fi
+            if grep -Fq "<h1>$ARTICLE_H1</h1>" <<<"$article" \
+              && grep -Fq "/clanky/${SLUG}.html" <<<"$home" \
+              && grep -Fq "/clanky/${SLUG}.html" <<<"$archive" \
+              && grep -Fq "${SLUG}.html" <<<"$rss" \
+              && grep -Fq "${SLUG}.html" <<<"$sitemap" \
+              && grep -Fq "${SLUG}.html" <<<"$news" \
+              && grep -Fq "source=$SOURCE_SHA" <<<"$health" \
+              && [[ "$image_ok" == yes ]]; then exit 0; fi
+            sleep 8
+          done
+          exit 1
+
+      - name: Zveřejnit a potvrdit Facebook
+        id: facebook
+        if: steps.timing.outputs.active == 'true'
+        env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+          FACEBOOK_WAIT_TIMEOUT: '900'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/process_facebook_queue_live.py "$ARTICLE"
+          marker="$(python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          a='clanky/plan-uses-kadan-krajina-zakazky-2026.html'
+          print(f'.github/facebook-published/{Path(a).stem}-{hashlib.sha256(a.encode()).hexdigest()[:10]}.json')
+          PY
+          )"
+          test -f "$marker"
+          grep -Fq facebook_post_id "$marker"
+          git config user.name 'Naše Kadaň Facebook automat'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- .github/facebook-publish-pending.txt .github/facebook-last-status.json .github/facebook-published
+          git commit -m 'Potvrdit Facebook článku o plánu ÚSES' || exit 0
+          for i in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && exit 0; sleep $((i*5)); done
+          exit 1
+
+      - name: Uzavřít staré upozornění po ověřeném úspěchu
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title='Opravit zveřejnění článku o plánu ÚSES';
+            const issues=await github.paginate(github.rest.issues.listForRepo,{owner:context.repo.owner,repo:context.repo.repo,state:'open',per_page:100});
+            for (const issue of issues.filter(i=>!i.pull_request&&i.title===title)) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.number,state:'closed',state_reason:'completed'});
+            const path='.github/uses-kadan-publication-status.json';
+            const state={status:'success',checked_at_utc:new Date().toISOString(),article:'clanky/plan-uses-kadan-krajina-zakazky-2026.html',web:'verified',facebook:'verified',run_id:context.runId};
+            const content=Buffer.from(JSON.stringify(state,null,2)+'\n').toString('base64');
+            let sha; try{const x=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(x.data))sha=x.data.sha;}catch(e){if(e.status!==404)throw e;}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:'Potvrdit úplné zveřejnění článku ÚSES',content,...(sha?{sha}:{})});
