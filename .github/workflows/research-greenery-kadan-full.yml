@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: nasekadan-greenery-full-research
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   research:
@@ -34,6 +34,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-ces tesseract-ocr-eng
           python3 -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 shapely pyproj matplotlib
 
+      - name: Opravit aktuální adresu ceníku
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's#https://www.tskadan.cz/dokumenty/cenik-sluzeb-vcetne-kalkulaci-2026.pdf#https://www.tskadan.cz/dokumenty/cenik2026.pdf#g' scripts/research_greenery_kadan_full.py
+
       - name: Stáhnout mapy, GIS, smlouvy a skenované přílohy
         shell: bash
         run: |
@@ -43,13 +49,28 @@ jobs:
           test -s .github/research/greenery-kadan-2026/status.json
           cat .github/research/greenery-kadan-2026/status.json
 
-      - name: Uložit výsledky do hlavní větve
+      - name: Odstranit velké dočasné soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/greenery-kadan-2026/pdfs
+          rm -rf .github/research/greenery-kadan-2026/raw
+          rm -rf .github/research/greenery-kadan-2026/ocr-work
+          find .github/research/greenery-kadan-2026 -type f -size +20M -delete
+
+      - name: Uložit ověřitelné výsledky do hlavní větve
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň – hloubková rešerše zeleně'
           git config user.email 'info@nasekadan.cz'
-          git add .github/research/greenery-kadan-2026
+          git add .github/research/greenery-kadan-2026/REPORT.md \
+                  .github/research/greenery-kadan-2026/status.json \
+                  .github/research/greenery-kadan-2026/contracts.json \
+                  .github/research/greenery-kadan-2026/gis-summary.json \
+                  .github/research/greenery-kadan-2026/errors.log
+          test ! -d .github/research/greenery-kadan-2026/texts || git add .github/research/greenery-kadan-2026/texts
+          test ! -d .github/research/greenery-kadan-2026/images || git add .github/research/greenery-kadan-2026/images
           if git diff --cached --quiet; then
             echo 'Výsledky jsou beze změny.'
           else
