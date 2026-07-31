@@ -1,0 +1,198 @@
+{
+  "urls": {
+    "service": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer?f=pjson",
+    "layer": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2?f=pjson",
+    "legend": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/legend?f=pjson",
+    "geojson": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson",
+    "json": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=5514&f=json",
+    "export": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/export?bbox=-820232.48,-1000532.32,-818297.74,-997378.81&bboxSR=5514&imageSR=5514&size=2600,2600&layers=show:2&format=png32&transparent=true&f=image"
+  },
+  "errors": [
+    "service: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer?f=pjson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
+    "layer: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2?f=pjson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
+    "legend: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/legend?f=pjson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
+    "geojson: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
+    "json: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=5514&f=json (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))"
+  ],
+  "feature_count": 0,
+  "features": [],
+  "area_by_properties": [],
+  "localities": [
+    {
+      "query": "Sídliště A, Kadaň",
+      "found": false
+    },
+    {
+      "query": "Sídliště B, Kadaň",
+      "found": true,
+      "lat": 50.389216,
+      "lon": 13.2721969,
+      "display_name": "Kadaň, Chomutovská sídliště B, Chomutovská, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Sídliště C, Kadaň",
+      "found": false
+    },
+    {
+      "query": "Sídliště D, Kadaň",
+      "found": false
+    },
+    {
+      "query": "Strážiště I, Kadaň",
+      "found": true,
+      "lat": 50.3820786,
+      "lon": 13.2574544,
+      "display_name": "Strážiště, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Strážiště II, Kadaň",
+      "found": true,
+      "lat": 50.3820151,
+      "lon": 13.2549493,
+      "display_name": "Strážiště, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Strážiště III, Kadaň",
+      "found": false
+    },
+    {
+      "query": "Obránců míru, Kadaň",
+      "found": true,
+      "lat": 50.3763274,
+      "lon": 13.2813547,
+      "display_name": "Obránců míru, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Smetanovy sady, Kadaň",
+      "found": true,
+      "lat": 50.3776192,
+      "lon": 13.2659215,
+      "display_name": "Historie parku Smetanovy sady, Jana Švermy, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Rooseveltovy sady, Kadaň",
+      "found": false
+    },
+    {
+      "query": "Na Podlesí, Kadaň",
+      "found": true,
+      "lat": 50.38373,
+      "lon": 13.2691401,
+      "display_name": "Na Podlesí, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Chomutovská, Kadaň",
+      "found": true,
+      "lat": 50.3878997,
+      "lon": 13.2718695,
+      "display_name": "Chomutovská, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Husova, Kadaň",
+      "found": true,
+      "lat": 50.3890879,
+      "lon": 13.2695115,
+      "display_name": "Husova, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Golovinova, Kadaň",
+      "found": true,
+      "lat": 50.3880337,
+      "lon": 13.2678992,
+      "display_name": "Golovinova, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Věžní, Kadaň",
+      "found": true,
+      "lat": 50.3777821,
+      "lon": 13.2759165,
+      "display_name": "Věžní, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Jitřní, Kadaň",
+      "found": true,
+      "lat": 50.3736182,
+      "lon": 13.2798657,
+      "display_name": "Jitřní, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Václava Havla, Kadaň",
+      "found": true,
+      "lat": 50.3770561,
+      "lon": 13.2604371,
+      "display_name": "Václava Havla, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Polní, Kadaň",
+      "found": true,
+      "lat": 50.3756905,
+      "lon": 13.2812725,
+      "display_name": "Polní, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Mírové náměstí, Kadaň",
+      "found": true,
+      "lat": 50.3765169,
+      "lon": 13.2709533,
+      "display_name": "Mírové náměstí, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Svatý kopeček, Kadaň",
+      "found": true,
+      "lat": 50.384146,
+      "lon": 13.2578215,
+      "display_name": "Svatý kopeček, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Suchý důl, Kadaň",
+      "found": true,
+      "lat": 50.3737802,
+      "lon": 13.2205704,
+      "display_name": "Suchý Důl, 1985, Suchý Důl, Rašovice, Klášterec nad Ohří, okres Chomutov, Ústecký kraj, 431 51, Česko",
+      "matches": []
+    },
+    {
+      "query": "Želina, Kadaň",
+      "found": true,
+      "lat": 50.3663729,
+      "lon": 13.2957303,
+      "display_name": "Želina, 1978, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
+      "matches": []
+    },
+    {
+      "query": "Prunéřov, Kadaň",
+      "found": true,
+      "lat": 50.4297163,
+      "lon": 13.259192,
+      "display_name": "Prunéřov, Kadaň, okres Chomutov, Ústecký kraj, 431 58, Česko",
+      "matches": []
+    },
+    {
+      "query": "Tušimice, Kadaň",
+      "found": true,
+      "lat": 50.3834697,
+      "lon": 13.3428658,
+      "display_name": "Tušimice, Kadaň, okres Chomutov, Ústecký kraj, Česko",
+      "matches": []
+    },
+    {
+      "query": "Lomazice, Kadaň",
+      "found": false
+    }
+  ]
+}
