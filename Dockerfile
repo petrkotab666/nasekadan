@@ -77,8 +77,8 @@ RUN python scripts/ensure_summer_ad_rotation.py --write --check
 # Blokující kontrola reklamních podkladů: build nesmí projít s historickým feedem,
 # starým JS ani neúplným seznamem cestovních a letních partnerů.
 RUN python -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null \
- && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' index.html \
- && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
+ && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-pojistime-rotation-4' index.html \
+ && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-pojistime-rotation-4' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
  && grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
  && grep -Fq 'lastminuteslevy-cz' reklamy-oprava-obrazku.js \
  && grep -Fq 'apollostore-cz' reklamy-oprava-obrazku.js \
