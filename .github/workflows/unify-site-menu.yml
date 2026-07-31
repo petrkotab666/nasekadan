@@ -1,0 +1,175 @@
+name: Sjednotit hlavní menu na celém webu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/site-menu-trigger.txt'
+      - '.github/workflows/unify-site-menu.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unify-site-menu
+  cancel-in-progress: true
+
+jobs:
+  normalize-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sjednotit hlavičky všech veřejných HTML stránek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/normalize_site_header.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.normalize_site_header import ROOT, is_public_html
+
+          required = (
+              'href="/clanky/">Články</a>',
+              'href="/#akce">Akce</a>',
+              'href="/pruvodce/">Průvodce</a>',
+              'href="/zapojte-se/">Poslat tip</a>',
+          )
+          bad = []
+          public = []
+          for path in sorted(ROOT.rglob('*.html')):
+              if not is_public_html(path):
+                  continue
+              public.append(path.relative_to(ROOT).as_posix())
+              text = path.read_text(encoding='utf-8', errors='replace')
+              if '<header' not in text or not all(item in text for item in required):
+                  bad.append(path.relative_to(ROOT).as_posix())
+              if '/site.js' not in text:
+                  bad.append(path.relative_to(ROOT).as_posix() + ' [chybí site.js]')
+          if bad:
+              raise SystemExit('Nesjednocené stránky:\n' + '\n'.join(bad[:100]))
+          (Path('/tmp/site-menu-files.txt')).write_text(
+              '\n'.join(public + ['site.js']) + '\n', encoding='utf-8'
+          )
+          print(f'Ověřeno {len(public)} veřejných HTML stránek.')
+          PY
+          grep -Fq "const canonicalNav" site.js
+          grep -Fq 'aria-label="Hlavní navigace"' prehled-zdroju/index.html
+
+      - name: Uložit sjednocené menu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- '*.html' site.js scripts/normalize_site_header.py
+          git commit -m 'Sjednotit hlavní menu na všech stránkách' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit balíček veřejných stránek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.normalize_site_header import ROOT, is_public_html
+          paths = [
+              p.relative_to(ROOT).as_posix()
+              for p in sorted(ROOT.rglob('*.html'))
+              if is_public_html(p)
+          ]
+          Path('/tmp/site-menu-files.txt').write_text(
+              '\n'.join(paths + ['site.js']) + '\n', encoding='utf-8'
+          )
+          PY
+          tar -czf "$RUNNER_TEMP/site-menu.tar.gz" -T /tmp/site-menu-files.txt
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit sjednocené menu přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/site-menu.tar.gz" ubuntu@57.129.43.215:/tmp/site-menu.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/site-menu.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/site-menu.tar.gz nasekadan-web:/tmp/site-menu.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/site-menu.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/site-menu.tar.gz
+          fi
+          rm -f /tmp/site-menu.tar.gz
+          grep -Fq 'href="/clanky/">Články</a>' /var/www/nasekadan/prehled-zdroju/index.html
+          grep -Fq 'href="/zapojte-se/">Poslat tip</a>' /var/www/nasekadan/prehled-zdroju/index.html
+          grep -Fq 'const canonicalNav' /var/www/nasekadan/site.js
+          REMOTE
+
+      - name: Veřejně ověřit jednotné menu bez cache
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for path in / /clanky/ /prakticke/ /pruvodce/ /prehled-zdroju/; do
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz${path}?v=${stamp}")"
+            grep -Fq 'href="/clanky/">Články</a>' <<<"$page"
+            grep -Fq 'href="/#akce">Akce</a>' <<<"$page"
+            grep -Fq 'href="/pruvodce/">Průvodce</a>' <<<"$page"
+            grep -Fq 'href="/zapojte-se/">Poslat tip</a>' <<<"$page"
+          done
+          js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/site.js?v=${stamp}")"
+          grep -Fq 'const canonicalNav' <<<"$js"
+          echo 'HOTOVO: hlavní menu je sjednocené a veřejně ověřené na všech kontrolovaných částech webu.'
+
+      - name: Zapsat stav sjednocení menu
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = 'site-menu-unification-status.json';
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
+            const status = {
+              status: ok ? 'success' : 'failed',
+              checked_at_utc: new Date().toISOString(),
+              run_id: context.runId,
+              server_deploy: process.env.DEPLOY || 'skipped',
+              public_verification: process.env.VERIFY || 'skipped'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({ owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main' });
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat stav sjednocení menu: ${status.status}`,
+              content,
+              ...(sha ? { sha } : {})
+            });
