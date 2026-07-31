@@ -77,16 +77,20 @@ RUN python scripts/ensure_summer_ad_rotation.py --write --check
 # Blokující kontrola reklamních podkladů: build nesmí projít s historickým feedem,
 # starým JS ani neúplným seznamem cestovních a letních partnerů.
 RUN python -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null \
- && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' index.html \
- && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-summer-rotation-1' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
+ && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-pojistime-rotation-4' index.html \
+ && grep -Fq 'reklamy-oprava-obrazku.js?v=20260730-pojistime-rotation-4' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
  && grep -Fq 'horko-feed.js?v=20260730-heat-rotation-1' clanky/kadan-tropicke-dny-koupaliste-cervenec-2026.html \
- && grep -Fq 'lastminuteslevy-cz' reklamy-oprava-obrazku.js \
+ && ! grep -Fq 'lastminuteslevy-cz' reklamy-oprava-obrazku.js \
  && grep -Fq 'apollostore-cz' reklamy-oprava-obrazku.js \
  && grep -Fq 'installFeaturedSeasonalBanner' reklamy-oprava-obrazku.js \
  && grep -Fq 'horko-apollostore' horko-feed.js \
  && grep -Fq 'rotatingItems' horko-feed.js \
  && grep -Fq 'ceskekormidlo-cz' assets/affiliate-site-travel-overlay.json \
  && grep -Fq 'proalergiky-cz' assets/affiliate-site-travel-overlay.json
+
+# Neveřejné rešeršní exporty a pracovní kopie dokumentů nesmějí vstoupit do
+# sitemapy, SEO auditu ani výsledného produkčního obrazu.
+RUN rm -rf research
 
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
@@ -142,6 +146,7 @@ RUN rm -rf /usr/share/nginx/html/.git \
            /usr/share/nginx/html/.image-parts \
            /usr/share/nginx/html/docker-entrypoint.d \
            /usr/share/nginx/html/nginx \
+           /usr/share/nginx/html/research \
            /usr/share/nginx/html/scripts \
            /usr/share/nginx/html/tools \
            /usr/share/nginx/html/article-layout-fixes.css \

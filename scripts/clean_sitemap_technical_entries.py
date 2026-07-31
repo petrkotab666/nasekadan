@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Remove non-page technical HTML files from the public sitemap."""
+"""Remove non-page technical and private research files from the public sitemap."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SITEMAP = ROOT / "sitemap.xml"
 TECHNICAL_PATTERNS = (
     re.compile(r"^https://nasekadan\.cz/clanky/parts/", re.IGNORECASE),
+    re.compile(r"^https://nasekadan\.cz/research/", re.IGNORECASE),
     re.compile(r"^https://nasekadan\.cz/google[a-z0-9_-]+\.html$", re.IGNORECASE),
 )
 
@@ -40,11 +41,11 @@ def main() -> int:
         handle.write("\n")
 
     if removed:
-        print("Ze sitemapy odstraněny technické soubory:")
+        print("Ze sitemapy odstraněny technické a neveřejné soubory:")
         for url in removed:
             print(f"- {url}")
     else:
-        print("Sitemap neobsahovala žádné technické soubory.")
+        print("Sitemap neobsahovala žádné technické ani neveřejné soubory.")
     return 0
 
 
