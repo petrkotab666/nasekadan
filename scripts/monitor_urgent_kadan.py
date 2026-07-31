@@ -10,9 +10,31 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from monitor_national_kadan import collect, fold, parse_datetime, read_json, write_json
+from monitor_national_kadan import (
+    collect,
+    fold,
+    normalize_url,
+    parse_datetime,
+    read_json,
+    write_json,
+)
 
 MAX_SEEN = 3000
+GENERIC_TITLES = {
+    "cist vice",
+    "vice",
+    "detail",
+    "zobrazit vice",
+    "pokracovat",
+    "dalsi aktuality",
+}
+SOURCE_PRIORITY = {
+    "emergency": 5,
+    "police": 5,
+    "regional_authority": 4,
+    "regional_media": 3,
+    "aggregator": 1,
+}
 
 
 def semantic_fingerprint(title: object) -> str:
@@ -29,6 +51,27 @@ def semantic_fingerprint(title: object) -> str:
 
 def term_matches(text: str, terms: list[str]) -> list[str]:
     return sorted({term for term in terms if term and term in text})
+
+
+def title_score(value: object) -> int:
+    title = str(value or "").strip()
+    normalized = fold(title)
+    if normalized in GENERIC_TITLES or len(title) < 8 or len(title) > 220:
+        return -10_000
+    score = 220 - abs(len(title) - 75)
+    if len(title) > 140 and title.endswith((".", "!", "?")):
+        score -= 120
+    if len(title.split()) < 3:
+        score -= 40
+    return score
+
+
+def candidate_quality(item: dict[str, Any]) -> tuple[int, int, int]:
+    return (
+        SOURCE_PRIORITY.get(str(item.get("tier") or ""), 0),
+        title_score(item.get("title")),
+        len(str(item.get("description") or "")),
+    )
 
 
 def main() -> int:
@@ -69,7 +112,7 @@ def main() -> int:
         collected = list(executor.map(collect, sources))
 
     source_status: list[dict[str, Any]] = []
-    unique: dict[str, dict[str, Any]] = {}
+    by_url: dict[str, dict[str, Any]] = {}
     parsed_total = 0
 
     for source, items, error in collected:
@@ -84,6 +127,8 @@ def main() -> int:
             **({"error": error} if error else {}),
         })
         for item in items:
+            if title_score(item.get("title")) < 0:
+                continue
             haystack = fold(" ".join([
                 str(item.get("title") or ""),
                 str(item.get("description") or ""),
@@ -96,10 +141,8 @@ def main() -> int:
             if not bool(source.get("alertAllLocal")) and not matched_incident:
                 continue
 
-            fingerprint = semantic_fingerprint(item.get("title"))
             candidate = dict(item)
             candidate.update({
-                "fingerprint": fingerprint,
                 "sourceName": source.get("name"),
                 "sourceUrl": source.get("url"),
                 "tier": source.get("tier"),
@@ -108,9 +151,18 @@ def main() -> int:
                 "matchedIncidentTerms": matched_incident,
                 "severity": "urgent" if matched_incident or source.get("tier") in {"emergency", "police"} else "high",
             })
-            previous = unique.get(fingerprint)
-            if not previous or len(str(candidate.get("description") or "")) > len(str(previous.get("description") or "")):
-                unique[fingerprint] = candidate
+            url_key = normalize_url(candidate.get("url")) or f"{source.get('name')}|{fold(candidate.get('title'))}"
+            previous = by_url.get(url_key)
+            if not previous or candidate_quality(candidate) > candidate_quality(previous):
+                by_url[url_key] = candidate
+
+    unique: dict[str, dict[str, Any]] = {}
+    for candidate in by_url.values():
+        fingerprint = semantic_fingerprint(candidate.get("title"))
+        candidate["fingerprint"] = fingerprint
+        previous = unique.get(fingerprint)
+        if not previous or candidate_quality(candidate) > candidate_quality(previous):
+            unique[fingerprint] = candidate
 
     candidates = sorted(
         unique.values(),
