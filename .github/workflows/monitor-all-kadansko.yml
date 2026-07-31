@@ -1,0 +1,186 @@
+name: Úplný monitoring Kadaně a Kadaňska
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '31 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'data/city-sources.json'
+      - 'data/organizations.json'
+      - 'data/kadansko-extra-sources.json'
+      - 'scripts/update_city_news.py'
+      - 'scripts/monitor_national_kadan.py'
+      - 'scripts/monitor_all_kadansko.py'
+      - '.github/workflows/monitor-all-kadansko.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: all-kadansko-monitoring
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Načíst aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zkontrolovat všechny známé organizace a zdroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            scripts/update_city_news.py \
+            scripts/monitor_national_kadan.py \
+            scripts/monitor_all_kadansko.py
+          python3 scripts/monitor_all_kadansko.py \
+            --extra-config data/kadansko-extra-sources.json \
+            --state data/all-kadansko-monitoring-state.json \
+            --status data/all-kadansko-monitoring-status.json \
+            --output "$RUNNER_TEMP/all-kadansko-alerts.json"
+
+      - name: Doručit nové redakční nálezy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ALERT_FILE="$RUNNER_TEMP/all-kadansko-alerts.json"
+          python3 - <<'PY'
+          import json, os, subprocess, tempfile
+          from pathlib import Path
+
+          payload=json.loads(Path(os.environ['ALERT_FILE']).read_text(encoding='utf-8'))
+          alerts=payload.get('alerts') or []
+          print(f'Nových redakčních nálezů: {len(alerts)}')
+          for alert in alerts:
+              title=str(alert.get('title') or 'Nová informace z Kadaňska').strip()
+              fingerprint='all-kadansko-'+str(alert.get('fingerprint') or '').strip()
+              source=str(alert.get('sourceName') or 'Zdroj').strip()
+              url=str(alert.get('url') or '').strip()
+              category=str(alert.get('category') or 'Kadaňsko').strip()
+              severity=str(alert.get('severity') or 'medium').strip()
+              published=str(alert.get('published') or 'neuvedeno').strip()
+              description=str(alert.get('description') or '').strip()
+              body='\n'.join([
+                  '## Nový nález z úplného monitoringu Kadaně a Kadaňska', '',
+                  f'**Zdroj:** {source}',
+                  f'**Oblast:** {category}',
+                  f'**Závažnost:** {severity}',
+                  f'**Publikováno zdrojem:** {published}', '',
+                  f'### {title}', '',
+                  description[:2400] if description else '_Zdroj neposkytl samostatný perex._', '',
+                  '### Přímý zdroj',
+                  f'- [{source}]({url})' if url else f'- {source}', '',
+                  '### Redakční postup',
+                  'Otevřít zdroj, ověřit datum, konkrétní dopad na Kadaň nebo Kadaňsko a rozhodnout o zprávě, aktualizaci či uložení jako podkladu.', '',
+                  '_Nález pochází z hodinového monitoringu všech známých městských organizací, škol, zdravotních a sociálních služeb, kultury, sportu, okolních obcí, dopravy, sítí, médií a veřejných registrů._',
+              ])
+              with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,suffix='.md') as handle:
+                  handle.write(body+'\n'); path=handle.name
+              try:
+                  subprocess.run([
+                      'python3','scripts/upsert_github_issue.py',
+                      '--fingerprint',fingerprint,
+                      '--title',f'[MONITORING KADAŇSKO] {title[:112]} [{fingerprint}]',
+                      '--body-file',path,
+                      '--assignee','petrkotab666',
+                  ],check=True)
+              finally:
+                  Path(path).unlink(missing_ok=True)
+          PY
+
+      - name: Aktualizovat zdravotní stav úplného monitoringu
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess, tempfile
+          from pathlib import Path
+
+          status=json.loads(Path('data/all-kadansko-monitoring-status.json').read_text(encoding='utf-8'))
+          failures=[x for x in status.get('sourceStatus',[]) if x.get('status')=='failed']
+          coverage=status.get('coverage') or {}
+          lines=[
+              '## Zdravotní stav úplného monitoringu Kadaně a Kadaňska','',
+              f'- Poslední kontrola: `{status.get("checkedAt")}`',
+              f'- Dostupné zdroje: **{status.get("checkedSources")}/{status.get("sourceCount")}**',
+              f'- Evidované kadaňské organizace: **{coverage.get("monitoredDirectoryOrganizations")}/{coverage.get("directoryOrganizations")}**',
+              f'- Obce ve správním obvodu: **{len(coverage.get("scopeMunicipalities") or [])}**',
+              f'- Načtené položky: **{status.get("itemsParsed")}**',
+              f'- Unikátní odkazy: **{status.get("uniqueItems")}**',
+              f'- Nová upozornění: **{status.get("newAlerts")}**',''
+          ]
+          if failures:
+              lines += ['### Aktuálně nedostupné nebo blokované zdroje']
+              for item in failures[:100]:
+                  lines.append(f'- **{item.get("name")}** — `{item.get("error","chyba")}`')
+              lines += ['', 'Tyto zdroje zůstávají v registru a systém je zkouší při každém dalším průchodu.']
+          else:
+              lines += ['Všechny registrované zdroje jsou dostupné.']
+          lines += ['', '_Jeden souhrnný technický záznam; nejde o redakční zprávu._']
+          with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,suffix='.md') as handle:
+              handle.write('\n'.join(lines)+'\n'); path=handle.name
+          try:
+              command=[
+                  'python3','scripts/upsert_github_issue.py',
+                  '--fingerprint','all-kadansko-monitor-health',
+                  '--title','[MONITORING KADAŇSKO] Nedostupné zdroje [all-kadansko-monitor-health]',
+                  '--body-file',path,
+                  '--assignee','petrkotab666',
+                  '--comment-existing',
+              ]
+              if not failures:
+                  command.append('--close')
+              subprocess.run(command,check=True)
+          finally:
+              Path(path).unlink(missing_ok=True)
+          PY
+
+      - name: Uložit stav deduplikace a kontroly
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/all-kadansko-monitoring-state.json data/all-kadansko-monitoring-status.json
+          if git diff --cached --quiet; then
+            echo 'Stav je beze změny.'
+            exit 0
+          fi
+          git commit -m 'Aktualizovat stav úplného monitoringu Kadaňska [skip ci]'
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
+
+      - name: Ověřit rozsah pokrytí
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          data=json.load(open('data/all-kadansko-monitoring-status.json',encoding='utf-8'))
+          coverage=data.get('coverage') or {}
+          assert data.get('sourceCount',0) >= 100, data
+          assert coverage.get('directoryOrganizations',0) >= 60, coverage
+          assert coverage.get('monitoredDirectoryOrganizations') == coverage.get('directoryOrganizations'), coverage
+          assert len(coverage.get('scopeMunicipalities') or []) == 19, coverage
+          assert data.get('checkedSources',0) >= 75, data
+          assert data.get('itemsParsed',0) >= 100, data
+          print(data)
+          PY
