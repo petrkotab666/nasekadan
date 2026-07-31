@@ -1,0 +1,43 @@
+name: Diagnostika úplného monitoringu Kadaňska
+
+on:
+  pull_request:
+    paths:
+      - '.github/triggers/diagnose-all-kadansko.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Otestovat úplný registr bez změny produkčního stavu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/update_city_news.py scripts/monitor_national_kadan.py scripts/monitor_all_kadansko.py
+          printf '{"version":1,"seen":{}}\n' > "$RUNNER_TEMP/empty-state.json"
+          python3 scripts/monitor_all_kadansko.py \
+            --extra-config data/kadansko-extra-sources.json \
+            --state "$RUNNER_TEMP/empty-state.json" \
+            --status "$RUNNER_TEMP/status.json" \
+            --output "$RUNNER_TEMP/alerts.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          data=json.loads((root/'status.json').read_text(encoding='utf-8'))
+          print(json.dumps(data,ensure_ascii=False,indent=2))
+          coverage=data.get('coverage') or {}
+          assert data.get('sourceCount',0)>=100,data
+          assert data.get('checkedSources',0)>=75,data
+          assert data.get('itemsParsed',0)>=100,data
+          assert coverage.get('directoryOrganizations',0)>=60,coverage
+          assert coverage.get('monitoredDirectoryOrganizations')==coverage.get('directoryOrganizations'),coverage
+          assert len(coverage.get('scopeMunicipalities') or [])==19,coverage
+          PY
