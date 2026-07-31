@@ -1,0 +1,60 @@
+name: Úplný text stanoviska MVE Hradiště
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/mve-hradiste-fulltext-trigger.txt'
+      - '.github/workflows/extract-mve-hradiste-jes-pr-20260731.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Stáhnout PDF a uložit úplnou textovou vrstvu
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet requests pypdf
+          python - <<'PY'
+          import io, re
+          from pathlib import Path
+          import requests
+          from pypdf import PdfReader
+          url='https://www.mesto-kadan.cz/filemanager/files/file.php?file=5122960'
+          r=requests.get(url,headers={'User-Agent':'Mozilla/5.0 NaseKadanResearch'},timeout=120)
+          r.raise_for_status()
+          reader=PdfReader(io.BytesIO(r.content))
+          out=[]
+          for i,page in enumerate(reader.pages,1):
+              out.append(f'\n\n===== STRANA {i} =====\n')
+              out.append(page.extract_text() or '')
+          text=''.join(out)
+          path=Path('.github/investigations/mve-hradiste-jes-fulltext-20260731.txt')
+          path.parent.mkdir(parents=True,exist_ok=True)
+          path.write_text(text,encoding='utf-8')
+          print('pages',len(reader.pages),'chars',len(text),'bytes',len(r.content))
+          assert 'MVE Hradiště' in text or 'MVE HRADIŠTĚ' in text
+          PY
+      - name: Uložit výstup
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/investigations/mve-hradiste-jes-fulltext-20260731.txt
+          git commit -m 'Vytěžit úplný text stanoviska MVE Hradiště' || exit 0
+          git push origin "HEAD:${HEAD_REF}"
