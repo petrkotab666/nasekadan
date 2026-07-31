@@ -1,0 +1,44 @@
+name: Archivovat originální PDF smlouvy ÚSES Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/archive-uses-contract-pdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Stáhnout a ověřit originální PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/research/uses-orp-kadan-2026
+          curl -fL --retry 5 --retry-delay 3 --max-time 180 \
+            'https://smlouvy.gov.cz/smlouva/soubor/46906686/Smlouva_USES_Kadan_vc_priloh_1-%20an..pdf' \
+            -o .github/research/uses-orp-kadan-2026/contract.pdf
+          test "$(stat -c%s .github/research/uses-orp-kadan-2026/contract.pdf)" -gt 10000000
+          test "$(sha256sum .github/research/uses-orp-kadan-2026/contract.pdf | awk '{print $1}')" = 'ade8d50508b3f8592397443974fdea93cccf7e59c39c72887aabafee5576203d'
+      - name: Uložit PDF
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/uses-orp-kadan-2026/contract.pdf
+          git commit -m 'Archivovat originální PDF smlouvy ÚSES Kadaň' || true
+          for i in 1 2 3 4; do
+            git pull --rebase origin main || true
+            git push origin HEAD:main && exit 0
+            sleep $((i*4))
+          done
+          exit 1
