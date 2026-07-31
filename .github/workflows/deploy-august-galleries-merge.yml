@@ -1,0 +1,148 @@
+name: Nasadit srpnový program galerií po merge
+run-name: Ostré nasazení článku o srpnových galeriích
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-august-galleries-merge.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-august-galleries-merge
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit veřejné přehledy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test -f clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
+          python3 -m pip install --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/normalize_footers.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/ensure_all_published_articles_in_rss.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/enforce_latest_homepage_hero.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/clean_sitemap_technical_entries.py
+          for file in index.html clanky/index.html rss.xml sitemap.xml; do
+            grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' "$file"
+          done
+          grep -Fq 'Srpen v kadaňských galeriích nabídne houby' clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
+
+      - name: Uložit sestavené přehledy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html clanky/index.html clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html rss.xml sitemap.xml news-sitemap.xml social/ llms.txt llms-full.txt 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Zařadit srpnový program galerií do všech přehledů'
+            for attempt in 1 2 3; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              sleep 4
+            done
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          selected=''
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"
+              selected="$name"
+              break
+            fi
+          done
+          test -n "$selected"
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Přenést článek na OVH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          social_file=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text=Path('clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'https://nasekadan\.cz/(social/[^"\']+)', text)
+          if not m: raise SystemExit('Sociální obrázek nenalezen')
+          print(m.group(1))
+          PY
+          )
+          test -f "$social_file"
+          tar -czf "$RUNNER_TEMP/galleries-release.tgz" \
+            index.html clanky/index.html clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html \
+            rss.xml sitemap.xml news-sitemap.xml "$social_file" llms.txt llms-full.txt
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            "$RUNNER_TEMP/galleries-release.tgz" ubuntu@57.129.43.215:/tmp/galleries-release.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          tmp=$(mktemp -d)
+          tar -xzf /tmp/galleries-release.tgz -C "$tmp"
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -m 0644 "$tmp/index.html" /var/www/nasekadan/index.html
+          sudo install -m 0644 "$tmp/clanky/index.html" /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 "$tmp/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html" /var/www/nasekadan/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
+          sudo install -m 0644 "$tmp/rss.xml" /var/www/nasekadan/rss.xml
+          sudo install -m 0644 "$tmp/sitemap.xml" /var/www/nasekadan/sitemap.xml
+          sudo install -m 0644 "$tmp/news-sitemap.xml" /var/www/nasekadan/news-sitemap.xml
+          sudo install -m 0644 "$tmp/llms.txt" /var/www/nasekadan/llms.txt
+          sudo install -m 0644 "$tmp/llms-full.txt" /var/www/nasekadan/llms-full.txt
+          sudo cp -a "$tmp/social/." /var/www/nasekadan/social/
+          sudo chmod -R a+rX /var/www/nasekadan
+          sudo nginx -t
+          sudo systemctl reload nginx
+          rm -rf "$tmp" /tmp/galleries-release.tgz
+          REMOTE
+
+      - name: Ověřit živý článek
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in $(seq 1 30); do
+            token="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html?verify=$token" -o /tmp/article.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/?verify=$token" -o /tmp/home.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/?verify=$token" -o /tmp/archive.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/rss.xml?verify=$token" -o /tmp/rss.xml || true
+            if grep -Fq 'Srpen v kadaňských galeriích nabídne houby' /tmp/article.html \
+              && grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' /tmp/home.html \
+              && grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' /tmp/archive.html \
+              && grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' /tmp/rss.xml; then
+              echo 'Článek je živý a zařazený ve všech přehledech.'
+              exit 0
+            fi
+            sleep 8
+          done
+          echo 'Veřejná kontrola neprošla.' >&2
+          exit 1
