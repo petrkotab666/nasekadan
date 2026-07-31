@@ -1,0 +1,52 @@
+name: Publikovat zápis Kadaňských Plaváčků
+
+on:
+  push:
+    paths:
+      - ".github/triggers/publish-kadansti-plavacci-20260731.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-kadansti-plavacci-20260731
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: self-hosted
+    steps:
+      - name: Stáhnout repozitář
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Připravit sociální obrázek
+        run: |
+          mkdir -p social
+          base64 -d .github/assets/kadansti-plavacci-zapis-podzim-2026.png.b64 > social/kadansti-plavacci-zapis-podzim-2026.png
+
+      - name: Publikovat článek
+        run: python3 scripts/publish_kadansti_plavacci_autumn_2026.py
+
+      - name: Ověřit výstupy
+        run: |
+          test -f clanky/kadansti-plavacci-zapis-podzim-2026.html
+          test -f social/kadansti-plavacci-zapis-podzim-2026.png
+          grep -q "Kadaňští Plaváčci otevřeli zápis" index.html
+          grep -q "kadansti-plavacci-zapis-podzim-2026.html" clanky/index.html
+          grep -q "kadansti-plavacci-zapis-podzim-2026.html" rss.xml
+          grep -q "kadansti-plavacci-zapis-podzim-2026.html" sitemap.xml
+
+      - name: Zapsat publikaci
+        run: |
+          if git diff --quiet; then
+            echo "Publikační soubory už jsou aktuální."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publikovat zápis Kadaňských Plaváčků do podzimních kurzů"
+          git push
