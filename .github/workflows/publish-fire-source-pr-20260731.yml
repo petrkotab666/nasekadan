@@ -1,0 +1,76 @@
+name: PR dokončení zdrojové publikace požárního článku
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/fire-source-pr-trigger.txt'
+      - '.github/workflows/publish-fire-source-pr-20260731.yml'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: fire-source-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  publish-source:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytvořit článek a všechny veřejné přehledy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          python scripts/publish_fire_restrictions_20260731.py
+          slug='nebezpeci-pozaru-ustecky-kraj-kadan-2026'
+          title='Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna'
+          test -s "clanky/${slug}.html"
+          test -s "social/${slug}.png"
+          grep -Fq "<h1>${title}</h1>" "clanky/${slug}.html"
+          grep -Fq "/clanky/${slug}.html" index.html
+          grep -Fq "/clanky/${slug}.html" clanky/index.html
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" sitemap.xml
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" news-sitemap.xml
+          python - "social/${slug}.png" <<'PY'
+          import struct, sys
+          from pathlib import Path
+          data = Path(sys.argv[1]).read_bytes()
+          assert data.startswith(b'\x89PNG\r\n\x1a\n')
+          assert struct.unpack('>II', data[16:24]) == (1200, 630)
+          assert len(data) > 10000
+          PY
+
+      - name: Zapsat vygenerované soubory do servisní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň publikační automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html \
+            social/nebezpeci-pozaru-ustecky-kraj-kadan-2026.png \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
+            llms.txt robots.txt analytics.js 404.html style.css
+          if git diff --cached --quiet; then
+            echo 'Zdrojová publikace je už kompletní.'
+            exit 0
+          fi
+          git commit -m 'Dokončit zdrojovou publikaci požárních omezení'
+          git push origin "HEAD:${HEAD_REF}"
