@@ -1,4 +1,4 @@
-name: Opravit chronologické pořadí článků
+name: Publikovat a chronologicky zařadit články
 
 on:
   push:
@@ -15,108 +15,49 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  fix-and-deploy:
+  publish-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Seřadit všechny přehledy podle data a času
+      - name: Publikovat Kadaňské Plaváčky
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p social
+          base64 -d .github/assets/kadansti-plavacci-zapis-podzim-2026.png.b64 > social/kadansti-plavacci-zapis-podzim-2026.png
+          python3 scripts/publish_kadansti_plavacci_autumn_2026.py
           python3 scripts/sort_articles_chronologically.py
 
-      - name: Zabudovat chronologické řazení do každého deploye
+      - name: Ověřit úplnost publikace
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
+          article='clanky/kadansti-plavacci-zapis-podzim-2026.html'
+          test -s "$article"
+          test -s social/kadansti-plavacci-zapis-podzim-2026.png
+          grep -q 'kadansti-plavacci-zapis-podzim-2026.html' index.html
+          grep -q 'kadansti-plavacci-zapis-podzim-2026.html' clanky/index.html
+          grep -q 'kadansti-plavacci-zapis-podzim-2026.html' rss.xml
+          grep -q 'kadansti-plavacci-zapis-podzim-2026.html' sitemap.xml
+          grep -q 'kadansti-plavacci-zapis-podzim-2026.html' news-sitemap.xml
 
-          deploy = Path('deploy/sync-production.sh')
-          text = deploy.read_text(encoding='utf-8')
-          call = 'python3 scripts/sort_articles_chronologically.py\n'
-          if call not in text:
-              needle = 'python3 scripts/normalize_footers.py --write --check\n'
-              if needle not in text:
-                  raise SystemExit('V deployi chybí očekávaný bod pro chronologické řazení.')
-              text = text.replace(needle, needle + call, 1)
-              deploy.write_text(text, encoding='utf-8', newline='\n')
-
-          enforcer = Path('scripts/enforce_homepage_latest_order.py')
-          enforcer.write_text('''#!/usr/bin/env python3
-from sort_articles_chronologically import main
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-''', encoding='utf-8', newline='\n')
-
-          autokemp = Path('scripts/publish_autokemp_outages_article.py')
-          if autokemp.exists():
-              source = autokemp.read_text(encoding='utf-8')
-              if 'from sort_articles_chronologically import main as sort_all' not in source:
-                  source = source.replace('from pathlib import Path\n', 'from pathlib import Path\n\nfrom sort_articles_chronologically import main as sort_all\n', 1)
-              marker = '    rewrite_latest_enforcer()\n'
-              if marker in source and '    sort_all()\n' not in source:
-                  source = source.replace(marker, marker + '    sort_all()\n', 1)
-              autokemp.write_text(source, encoding='utf-8', newline='\n')
-          PY
-
-      - name: Ověřit přesné pořadí ve zdrojových souborech
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import re
-          from pathlib import Path
-          from scripts.sort_articles_chronologically import article_href, article_published
-
-          expected = [
-              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html',
-              '/clanky/arc-med-nemocnice-kadan.html',
-              '/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html',
-              '/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html',
-              '/clanky/kolobezky-hriste-detektor-kovu-kadan.html',
-              '/clanky/avies-nemocnice-kadan.html',
-              '/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html',
-          ]
-
-          def order(path, start, end):
-              text = Path(path).read_text(encoding='utf-8')
-              body = text.split(start, 1)[1].split(end, 1)[0]
-              return [article_href(x) for x in re.findall(r'<article\b[^>]*>.*?</article>', body, re.I | re.S)]
-
-          home = order('index.html', '<div class="article-list">', '<p class="archive-note">')
-          archive = order('clanky/index.html', '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>')
-          if home[:len(expected)] != expected:
-              raise SystemExit(f'Nesprávná titulní stránka: {home[:len(expected)]}')
-          if archive[:len(expected)] != expected:
-              raise SystemExit(f'Nesprávný archiv: {archive[:len(expected)]}')
-          for label, values in [('home', home), ('archive', archive)]:
-              dates = [article_published(href) for href in values]
-              if dates != sorted(dates, reverse=True):
-                  raise SystemExit(f'{label} není sestupně podle data a času')
-          print('Zdrojové pořadí je správné:', expected)
-          PY
-
-      - name: Uložit trvalou opravu do main
+      - name: Uložit zdrojovou publikaci
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň automat'
           git config user.email 'actions@users.noreply.github.com'
-          git add index.html clanky/index.html rss.xml news-sitemap.xml \
-            deploy/sync-production.sh scripts/sort_articles_chronologically.py \
-            scripts/publish_weekly_events.py scripts/enforce_homepage_latest_order.py \
-            scripts/publish_autokemp_outages_article.py
-          git commit -m 'Řadit články výhradně podle data a času zveřejnění' || true
-          for attempt in 1 2 3; do
+          git add -A
+          git commit -m 'Zařadit zápis Kadaňských Plaváčků na web' || true
+          for attempt in 1 2 3 4; do
             if git pull --rebase origin main && git push origin HEAD:main; then
               exit 0
             fi
@@ -125,7 +66,7 @@ if __name__ == "__main__":
           done
           exit 1
 
-      - name: Kanonicky nasadit na OVH
+      - name: Nasadit na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -146,48 +87,24 @@ if __name__ == "__main__":
           sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
           REMOTE
 
-      - name: Veřejně ověřit chronologické pořadí
+      - name: Veřejně ověřit článek a zařazení
         shell: bash
         run: |
           set -euo pipefail
           stamp="$(date +%s)"
-          for attempt in $(seq 1 30); do
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?chronology=$stamp-$attempt" -o /tmp/home.html || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?chronology=$stamp-$attempt" -o /tmp/archive.html || true
-            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html?chronology=$stamp-$attempt" -o /tmp/culture.html || true
-            if python3 - <<'PY'
-          import re
-          from pathlib import Path
-          expected = [
-              '/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html',
-              '/clanky/arc-med-nemocnice-kadan.html',
-              '/clanky/hasici-kadan-vycvik-zachrana-voda-nechranice.html',
-              '/clanky/nemocnice-kadan-darovala-82-luzek-ukrajine.html',
-              '/clanky/kolobezky-hriste-detektor-kovu-kadan.html',
-              '/clanky/avies-nemocnice-kadan.html',
-              '/clanky/kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html',
-          ]
-          def hrefs(path, start, end):
-              text = Path(path).read_text(encoding='utf-8', errors='replace')
-              if start not in text or end not in text:
-                  return []
-              body = text.split(start,1)[1].split(end,1)[0]
-              blocks = re.findall(r'<article\b[^>]*>.*?</article>', body, re.I|re.S)
-              out=[]
-              for block in blocks:
-                  m=re.search(r'href=["\'](/clanky/[^"\']+\.html)["\']', block, re.I)
-                  if m: out.append(m.group(1))
-              return out
-          home=hrefs('/tmp/home.html','<div class="article-list">','<p class="archive-note">')
-          archive=hrefs('/tmp/archive.html','<section class="archive-list" aria-label="Chronologický přehled článků">','</section>')
-          culture=Path('/tmp/culture.html').read_text(encoding='utf-8', errors='replace')
-          raise SystemExit(0 if home[:len(expected)]==expected and archive[:len(expected)]==expected and 'data-autokemp-outages-note' in culture else 1)
-          PY
-            then
-              echo 'Veřejná titulní stránka i archiv jsou přesně chronologické.'
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html?v=$stamp-$attempt" || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" || true)"
+            image_code="$(curl -4 -ksS -o /dev/null -w '%{http_code}' --max-time 25 "https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png?v=$stamp-$attempt" || true)"
+            if grep -q 'Kadaňští Plaváčci otevřeli zápis' <<<"$article" \
+              && grep -q 'kadansti-plavacci-zapis-podzim-2026.html' <<<"$home" \
+              && grep -q 'kadansti-plavacci-zapis-podzim-2026.html' <<<"$archive" \
+              && [[ "$image_code" == '200' ]]; then
+              echo 'Článek, titulní stránka, archiv i sociální obrázek jsou živé.'
               exit 0
             fi
             sleep 5
           done
-          echo 'Veřejná chronologická kontrola neprošla.' >&2
+          echo 'Veřejná kontrola publikace neprošla.' >&2
           exit 1
