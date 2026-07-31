@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "checkedAt": "2026-07-31T19:56:35.071676+00:00",
+  "checkedAt": "2026-07-31T22:17:21.994709+00:00",
   "bootstrap": false,
   "sourceCount": 25,
   "checkedSources": 23,
   "failedSources": 2,
-  "relevantItems": 64,
-  "ignoredItems": 6,
+  "relevantItems": 68,
+  "ignoredItems": 5,
   "staleAlertsSuppressed": 0,
-  "newAlerts": 4,
+  "newAlerts": 2,
   "sourceStatus": [
     {
       "name": "Vláda České republiky – aktuality",
@@ -111,9 +111,8 @@
       "url": "https://mk.gov.cz/novinky-a-media-cs-4",
       "tier": "ministry",
       "category": "Kultura a památky",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 123
     },
     {
       "name": "Poslanecká sněmovna – tiskové zprávy",
@@ -193,8 +192,9 @@
       "url": "https://nsa.gov.cz/aktuality/",
       "tier": "agency",
       "category": "Sportovní dotace",
-      "status": "checked",
-      "itemsParsed": 76
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "CzechInvest – novinky",
@@ -202,7 +202,7 @@
       "tier": "agency",
       "category": "Investice a průmysl",
       "status": "checked",
-      "itemsParsed": 209
+      "itemsParsed": 210
     },
     {
       "name": "Celostátní média – Google News: Kadaň a okolí",
