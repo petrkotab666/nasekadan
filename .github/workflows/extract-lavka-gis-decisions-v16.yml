@@ -1,0 +1,135 @@
+name: Vytěžit mapy a rozhodnutí k lávce v16
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/extract-lavka-gis-decisions-v16-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Vytěžit data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet requests beautifulsoup4 lxml pyproj
+          rm -rf .github/research/lavka-gis-decisions-v16
+          mkdir -p .github/research/lavka-gis-decisions-v16
+          cat > /tmp/v16.py <<'PY'
+          import json,re,time,hashlib
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          from pyproj import Transformer
+          R=Path('.github/research/lavka-gis-decisions-v16')
+          S=requests.Session();S.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0)'
+          def get(u,**kw):
+              e=None
+              for i in range(4):
+                  try:return S.get(u,timeout=60,allow_redirects=True,**kw)
+                  except Exception as x:e=x;time.sleep(1+i)
+              raise e
+          def clean(s):return re.sub(r'\s+',' ',s or '').strip()
+          out={'gis':[],'osm':[],'city':[],'region':[],'police':[],'decisions':[]}
+          # Převod stanice Shell z WGS84 do S-JTSK a dotazy na městské vrstvy Lávka.
+          lon,lat=13.25996,50.3856
+          tr=Transformer.from_crs(4326,5514,always_xy=True);x,y=tr.transform(lon,lat)
+          env=f'{x-900},{y-900},{x+900},{y+900}'
+          for layer in [31,80]:
+              u=f'https://gis.mesto-kadan.cz/portal/arcgis/rest/services/zabaged/ZABAGED_Polohopis/MapServer/{layer}/query'
+              try:
+                  rr=get(u,params={'where':'1=1','geometry':env,'geometryType':'esriGeometryEnvelope','inSR':'5514','spatialRel':'esriSpatialRelIntersects','outFields':'*','returnGeometry':'true','f':'json'})
+                  out['gis'].append({'layer':layer,'url':rr.url,'status':rr.status_code,'data':rr.json() if rr.text.lstrip().startswith('{') else rr.text[:1000]})
+              except Exception as e:out['gis'].append({'layer':layer,'error':repr(e)})
+          # OSM / Overpass pro současné mapové zanesení lávky a stavebních cest.
+          q=f'''[out:json][timeout:30];(node(around:700,{lat},{lon})[bridge];way(around:700,{lat},{lon})[bridge];relation(around:700,{lat},{lon})[bridge];way(around:700,{lat},{lon})[highway=footway];way(around:700,{lat},{lon})[construction];);out tags geom;'''
+          for host in ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']:
+              try:
+                  rr=get(host,params={'data':q});out['osm'].append({'url':rr.url,'status':rr.status_code,'data':rr.json()})
+                  if rr.status_code==200:break
+              except Exception as e:out['osm'].append({'url':host,'error':repr(e)})
+          # Městské červencové stránky, rady, zastupitelstvo, 106, úřední deska a všechny odkazy.
+          seeds=[
+            'https://www.mesto-kadan.cz/cs/mesto/rada-mesta/usneseni-rady-mesta-1.html',
+            'https://www.mesto-kadan.cz/cs/mesto/zastupitelstvo-mesta/zapisy-zastupitelstva-mesta.html',
+            'https://www.mesto-kadan.cz/cs/system/uredni-deska-nova.html',
+            'https://www.mesto-kadan.cz/cs/mestsky-urad/zadosti-o-poskytnuti-informaci-dle-zakona-c-106-1999-sb/'
+          ]
+          candidate=set()
+          for u in seeds:
+              try:
+                  rr=get(u);s=BeautifulSoup(rr.content,'lxml');text=clean(s.get_text(' '));links=[]
+                  for a in s.select('a[href]'):
+                      v=urljoin(rr.url,a['href']);links.append(v)
+                      if 'mesto-kadan.cz' in urlparse(v).netloc:candidate.add(v)
+                  out['city'].append({'url':u,'final':rr.url,'status':rr.status_code,'title':clean(s.title.get_text()) if s.title else '', 'links':links,'preview':text[:3000]})
+              except Exception as e:out['city'].append({'url':u,'error':repr(e)})
+          keys=['lávka','lavka','shell','svatý kopeček','svaty kopecek','silnice group','kolaud','předčasné užívání','předávací protokol','smluvní pokuta','29.7.2026','29. 7. 2026','rozhodnutí']
+          for u in sorted(candidate):
+              low=u.lower()
+              if not any(t in low for t in ['2026','detail_claim','zadosti-o-poskytnuti','usneseni','zapis','filemanager']):continue
+              try:
+                  rr=get(u);ct=rr.headers.get('content-type','').lower()
+                  if 'pdf' in ct or rr.content[:4]==b'%PDF':
+                      # pouze metadata; těžké OCR řeší v15
+                      out['decisions'].append({'url':u,'final':rr.url,'status':rr.status_code,'content_type':ct,'bytes':len(rr.content),'sha256':hashlib.sha256(rr.content).hexdigest()})
+                  else:
+                      s=BeautifulSoup(rr.content,'lxml');text=clean(s.get_text(' '));hits=[k for k in keys if k.lower() in text.lower()]
+                      if hits or 'zadosti-o-poskytnuti' in low or 'detail_claim' in low:
+                          out['decisions'].append({'url':u,'final':rr.url,'status':rr.status_code,'title':clean(s.title.get_text()) if s.title else '', 'hits':hits,'text':text[:12000],'links':[urljoin(rr.url,a['href']) for a in s.select('a[href]')]})
+              except Exception as e:pass
+          # Kraj, SÚS a policie: vyhledávací a sitemap stránky.
+          for cat,urls in {
+            'region':['https://www.kr-ustecky.cz/vyhledavani/ds-113112','https://www.kr-ustecky.cz/sitemap.xml','https://www.susuk.cz/','https://www.susuk.cz/sitemap.xml'],
+            'police':['https://policie.gov.cz/vyhledavani.aspx?q=Kada%C5%88%20l%C3%A1vka','https://policie.gov.cz/clanek/dopravni-informace.aspx']
+          }.items():
+              for u in urls:
+                  try:
+                      rr=get(u);s=BeautifulSoup(rr.content,'lxml');text=clean(s.get_text(' '));hits=[k for k in keys if k.lower() in text.lower()]
+                      out[cat].append({'url':u,'final':rr.url,'status':rr.status_code,'title':clean(s.title.get_text()) if s.title else '', 'hits':hits,'text':text[:8000],'links':[urljoin(rr.url,a['href']) for a in s.select('a[href]')][:1000]})
+                  except Exception as e:out[cat].append({'url':u,'error':repr(e)})
+          (R/'results.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Mapy, rozhodnutí a krajské zdroje k lávce v16','',f'Centrum S-JTSK: {x:.2f}, {y:.2f}','']
+          md.append('## GIS')
+          for z in out['gis']:md.append('- '+json.dumps(z,ensure_ascii=False)[:5000])
+          md.append('\n## OSM')
+          for z in out['osm']:md.append('- '+json.dumps(z,ensure_ascii=False)[:5000])
+          md.append('\n## Relevantní městské a správní stránky')
+          for z in out['decisions']:
+              if z.get('hits'):md.append(f"- {z['url']} — {z['hits']} — {z.get('text','')[:1800]}")
+          md.append('\n## Kraj a SÚS')
+          for z in out['region']:
+              if z.get('hits'):md.append(f"- {z['url']} — {z['hits']} — {z.get('text','')[:1500]}")
+          md.append('\n## Policie')
+          for z in out['police']:
+              if z.get('hits'):md.append(f"- {z['url']} — {z['hits']} — {z.get('text','')[:1500]}")
+          (R/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/v16.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
+          git add .github/research/lavka-gis-decisions-v16
+          git commit -m 'Vytěžit mapy a rozhodnutí k lávce v16' || true
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep 3
+          done
+          exit 1
