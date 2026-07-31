@@ -1,23 +1,35 @@
 /* Opravy kolizí mezi kartami titulní stránky a prvky uvnitř článků. */
-.article-shell .article > section.event{
+.article-shell .article > .event{
   display:block!important;
   grid-template-columns:none!important;
+  grid-auto-columns:auto!important;
+  grid-auto-flow:initial!important;
   gap:0!important;
   min-height:0!important;
   width:100%!important;
 }
-.article-shell .article > section.event > time,
-.article-shell .article > section.event > h3,
-.article-shell .article > section.event > p{
+.article-shell .article > .event > time,
+.article-shell .article > .event > h3,
+.article-shell .article > .event > p,
+.article-shell .article > .event > ul,
+.article-shell .article > .event > ol,
+.article-shell .article > .event > div{
   grid-column:auto!important;
   width:auto!important;
   max-width:none!important;
+  min-width:0!important;
 }
-.article-shell .article > section.event > h3{
-  display:block!important;
-}
-.article-shell .article > section.event > p{
+.article-shell .article > .event > h3,
+.article-shell .article > .event > p,
+.article-shell .article > .event > ul,
+.article-shell .article > .event > ol{
   display:block!important;
   overflow-wrap:normal!important;
   word-break:normal!important;
+}
+.article-shell .article > .event > time{
+  display:inline-block!important;
+  height:auto!important;
+  max-width:100%!important;
+  white-space:normal!important;
 }
