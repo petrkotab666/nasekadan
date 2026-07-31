@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "checkedAt": "2026-07-31T17:25:47.525502+00:00",
+  "checkedAt": "2026-07-31T19:56:35.071676+00:00",
   "bootstrap": false,
   "sourceCount": 25,
   "checkedSources": 23,
   "failedSources": 2,
-  "relevantItems": 0,
-  "ignoredItems": 0,
+  "relevantItems": 64,
+  "ignoredItems": 6,
   "staleAlertsSuppressed": 0,
-  "newAlerts": 0,
+  "newAlerts": 4,
   "sourceStatus": [
     {
       "name": "Vláda České republiky – aktuality",
@@ -111,8 +111,9 @@
       "url": "https://mk.gov.cz/novinky-a-media-cs-4",
       "tier": "ministry",
       "category": "Kultura a památky",
-      "status": "checked",
-      "itemsParsed": 123
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 503: Service Unavailable"
     },
     {
       "name": "Poslanecká sněmovna – tiskové zprávy",
@@ -208,9 +209,8 @@
       "url": "https://news.google.com/rss/search?q=%22Kada%C5%88%22+OR+Prun%C3%A9%C5%99ov+OR+Tu%C5%A1imice+OR+Nechranice&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "tier": "national_media",
       "category": "Celostátní média",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 100
     }
   ]
 }
