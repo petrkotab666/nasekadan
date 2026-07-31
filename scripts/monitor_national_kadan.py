@@ -17,7 +17,7 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
-UA = "NaseKadanNationalMonitor/1.1 (+https://nasekadan.cz; info@nasekadan.cz)"
+UA = "NaseKadanNationalMonitor/1.2 (+https://nasekadan.cz; info@nasekadan.cz)"
 BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36"
 MAX_WORKERS = 8
 MAX_ITEMS_PER_SOURCE = 120
@@ -276,6 +276,7 @@ def main() -> int:
 
     now = datetime.now(timezone.utc)
     bootstrap_hours = max(1, int(config.get("bootstrapHours") or 72))
+    national_media_max_alert_age_days = max(1, int(config.get("nationalMediaMaxAlertAgeDays") or 14))
     state = read_json(state_path)
     seen = state.get("seen") if isinstance(state.get("seen"), dict) else {}
     bootstrap = not bool(seen)
@@ -329,6 +330,7 @@ def main() -> int:
         reverse=True,
     )
     alerts: list[dict[str, Any]] = []
+    stale_alerts_suppressed = 0
     for item in relevant_items:
         fingerprint = str(item["fingerprint"])
         is_new = fingerprint not in seen
@@ -336,6 +338,13 @@ def main() -> int:
         published = parse_datetime(item.get("published"))
         if is_new and bootstrap and published and published >= now - timedelta(hours=bootstrap_hours):
             should_alert = True
+        if (
+            should_alert
+            and str(item.get("tier") or "") == "national_media"
+            and (not published or published < now - timedelta(days=national_media_max_alert_age_days))
+        ):
+            should_alert = False
+            stale_alerts_suppressed += 1
         if should_alert:
             alerts.append(item)
         previous = seen.get(fingerprint) if isinstance(seen.get(fingerprint), dict) else {}
@@ -371,6 +380,7 @@ def main() -> int:
         "failedSources": len(failed),
         "relevantItems": len(relevant_items),
         "ignoredItems": ignored_items,
+        "staleAlertsSuppressed": stale_alerts_suppressed,
         "newAlerts": len(alerts),
         "sourceStatus": source_status,
     }
@@ -380,6 +390,7 @@ def main() -> int:
         "sourceCount": len(sources),
         "failedSources": len(failed),
         "ignoredItems": ignored_items,
+        "staleAlertsSuppressed": stale_alerts_suppressed,
         "alerts": alerts,
         "matches": relevant_items[:100],
     }
@@ -393,6 +404,7 @@ def main() -> int:
         "failed": len(failed),
         "matches": len(relevant_items),
         "ignored": ignored_items,
+        "staleSuppressed": stale_alerts_suppressed,
         "alerts": len(alerts),
     }, ensure_ascii=False))
     return 0
