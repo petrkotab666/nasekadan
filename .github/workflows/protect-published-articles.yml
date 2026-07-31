@@ -1,13 +1,28 @@
 name: Chránit publikované články před zmizením
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/**'
+      - 'index.html'
+      - 'sitemap.xml'
+      - 'rss.xml'
+      - 'scripts/ensure_publication_integrity.py'
+      - 'scripts/ensure_newest_article_indexes.py'
+      - 'scripts/validate_publication_integrity.py'
+      - '.github/publication-integrity-trigger.txt'
+      - '.github/workflows/protect-published-articles.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/run-publication-integrity-pr.txt'
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
-  issues: write
   pull-requests: write
 
 concurrency:
@@ -17,69 +32,42 @@ concurrency:
 jobs:
   protect:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    env:
-      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
-      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
-      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Nasadit a veřejně ověřit srpnový program galerií
-        id: deploy
+      - name: Obnovit všechny chybějící vazby publikovaných článků
+        run: |
+          set -euo pipefail
+          python3 scripts/ensure_publication_integrity.py
+          python3 scripts/ensure_newest_article_indexes.py
+
+      - name: Ověřit titulní stránku, archiv, sitemapu a RSS
+        run: python3 scripts/validate_publication_integrity.py
+
+      - name: Trvale uložit automatickou opravu
+        id: save
         shell: bash
         run: |
-          set -Eeuo pipefail
-          bash -n scripts/deploy_august_galleries_emergency.sh
-          bash scripts/deploy_august_galleries_emergency.sh
-          test -f /tmp/august-galleries-deploy-success
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – ochrana článků'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html sitemap.xml rss.xml
 
-      - name: Zapsat výsledek a obnovit původní hlídač
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-        with:
-          script: |
-            const owner=context.repo.owner;
-            const repo=context.repo.repo;
-            const statusPath='august-galleries-live-status.json';
-            const workflowPath='.github/workflows/protect-published-articles.yml';
-            const scheduledPath='.github/workflows/scheduled-emergency-deploy-august-galleries.yml';
-            const success=process.env.DEPLOY_OUTCOME==='success';
-            const status={
-              status:success?'success':'failed',
-              checked_at_utc:new Date().toISOString(),
-              run_id:context.runId,
-              trigger:context.eventName,
-              deploy_outcome:process.env.DEPLOY_OUTCOME||'unknown',
-              article:'https://nasekadan.cz/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html'
-            };
-            let statusSha;
-            try{const response=await github.rest.repos.getContent({owner,repo,path:statusPath,ref:'main'});if(!Array.isArray(response.data))statusSha=response.data.sha}catch(error){if(error.status!==404)throw error}
-            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:statusPath,branch:'main',message:`Zapsat nasazení srpnového programu galerií: ${status.status}`,content:Buffer.from(JSON.stringify(status,null,2)+'\n').toString('base64'),...(statusSha?{sha:statusSha}:{})});
-            if(success){
-              const original=await github.rest.repos.getContent({owner,repo,path:workflowPath,ref:'841ec5dfa68cb8ad35c7001336fff95386e4472f'});
-              const current=await github.rest.repos.getContent({owner,repo,path:workflowPath,ref:'main'});
-              if(!Array.isArray(original.data)&&!Array.isArray(current.data)){
-                await github.rest.repos.createOrUpdateFileContents({owner,repo,path:workflowPath,branch:'main',message:'Obnovit původní hodinovou ochranu publikovaných článků',content:original.data.content.replace(/\n/g,''),sha:current.data.sha});
-              }
-              try{
-                const extra=await github.rest.repos.getContent({owner,repo,path:scheduledPath,ref:'main'});
-                if(!Array.isArray(extra.data))await github.rest.repos.deleteFile({owner,repo,path:scheduledPath,branch:'main',message:'Odstranit dokončený pomocný plánovač galerií',sha:extra.data.sha});
-              }catch(error){if(error.status!==404)throw error}
-              try{await github.rest.issues.update({owner,repo,issue_number:264,state:'closed',state_reason:'completed'})}catch{}
-              try{await github.rest.pulls.update({owner,repo,pull_number:265,state:'closed'})}catch{}
-            }
+          if git diff --cached --quiet; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo 'Publikované články jsou kompletní; není co opravovat.'
+            exit 0
+          fi
 
-      - name: Potvrdit úspěch
-        if: steps.deploy.outcome != 'success'
-        run: exit 1
+          git commit -m 'Obnovit trvalou dostupnost všech publikovaných článků'
+          git pull --rebase origin main
+          git push origin main
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Závěrečná kontrola po opravě
+        run: python3 scripts/validate_publication_integrity.py
