@@ -1,0 +1,94 @@
+name: Klíčové výňatky SMR Tušimice
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/investigate-smr-key-extracts-now.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+          mkdir -p "$RUNNER_TEMP/key/raw" "$RUNNER_TEMP/key/text"
+      - id: work
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          B="$RUNNER_TEMP/key"
+          cat > "$B/sources.tsv" <<'EOF'
+          chmi_2023_36	https://smlouvy.gov.cz/smlouva/soubor/32132087/Potvrzen%C3%AD%20objedn%C3%A1vky%20%C4%8D.%20OV23-2430036.pdf
+          chmi_2023_37	https://smlouvy.gov.cz/smlouva/soubor/32133003/Potvrzen%C3%AD%20objedn%C3%A1vky%20%C4%8D.%20OV23-2430037.pdf
+          chmi_2024_32	https://smlouvy.gov.cz/smlouva/soubor/35576848/Potvrzen%C3%AD%20objedn%C3%A1vky%20%C4%8D.%20OV24-2430032.pdf
+          chmi_2025_21	https://smlouvy.gov.cz/smlouva/soubor/39110648/Potvrzen%C3%AD%20objedn%C3%A1vky%20%C4%8D.%20OV25_2430021.pdf
+          chmi_2025_26	https://smlouvy.gov.cz/smlouva/soubor/39321808/Potvrzen%C3%AD%20objedn%C3%A1vky%20%C4%8D.%20OV25-2430026.pdf
+          health_tusimice	https://smlouvy.gov.cz/smlouva/soubor/32299271/Smlouva-objednavka_c._1119-0134-23_studie_Aktualniho_stavu_verejneho_zdravi_v_lokalite_Tusimice_Archive.pdf
+          ceps	https://eru.gov.cz/sites/default/files/obsah/prilohy/desetilety-plan-rozvoje-prenosove-soustavy-ceske-republiky-2025-205642346567.pdf
+          spcr	https://www.spcr.cz/sites/default/files/2026-05/pripominky%20SP%20CR%20lomy%20Libous%20a%20Bilina.pdf
+          secr	https://www.svazenergetiky.cz/files/secr-stanovisko-libous.pdf
+          EOF
+          while IFS=$'\t' read -r n u; do
+            curl -fL --retry 3 --connect-timeout 20 --max-time 180 -A 'Mozilla/5.0 Chrome/126' "$u" -o "$B/raw/$n.pdf" || true
+            [ -s "$B/raw/$n.pdf" ] && pdftotext -layout "$B/raw/$n.pdf" "$B/text/$n.txt" || true
+          done < "$B/sources.tsv"
+
+          python3 - "$B" <<'PY'
+          import json,re,sys
+          from pathlib import Path
+          b=Path(sys.argv[1]); out=[]
+          exact={
+            'chmi_2023_36':['předmět','lokalit','tušim','temel','dětmar','klimat','meteor','data','období','termín'],
+            'chmi_2023_37':['předmět','lokalit','tušim','temel','dětmar','klimat','meteor','data','období','termín'],
+            'chmi_2024_32':['předmět','lokalit','tušim','temel','dětmar','klimat','meteor','data','období','termín'],
+            'chmi_2025_21':['předmět','lokalit','tušim','temel','dětmar','klimat','meteor','data','období','termín'],
+            'chmi_2025_26':['předmět','lokalit','tušim','temel','dětmar','klimat','meteor','data','období','termín'],
+            'health_tusimice':['Tušimice','veřejného zdraví','termín','výstup','cena','objednáváme','lokalita'],
+            'ceps':['Tušimice','SMR','malé modulární','Hradec','V411','V412','V413','V414','jaderný','nový jaderný','zdrojů 1500','1 500'],
+            'spcr':['Libouš','Nechranice','Tušimice','SMR','přečerpávací','tunel','štěrbin','vlastnick','majetkopráv','financování'],
+            'secr':['Libouš','Nechranice','Tušimice','SMR','přečerpávací','tunel','štěrbin','vlastnick','majetkopráv','financování']}
+          for p in sorted((b/'text').glob('*.txt')):
+            s=p.read_text('utf-8',errors='replace'); lines=s.splitlines(); name=p.stem
+            hits=[]
+            for i,l in enumerate(lines):
+              if any(k.casefold() in l.casefold() for k in exact.get(name,[])):
+                q=' '.join(lines[max(0,i-3):min(len(lines),i+4)])
+                q=re.sub(r'\s+',' ',q).strip()
+                if q and q not in hits:hits.append(q[:1800])
+              if len(hits)>=120:break
+            out.append({'name':name,'chars':len(s),'hits':hits,'head':re.sub(r'\s+',' ',s[:4000]).strip()})
+          (b/'result.json').write_text(json.dumps(out,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Klíčové výňatky SMR Tušimice','']
+          for x in out:
+            md += [f"## {x['name']}",f"Text: {x['chars']} znaků",'']
+            if x['hits']: md += [f'- {h}' for h in x['hits']]
+            else: md += ['- Bez nalezeného klíčového výrazu.','',f"Začátek dokumentu: {x['head'][:2500]}"]
+            md.append('')
+          (b/'report.md').write_text('\n'.join(md),encoding='utf-8')
+          print(json.dumps({'files':len(out),'with_hits':sum(bool(x['hits']) for x in out)},ensure_ascii=False))
+          PY
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smr-key-extracts
+          path: ${{ runner.temp }}/key/
+          retention-days: 30
+      - if: always()
+        uses: actions/github-script@v7
+        env:
+          RESULT: ${{ steps.work.outcome }}
+        with:
+          script: |
+            const fs=require('fs'), b=process.env.RUNNER_TEMP+'/key/';
+            const read=(p,n)=>{try{return fs.readFileSync(b+p,'utf8').slice(0,n)}catch{return ''}};
+            const body=[`- Commit: \`${context.sha}\``,`- Výsledek: **${process.env.RESULT}**`,'',read('report.md',61000),'','_Úplné zdrojové texty jsou v artefaktu `smr-key-extracts`._'].join('\n').slice(0,65000);
+            const x=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[SMR TUŠIMICE KLÍČOVÉ VÝŇATKY] ${process.env.RESULT} ${new Date().toISOString()}`,body});
+            if(process.env.RESULT==='success')await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:x.data.number,state:'closed',state_reason:'completed'});
