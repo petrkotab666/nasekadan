@@ -92,7 +92,7 @@ Automatizovaná kontrola veřejných zdrojů dne 31. 7. 2026.
 - HTTP: 200
 - Typ: text/html
 - Velikost: 38776 B
-- SHA-256: c1569e8fe899963568110dff8ee23ea8a0b77a0824dc9884f108bccd836a04bc
+- SHA-256: eec300ee966036b12d1ee078865bb178299a9e9922c81a2c4908452938bfc33d
 
 #### MÃ Å½P ZÃ¡vaznÃ© stanovisko MVE HradiÅ¡tÄ
 
@@ -203,7 +203,7 @@ Automatizovaná kontrola veřejných zdrojů dne 31. 7. 2026.
 - HTTP: 200
 - Typ: text/html; charset=utf-8
 - Velikost: 10842 B
-- SHA-256: 2ae5c49692f8d90e33faa74e318c0c0c279aedcc1b55b5b5502416e731759048
+- SHA-256: 75c1cd61f88fba834fc66505f8751385f75a2006a190ac89832f9e572830b08c
 
 > Severočeské vodovody a kanalizace, a.s. | Registr smluv Registr smluv Úvod Jak publikovat Metodika Co dělám špatně? Publikační formuláře Aplikační rozhraní ISRS Testovací prostředí Anonymizace dokumentů Podrobné vyhledávání Časté dotazy Právní rámec Technické řešení Otevřená data Popis nasazených úprav Vyhledat Severočeské vodovody a kanalizace, a.s. - smlouva o dílo - 12922.02 - rekonstrukce MVE - rekonstrukce rozvaděče, rozvod silnoproudu, technologické elektroinstalace, ASŘTP Publikující smluvní strana Název subjektu: Severočeské vodovody a kanalizace, a.s. IČO: 49099451 Datová schránka: f7rf9ns Adresa: Přítkovská 1689/14, 41501 Teplice, CZ Útvar / Odbor : Informace o zápisu ID smlouvy: 36426972 ID verze: 38761644 Číslo verze: 1 Zveřejnění: 14.07.2026 14:17:52 Zveřejňující : Severočeské vodovody a kanalizace, a.s. Datová schránka: f7rf9ns Smlouva Předmět smlouvy: smlouva o dílo - 12922.02 - rekonstrukce MVE - rekonstrukce rozvaděče, rozvod silnoproudu, technologické elektroinstalace, ASŘTP Datum uzavření: 07.07.
 
