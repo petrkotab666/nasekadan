@@ -1,0 +1,106 @@
+name: Finální nasazení článku o požárních omezeních
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-fire-final-20260731.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit připravené soubory
+        run: |
+          set -euo pipefail
+          test -s clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html
+          test -s social/nebezpeci-pozaru-ustecky-kraj-kadan-2026.png
+          grep -Fq '<h1>Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna</h1>' clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html
+          grep -Fq '/clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html' index.html
+          grep -Fq '/clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html' clanky/index.html
+          grep -Fq 'https://nasekadan.cz/clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html' rss.xml
+          grep -Fq 'https://nasekadan.cz/clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html' sitemap.xml
+
+      - name: Kanonicky nasadit na OVH
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Veřejně ověřit kompletní publikaci
+        id: verify
+        run: |
+          set -euo pipefail
+          slug='nebezpeci-pozaru-ustecky-kraj-kadan-2026'
+          title='Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna'
+          sha="$(git rev-parse origin/main)"
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for attempt in $(seq 1 20); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/${slug}.html?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            image="$RUNNER_TEMP/fire-${attempt}.png"
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/social/${slug}.png?v=${stamp}-${attempt}" -o "$image" 2>/dev/null || true
+            image_ok="$(python3 - "$image" <<'PY'
+          import sys
+          from pathlib import Path
+          try:
+              from PIL import Image
+              p=Path(sys.argv[1])
+              with Image.open(p) as im:
+                  print('yes' if im.format=='PNG' and im.size==(1200,630) and p.stat().st_size>10000 else 'no')
+          except Exception:
+              print('no')
+          PY
+            )"
+            if grep -Fq "<h1>${title}</h1>" <<<"$article" \
+              && grep -Fq "/clanky/${slug}.html" <<<"$home" \
+              && grep -Fq "/clanky/${slug}.html" <<<"$archive" \
+              && grep -Fq "https://nasekadan.cz/clanky/${slug}.html" <<<"$rss" \
+              && grep -Fq "https://nasekadan.cz/clanky/${slug}.html" <<<"$sitemap" \
+              && grep -Fq "source=${sha}" <<<"$health" \
+              && [[ "$image_ok" == yes ]]; then
+              echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 6
+          done
+          exit 1
+
+      - name: Zapsat výsledek do issue 232
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RESULT: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.verify.outputs.source_sha }}
+        with:
+          script: |
+            const success = process.env.RESULT === 'success';
+            const body = [
+              `## Finální OVH nasazení ${success ? 'veřejně ověřeno' : 'nebylo plně ověřeno'}`,
+              '',
+              `- Čas: ${new Date().toISOString()}`,
+              `- Článek: https://nasekadan.cz/clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html`,
+              `- Titulka, archiv, RSS, sitemap, obrázek a deployment-health: **${success ? 'ověřeno' : 'selhání nebo rozpor'}**`,
+              `- Veřejný source: ${process.env.SOURCE_SHA || 'nepotvrzen'}`,
+              `- Běh: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            ].join('\n');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:232,body});
