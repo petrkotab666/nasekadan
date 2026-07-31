@@ -9,6 +9,9 @@ nezobrazují.
 """
 from __future__ import annotations
 
+# Servisní spouštěč kanonického OVH deploye po publikaci MVE Hradiště 31. 7. 2026.
+# Nemění chování skriptu; sledovaná cesta pouze aktivuje existující cloudový postup.
+
 from datetime import datetime, timezone, timedelta
 from html import escape, unescape
 from pathlib import Path
