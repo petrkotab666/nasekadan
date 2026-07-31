@@ -1,0 +1,243 @@
+name: Rešerše primárních dokumentů MVE Hradiště
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/mve-hradiste-research-trigger.txt'
+      - '.github/workflows/research-mve-hradiste-pr-20260731.yml'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: mve-hradiste-research-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  research:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Stáhnout a vytěžit veřejné primární dokumenty
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 lxml pypdf
+          python - <<'PY'
+          from __future__ import annotations
+          import hashlib, html, io, json, os, re, sys, textwrap
+          from pathlib import Path
+          from urllib.parse import urljoin, urlparse
+          import requests
+          from bs4 import BeautifulSoup
+          from lxml import etree
+          from pypdf import PdfReader
+
+          OUT = Path('.github/investigations')
+          OUT.mkdir(parents=True, exist_ok=True)
+          REPORT = OUT / 'mve-hradiste-primary-docs-20260731.md'
+          session = requests.Session()
+          session.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadanResearch/1.0; +https://nasekadan.cz)'})
+
+          city_url = ('https://www.mesto-kadan.cz/redakce/index.php?'
+                      'as4uOriginalDomain=www.mesto-kadan.cz&as4u_protocol=https&'
+                      'clanek=274670&detail_claim=295345&lanG=cs&slozka=219380')
+          lines = ['# MVE Hradiště – primární dokumenty', '',
+                   'Automatizovaná kontrola veřejných zdrojů dne 31. 7. 2026.', '']
+
+          def get(url: str, timeout=60):
+              r = session.get(url, timeout=timeout, allow_redirects=True)
+              return r
+
+          def clean_text(value: str) -> str:
+              return re.sub(r'\s+', ' ', html.unescape(value or '')).strip()
+
+          def pdf_text(data: bytes) -> str:
+              try:
+                  reader = PdfReader(io.BytesIO(data))
+                  return '\n'.join((p.extract_text() or '') for p in reader.pages)
+              except Exception as exc:
+                  return f'[PDF extraction failed: {exc}]'
+
+          def relevant_snippets(text: str, terms: list[str], radius=420) -> list[str]:
+              norm = re.sub(r'\s+', ' ', text)
+              out=[]
+              low=norm.lower()
+              for term in terms:
+                  start=0
+                  while True:
+                      pos=low.find(term.lower(), start)
+                      if pos < 0: break
+                      snippet=norm[max(0,pos-radius):min(len(norm),pos+len(term)+radius)]
+                      if snippet not in out: out.append(snippet)
+                      start=pos+len(term)
+                      if len(out)>=18: return out
+              return out
+
+          # 1) Detail úřední desky a jeho přílohy
+          lines += ['## 1. Úřední deska města Kadaň', '', f'- Detail: {city_url}']
+          city = get(city_url)
+          lines += [f'- HTTP: {city.status_code}', f'- Konečná URL: {city.url}',
+                    f'- Content-Type: {city.headers.get("content-type","")}', '']
+          city_html = city.text
+          soup = BeautifulSoup(city_html, 'lxml')
+          visible = clean_text(soup.get_text(' ', strip=True))
+          lines += ['### Text detailu', '', visible[:12000] or '[bez čitelného textu]', '']
+          candidates=[]
+          for tag in soup.find_all(['a','iframe','embed','object','source']):
+              raw=tag.get('href') or tag.get('src') or tag.get('data')
+              if not raw: continue
+              u=urljoin(city.url, raw)
+              label=clean_text(tag.get_text(' ', strip=True))
+              if u not in [x[0] for x in candidates]: candidates.append((u,label))
+          lines += ['### Odkazy a přílohy v detailu', '']
+          if not candidates: lines.append('- Nebyl nalezen žádný odkaz v HTML detailu.')
+          for u,label in candidates:
+              lines.append(f'- {label or "bez popisu"}: {u}')
+          lines.append('')
+
+          attachment_results=[]
+          for u,label in candidates:
+              low=u.lower()
+              if not (any(x in low for x in ['.pdf','.doc','.docx','.odt','download','soubor','prilo','claim','file']) or 'dokument' in label.lower()):
+                  continue
+              try:
+                  r=get(u)
+                  ctype=(r.headers.get('content-type') or '').lower()
+                  text=''
+                  if 'pdf' in ctype or r.content.startswith(b'%PDF'):
+                      text=pdf_text(r.content)
+                  elif 'text' in ctype or 'html' in ctype or r.content[:1] in (b'<',b'{',b'['):
+                      text=clean_text(BeautifulSoup(r.text,'lxml').get_text(' ',strip=True))
+                  attachment_results.append({
+                      'url':u,'label':label,'status':r.status_code,'ctype':ctype,
+                      'size':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest(),
+                      'text':text
+                  })
+              except Exception as exc:
+                  attachment_results.append({'url':u,'label':label,'error':str(exc),'text':''})
+          lines += ['### Vytěžené přílohy úřední desky', '']
+          if not attachment_results: lines.append('- Žádnou přílohu se nepodařilo z HTML identifikovat.')
+          for item in attachment_results:
+              lines += [f'#### {item.get("label") or item["url"]}', '', f'- URL: {item["url"]}',
+                        f'- HTTP: {item.get("status","chyba")}', f'- Typ: {item.get("ctype","")}',
+                        f'- Velikost: {item.get("size",0)} B', f'- SHA-256: {item.get("sha256","")}', '']
+              for sn in relevant_snippets(item.get('text',''), ['MVE Hradiště','stavebník','záměr','parcel','cena','Mateo','Severočesk','stanovisko','podmínk']):
+                  lines += ['> '+sn, '']
+
+          # 2) Otevřená data Registru smluv
+          lines += ['## 2. Registr smluv – záznam 12922.02', '']
+          index_urls=['https://data.smlouvy.gov.cz/index.xml','https://data.isrs.cz/index.xml']
+          index_data=None; index_url=None
+          for u in index_urls:
+              try:
+                  r=get(u)
+                  if r.ok and b'<odkaz>' in r.content:
+                      index_data=r.content; index_url=u; break
+              except Exception:
+                  pass
+          lines += [f'- Index otevřených dat: {index_url or "nenačten"}']
+          dump_url='https://data.smlouvy.gov.cz/dump_2026_07.xml'
+          if index_data:
+              try:
+                  root=etree.fromstring(index_data)
+                  for el in root.iter():
+                      if el.tag.split('}')[-1]=='odkaz' and el.text and 'dump_2026_07' in el.text:
+                          dump_url=el.text.strip(); break
+              except Exception as exc:
+                  lines.append(f'- Chyba parsování indexu: {exc}')
+          lines += [f'- Červencový dump: {dump_url}', '']
+          dump=get(dump_url, timeout=180)
+          dump.raise_for_status()
+          target_xml=None
+          context=etree.iterparse(io.BytesIO(dump.content), events=('end',), recover=True, huge_tree=True)
+          for _, elem in context:
+              if elem.tag.split('}')[-1] != 'zaznam':
+                  continue
+              flat=' '.join(clean_text(x) for x in elem.itertext())
+              if '12922.02' in flat or ('rekonstrukce MVE' in flat and 'Mateo Solutions' in flat):
+                  target_xml=etree.tostring(elem, encoding='unicode', pretty_print=True)
+                  break
+              elem.clear()
+              while elem.getprevious() is not None:
+                  del elem.getparent()[0]
+          if not target_xml:
+              lines += ['- Záznam nebyl v dumpu nalezen.', '']
+          else:
+              lines += ['### Metadata záznamu', '', '```xml', target_xml[:30000], '```', '']
+              root=etree.fromstring(target_xml.encode())
+              fields=[]
+              for el in root.iter():
+                  name=el.tag.split('}')[-1]
+                  val=clean_text(el.text or '')
+                  if val: fields.append((name,val))
+              links=[]
+              for name,val in fields:
+                  if val.startswith('http'): links.append(val)
+              lines += ['### Přílohy smlouvy', '']
+              if not links: lines.append('- V záznamu nebyl nalezen odkaz.')
+              for u in dict.fromkeys(links): lines.append(f'- {u}')
+              lines.append('')
+              for u in dict.fromkeys(links):
+                  try:
+                      r=get(u, timeout=120)
+                      ctype=(r.headers.get('content-type') or '').lower()
+                      text=''
+                      if 'pdf' in ctype or r.content.startswith(b'%PDF'):
+                          text=pdf_text(r.content)
+                      elif 'html' in ctype or 'text' in ctype:
+                          text=clean_text(BeautifulSoup(r.text,'lxml').get_text(' ',strip=True))
+                      lines += [f'#### Příloha {Path(urlparse(u).path).name or u}', '',
+                                f'- URL: {u}', f'- HTTP: {r.status_code}', f'- Typ: {ctype}',
+                                f'- Velikost: {len(r.content)} B',
+                                f'- SHA-256: {hashlib.sha256(r.content).hexdigest()}', '']
+                      snippets=relevant_snippets(text, ['Hradiště','12922.02','cena díla','termín','místo plnění','Mateo','rozvaděč','ASŘTP','předání','objednatel','zhotovitel'], radius=650)
+                      if snippets:
+                          for sn in snippets: lines += ['> '+sn, '']
+                      else:
+                          lines += ['> V příloze nebyla dostupná použitelná textová vrstva nebo nebyl nalezen hledaný výraz.', '']
+                  except Exception as exc:
+                      lines += [f'#### Příloha {u}', '', f'- Chyba stažení: {exc}', '']
+
+          # 3) Rychlé závěry – jen co je přímo v dokumentech
+          lines += ['## 3. Automatický soupis hledaných údajů', '']
+          all_text='\n'.join(lines)
+          for label,patterns in {
+              'Lokalita Hradiště':['Hradiště u Vernéřova','ÚV Hradiště','MVE Hradiště'],
+              'Dodavatel Mateo Solutions':['Mateo Solutions'],
+              'Číslo akce 12922.02':['12922.02'],
+              'Cena':['Cena díla','cena díla','Kč bez DPH','Kč včetně DPH'],
+              'Termín':['termín dokončení','doba plnění','Termín plnění','předání díla'],
+              'Environmentální podmínky':['podmínky','závazné stanovisko','jednotné environmentální stanovisko'],
+          }.items():
+              found=[p for p in patterns if p.lower() in all_text.lower()]
+              lines.append(f'- {label}: {", ".join(found) if found else "nenalezeno"}')
+
+          REPORT.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          print(f'Wrote {REPORT} ({REPORT.stat().st_size} bytes)')
+          PY
+
+      - name: Uložit výsledek do servisní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/investigations/mve-hradiste-primary-docs-20260731.md
+          git commit -m 'Dohledat primární dokumenty k MVE Hradiště' || exit 0
+          git push origin "HEAD:${HEAD_REF}"
