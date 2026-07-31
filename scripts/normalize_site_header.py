@@ -16,6 +16,7 @@ EXCLUDE_DIRS = {
     "nahled",
     "newsletter",
     "nginx",
+    "parts",
     "scripts",
     "sdilet",
     "tools",
@@ -33,7 +34,13 @@ BODY_RE = re.compile(r"(<body\b[^>]*>)", re.IGNORECASE)
 
 
 def is_public_html(path: Path) -> bool:
-    return not any(part in EXCLUDE_DIRS for part in path.relative_to(ROOT).parts)
+    relative = path.relative_to(ROOT)
+    if any(part in EXCLUDE_DIRS for part in relative.parts):
+        return False
+    lower_name = path.name.lower()
+    if lower_name.startswith(("google", "bing", "yandex")):
+        return False
+    return True
 
 
 def normalize_header_html(text: str) -> str:
@@ -60,6 +67,8 @@ def normalize_all_headers() -> int:
         if not is_public_html(path):
             continue
         original = path.read_text(encoding="utf-8", errors="replace")
+        if "<html" not in original.lower() or "<body" not in original.lower():
+            continue
         updated = ensure_site_script(normalize_header_html(original))
         if updated == original:
             continue
