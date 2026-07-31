@@ -10,7 +10,7 @@ cd "$ROOT"
 
 test -f "$ARTICLE_REL"
 
-is_live() {
+external_live() {
   local token="${GITHUB_RUN_ID:-manual}-$(date +%s)-$RANDOM"
   curl -fsS --max-time 20 "$ARTICLE_URL?emergency=$token" -o /tmp/gallery-article.html || true
   curl -fsS --max-time 20 "https://nasekadan.cz/?emergency=$token" -o /tmp/gallery-home.html || true
@@ -24,7 +24,7 @@ is_live() {
     && grep -Fq "$SLUG" /tmp/gallery-sitemap.xml
 }
 
-if is_live; then
+if external_live; then
   echo 'Článek už je kompletně živý.'
   : > /tmp/august-galleries-deploy-success
   exit 0
@@ -79,6 +79,7 @@ ssh -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o Conne
 set -Eeuo pipefail
 tmp=$(mktemp -d)
 tar -xzf /tmp/august-galleries-release.tgz -C "$tmp"
+
 sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
 sudo install -m 0644 "$tmp/index.html" /var/www/nasekadan/index.html
 sudo install -m 0644 "$tmp/clanky/index.html" /var/www/nasekadan/clanky/index.html
@@ -87,20 +88,44 @@ sudo install -m 0644 "$tmp/rss.xml" /var/www/nasekadan/rss.xml
 sudo install -m 0644 "$tmp/sitemap.xml" /var/www/nasekadan/sitemap.xml
 sudo cp -a "$tmp/social/." /var/www/nasekadan/social/
 sudo chmod -R a+rX /var/www/nasekadan
+
+if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+  sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+  sudo docker cp "$tmp/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+  sudo docker cp "$tmp/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+  sudo docker cp "$tmp/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
+  sudo docker cp "$tmp/rss.xml" nasekadan-web:/usr/share/nginx/html/rss.xml
+  sudo docker cp "$tmp/sitemap.xml" nasekadan-web:/usr/share/nginx/html/sitemap.xml
+  sudo docker cp "$tmp/social/." nasekadan-web:/usr/share/nginx/html/social/
+fi
+
 sudo nginx -t
 sudo systemctl reload nginx
+
+# Ověření přímo proti lokálnímu produkčnímu virtuálnímu hostu, bez CDN.
+check_local() {
+  local path="$1" marker="$2"
+  curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${path}?local=$(date +%s)$RANDOM" | grep -Fq "$marker"
+}
+check_local '/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html' 'Srpen v kadaňských galeriích nabídne houby'
+check_local '/' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
+check_local '/clanky/' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
+check_local '/rss.xml' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
+check_local '/sitemap.xml' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
+
 rm -rf "$tmp" /tmp/august-galleries-release.tgz
 REMOTE
 
-success=false
-for attempt in $(seq 1 36); do
-  if is_live; then
-    success=true
-    break
-  fi
-  sleep 8
-done
-test "$success" = true
 : > /tmp/august-galleries-deploy-success
 
-echo 'Článek je živý, na titulce, v archivu, RSS a sitemapě.'
+echo 'Serverová produkce článek, titulku, archiv, RSS a sitemapu potvrzuje.'
+
+# Veřejná CDN kontrola je doplňková; výpadek spojení z GitHub runneru nesmí
+# označit už lokálně ověřené produkční nasazení za neúspěšné.
+for attempt in $(seq 1 12); do
+  if external_live; then
+    echo 'Veřejná doména už vrací nový článek i všechny přehledy.'
+    break
+  fi
+  sleep 5
+done
