@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "fingerprint": "produkce-pozar-archiv-main-20260731",
+  "title": "Požární článek chybí ve veřejném archivu Naše Kadaň",
+  "summary": "Titulní stránka zobrazuje požární článek jako nejnovější, ale veřejný archiv /clanky/ stále začíná článkem o koupališti. Main obsahuje požární článek v archivu na první pozici. Jeden bezpečný kanonický opravný pokus přes existující OVH workflow byl spuštěn, avšak následná veřejná kontrola zatím ukázala trvající rozpor.",
+  "facts": [
+    "Veřejná titulka zobrazuje článek Ústecký kraj znovu omezil rozdělávání ohňů jako nejnovější.",
+    "Veřejný archiv /clanky/ požární článek neobsahuje a začíná článkem o kadaňském koupališti.",
+    "Zdrojový soubor clanky/index.html v aktuálním main obsahuje požární článek na první pozici.",
+    "Požární článek byl doplněn do production-content-manifest.json commitem 0b5483a0776f8eb4add437edfa9ec51ca6c5f6a5.",
+    "Servisní PR #249 byl sloučen jako commit 81e3b497e675b9307e8344f237fc4741168a8731 a vyvolává jediný kanonický OVH opravný běh.",
+    "Následná veřejná kontrola v 13:47 SELČ stále ukázala starý archiv; další deploy při nezměněném stavu nebyl spuštěn."
+  ],
+  "sources": [
+    "https://nasekadan.cz/",
+    "https://nasekadan.cz/clanky/",
+    "https://github.com/petrkotab666/nasekadan/blob/main/clanky/index.html",
+    "https://github.com/petrkotab666/nasekadan/commit/0b5483a0776f8eb4add437edfa9ec51ca6c5f6a5",
+    "https://github.com/petrkotab666/nasekadan/pull/249",
+    "https://github.com/petrkotab666/nasekadan/issues/250"
+  ],
+  "observed_at": "2026-07-31T11:47:25Z",
+  "severity": "high",
+  "recommended_action": "Nespouštět další paralelní deploy. Zkontrolovat doběhnutí již vyvolaného finálního OVH workflow a poté veřejně ověřit článek, titulku, archiv, RSS, sitemap, deployment-health source a sociální obrázek."
+}
