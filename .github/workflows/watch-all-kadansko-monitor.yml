@@ -1,0 +1,94 @@
+name: Dohled úplného monitoringu Kadaňska
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 */2 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/watch-all-kadansko-monitor.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Ověřit čerstvost a rozsah úplného monitoringu
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, subprocess, tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          path=Path('data/all-kadansko-monitoring-status.json')
+          now=datetime.now(timezone.utc)
+          status={}
+          problems=[]
+          age_minutes=None
+          if not path.exists():
+              problems.append('Stavový soubor úplného monitoringu neexistuje.')
+          else:
+              try:
+                  status=json.loads(path.read_text(encoding='utf-8'))
+                  checked=datetime.fromisoformat(str(status.get('checkedAt') or '').replace('Z','+00:00'))
+                  if checked.tzinfo is None:
+                      checked=checked.replace(tzinfo=timezone.utc)
+                  age_minutes=int((now-checked.astimezone(timezone.utc)).total_seconds()//60)
+                  if age_minutes>95:
+                      problems.append(f'Poslední úplná kontrola je stará {age_minutes} minut.')
+                  if int(status.get('sourceCount') or 0)<100:
+                      problems.append(f'Registr obsahuje jen {status.get("sourceCount")} zdrojů.')
+                  if int(status.get('checkedSources') or 0)<75:
+                      problems.append(f'Dostupných bylo jen {status.get("checkedSources")} zdrojů.')
+                  coverage=status.get('coverage') or {}
+                  if int(coverage.get('monitoredDirectoryOrganizations') or 0)!=int(coverage.get('directoryOrganizations') or 0):
+                      problems.append('Některá kadaňská organizace z adresáře není napojena.')
+                  if len(coverage.get('scopeMunicipalities') or [])!=19:
+                      problems.append('Územní rozsah neobsahuje všech 19 obcí ORP Kadaň.')
+              except Exception as exc:
+                  problems.append(f'Stav nelze přečíst: {type(exc).__name__}: {exc}')
+
+          healthy=not problems
+          lines=[
+              '## Nezávislý dohled úplného monitoringu Kadaňska','',
+              f'- Kontrola watchdogu: `{now.isoformat()}`',
+              f'- Poslední úplný běh: `{status.get("checkedAt","neuvedeno")}`',
+              f'- Stáří běhu: **{age_minutes if age_minutes is not None else "neznámé"} minut**',
+              f'- Zdroje: **{status.get("checkedSources","?")}/{status.get("sourceCount","?")}**',''
+          ]
+          if problems:
+              lines += ['### Zjištěné problémy'] + [f'- {item}' for item in problems]
+          else:
+              lines += ['Úplný monitoring běží v požadovaném rozsahu a intervalu.']
+          lines += ['', '_Watchdog běží odděleně od hlavního monitoru._']
+          with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,suffix='.md') as handle:
+              handle.write('\n'.join(lines)+'\n'); body=handle.name
+          try:
+              command=[
+                  'python3','scripts/upsert_github_issue.py',
+                  '--fingerprint','all-kadansko-monitor-stale',
+                  '--title','[MONITORING KADAŇSKO] Úplný monitoring neběží správně [all-kadansko-monitor-stale]',
+                  '--body-file',body,
+                  '--assignee','petrkotab666',
+              ]
+              if healthy:
+                  command += ['--close','--comment-existing']
+              subprocess.run(command,check=True)
+          finally:
+              Path(body).unlink(missing_ok=True)
+          if not healthy:
+              raise SystemExit('; '.join(problems))
+          PY
