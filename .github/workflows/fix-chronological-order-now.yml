@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - '.github/chronological-order-trigger.txt'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/chronological-order-trigger.txt'
   workflow_dispatch:
 
 permissions:
@@ -18,8 +22,6 @@ jobs:
   publish-and-deploy:
     runs-on: self-hosted
     timeout-minutes: 30
-    env:
-      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Stáhnout aktuální main
         uses: actions/checkout@v4
