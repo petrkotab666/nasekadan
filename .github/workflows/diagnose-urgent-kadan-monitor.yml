@@ -1,0 +1,42 @@
+name: Diagnostika rychlého monitoringu Kadaně
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/triggers/urgent-monitor-diagnostic.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Otestovat všechny přímé zdroje bez změny produkčního stavu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/monitor_national_kadan.py scripts/monitor_urgent_kadan.py
+          printf '{"version":1,"seen":{}}\n' > "$RUNNER_TEMP/empty-state.json"
+          python3 scripts/monitor_urgent_kadan.py \
+            --config data/urgent-kadan-sources.json \
+            --state "$RUNNER_TEMP/empty-state.json" \
+            --status "$RUNNER_TEMP/urgent-status.json" \
+            --output "$RUNNER_TEMP/urgent-alerts.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          status=json.loads((root/'urgent-status.json').read_text(encoding='utf-8'))
+          print(json.dumps(status, ensure_ascii=False, indent=2))
+          if int(status.get('checkedSources') or 0) < 6:
+              raise SystemExit('Prošlo méně než šest přímých zdrojů.')
+          if int(status.get('itemsParsed') or 0) < 20:
+              raise SystemExit('Zdroje vrátily podezřele málo položek.')
+          PY
