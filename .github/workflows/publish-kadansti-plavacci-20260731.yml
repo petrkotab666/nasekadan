@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Stáhnout repozitář
         uses: actions/checkout@v4
@@ -49,4 +49,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Publikovat zápis Kadaňských Plaváčků do podzimních kurzů"
+          git pull --rebase origin main
           git push
