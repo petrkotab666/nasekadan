@@ -27,12 +27,33 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Připravit publikační skript
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/publish_kadansti_plavacci_autumn_2026.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'kadansti-plavacci-zapis-podzim-2026.png',
+              'kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png',
+          )
+          old = "    text = text.replace('>', '>\\n' + NEWS_URL, 1) if '<urlset' in text else text\n"
+          new = "    text = re.sub(r'(<urlset\\b[^>]*>)', lambda match: match.group(1) + '\\n' + NEWS_URL, text, count=1) if '<urlset' in text else text\n"
+          if old not in text:
+              raise SystemExit('V publikačním skriptu chybí očekávaná oprava news sitemap.')
+          text = text.replace(old, new, 1)
+          text = text.replace('    rewrite_latest_enforcer()\n', '', 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
       - name: Publikovat Kadaňské Plaváčky
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p social
-          base64 -d .github/assets/kadansti-plavacci-zapis-podzim-2026.png.b64 > social/kadansti-plavacci-zapis-podzim-2026.png
           python3 scripts/publish_kadansti_plavacci_autumn_2026.py
           python3 scripts/sort_articles_chronologically.py
 
@@ -42,12 +63,20 @@ jobs:
           set -euo pipefail
           article='clanky/kadansti-plavacci-zapis-podzim-2026.html'
           test -s "$article"
-          test -s social/kadansti-plavacci-zapis-podzim-2026.png
+          test -s social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png
           grep -q 'kadansti-plavacci-zapis-podzim-2026.html' index.html
           grep -q 'kadansti-plavacci-zapis-podzim-2026.html' clanky/index.html
           grep -q 'kadansti-plavacci-zapis-podzim-2026.html' rss.xml
           grep -q 'kadansti-plavacci-zapis-podzim-2026.html' sitemap.xml
           grep -q 'kadansti-plavacci-zapis-podzim-2026.html' news-sitemap.xml
+          grep -q 'kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png' "$article"
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          ET.parse('rss.xml')
+          ET.parse('sitemap.xml')
+          ET.parse('news-sitemap.xml')
+          print('XML výstupy jsou platné.')
+          PY
 
       - name: Uložit zdrojovou publikaci
         shell: bash
@@ -96,7 +125,7 @@ jobs:
             article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html?v=$stamp-$attempt" || true)"
             home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp-$attempt" || true)"
             archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" || true)"
-            image_code="$(curl -4 -ksS -o /dev/null -w '%{http_code}' --max-time 25 "https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png?v=$stamp-$attempt" || true)"
+            image_code="$(curl -4 -ksS -o /dev/null -w '%{http_code}' --max-time 25 "https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png?v=$stamp-$attempt" || true)"
             if grep -q 'Kadaňští Plaváčci otevřeli zápis' <<<"$article" \
               && grep -q 'kadansti-plavacci-zapis-podzim-2026.html' <<<"$home" \
               && grep -q 'kadansti-plavacci-zapis-podzim-2026.html' <<<"$archive" \
