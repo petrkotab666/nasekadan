@@ -1,0 +1,81 @@
+name: Ověřit zdroj článku o sečení před publikací
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/drafts/sekani-travniku-kadan-spravci-vysky-2026.html.gz.b64'
+      - '.github/drafts/sekani-travniku-kadan-spravci-vysky-2026.html.gz.b64.part2'
+      - '.github/workflows/publish-greenery-2026-08-01-1100.yml'
+      - '.github/workflows/validate-greenery-publication-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-greenery-publication-source
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit a zkontrolovat zdroj
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/drafts/sekani-travniku-kadan-spravci-vysky-2026.html.gz.b64 \
+              .github/drafts/sekani-travniku-kadan-spravci-vysky-2026.html.gz.b64.part2 \
+            | base64 -d | gzip -dc > /tmp/greenery-article.html
+          test -s /tmp/greenery-article.html
+          grep -Fq '<meta name="robots" content="noindex,nofollow">' /tmp/greenery-article.html
+          grep -Fq '2026-08-01T11:00:00+02:00' /tmp/greenery-article.html
+          grep -Fq 'data-poll-id="sekani-travniku-kadan-2026"' /tmp/greenery-article.html
+          grep -Fq '/api/analytics/pageview' /tmp/greenery-article.html
+          grep -Fq 'Sedm centimetrů je smluvní minimum jedné konkrétní lokality' /tmp/greenery-article.html
+          grep -Fq '105,2 ha' /tmp/greenery-article.html
+          grep -Fq '282' /tmp/greenery-article.html
+          grep -Fq '7–25 cm' /tmp/greenery-article.html
+          grep -Fq '</article>' /tmp/greenery-article.html
+          grep -Fq '</html>' /tmp/greenery-article.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          class P(HTMLParser): pass
+          text=Path('/tmp/greenery-article.html').read_text(encoding='utf-8')
+          P().feed(text)
+          assert len(text) > 25000
+          assert text.count('<h2') >= 10
+          assert text.count('data-poll-vote=') == 4
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat ověřený stav
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          CHECK_OK: ${{ steps.check.outputs.ok }}
+        with:
+          script: |
+            const path='.github/greenery-preflight-status.json';
+            const ok=process.env.CHECK_OK==='true';
+            const payload={
+              status:ok?'passed':'failed',
+              checkedAtUtc:new Date().toISOString(),
+              runId:context.runId,
+              sourceSha:context.sha,
+              scheduledFor:'2026-08-01T11:00:00+02:00',
+              article:'https://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+            };
+            const content=Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64');
+            let sha;
+            try{const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(current.data))sha=current.data.sha;}catch(error){if(error.status!==404)throw error;}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat předletovou kontrolu článku o sečení: ${payload.status} [skip ci]`,content,...(sha?{sha}:{})});
