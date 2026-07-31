@@ -1,0 +1,72 @@
+name: Dokončit zdrojovou publikaci požárních omezení
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-fire-source-cloud-20260731.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-fire-source-publication
+  cancel-in-progress: false
+
+jobs:
+  publish-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytvořit článek, obrázek a všechny veřejné přehledy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          python scripts/publish_fire_restrictions_20260731.py
+          slug='nebezpeci-pozaru-ustecky-kraj-kadan-2026'
+          title='Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna'
+          test -s "clanky/${slug}.html"
+          test -s "social/${slug}.png"
+          grep -Fq "<h1>${title}</h1>" "clanky/${slug}.html"
+          grep -Fq "/clanky/${slug}.html" index.html
+          grep -Fq "/clanky/${slug}.html" clanky/index.html
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" sitemap.xml
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" news-sitemap.xml
+          python - "social/${slug}.png" <<'PY'
+          import struct, sys
+          from pathlib import Path
+          data=Path(sys.argv[1]).read_bytes()
+          assert data.startswith(b'\x89PNG\r\n\x1a\n')
+          assert struct.unpack('>II', data[16:24]) == (1200, 630)
+          assert len(data) > 10000
+          PY
+
+      - name: Uložit dokončenou publikaci do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň publikační automat'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html \
+            social/nebezpeci-pozaru-ustecky-kraj-kadan-2026.png \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
+            llms.txt robots.txt analytics.js 404.html style.css
+          if git diff --cached --quiet; then
+            echo 'Zdrojová publikace už je kompletní.'
+            exit 0
+          fi
+          git commit -m 'Dokončit zdrojovou publikaci požárních omezení [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
