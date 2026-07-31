@@ -10,7 +10,6 @@ on:
 permissions:
   contents: read
   issues: write
-  actions: write
 
 jobs:
   investigate:
@@ -19,202 +18,118 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Připravit nástroje
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq p7zip-full poppler-utils unzip file
-          mkdir -p "$RUNNER_TEMP/smr/raw" "$RUNNER_TEMP/smr/extracted" "$RUNNER_TEMP/smr/text"
-
-      - name: Stáhnout archivy CENIA a přílohy NEN
-        id: download
+      - name: Stáhnout, rozbalit a analyzovat veřejné podklady
+        id: scan
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
+          set -Eeuo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq p7zip-full poppler-utils unzip file
           BASE="$RUNNER_TEMP/smr"
-          LOG="$BASE/download.log"
+          mkdir -p "$BASE/raw" "$BASE/extracted" "$BASE/text"
+          LOG="$BASE/log.txt"
           UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126 Safari/537.36'
 
-          download() {
-            local url="$1" target="$2" referer="${3:-}"
-            echo "=== $target ===" | tee -a "$LOG"
-            args=(-fL --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 180 -A "$UA")
-            [[ -n "$referer" ]] && args+=(-e "$referer")
-            if curl "${args[@]}" -o "$target" "$url" 2>>"$LOG"; then
-              file "$target" | tee -a "$LOG"
-              stat -c '%n | %s B' "$target" | tee -a "$LOG"
-              sha256sum "$target" | tee -a "$LOG"
+          get() {
+            local url="$1" out="$2" ref="${3:-}"
+            echo "DOWNLOAD $out" | tee -a "$LOG"
+            local args=(-fL --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 180 -A "$UA")
+            [[ -n "$ref" ]] && args+=(-e "$ref")
+            if curl "${args[@]}" -o "$out" "$url" 2>>"$LOG"; then
+              file "$out" | tee -a "$LOG"
+              stat -c '%n | %s B' "$out" | tee -a "$LOG"
             else
-              echo "DOWNLOAD_FAILED $url" | tee -a "$LOG"
-              rm -f "$target"
+              echo "FAILED $url" | tee -a "$LOG"
+              rm -f "$out"
             fi
           }
 
-          download 'https://portal.cenia.cz/eiasea/download/RUlBX01aUDUzMV9vem5hbWVuaURPQ180NTgwMDg3OTA3OTYyNDEzNzUxLjd6/MZP531_oznameni.7z' "$BASE/raw/MZP531_oznameni.7z"
-          download 'https://portal.cenia.cz/eiasea/download/RUlBX01aUDUzMV9tZXppc3RPem5hbWVuaURPQ18yODkwNDQ1NzMzMzQ1MTU0NDgwLjd6/MZP531_mezistOznameni.7z' "$BASE/raw/MZP531_mezistOznameni.7z"
+          get 'https://portal.cenia.cz/eiasea/download/RUlBX01aUDUzMV9vem5hbWVuaURPQ180NTgwMDg3OTA3OTYyNDEzNzUxLjd6/MZP531_oznameni.7z' "$BASE/raw/MZP531_oznameni.7z"
+          get 'https://portal.cenia.cz/eiasea/download/RUlBX01aUDUzMV9tZXppc3RPem5hbWVuaURPQ18yODkwNDQ1NzMzMzQ1MTU0NDgwLjd6/MZP531_mezistOznameni.7z' "$BASE/raw/MZP531_mezistOznameni.7z"
 
-          NEN_PAGE='https://nen.nipez.cz/verejne-zakazky/detail-zakazky/N006-24-V00022141/zadavaci-dokumentace'
-          curl -fsSL -A "$UA" -c "$BASE/nen.cookies" "$NEN_PAGE" -o "$BASE/raw/nen-page.html" || true
-          for spec in \
-            '2303464694|NEN_technicka_specifikace.docx' \
-            '2303464655|NEN_harmonogram.docx' \
-            '2303464663|NEN_cenova_specifikace.docx' \
-            '2303464743|NEN_seznam_poddodavatelu.docx' \
-            '2303464721|NEN_protiplneni_objednatele.docx'; do
-            id="${spec%%|*}"; name="${spec#*|}"
-            echo "=== $name ===" | tee -a "$LOG"
-            if curl -fL --retry 3 --connect-timeout 20 --max-time 120 \
-              -A "$UA" -e "$NEN_PAGE" -b "$BASE/nen.cookies" \
+          NEN='https://nen.nipez.cz/verejne-zakazky/detail-zakazky/N006-24-V00022141/zadavaci-dokumentace'
+          curl -fsSL -A "$UA" -c "$BASE/cookies" "$NEN" -o "$BASE/raw/nen.html" || true
+          for x in \
+            '2303464694 NEN_technicka_specifikace.docx' \
+            '2303464655 NEN_harmonogram.docx' \
+            '2303464663 NEN_cenova_specifikace.docx' \
+            '2303464743 NEN_seznam_poddodavatelu.docx' \
+            '2303464721 NEN_protiplneni.docx'; do
+            set -- $x; id="$1"; name="$2"
+            if curl -fL --retry 3 --connect-timeout 20 --max-time 120 -A "$UA" -e "$NEN" -b "$BASE/cookies" \
               -o "$BASE/raw/$name" "https://nen.nipez.cz/file?id=$id" 2>>"$LOG"; then
               file "$BASE/raw/$name" | tee -a "$LOG"
-              stat -c '%n | %s B' "$BASE/raw/$name" | tee -a "$LOG"
-              sha256sum "$BASE/raw/$name" | tee -a "$LOG"
               if ! file "$BASE/raw/$name" | grep -qiE 'Microsoft Word|Zip archive'; then
-                echo "INVALID_NEN_PAYLOAD $name" | tee -a "$LOG"
-                head -c 500 "$BASE/raw/$name" | strings | tee -a "$LOG" || true
-                rm -f "$BASE/raw/$name"
+                echo "INVALID $name" | tee -a "$LOG"; rm -f "$BASE/raw/$name"
               fi
             else
-              echo "NEN_DOWNLOAD_FAILED id=$id name=$name" | tee -a "$LOG"
-              rm -f "$BASE/raw/$name"
+              echo "NEN_FAILED $id $name" | tee -a "$LOG"; rm -f "$BASE/raw/$name"
             fi
           done
 
-      - name: Rozbalit a převést dokumenty na text
-        id: extract
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          BASE="$RUNNER_TEMP/smr"
-          LOG="$BASE/extract.log"
-
-          for archive in "$BASE"/raw/*.7z; do
-            [[ -f "$archive" ]] || continue
-            dir="$BASE/extracted/$(basename "$archive" .7z)"
-            mkdir -p "$dir"
-            echo "=== EXTRACT $(basename "$archive") ===" | tee -a "$LOG"
-            7z x -y -o"$dir" "$archive" 2>&1 | tee -a "$LOG"
+          for a in "$BASE"/raw/*.7z; do
+            [[ -f "$a" ]] || continue
+            d="$BASE/extracted/$(basename "$a" .7z)"; mkdir -p "$d"
+            7z x -y -o"$d" "$a" >>"$LOG" 2>&1
           done
-
-          for doc in "$BASE"/raw/*.docx; do
-            [[ -f "$doc" ]] || continue
-            cp "$doc" "$BASE/extracted/$(basename "$doc")"
-          done
-
-          find "$BASE/extracted" -type f -printf '%P | %s B\n' | sort > "$BASE/text/file-list.txt"
+          cp "$BASE"/raw/*.docx "$BASE/extracted/" 2>/dev/null || true
+          find "$BASE/extracted" -type f -printf '%P | %s B\n' | sort > "$BASE/file-list.txt"
 
           python3 - "$BASE" <<'PY'
-          import re, sys, zipfile
+          import json,re,sys,zipfile,subprocess
           from pathlib import Path
           from xml.etree import ElementTree as ET
-
-          base=Path(sys.argv[1])
-          out=base/'text'
-          out.mkdir(exist_ok=True)
-          for p in base.joinpath('extracted').rglob('*'):
-              if not p.is_file():
-                  continue
-              suffix=p.suffix.lower()
-              rel=str(p.relative_to(base/'extracted')).replace('/','__')
-              if suffix=='.docx':
-                  try:
+          base=Path(sys.argv[1]); root=base/'extracted'; out=base/'text'; out.mkdir(exist_ok=True)
+          for p in root.rglob('*'):
+              if not p.is_file(): continue
+              rel=str(p.relative_to(root)).replace('/','__')
+              try:
+                  if p.suffix.lower()=='.docx':
+                      pieces=[]
                       with zipfile.ZipFile(p) as z:
-                          parts=[]
-                          for name in z.namelist():
-                              if name.startswith('word/') and name.endswith('.xml'):
-                                  root=ET.fromstring(z.read(name))
-                                  texts=[]
-                                  for el in root.iter():
-                                      if el.tag.endswith('}t') and el.text:
-                                          texts.append(el.text)
-                                      elif el.tag.endswith('}tab'):
-                                          texts.append('\t')
-                                      elif el.tag.endswith('}br'):
-                                          texts.append('\n')
-                                  parts.append(' '.join(texts))
-                          text='\n'.join(parts)
-                      text=re.sub(r'[ \t]+',' ',text)
-                      (out/(rel+'.txt')).write_text(text,encoding='utf-8')
-                  except Exception as exc:
-                      (out/(rel+'.error.txt')).write_text(repr(exc),encoding='utf-8')
-          PY
+                          for n in z.namelist():
+                              if n.startswith('word/') and n.endswith('.xml'):
+                                  x=ET.fromstring(z.read(n)); pieces += [e.text for e in x.iter() if e.tag.endswith('}t') and e.text]
+                      (out/(rel+'.txt')).write_text('\n'.join(pieces),encoding='utf-8')
+                  elif p.suffix.lower()=='.pdf':
+                      target=out/(rel+'.txt')
+                      subprocess.run(['pdftotext','-layout',str(p),str(target)],check=False)
+                  elif p.suffix.lower() in {'.txt','.csv'}:
+                      (out/(rel+'.txt')).write_bytes(p.read_bytes())
+              except Exception as e:
+                  (out/(rel+'.error.txt')).write_text(repr(e),encoding='utf-8')
 
-          while IFS= read -r -d '' pdf; do
-            rel="${pdf#$BASE/extracted/}"
-            safe="${rel//\//__}.txt"
-            pdftotext -layout "$pdf" "$BASE/text/$safe" 2>>"$LOG" || true
-          done < <(find "$BASE/extracted" -type f -iname '*.pdf' -print0)
-
-          while IFS= read -r -d '' txt; do
-            rel="${txt#$BASE/extracted/}"
-            safe="${rel//\//__}.txt"
-            cp "$txt" "$BASE/text/$safe" || true
-          done < <(find "$BASE/extracted" -type f \( -iname '*.txt' -o -iname '*.csv' \) -print0)
-
-          echo '=== EXTRACTED FILES ===' | tee -a "$LOG"
-          cat "$BASE/text/file-list.txt" | tee -a "$LOG"
-          echo "TEXT_FILES=$(find "$BASE/text" -type f | wc -l)" | tee -a "$LOG"
-
-      - name: Vytvořit rejstřík a klíčové výňatky
-        id: analyse
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -o pipefail
-          BASE="$RUNNER_TEMP/smr"
-          python3 - "$BASE" <<'PY'
-          import json, re, sys
-          from pathlib import Path
-
-          base=Path(sys.argv[1])
-          text_dir=base/'text'
-          keywords=[
-            'harmonogram','cenová specifikace','poddodavatel','AQUATIS','vodohospodář',
-            'Nechranice','Libouš','Hradec 400','400 kV','ČEPS','vyvedení výkonu',
-            'chladicí','odběr vody','tritium','havarijní','geolog','seism',
-            'pracovníků','zaměstnanců','náklady','cena','termín','milník','Rolls-Royce',
-            'Tušimice','ETU','SMR'
-          ]
+          keys=['harmonogram','cenová specifikace','poddodavatel','AQUATIS','vodohospodář','Nechranice','Libouš','Hradec 400','400 kV','ČEPS','vyvedení výkonu','chladicí','odběr vody','tritium','havarijní','geolog','seism','pracovníků','náklady','cena','termín','milník','Rolls-Royce','Tušimice','ETU','SMR']
           report=[]
-          for p in sorted(text_dir.glob('*.txt')):
-              try: text=p.read_text(encoding='utf-8',errors='replace')
-              except OSError: continue
-              lines=text.splitlines()
-              matches=[]
+          for p in sorted(out.glob('*.txt')):
+              text=p.read_text(encoding='utf-8',errors='replace'); lines=text.splitlines(); hits=[]
               for i,line in enumerate(lines):
-                  if any(k.lower() in line.lower() for k in keywords):
-                      snippet=' '.join(lines[max(0,i-1):min(len(lines),i+2)])
-                      snippet=re.sub(r'\s+',' ',snippet).strip()
-                      if snippet and snippet not in matches:
-                          matches.append(snippet[:900])
-                  if len(matches)>=35: break
-              report.append({'file':p.name,'chars':len(text),'matches':matches})
+                  if any(k.casefold() in line.casefold() for k in keys):
+                      s=re.sub(r'\s+',' ',' '.join(lines[max(0,i-1):i+2])).strip()
+                      if s and s not in hits: hits.append(s[:1000])
+                  if len(hits)>=45: break
+              report.append({'file':p.name,'chars':len(text),'hits':hits})
           (base/'analysis.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-
-          md=['# Technická analýza archivů SMR Tušimice','']
-          for item in report:
-              md += [f"## {item['file']}",f"Text: {item['chars']} znaků",'']
-              for s in item['matches']:
-                  md.append(f'- {s}')
-              md.append('')
+          md=['# Rozbalené podklady SMR Tušimice','']
+          for r in report:
+              md += [f"## {r['file']}",f"Text: {r['chars']} znaků",'']+[f'- {x}' for x in r['hits']]+['']
           (base/'report.md').write_text('\n'.join(md),encoding='utf-8')
-          print(json.dumps({'files':len(report),'with_matches':sum(bool(x['matches']) for x in report)},ensure_ascii=False))
+          print(json.dumps({'files':len(report),'matched':sum(bool(r['hits']) for r in report)},ensure_ascii=False))
           PY
 
-          sed -n '1,2400p' "$BASE/report.md" > "$BASE/report-truncated.md"
-          wc -c "$BASE/report.md" "$BASE/report-truncated.md"
+          sha256sum "$BASE"/raw/* 2>/dev/null > "$BASE/hashes.txt" || true
+          echo 'DONE' | tee -a "$LOG"
 
-      - name: Uložit artefakt
+      - name: Uložit úplný výsledek
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: smr-tusimice-archives-analysis
           path: |
-            ${{ runner.temp }}/smr/download.log
-            ${{ runner.temp }}/smr/extract.log
-            ${{ runner.temp }}/smr/text/file-list.txt
+            ${{ runner.temp }}/smr/log.txt
+            ${{ runner.temp }}/smr/file-list.txt
+            ${{ runner.temp }}/smr/hashes.txt
             ${{ runner.temp }}/smr/analysis.json
             ${{ runner.temp }}/smr/report.md
           retention-days: 30
@@ -223,36 +138,14 @@ jobs:
         if: always()
         uses: actions/github-script@v7
         env:
-          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
-          EXTRACT_OUTCOME: ${{ steps.extract.outcome }}
-          ANALYSE_OUTCOME: ${{ steps.analyse.outcome }}
+          OUTCOME: ${{ steps.scan.outcome }}
         with:
           script: |
-            const fs=require('fs');
-            const base=process.env.RUNNER_TEMP+'/smr';
-            const read=(p,n=60000)=>{try{return fs.readFileSync(p,'utf8').slice(0,n)}catch{return ''}};
-            const files=read(base+'/text/file-list.txt',20000);
-            const report=read(base+'/report-truncated.md',55000);
-            const download=read(base+'/download.log',12000);
-            const extract=read(base+'/extract.log',12000);
-            const ok=process.env.ANALYSE_OUTCOME==='success' && report.length>0;
-            const body=[
-              `- Commit: \`${context.sha}\``,
-              `- Stažení: **${process.env.DOWNLOAD_OUTCOME}**`,
-              `- Rozbalení: **${process.env.EXTRACT_OUTCOME}**`,
-              `- Analýza: **${process.env.ANALYSE_OUTCOME}**`,
-              '',
-              '## Seznam rozbalených souborů','```text',files,'```','',
-              report,
-              '',
-              '## Diagnostika stahování','```text',download,'```','',
-              '## Diagnostika rozbalení','```text',extract,'```',
-              '',
-              '_Úplné texty jsou uložené v artefaktu workflow `smr-tusimice-archives-analysis`._'
-            ].join('\n').slice(0,65000);
-            const issue=await github.rest.issues.create({
-              owner:context.repo.owner,repo:context.repo.repo,
-              title:`[SMR TUŠIMICE ARCHIVY] ${ok?'Výsledek':'Částečný výsledek'} ${new Date().toISOString()}`,
-              body
-            });
-            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+            const fs=require('fs'), b=process.env.RUNNER_TEMP+'/smr';
+            const r=(p,n)=>{try{return fs.readFileSync(p,'utf8').slice(0,n)}catch{return ''}};
+            const files=r(b+'/file-list.txt',18000), report=r(b+'/report.md',42000), log=r(b+'/log.txt',8000);
+            const body=[`- Commit: \`${context.sha}\``,`- Běh: **${process.env.OUTCOME}**`,'','## Soubory','```text',files,'```','',report,'','## Diagnostika','```text',log,'```','', '_Úplné výstupy jsou v artefaktu `smr-tusimice-archives-analysis`._'].join('\n').slice(0,65000);
+            const issue=await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title:`[SMR TUŠIMICE ARCHIVY] ${new Date().toISOString()}`,body});
+            if(report.length) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.data.number,state:'closed',state_reason:'completed'});
+
+# Druhý commit záměrně spouští workflow po jeho založení.
