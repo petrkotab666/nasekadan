@@ -48,8 +48,6 @@ test -f sitemap.xml
 test -d social
 grep -Fq "$TITLE_MARKER" "$ARTICLE_REL"
 
-echo 'Veřejné soubory jsou sestavené. Pokračuje přímý přenos na OVH.'
-
 umask 077
 KEY_FILE="${RUNNER_TEMP:-/tmp}/nasekadan_august_gallery_key"
 SELECTED=''
@@ -67,9 +65,7 @@ chmod 600 "$KEY_FILE"
 echo "Použit SSH klíč: $SELECTED"
 
 RELEASE="${RUNNER_TEMP:-/tmp}/august-galleries-release.tgz"
-tar -czf "$RELEASE" \
-  index.html clanky/index.html "$ARTICLE_REL" \
-  rss.xml sitemap.xml social
+tar -czf "$RELEASE" index.html clanky/index.html "$ARTICLE_REL" rss.xml sitemap.xml social
 
 scp -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
   "$RELEASE" ubuntu@57.129.43.215:/tmp/august-galleries-release.tgz
@@ -77,54 +73,93 @@ scp -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o Conne
 ssh -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
   ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
 set -Eeuo pipefail
+SLUG='srpen-kadanske-galerie-vystavy-workshop-2026.html'
+TITLE='Srpen v kadaňských galeriích nabídne houby'
 tmp=$(mktemp -d)
 tar -xzf /tmp/august-galleries-release.tgz -C "$tmp"
 
+# Záložní hostitelská kopie.
 sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
 sudo install -m 0644 "$tmp/index.html" /var/www/nasekadan/index.html
 sudo install -m 0644 "$tmp/clanky/index.html" /var/www/nasekadan/clanky/index.html
-sudo install -m 0644 "$tmp/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html" /var/www/nasekadan/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
+sudo install -m 0644 "$tmp/clanky/$SLUG" "/var/www/nasekadan/clanky/$SLUG"
 sudo install -m 0644 "$tmp/rss.xml" /var/www/nasekadan/rss.xml
 sudo install -m 0644 "$tmp/sitemap.xml" /var/www/nasekadan/sitemap.xml
 sudo cp -a "$tmp/social/." /var/www/nasekadan/social/
 sudo chmod -R a+rX /var/www/nasekadan
 
-if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-  sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
-  sudo docker cp "$tmp/index.html" nasekadan-web:/usr/share/nginx/html/index.html
-  sudo docker cp "$tmp/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
-  sudo docker cp "$tmp/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
-  sudo docker cp "$tmp/rss.xml" nasekadan-web:/usr/share/nginx/html/rss.xml
-  sudo docker cp "$tmp/sitemap.xml" nasekadan-web:/usr/share/nginx/html/sitemap.xml
-  sudo docker cp "$tmp/social/." nasekadan-web:/usr/share/nginx/html/social/
-fi
+echo 'Běžící kontejnery:'
+sudo docker ps --format '  {{.ID}} {{.Names}} {{.Image}} {{.Ports}}' || true
 
-sudo nginx -t
-sudo systemctl reload nginx
+# Najít všechny možné kontejnery Naše Kadaň. Produkční název se může po
+# přestavbě změnit, rozhodující je publikovaný port nebo existující webový kořen.
+declare -a candidates=()
+while IFS= read -r cid; do
+  [[ -n "$cid" ]] && candidates+=("$cid")
+done < <(sudo docker ps -q --filter publish=3224 2>/dev/null || true)
 
-# Ověření přímo proti lokálnímu produkčnímu virtuálnímu hostu, bez CDN.
-check_local() {
-  local path="$1" marker="$2"
-  curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${path}?local=$(date +%s)$RANDOM" | grep -Fq "$marker"
-}
-check_local '/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html' 'Srpen v kadaňských galeriích nabídne houby'
-check_local '/' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
-check_local '/clanky/' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
-check_local '/rss.xml' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
-check_local '/sitemap.xml' 'srpen-kadanske-galerie-vystavy-workshop-2026.html'
+for cid in $(sudo docker ps -q 2>/dev/null || true); do
+  name=$(sudo docker inspect -f '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##' || true)
+  image=$(sudo docker inspect -f '{{.Config.Image}}' "$cid" 2>/dev/null || true)
+  if [[ "$name $image" == *nasekadan* ]]; then candidates+=("$cid"); fi
+  if sudo docker exec "$cid" sh -c "test -f /usr/share/nginx/html/index.html && grep -qi 'NAŠE.*KADAŇ\|Naše Kadaň' /usr/share/nginx/html/index.html" 2>/dev/null; then
+    candidates+=("$cid")
+  fi
+done
 
-rm -rf "$tmp" /tmp/august-galleries-release.tgz
+# Odstranit duplicity.
+mapfile -t candidates < <(printf '%s\n' "${candidates[@]:-}" | awk 'NF&&!seen[$0]++')
+test "${#candidates[@]}" -gt 0
+
+updated=0
+for cid in "${candidates[@]}"; do
+  name=$(sudo docker inspect -f '{{.Name}}' "$cid" | sed 's#^/##')
+  if ! sudo docker exec "$cid" sh -c 'test -d /usr/share/nginx/html'; then
+    continue
+  fi
+  echo "Aktualizuji produkční kontejner: $name ($cid)"
+  sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+  sudo docker cp "$tmp/index.html" "$cid:/usr/share/nginx/html/index.html"
+  sudo docker cp "$tmp/clanky/index.html" "$cid:/usr/share/nginx/html/clanky/index.html"
+  sudo docker cp "$tmp/clanky/$SLUG" "$cid:/usr/share/nginx/html/clanky/$SLUG"
+  sudo docker cp "$tmp/rss.xml" "$cid:/usr/share/nginx/html/rss.xml"
+  sudo docker cp "$tmp/sitemap.xml" "$cid:/usr/share/nginx/html/sitemap.xml"
+  sudo docker cp "$tmp/social/." "$cid:/usr/share/nginx/html/social/"
+  sudo docker exec "$cid" sh -c "grep -Fq '$TITLE' '/usr/share/nginx/html/clanky/$SLUG'"
+  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/index.html"
+  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/clanky/index.html"
+  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/rss.xml"
+  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/sitemap.xml"
+  sudo docker exec "$cid" nginx -t
+  sudo docker exec "$cid" nginx -s reload || sudo docker restart "$cid"
+  updated=$((updated+1))
+done
+test "$updated" -gt 0
+
+# Přímá kontrola upstreamu používaného hostitelským Nginxem.
+for port in 3224 80; do
+  if curl -fsS --max-time 20 "http://127.0.0.1:${port}/clanky/$SLUG?local=$(date +%s)" -o /tmp/local-article.html 2>/dev/null \
+    && grep -Fq "$TITLE" /tmp/local-article.html; then
+    curl -fsS --max-time 20 "http://127.0.0.1:${port}/?local=$(date +%s)" | grep -Fq "$SLUG"
+    curl -fsS --max-time 20 "http://127.0.0.1:${port}/clanky/?local=$(date +%s)" | grep -Fq "$SLUG"
+    curl -fsS --max-time 20 "http://127.0.0.1:${port}/rss.xml?local=$(date +%s)" | grep -Fq "$SLUG"
+    curl -fsS --max-time 20 "http://127.0.0.1:${port}/sitemap.xml?local=$(date +%s)" | grep -Fq "$SLUG"
+    echo "Interní produkční upstream na portu $port je aktualizovaný."
+    rm -rf "$tmp" /tmp/august-galleries-release.tgz
+    exit 0
+  fi
+done
+
+echo 'Soubory jsou v produkčním kontejneru, ale interní HTTP upstream je nenalezl.' >&2
+exit 1
 REMOTE
 
 : > /tmp/august-galleries-deploy-success
+echo 'Produkční kontejner i interní upstream potvrzují článek a všechny přehledy.'
 
-echo 'Serverová produkce článek, titulku, archiv, RSS a sitemapu potvrzuje.'
-
-# Veřejná CDN kontrola je doplňková; výpadek spojení z GitHub runneru nesmí
-# označit už lokálně ověřené produkční nasazení za neúspěšné.
 for attempt in $(seq 1 12); do
   if external_live; then
-    echo 'Veřejná doména už vrací nový článek i všechny přehledy.'
+    echo 'Veřejná doména vrací nový článek i všechny přehledy.'
     break
   fi
   sleep 5
