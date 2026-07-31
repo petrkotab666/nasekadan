@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "fingerprint": "produkce-obnovena-koupaliste-20260731",
+  "title": "Veřejná titulka a archiv znovu zobrazují aktuální články",
+  "summary": "Živá titulní stránka a archiv Naší Kadaně při kontrole 31. července 2026 znovu zobrazovaly jako nejnovější článek text o 50 letech koupaliště a skluzavce Niagara z 04:00. Jde o ověřený posun proti předchozímu zastaralému veřejnému stavu. Úplné technické potvrzení publikace však chybí, protože se v tomto běhu nepodařilo nezávisle načíst přímou URL článku, RSS, sitemapu a deployment-health.txt.",
+  "facts": [
+    "Veřejná titulní stránka zobrazovala článek o koupališti a Niagaře z 31. 7. 2026 04:00 jako hlavní článek.",
+    "Veřejný archiv /clanky/ zobrazoval stejný článek jako nejnovější a pod ním aktuální texty z 30. července.",
+    "Interní stavový soubor v repozitáři stále uváděl repair_pending a přeskočené veřejné ověření; podle pravidel monitoringu je veřejný web zdrojem pravdy.",
+    "Přímou URL článku, rss.xml, sitemap.xml a deployment-health.txt se v dostupném prostředí nepodařilo nezávisle potvrdit, proto nejde o úplné ověření publikace."
+  ],
+  "sources": [
+    {
+      "url": "https://nasekadan.cz/",
+      "observed_at": "2026-07-31T05:42:09Z",
+      "note": "Titulní stránka zobrazovala aktuální článek o koupališti jako hlavní."
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/",
+      "observed_at": "2026-07-31T05:42:09Z",
+      "note": "Archiv zobrazoval článek o koupališti jako nejnovější."
+    },
+    {
+      "url": "https://github.com/petrkotab666/nasekadan/commit/a61bab1d2af2ad1b5293fac50ec1e2262098d5af",
+      "observed_at": "2026-07-31T05:42:09Z",
+      "note": "Interní stav repair_pending s přeskočeným veřejným ověřením; je v rozporu s živou titulní stránkou a archivem."
+    }
+  ],
+  "observed_at": "2026-07-31T05:42:09Z",
+  "severity": "medium",
+  "recommended_action": "Nespouštět další deploy. Z prostředí s funkčním DNS jednorázově ověřit HTTP 200 a správný H1 přímé URL článku, jeho výskyt v RSS a sitemapě a shodu source v deployment-health.txt s aktuálním main; teprve poté označit publikaci za plně úspěšnou."
+}
