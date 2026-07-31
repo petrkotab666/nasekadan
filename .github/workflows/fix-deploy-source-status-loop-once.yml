@@ -1,9 +1,9 @@
 name: Jednorázově opravit stavové commity po deployi
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - fix/deploy-source-status-loop-20260731
     paths:
       - '.github/fix-deploy-source-status-loop-trigger.txt'
       - '.github/workflows/fix-deploy-source-status-loop-once.yml'
@@ -13,12 +13,11 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: fix/deploy-source-status-loop-20260731
           fetch-depth: 0
 
       - name: Přesměrovat provozní stav pouze do souhrnu běhu
@@ -85,4 +84,4 @@ jobs:
           git add .github/workflows/publication-integrity-guard.yml .github/workflows/deploy-ovh.yml
           if git diff --cached --quiet; then exit 0; fi
           git commit -m 'Zabránit stavovým commitům rozbíjet shodu produkčního source'
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          git push origin HEAD:fix/deploy-source-status-loop-20260731
