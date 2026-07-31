@@ -48,6 +48,24 @@ Výstup vznikl stažením aktuální mapy a GIS vrstvy města, průchodem Regist
 - Registr: https://smlouvy.gov.cz/smlouva/37381853
 - Příloha: `225 - podepsáno.pdf` · extrakce: **pdftotext** · 1235 znaků
 
+#### Město Kadaň - Smlouva o centralizovaném zadávání veřejné zakázky "Nákup elektrické energie na období 1.1.2027 do 31.12.2028"
+- Datum: 23.07.2026 · Č. j.: 00011/OVV/2026 · bez DPH: Hodnota vč. DPH: · s DPH: Smluvní strany
+- Registr: https://smlouvy.gov.cz/smlouva/38932262
+- Příloha: `Město x Příspěvkovky - centrální zadávání - elektrika - 2027 - 2028_PDFA.pdf` · extrakce: **pdftotext** · 26060 znaků
+  - …......................................................................................... 6 3. Náklady na zadání veřejné zakázky, sankce a povinnost uhradit škodu .............................. 7 4. Práva a povinnosti Centrálního zadavatele ................................................................................... 7 5. Práva a povinnosti Zadavatelů ..............................…
+  - …tel je oprávněn opakovat, změnit druh zadávacího řízení nebo zvolit jiný postup dle Zákona. 3. Náklady na zadání veřejné zakázky, sankce a povinnost uhradit škodu 3.1. Náklady na zadání veřejné zakázky 3.1.1. Smluvní strany se dohodly, že Centrální zadavatel nese veškeré náklady spojené s centralizovaným zadáváním veřejné zakázky a uzavřením smlouvy s vybraným dodavatelem, včetně případn…
+  - …. Smluvní strany se dohodly, že se Pověřující zadavatelé nepodílejí jakýmkoliv způsobem na nákladech Centrálního zadavatele. 3.2. Sankce 3.2.1. Smluvní strany se dohodly, že Centrální zadavatel je povinen uhradit veškeré sankce uložené příslušnými orgány veřejné správy podle Zákona a Pověřující zadavatelé se nepodílejí jakýmkoliv způsobem na úhradě těchto sankcí, ledaže k takovému poruše…
+  - …uložené příslušnými orgány veřejné správy podle Zákona a Pověřující zadavatelé se nepodílejí jakýmkoliv způsobem na úhradě těchto sankcí, ledaže k takovému porušení došlo v důsledku jednání či opomenutí Pověřujícího zadavatele, případně v důsledku neposkytnutí součinnosti ze strany Pověřujícího zadavatele. 3.3. Škoda 3.3.1. V případě, že na základě jednání či opomenutí Pověřujícího zadav…
+  - …aný zadavatel. 6.6. Další ujednání 6.6.1. Centrální zadavatel je podle ustanovení § 2 písm. e) zákona č. 320/2001 Sb., o finanční kontrole ve veřejné správě a o změně některých zákonů (zákon o finanční kontrole), ve znění pozdějších předpisů, osobou povinnou spolupůsobit při výkonu finanční kontroly prováděné v souvislosti s úhradou zboží nebo služeb z veřejných výdajů anebo z veřejné fi…
+  - …měně některých zákonů (zákon o finanční kontrole), ve znění pozdějších předpisů, osobou povinnou spolupůsobit při výkonu finanční kontroly prováděné v souvislosti s úhradou zboží nebo služeb z veřejných výdajů anebo z veřejné finanční podpory. 6.6.2. Tato Smlouva je vypracována v 20 vyhotoveních, z nichž jedno náleží každé Smluvní straně a jedno Administrátorovi. 6.6.3. Tato Smlouva vstu…
+- Příloha: `Město x Příspěvkovky - centrální zadávání - elektrika - 2027 - 2028_PDFA.pdf` · extrakce: **pdftotext** · 26060 znaků
+  - …......................................................................................... 6 3. Náklady na zadání veřejné zakázky, sankce a povinnost uhradit škodu .............................. 7 4. Práva a povinnosti Centrálního zadavatele ................................................................................... 7 5. Práva a povinnosti Zadavatelů ..............................…
+  - …tel je oprávněn opakovat, změnit druh zadávacího řízení nebo zvolit jiný postup dle Zákona. 3. Náklady na zadání veřejné zakázky, sankce a povinnost uhradit škodu 3.1. Náklady na zadání veřejné zakázky 3.1.1. Smluvní strany se dohodly, že Centrální zadavatel nese veškeré náklady spojené s centralizovaným zadáváním veřejné zakázky a uzavřením smlouvy s vybraným dodavatelem, včetně případn…
+  - …. Smluvní strany se dohodly, že se Pověřující zadavatelé nepodílejí jakýmkoliv způsobem na nákladech Centrálního zadavatele. 3.2. Sankce 3.2.1. Smluvní strany se dohodly, že Centrální zadavatel je povinen uhradit veškeré sankce uložené příslušnými orgány veřejné správy podle Zákona a Pověřující zadavatelé se nepodílejí jakýmkoliv způsobem na úhradě těchto sankcí, ledaže k takovému poruše…
+  - …uložené příslušnými orgány veřejné správy podle Zákona a Pověřující zadavatelé se nepodílejí jakýmkoliv způsobem na úhradě těchto sankcí, ledaže k takovému porušení došlo v důsledku jednání či opomenutí Pověřujícího zadavatele, případně v důsledku neposkytnutí součinnosti ze strany Pověřujícího zadavatele. 3.3. Škoda 3.3.1. V případě, že na základě jednání či opomenutí Pověřujícího zadav…
+  - …aný zadavatel. 6.6. Další ujednání 6.6.1. Centrální zadavatel je podle ustanovení § 2 písm. e) zákona č. 320/2001 Sb., o finanční kontrole ve veřejné správě a o změně některých zákonů (zákon o finanční kontrole), ve znění pozdějších předpisů, osobou povinnou spolupůsobit při výkonu finanční kontroly prováděné v souvislosti s úhradou zboží nebo služeb z veřejných výdajů anebo z veřejné fi…
+  - …měně některých zákonů (zákon o finanční kontrole), ve znění pozdějších předpisů, osobou povinnou spolupůsobit při výkonu finanční kontroly prováděné v souvislosti s úhradou zboží nebo služeb z veřejných výdajů anebo z veřejné finanční podpory. 6.6.2. Tato Smlouva je vypracována v 20 vyhotoveních, z nichž jedno náleží každé Smluvní straně a jedno Administrátorovi. 6.6.3. Tato Smlouva vstu…
+
 #### Město Kadaň - objednávka 270/Jan/2026
 - Datum: 21.04.2026 · Č. j.: 00276/OZP/2026 · bez DPH: 122 439,00 CZK · s DPH: 148 151,19 CZK
 - Registr: https://smlouvy.gov.cz/smlouva/37664969
@@ -87,10 +105,6 @@ Výstup vznikl stažením aktuální mapy a GIS vrstvy města, průchodem Regist
 - Příloha: `173 - podepsáno.pdf` · extrakce: **pdftotext** · 1111 znaků
 
 ### J. Zalabák - údržba zeleně, s.r.o.
-
-#### Město Kadaň - objednávka 80/Jan/2026
-- Datum: 30.01.2026 · Č. j.: 00092/OZP/2026 · bez DPH: 54 800,00 CZK · s DPH: 66 308,00 CZK
-- Registr: https://smlouvy.gov.cz/smlouva/36685065
 
 #### Město Kadaň - objednávka 198/Jan/2026
 - Datum: 17.03.2026 · Č. j.: 00202/OZP/2026 · bez DPH: 330 000,00 CZK · s DPH: 399 300,00 CZK
@@ -149,20 +163,11 @@ Výstup vznikl stažením aktuální mapy a GIS vrstvy města, průchodem Regist
 #### Město Kadaň - objednávka 119/Jan/2026
 - Datum: 09.02.2026 · Č. j.: 00118/OZP/2026 · bez DPH: 93 000,00 CZK · s DPH: 112 530,00 CZK
 - Registr: https://smlouvy.gov.cz/smlouva/36737225
-- Příloha: `119 - podepsáno.pdf` · extrakce: **pdftotext** · 1365 znaků
-  - …Celková cena je stanovena za roční údržbu naučné stezky na Svatém kopci v roce 2026. Jedná se o úklid a odvoz odpadu (celoročně), sekání a následný úklid naučné stezky (květen - září). Cena za výše uvedené práce nepřesáhne částku 112530 Kč včetně DPH. ČÍSLO OBJEDNÁVKY UVEĎTE VE FAKTUŘE NEBO K NÍ JEJÍ KOPII PŘILOŽTE. V Kadani dne 09.02.2026…
 
 #### Město Kadaň - objednávka 300/Jan/2026
 - Datum: 04.05.2026 · Č. j.: 00302/OZP/2026 · bez DPH: 55 000,00 CZK · s DPH: 66 550,00 CZK
 - Registr: https://smlouvy.gov.cz/smlouva/37884689
 - Příloha: `300 - podepsáno.pdf` · extrakce: **pdftotext** · 1290 znaků
-
-#### Město Kadaň - objednávka 104/Jan/2026
-- Datum: 04.02.2026 · Č. j.: 00096/OZP/2026 · bez DPH: 90 000,00 CZK · s DPH: 108 900,00 CZK
-- Registr: https://smlouvy.gov.cz/smlouva/36685141
-- Příloha: `104 - podepsáno.pdf` · extrakce: **pdftotext** · 1299 znaků
-  - …příkopů cyklostezek z Kadaně do Želiny, z Kadaně do Prunéřova a z Kadaně do Tušimic, průmyslové zóně Královský vrch (Arlaplast) s odvozem a likvidací odpadu. Cena za výše uvedené práce nepřesáhne částku 108900 Kč včetně DPH. ČÍSLO OBJEDNÁVKY UVEĎTE VE FAKTUŘE NEBO K NÍ JEJÍ KOPII PŘILOŽTE. V Kadani dne 04.02.2026…
-  - …vka a místo , do 31.3.2026 Objednáváme u Vás: objednávka 104/Jan/2026 kompletní provedení výřezů, ořezů obrostů a větví v profilu cyklostezek vč. příkopů cyklostezek z Kadaně do Želiny, z Kadaně do Prunéřova a z Kadaně do Tušimic, průmyslové zóně Královský vrch (Arlaplast) s odvozem a likvidací odpadu. Cena za výše uvedené práce nepřesáhne částku 108900 Kč včetně DPH. ČÍSLO OBJEDNÁVKY UV…
 
 ## Soubory
 

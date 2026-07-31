@@ -1,22 +1,174 @@
 {
-  "urls": {
-    "service": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer?f=pjson",
-    "layer": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2?f=pjson",
-    "legend": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/legend?f=pjson",
-    "geojson": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson",
-    "json": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=5514&f=json",
-    "export": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/export?bbox=-820232.48,-1000532.32,-818297.74,-997378.81&bboxSR=5514&imageSR=5514&size=2600,2600&layers=show:2&format=png32&transparent=true&f=image"
+  "source": "https://gis.mesto-kadan.cz/portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2",
+  "layer_name": "Správci veřejné zeleně",
+  "geometry_type": "esriGeometryPolygon",
+  "renderer_field": "nazev",
+  "renderer_labels": {
+    "Technické služby Kadaň s r.o.": "Technické služby Kadaň s r.o.",
+    "Jaroslav Kučera KU-KU s r.o.": "Jaroslav Kučera KU-KU s r.o.",
+    "Josef Zalabák": "Josef Zalabák",
+    "Marek Čepelák": "Marek Čepelák",
+    "Nemocnice Kadaň s r. o.": "Nemocnice Kadaň s r. o.",
+    "supermarket": "Supermarket"
   },
-  "errors": [
-    "service: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer?f=pjson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
-    "layer: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2?f=pjson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
-    "legend: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/legend?f=pjson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
-    "geojson: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=4326&f=geojson (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))",
-    "json: SSLError: HTTPSConnectionPool(host='gis.mesto-kadan.cz', port=443): Max retries exceeded with url: /portal/arcgis/rest/services/verejny_portal/Verejny_portal/MapServer/2/query?where=1%3D1&outFields=*&returnGeometry=true&outSR=5514&f=json (Caused by SSLError(SSLError(1, '[SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)')))"
+  "feature_count": 6,
+  "fields": [
+    {
+      "name": "FID",
+      "type": "esriFieldTypeOID",
+      "alias": "FID",
+      "domain": null
+    },
+    {
+      "name": "Shape",
+      "type": "esriFieldTypeGeometry",
+      "alias": "Shape",
+      "domain": null
+    },
+    {
+      "name": "Id",
+      "type": "esriFieldTypeInteger",
+      "alias": "Id",
+      "domain": null
+    },
+    {
+      "name": "nazev",
+      "type": "esriFieldTypeString",
+      "alias": "nazev",
+      "length": 50,
+      "domain": null
+    }
   ],
-  "feature_count": 0,
-  "features": [],
-  "area_by_properties": [],
+  "area_by_manager": [
+    {
+      "manager_label": "Technické služby Kadaň s r.o.",
+      "area_m2": 421487.78,
+      "hectares": 42.149
+    },
+    {
+      "manager_label": "Marek Čepelák",
+      "area_m2": 229069.6,
+      "hectares": 22.907
+    },
+    {
+      "manager_label": "Jaroslav Kučera KU-KU s r.o.",
+      "area_m2": 225158.39,
+      "hectares": 22.516
+    },
+    {
+      "manager_label": "Josef Zalabák",
+      "area_m2": 93303.49,
+      "hectares": 9.33
+    },
+    {
+      "manager_label": "Nemocnice Kadaň s r. o.",
+      "area_m2": 48154.74,
+      "hectares": 4.815
+    },
+    {
+      "manager_label": "Supermarket",
+      "area_m2": 35137.74,
+      "hectares": 3.514
+    }
+  ],
+  "features": [
+    {
+      "index": 1,
+      "properties": {
+        "FID": 0,
+        "Id": 0,
+        "nazev": "Nemocnice Kadaň s r. o."
+      },
+      "renderer_value": "Nemocnice Kadaň s r. o.",
+      "manager_label": "Nemocnice Kadaň s r. o.",
+      "area_m2": 48154.74,
+      "hectares": 4.8155,
+      "representative_point": [
+        13.2703599,
+        50.3915208
+      ]
+    },
+    {
+      "index": 2,
+      "properties": {
+        "FID": 1,
+        "Id": 0,
+        "nazev": "Technické služby Kadaň s r.o."
+      },
+      "renderer_value": "Technické služby Kadaň s r.o.",
+      "manager_label": "Technické služby Kadaň s r.o.",
+      "area_m2": 421487.78,
+      "hectares": 42.1488,
+      "representative_point": [
+        13.2791145,
+        50.3797924
+      ]
+    },
+    {
+      "index": 3,
+      "properties": {
+        "FID": 2,
+        "Id": 0,
+        "nazev": "Jaroslav Kučera KU-KU s r.o."
+      },
+      "renderer_value": "Jaroslav Kučera KU-KU s r.o.",
+      "manager_label": "Jaroslav Kučera KU-KU s r.o.",
+      "area_m2": 225158.39,
+      "hectares": 22.5158,
+      "representative_point": [
+        13.2630806,
+        50.3794261
+      ]
+    },
+    {
+      "index": 4,
+      "properties": {
+        "FID": 3,
+        "Id": 0,
+        "nazev": "Josef Zalabák"
+      },
+      "renderer_value": "Josef Zalabák",
+      "manager_label": "Josef Zalabák",
+      "area_m2": 93303.49,
+      "hectares": 9.3303,
+      "representative_point": [
+        13.2735044,
+        50.3903808
+      ]
+    },
+    {
+      "index": 5,
+      "properties": {
+        "FID": 4,
+        "Id": 0,
+        "nazev": "Marek Čepelák"
+      },
+      "renderer_value": "Marek Čepelák",
+      "manager_label": "Marek Čepelák",
+      "area_m2": 229069.6,
+      "hectares": 22.907,
+      "representative_point": [
+        13.2786596,
+        50.3886609
+      ]
+    },
+    {
+      "index": 6,
+      "properties": {
+        "FID": 5,
+        "Id": 0,
+        "nazev": "supermarket"
+      },
+      "renderer_value": "supermarket",
+      "manager_label": "Supermarket",
+      "area_m2": 35137.74,
+      "hectares": 3.5138,
+      "representative_point": [
+        13.2753435,
+        50.3832981
+      ]
+    }
+  ],
   "localities": [
     {
       "query": "Sídliště A, Kadaň",
@@ -28,7 +180,17 @@
       "lat": 50.389216,
       "lon": 13.2721969,
       "display_name": "Kadaň, Chomutovská sídliště B, Chomutovská, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
-      "matches": []
+      "matches": [
+        {
+          "manager_label": "Jaroslav Kučera KU-KU s r.o.",
+          "renderer_value": "Jaroslav Kučera KU-KU s r.o.",
+          "properties": {
+            "FID": 2,
+            "Id": 0,
+            "nazev": "Jaroslav Kučera KU-KU s r.o."
+          }
+        }
+      ]
     },
     {
       "query": "Sídliště C, Kadaň",
@@ -61,8 +223,8 @@
     {
       "query": "Obránců míru, Kadaň",
       "found": true,
-      "lat": 50.3763274,
-      "lon": 13.2813547,
+      "lat": 50.3761072,
+      "lon": 13.2810815,
       "display_name": "Obránců míru, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
       "matches": []
     },
@@ -84,7 +246,17 @@
       "lat": 50.38373,
       "lon": 13.2691401,
       "display_name": "Na Podlesí, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
-      "matches": []
+      "matches": [
+        {
+          "manager_label": "Josef Zalabák",
+          "renderer_value": "Josef Zalabák",
+          "properties": {
+            "FID": 3,
+            "Id": 0,
+            "nazev": "Josef Zalabák"
+          }
+        }
+      ]
     },
     {
       "query": "Chomutovská, Kadaň",
@@ -100,7 +272,17 @@
       "lat": 50.3890879,
       "lon": 13.2695115,
       "display_name": "Husova, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
-      "matches": []
+      "matches": [
+        {
+          "manager_label": "Technické služby Kadaň s r.o.",
+          "renderer_value": "Technické služby Kadaň s r.o.",
+          "properties": {
+            "FID": 1,
+            "Id": 0,
+            "nazev": "Technické služby Kadaň s r.o."
+          }
+        }
+      ]
     },
     {
       "query": "Golovinova, Kadaň",
@@ -113,8 +295,8 @@
     {
       "query": "Věžní, Kadaň",
       "found": true,
-      "lat": 50.3777821,
-      "lon": 13.2759165,
+      "lat": 50.3770074,
+      "lon": 13.2763005,
       "display_name": "Věžní, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
       "matches": []
     },
@@ -132,13 +314,23 @@
       "lat": 50.3770561,
       "lon": 13.2604371,
       "display_name": "Václava Havla, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
-      "matches": []
+      "matches": [
+        {
+          "manager_label": "Technické služby Kadaň s r.o.",
+          "renderer_value": "Technické služby Kadaň s r.o.",
+          "properties": {
+            "FID": 1,
+            "Id": 0,
+            "nazev": "Technické služby Kadaň s r.o."
+          }
+        }
+      ]
     },
     {
       "query": "Polní, Kadaň",
       "found": true,
-      "lat": 50.3756905,
-      "lon": 13.2812725,
+      "lat": 50.3768273,
+      "lon": 13.2864147,
       "display_name": "Polní, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
       "matches": []
     },
@@ -148,7 +340,17 @@
       "lat": 50.3765169,
       "lon": 13.2709533,
       "display_name": "Mírové náměstí, Kadaňská Jeseň, Kadaň, okres Chomutov, Ústecký kraj, 432 01, Česko",
-      "matches": []
+      "matches": [
+        {
+          "manager_label": "Technické služby Kadaň s r.o.",
+          "renderer_value": "Technické služby Kadaň s r.o.",
+          "properties": {
+            "FID": 1,
+            "Id": 0,
+            "nazev": "Technické služby Kadaň s r.o."
+          }
+        }
+      ]
     },
     {
       "query": "Svatý kopeček, Kadaň",
@@ -194,5 +396,6 @@
       "query": "Lomazice, Kadaň",
       "found": false
     }
-  ]
+  ],
+  "raw_query_count": 6
 }

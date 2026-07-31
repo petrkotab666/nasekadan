@@ -1,0 +1,277 @@
+{
+  "currentVersion": 10.71,
+  "id": 2,
+  "name": "Správci veřejné zeleně",
+  "type": "Feature Layer",
+  "description": "",
+  "geometryType": "esriGeometryPolygon",
+  "sourceSpatialReference": {
+    "wkid": 102067,
+    "latestWkid": 5514
+  },
+  "copyrightText": "",
+  "parentLayer": null,
+  "subLayers": [],
+  "minScale": 0,
+  "maxScale": 0,
+  "drawingInfo": {
+    "renderer": {
+      "type": "uniqueValue",
+      "field1": "nazev",
+      "field2": null,
+      "field3": null,
+      "defaultSymbol": null,
+      "defaultLabel": null,
+      "uniqueValueInfos": [
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              190,
+              210,
+              255,
+              255
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                0,
+                77,
+                168,
+                255
+              ],
+              "width": 2
+            }
+          },
+          "value": "Technické služby Kadaň s r.o.",
+          "label": "Technické služby Kadaň s r.o.",
+          "description": ""
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              255,
+              255,
+              115,
+              255
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                168,
+                168,
+                0,
+                255
+              ],
+              "width": 2
+            }
+          },
+          "value": "Jaroslav Kučera KU-KU s r.o.",
+          "label": "Jaroslav Kučera KU-KU s r.o.",
+          "description": ""
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              255,
+              211,
+              127,
+              255
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                168,
+                112,
+                0,
+                255
+              ],
+              "width": 2
+            }
+          },
+          "value": "Josef Zalabák",
+          "label": "Josef Zalabák",
+          "description": ""
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              115,
+              255,
+              223,
+              255
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                0,
+                168,
+                132,
+                255
+              ],
+              "width": 2
+            }
+          },
+          "value": "Marek Čepelák",
+          "label": "Marek Čepelák",
+          "description": ""
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              163,
+              255,
+              115,
+              255
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                56,
+                168,
+                0,
+                255
+              ],
+              "width": 2
+            }
+          },
+          "value": "Nemocnice Kadaň s r. o.",
+          "label": "Nemocnice Kadaň s r. o.",
+          "description": ""
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              255,
+              115,
+              223,
+              255
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                168,
+                0,
+                132,
+                255
+              ],
+              "width": 2
+            }
+          },
+          "value": "supermarket",
+          "label": "Supermarket",
+          "description": ""
+        }
+      ],
+      "fieldDelimiter": ","
+    },
+    "transparency": 0,
+    "labelingInfo": null
+  },
+  "defaultVisibility": true,
+  "extent": {
+    "xmin": -820232.4799995422,
+    "ymin": -1000532.3200073242,
+    "xmax": -818297.7454071045,
+    "ymax": -997378.8100528717,
+    "spatialReference": {
+      "wkid": 102067,
+      "latestWkid": 5514
+    }
+  },
+  "hasAttachments": false,
+  "htmlPopupType": "esriServerHTMLPopupTypeNone",
+  "displayField": "nazev",
+  "typeIdField": null,
+  "subtypeFieldName": null,
+  "subtypeField": null,
+  "defaultSubtypeCode": null,
+  "fields": [
+    {
+      "name": "FID",
+      "type": "esriFieldTypeOID",
+      "alias": "FID",
+      "domain": null
+    },
+    {
+      "name": "Shape",
+      "type": "esriFieldTypeGeometry",
+      "alias": "Shape",
+      "domain": null
+    },
+    {
+      "name": "Id",
+      "type": "esriFieldTypeInteger",
+      "alias": "Id",
+      "domain": null
+    },
+    {
+      "name": "nazev",
+      "type": "esriFieldTypeString",
+      "alias": "nazev",
+      "length": 50,
+      "domain": null
+    }
+  ],
+  "geometryField": {
+    "name": "Shape",
+    "type": "esriFieldTypeGeometry",
+    "alias": "Shape"
+  },
+  "indexes": [
+    {
+      "name": "Shape",
+      "fields": "Shape",
+      "isAscending": true,
+      "isUnique": false,
+      "description": ""
+    }
+  ],
+  "subtypes": [],
+  "relationships": [],
+  "canModifyLayer": false,
+  "canScaleSymbols": false,
+  "hasLabels": false,
+  "capabilities": "Data,Map,Query",
+  "maxRecordCount": 1000,
+  "supportsStatistics": false,
+  "supportsAdvancedQueries": false,
+  "supportedQueryFormats": "JSON, geoJSON",
+  "isDataVersioned": false,
+  "ownershipBasedAccessControlForFeatures": {
+    "allowOthersToQuery": true
+  },
+  "useStandardizedQueries": true,
+  "advancedQueryCapabilities": {
+    "useStandardizedQueries": true,
+    "supportsStatistics": false,
+    "supportsHavingClause": false,
+    "supportsCountDistinct": false,
+    "supportsOrderBy": false,
+    "supportsDistinct": false,
+    "supportsPagination": false,
+    "supportsTrueCurve": true,
+    "supportsReturningQueryExtent": true,
+    "supportsQueryWithDistance": true,
+    "supportsSqlExpression": false
+  },
+  "supportsDatumTransformation": true,
+  "supportsCoordinatesQuantization": true
+}
