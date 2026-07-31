@@ -1,0 +1,157 @@
+name: Opravit zastaralou upoutávku na koupaliště
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-published-pool-teaser.yml'
+      - 'scripts/fix_published_pool_teaser.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-fix-published-pool-teaser
+  cancel-in-progress: true
+
+jobs:
+  fix-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/strikacky-vchody-drogy-kadan.html
+      DRAFT: .github/drafts/strikacky-vchody-drogy-kadan.html
+      URL: https://nasekadan.cz/clanky/strikacky-vchody-drogy-kadan.html
+    steps:
+      - name: Načíst hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit upoutávku ve zdroji i veřejném článku
+        run: python3 scripts/fix_published_pool_teaser.py
+
+      - name: Ověřit obsah před nasazením
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in "$ARTICLE" "$DRAFT"; do
+            grep -Fq 'UŽ ZVEŘEJNĚNO' "$file"
+            grep -Fq 'Kadaňské koupaliště slaví 50 let' "$file"
+            grep -Fq '/clanky/koupaliste-kadan-pozemky-skluzavka-provoz-2026.html' "$file"
+            grep -Fq 'Přečíst článek o koupališti' "$file"
+            if grep -Fq 'PŘIPRAVUJEME PRO NAŠE KADAŇ' "$file"; then
+              echo "Soubor $file stále obsahuje zastaralou upoutávku." >&2
+              exit 1
+            fi
+          done
+
+      - name: Uložit opravu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- "$ARTICLE" "$DRAFT"; then
+            echo 'Upoutávka už byla opravena.'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add "$ARTICLE" "$DRAFT"
+            git commit -m 'Nahradit upoutávku na připravovaný článek přímým odkazem'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit opravený článek na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$ARTICLE" ubuntu@57.129.43.215:/tmp/strikacky-vchody-drogy-kadan.html
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -D -m 0644 /tmp/strikacky-vchody-drogy-kadan.html \
+            /var/www/nasekadan/clanky/strikacky-vchody-drogy-kadan.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/strikacky-vchody-drogy-kadan.html \
+              nasekadan-web:/usr/share/nginx/html/clanky/strikacky-vchody-drogy-kadan.html
+          fi
+          rm -f /tmp/strikacky-vchody-drogy-kadan.html
+          REMOTE
+
+      - name: Ověřit veřejnou stránku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            curl -4 -kfsS --max-time 25 \
+              -H 'Cache-Control: no-cache, no-store, max-age=0' \
+              -H 'Pragma: no-cache' \
+              "${URL}?pool_teaser=${GITHUB_RUN_ID}-${attempt}-$(date +%s)" \
+              -o /tmp/article-live.html || true
+            if grep -Fq 'UŽ ZVEŘEJNĚNO' /tmp/article-live.html 2>/dev/null \
+              && grep -Fq 'Kadaňské koupaliště slaví 50 let' /tmp/article-live.html 2>/dev/null \
+              && grep -Fq '/clanky/koupaliste-kadan-pozemky-skluzavka-provoz-2026.html' /tmp/article-live.html 2>/dev/null \
+              && grep -Fq 'Přečíst článek o koupališti' /tmp/article-live.html 2>/dev/null \
+              && ! grep -Fq 'PŘIPRAVUJEME PRO NAŠE KADAŇ' /tmp/article-live.html 2>/dev/null; then
+              echo 'Veřejný článek už odkazuje přímo na zveřejněný článek o koupališti.'
+              exit 0
+            fi
+            sleep 4
+          done
+          echo 'Veřejná stránka opravenou upoutávku nepotvrdila.' >&2
+          exit 1
+
+      - name: Zapsat stav opravy
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path = '.github/published-pool-teaser-status.json';
+            const ok = process.env.DEPLOY_OUTCOME === 'success' && process.env.VERIFY_OUTCOME === 'success';
+            const status = {
+              status: ok ? 'passed' : 'failed',
+              checkedAtUtc: new Date().toISOString(),
+              runId: context.runId,
+              sourceSha: context.sha,
+              serverDeploy: process.env.DEPLOY_OUTCOME || 'skipped',
+              publicVerification: process.env.VERIFY_OUTCOME || 'skipped',
+              publicUrl: 'https://nasekadan.cz/clanky/strikacky-vchody-drogy-kadan.html',
+              linkedArticle: 'https://nasekadan.cz/clanky/koupaliste-kadan-pozemky-skluzavka-provoz-2026.html'
+            };
+            const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
+            let sha;
+            try {
+              const current = await github.rest.repos.getContent({owner: context.repo.owner, repo: context.repo.repo, path, ref: 'main'});
+              if (!Array.isArray(current.data)) sha = current.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              path,
+              branch: 'main',
+              message: `Zapsat opravu upoutávky na koupaliště: ${status.status} [skip ci]`,
+              content,
+              ...(sha ? {sha} : {})
+            });
