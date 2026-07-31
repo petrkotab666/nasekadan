@@ -39,11 +39,41 @@ jobs:
           set -euo pipefail
           python -m pip install --disable-pip-version-check --quiet Pillow
           python scripts/publish_fire_restrictions_20260731.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('clanky/nebezpeci-pozaru-ustecky-kraj-kadan-2026.html')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('<article>', '<article class="article">', 1)
+          text = text.replace(
+              '</strong>\n  <figure class="article-photo">',
+              '</strong></p>\n\n  <figure class="article-photo">',
+              1,
+          )
+          text = text.replace(
+              '<a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="/o-webu/#provozovatel">',
+              '<a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="/navstevnost/">Návštěvnost</a><a href="/o-webu/#provozovatel">',
+              1,
+          )
+          extra = (
+              '<div class="wrap footer-legal"><span class="legal-links">'
+              '<a href="/o-webu/">O webu</a> · '
+              '<a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a> · '
+              '<a href="/navstevnost/">Návštěvnost</a></span></div>'
+          )
+          text = text.replace(extra, '', 1)
+          assert '<article class="article">' in text
+          assert '</strong></p>\n\n  <figure class="article-photo">' in text
+          assert text.count('class="footer-legal"') == 1
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
           slug='nebezpeci-pozaru-ustecky-kraj-kadan-2026'
           title='Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna'
           test -s "clanky/${slug}.html"
           test -s "social/${slug}.png"
           grep -Fq "<h1>${title}</h1>" "clanky/${slug}.html"
+          grep -Fq '<article class="article">' "clanky/${slug}.html"
           grep -Fq "/clanky/${slug}.html" index.html
           grep -Fq "/clanky/${slug}.html" clanky/index.html
           grep -Fq "https://nasekadan.cz/clanky/${slug}.html" rss.xml
