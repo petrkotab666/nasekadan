@@ -10,7 +10,7 @@ SLUG = "kadansti-plavacci-zapis-podzim-2026"
 ARTICLE_PATH = ROOT / "clanky" / f"{SLUG}.html"
 ARTICLE_URL = f"https://nasekadan.cz/clanky/{SLUG}.html"
 ARTICLE_HREF = f"/clanky/{SLUG}.html"
-IMAGE_URL = "https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png"
+IMAGE_URL = "https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png"
 PUBLISHED = "2026-07-31T21:30:00+02:00"
 TITLE = "Kadaňští Plaváčci otevřeli zápis do podzimních kurzů. Nabídka je pro děti i dospělé"
 DESC = "Kadaňští Plaváčci zahájili zápis do podzimních kurzů 2026. Nabízejí deset lekcí pro děti různých věkových kategorií, dospělé i AquaFIT."
@@ -35,21 +35,21 @@ ARTICLE = '''<!doctype html>
   <meta property="og:title" content="Kadaňští Plaváčci otevřeli zápis do podzimních kurzů">
   <meta property="og:description" content="Kurzy jsou určené dětem různých věkových kategorií, dospělým i zájemcům o AquaFIT. Kapacita je omezená.">
   <meta property="og:url" content="https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html">
-  <meta property="og:image" content="https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png">
+  <meta property="og:image" content="https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Kadaňští Plaváčci otevřeli zápis do podzimních kurzů">
   <meta name="twitter:description" content="Kurzy pro děti i dospělé a AquaFIT. Kapacita je omezená.">
-  <meta name="twitter:image" content="https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png">
+  <meta name="twitter:image" content="https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png">
   <link data-nasekadan-discovery="1" rel="alternate" type="application/rss+xml" title="Naše Kadaň – zprávy z Kadaně" href="https://nasekadan.cz/rss.xml">
   <link rel="alternate" type="text/plain" title="Naše Kadaň pro AI" href="https://nasekadan.cz/llms.txt">
   <meta name="geo.region" content="CZ-42">
   <meta name="geo.placename" content="Kadaň">
   <meta name="geo.position" content="50.375984;13.271307">
   <meta name="ICBM" content="50.375984, 13.271307">
-  <script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Kadaňští Plaváčci otevřeli zápis do podzimních kurzů. Nabídka je pro děti i dospělé","description":"Kadaňští Plaváčci zahájili zápis do podzimních kurzů 2026. Nabízejí deset lekcí pro děti různých věkových kategorií, dospělé i AquaFIT.","datePublished":"2026-07-31T21:30:00+02:00","dateModified":"2026-07-31T21:30:00+02:00","author":{"@type":"Organization","@id":"https://nasekadan.cz/#organization","name":"Naše Kadaň","url":"https://nasekadan.cz/o-webu/"},"publisher":{"@id":"https://nasekadan.cz/#organization"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html"},"inLanguage":"cs-CZ","isAccessibleForFree":true,"image":["https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png"]}</script>
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","headline":"Kadaňští Plaváčci otevřeli zápis do podzimních kurzů. Nabídka je pro děti i dospělé","description":"Kadaňští Plaváčci zahájili zápis do podzimních kurzů 2026. Nabízejí deset lekcí pro děti různých věkových kategorií, dospělé i AquaFIT.","datePublished":"2026-07-31T21:30:00+02:00","dateModified":"2026-07-31T21:30:00+02:00","author":{"@type":"Organization","@id":"https://nasekadan.cz/#organization","name":"Naše Kadaň","url":"https://nasekadan.cz/o-webu/"},"publisher":{"@id":"https://nasekadan.cz/#organization"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html"},"inLanguage":"cs-CZ","isAccessibleForFree":true,"image":["https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png"]}</script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Naše Kadaň","item":"https://nasekadan.cz/"},{"@type":"ListItem","position":2,"name":"Články","item":"https://nasekadan.cz/clanky/"},{"@type":"ListItem","position":3,"name":"Kadaňští Plaváčci otevřeli zápis do podzimních kurzů","item":"https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html"}]}</script>
   <style>
     .article-shell{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:56px 0}
@@ -83,7 +83,7 @@ ARTICLE = '''<!doctype html>
   <p class="tag">VOLNÝ ČAS · PRAKTICKÉ INFORMACE · 31. ČERVENCE 2026</p>
   <h1>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů. Nabídka je pro děti i dospělé</h1>
   <p class="leadtext"><strong>Plavecká škola Kadaňští Plaváčci zahájila přihlašování do podzimních kurzů 2026. Nabídka zahrnuje lekce pro děti od tří let, starší školáky, dospělé i cvičení AquaFIT. Organizátoři upozorňují, že kapacita je omezená a oblíbené časy se mohou rychle zaplnit.</strong></p>
-  <img class="article-image" src="/social/kadansti-plavacci-zapis-podzim-2026.png" width="1200" height="630" alt="Kadaňští Plaváčci otevřeli zápis do podzimních kurzů 2026">
+  <img class="article-image" src="/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png" width="1200" height="630" alt="Kadaňští Plaváčci otevřeli zápis do podzimních kurzů 2026">
   <p>Podle zveřejněného oznámení jsou kurzy určené začátečníkům i dětem a dospělým, kteří chtějí svou techniku dále zlepšovat. Přihlášení a podrobnosti pořadatelé zveřejnili na svém webu.</p>
 
   <h2>Pro koho jsou kurzy určené</h2>
@@ -127,7 +127,7 @@ ARTICLE = '''<!doctype html>
 
 HERO_SECTION = '''  <section class="wrap hero" id="clanky" data-auto-latest-hero="1" data-latest-article-href="/clanky/kadansti-plavacci-zapis-podzim-2026.html">
     <article class="lead">
-      <div class="photo" style="background:linear-gradient(90deg,rgba(3,28,49,.35),rgba(3,28,49,.1)),url('/social/kadansti-plavacci-zapis-podzim-2026.png') center/cover no-repeat"><span>VOLNÝ ČAS · PRAKTICKÉ INFORMACE · 31. ČERVENCE 2026</span><strong>PODZIM 2026</strong></div>
+      <div class="photo" style="background:linear-gradient(90deg,rgba(3,28,49,.35),rgba(3,28,49,.1)),url('/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png') center/cover no-repeat"><span>VOLNÝ ČAS · PRAKTICKÉ INFORMACE · 31. ČERVENCE 2026</span><strong>PODZIM 2026</strong></div>
       <div class="copy">
         <small>VOLNÝ ČAS · PRAKTICKÉ INFORMACE · 31. 7. 2026 · 21:30</small>
         <h1>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů</h1>
@@ -146,16 +146,16 @@ HERO_SECTION = '''  <section class="wrap hero" id="clanky" data-auto-latest-hero
   </section>'''
 
 HOME_CARD = '''    <article class="article-card service" data-plavacci-autumn-card>
-      <div class="visual" style="background:linear-gradient(90deg,rgba(3,28,49,.28),rgba(3,28,49,.08)),url('/social/kadansti-plavacci-zapis-podzim-2026.png') center/cover no-repeat"><strong>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů</strong></div>
+      <div class="visual" style="background:linear-gradient(90deg,rgba(3,28,49,.28),rgba(3,28,49,.08)),url('/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png') center/cover no-repeat"><strong>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů</strong></div>
       <div class="article-body"><span class="meta">31. 7. 2026 · 21:30 · Volný čas · Praktické informace</span><h3>Nové kurzy jsou pro děti, dospělé i zájemce o AquaFIT</h3><p>Podzimní zápis je spuštěný. Organizátoři upozorňují na omezenou kapacitu.</p><a class="read-more" href="/clanky/kadansti-plavacci-zapis-podzim-2026.html">Přečíst článek →</a></div>
     </article>'''
 
 ARCHIVE_CARD = '''    <article class="archive-item service" data-plavacci-autumn-card>
-      <div class="archive-visual" style="background:linear-gradient(90deg,rgba(3,28,49,.28),rgba(3,28,49,.08)),url('/social/kadansti-plavacci-zapis-podzim-2026.png') center/cover no-repeat"><strong>Zápis do kurzů plavání</strong></div>
+      <div class="archive-visual" style="background:linear-gradient(90deg,rgba(3,28,49,.28),rgba(3,28,49,.08)),url('/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png') center/cover no-repeat"><strong>Zápis do kurzů plavání</strong></div>
       <div class="archive-body"><span class="archive-meta">31. července 2026 ve 21:30 · Volný čas · Praktické informace</span><h2>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů. Nabídka je pro děti i dospělé</h2><p>Kurzy zahrnují skupiny pro děti od tří let, starší školáky, dospělé i AquaFIT. Kapacita je omezená.</p><a href="/clanky/kadansti-plavacci-zapis-podzim-2026.html">Přečíst praktické informace →</a></div>
     </article>'''
 
-RSS_ITEM = '''    <item><title>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů</title><description><![CDATA[Kadaňští Plaváčci zahájili zápis do podzimních kurzů 2026. Nabízejí deset lekcí pro děti různých věkových kategorií, dospělé i AquaFIT.]]></description><link>https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html</guid><pubDate>Fri, 31 Jul 2026 21:30:00 +0200</pubDate><category>Volný čas</category><category>Praktické informace</category><category>Plavání</category><szn:image><szn:url>https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>
+RSS_ITEM = '''    <item><title>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů</title><description><![CDATA[Kadaňští Plaváčci zahájili zápis do podzimních kurzů 2026. Nabízejí deset lekcí pro děti různých věkových kategorií, dospělé i AquaFIT.]]></description><link>https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html</link><guid isPermaLink="true">https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html</guid><pubDate>Fri, 31 Jul 2026 21:30:00 +0200</pubDate><category>Volný čas</category><category>Praktické informace</category><category>Plavání</category><szn:image><szn:url>https://nasekadan.cz/social/kadansti-plavacci-zapis-podzim-2026-15a89a2edb.png</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>
 '''
 
 NEWS_URL = '''  <url><loc>https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>2026-07-31T21:30:00+02:00</news:publication_date><news:title>Kadaňští Plaváčci otevřeli zápis do podzimních kurzů</news:title></news:news></url>
@@ -233,7 +233,7 @@ def update_sitemaps() -> None:
     news = ROOT / "news-sitemap.xml"
     text = news.read_text(encoding="utf-8")
     text = re.sub(r'\s*<url>\s*<loc>' + re.escape(ARTICLE_URL) + r'</loc>.*?</url>\s*', '\n', text, flags=re.S)
-    text = text.replace('>', '>\n' + NEWS_URL, 1) if '<urlset' in text else text
+    text = re.sub(r'(<urlset\b[^>]*>)', lambda match: match.group(1) + '\n' + NEWS_URL, text, count=1) if '<urlset' in text else text
     news.write_text(text, encoding="utf-8", newline="\n")
 
 
@@ -301,7 +301,6 @@ def main() -> None:
     update_sitemaps()
     update_llms()
     update_manifest()
-    rewrite_latest_enforcer()
     print("Článek o zápisu do podzimních kurzů Kadaňských Plaváčků byl publikován.")
 
 
