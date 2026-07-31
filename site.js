@@ -9,9 +9,39 @@ document.addEventListener('DOMContentLoaded', () => {
     document.head.appendChild(mobile);
   }
 
+  const canonicalNav = [
+    ['/clanky/', 'Články'],
+    ['/#akce', 'Akce'],
+    ['/pruvodce/', 'Průvodce'],
+    ['/zapojte-se/', 'Poslat tip'],
+  ];
+
   document.querySelectorAll('.head').forEach((head) => {
-    const nav = head.querySelector('nav');
-    if (!nav || head.querySelector('.menu-toggle')) return;
+    let nav = head.querySelector('nav');
+    if (!nav) {
+      nav = document.createElement('nav');
+      const logo = head.querySelector('.logo');
+      if (logo) logo.after(nav);
+      else head.prepend(nav);
+    }
+
+    nav.setAttribute('aria-label', 'Hlavní navigace');
+    nav.innerHTML = canonicalNav
+      .map(([href, label]) => `<a href="${href}">${label}</a>`)
+      .join('');
+
+    const path = location.pathname;
+    nav.querySelectorAll('a').forEach((link) => {
+      const href = link.getAttribute('href') || '';
+      const active =
+        (href === '/clanky/' && path.startsWith('/clanky/')) ||
+        (href === '/pruvodce/' && path.startsWith('/pruvodce/')) ||
+        (href === '/zapojte-se/' && path.startsWith('/zapojte-se/')) ||
+        (href === '/#akce' && path === '/' && location.hash === '#akce');
+      if (active) link.setAttribute('aria-current', 'page');
+    });
+
+    if (head.querySelector('.menu-toggle')) return;
 
     const button = document.createElement('button');
     button.className = 'menu-toggle';
