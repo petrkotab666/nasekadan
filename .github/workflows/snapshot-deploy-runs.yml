@@ -32,8 +32,8 @@ jobs:
             const repo = context.repo.repo;
             const response = await github.rest.actions.listWorkflowRunsForRepo({owner, repo, branch: 'main', per_page: 100});
             const interesting = response.data.workflow_runs
-              .filter(run => /nasad|deploy|přeplněných koších|koších/i.test(`${run.name} ${run.display_title}`))
-              .slice(0, 30);
+              .filter(run => /nasad|nasaz|deploy|požár|ohně|přeplněných koších|koších/i.test(`${run.name} ${run.display_title}`))
+              .slice(0, 50);
             const result = [];
             for (const run of interesting) {
               let jobs = [];
