@@ -1,5 +1,5 @@
-Spuštěno 2026-07-31 17:48 Europe/Prague
-Kanál: ověřený self-hosted kanonický produkční deploy na OVH.
-Požadavek: nasadit aktuální main po publikaci článku „Srpen v kadaňských galeriích nabídne houby, podmořský svět, fotografické příběhy i filatelii“.
-Veřejně ověřit: článek, přesný H1, vlastní sociální PNG, titulku, archiv, RSS, sitemap.xml a news-sitemap.xml.
-Důvod: předchozí API a workflow-dispatch spouštěče nevytvořily produkční běh.
+Spuštěno 2026-07-31 19:47 Europe/Prague
+Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH.
+Požadavek: nasadit aktuální main po přidání záložního monitoring alertu a zachovat nejnovější článek o srpnových kadaňských galeriích.
+Veřejně ověřit: aktuální source v deployment-health.txt, článek a správný H1, titulku, archiv, RSS a sitemap.xml.
+Důvod: přísná technická kontrola vyžaduje shodu veřejného source s aktuálním main; při nezměněném stavu se další deploy nespouští.
