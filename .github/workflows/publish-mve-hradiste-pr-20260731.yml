@@ -41,11 +41,30 @@ jobs:
           python -m pip install --disable-pip-version-check --quiet Pillow
           python scripts/publish_mve_hradiste_20260731.py
 
+          python - <<'PY'
+          from pathlib import Path
+
+          article = Path('clanky/mve-hradiste-nova-vodni-elektrarna-2026.html')
+          text = article.read_text(encoding='utf-8')
+          text = text.replace(
+              '  <meta name="geo.region" content="CZ-42"><meta name="geo.placename" content="Hradiště u Vernéřova"><meta name="geo.position" content="50.3900;13.1730"><meta name="ICBM" content="50.3900, 13.1730">\n',
+              ''
+          )
+          article.write_text(text, encoding='utf-8', newline='\n')
+
+          duplicate = '<div class="wrap footer-legal"><span class="legal-links"><a href="/o-webu/">O webu</a> · <a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a> · <a href="/navstevnost/">Návštěvnost</a></span></div>'
+          for path in (Path('index.html'), Path('404.html')):
+              current = path.read_text(encoding='utf-8')
+              current = current.replace(duplicate, '')
+              path.write_text(current, encoding='utf-8', newline='\n')
+          PY
+
           slug='mve-hradiste-nova-vodni-elektrarna-2026'
           title='U Hradiště má vzniknout nová malá vodní elektrárna. Vodu přivede potrubí dlouhé 520 metrů'
           test -s "clanky/${slug}.html"
           test -s "social/${slug}.png"
           grep -Fq "<h1>${title}</h1>" "clanky/${slug}.html"
+          ! grep -Fq '50.3900;13.1730' "clanky/${slug}.html"
           grep -Fq '/clanky/mve-hradiste-nova-vodni-elektrarna-2026.html' index.html
           grep -Fq '/clanky/mve-hradiste-nova-vodni-elektrarna-2026.html' clanky/index.html
           grep -Fq 'https://nasekadan.cz/clanky/mve-hradiste-nova-vodni-elektrarna-2026.html' rss.xml
