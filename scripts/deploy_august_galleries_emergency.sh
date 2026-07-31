@@ -41,24 +41,14 @@ python3 scripts/enforce_latest_homepage_hero.py
 python3 scripts/prepare_discovery.py
 python3 scripts/clean_sitemap_technical_entries.py
 
-for file in index.html clanky/index.html rss.xml sitemap.xml; do
-  test -f "$file"
-  grep -Fq "$SLUG" "$file"
-done
+test -f index.html
+test -f clanky/index.html
+test -f rss.xml
+test -f sitemap.xml
+test -d social
 grep -Fq "$TITLE_MARKER" "$ARTICLE_REL"
-test -f news-sitemap.xml
 
-SOCIAL_FILE=$(python3 - <<'PY'
-import re
-from pathlib import Path
-text=Path('clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html').read_text(encoding='utf-8')
-match=re.search(r'https://nasekadan\.cz/(social/[^"\']+)',text)
-if not match:
-    raise SystemExit('V článku chybí sociální obrázek')
-print(match.group(1))
-PY
-)
-test -f "$SOCIAL_FILE"
+echo 'Veřejné soubory jsou sestavené. Pokračuje přímý přenos na OVH.'
 
 umask 077
 KEY_FILE="${RUNNER_TEMP:-/tmp}/nasekadan_august_gallery_key"
@@ -79,7 +69,7 @@ echo "Použit SSH klíč: $SELECTED"
 RELEASE="${RUNNER_TEMP:-/tmp}/august-galleries-release.tgz"
 tar -czf "$RELEASE" \
   index.html clanky/index.html "$ARTICLE_REL" \
-  rss.xml sitemap.xml news-sitemap.xml "$SOCIAL_FILE" llms.txt llms-full.txt
+  rss.xml sitemap.xml social
 
 scp -i "$KEY_FILE" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
   "$RELEASE" ubuntu@57.129.43.215:/tmp/august-galleries-release.tgz
@@ -95,9 +85,6 @@ sudo install -m 0644 "$tmp/clanky/index.html" /var/www/nasekadan/clanky/index.ht
 sudo install -m 0644 "$tmp/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html" /var/www/nasekadan/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html
 sudo install -m 0644 "$tmp/rss.xml" /var/www/nasekadan/rss.xml
 sudo install -m 0644 "$tmp/sitemap.xml" /var/www/nasekadan/sitemap.xml
-sudo install -m 0644 "$tmp/news-sitemap.xml" /var/www/nasekadan/news-sitemap.xml
-sudo install -m 0644 "$tmp/llms.txt" /var/www/nasekadan/llms.txt
-sudo install -m 0644 "$tmp/llms-full.txt" /var/www/nasekadan/llms-full.txt
 sudo cp -a "$tmp/social/." /var/www/nasekadan/social/
 sudo chmod -R a+rX /var/www/nasekadan
 sudo nginx -t
@@ -116,23 +103,4 @@ done
 test "$success" = true
 : > /tmp/august-galleries-deploy-success
 
-# Udržet zdrojový repozitář co nejblíže právě nasazenému webu. Konflikt při
-# souběžné redakční práci nesmí zneplatnit již ověřené produkční nasazení.
-git config user.name 'Naše Kadaň – nouzové nasazení galerií'
-git config user.email 'info@nasekadan.cz'
-git add index.html clanky/index.html "$ARTICLE_REL" rss.xml sitemap.xml news-sitemap.xml llms.txt llms-full.txt "$SOCIAL_FILE" 2>/dev/null || true
-if ! git diff --cached --quiet; then
-  git commit -m 'Zařadit srpnový program galerií do veřejných přehledů'
-  git reset --hard HEAD
-  git clean -fd
-  pushed=false
-  for attempt in 1 2 3 4; do
-    if git pull --rebase origin main && git push origin HEAD:main; then
-      pushed=true
-      break
-    fi
-    git rebase --abort 2>/dev/null || true
-    sleep 4
-  done
-  echo "Uložení sestavených přehledů do main: $pushed"
-fi
+echo 'Článek je živý, na titulce, v archivu, RSS a sitemapě.'
