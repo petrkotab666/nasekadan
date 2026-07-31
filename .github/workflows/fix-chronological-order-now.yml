@@ -14,14 +14,12 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: publish-kadansti-plavacci-production
-  cancel-in-progress: false
-
 jobs:
   publish-and-deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Stáhnout aktuální main
         uses: actions/checkout@v4
@@ -72,12 +70,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
           git clean -fd
           chmod +x deploy/sync-production.sh
           sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
+          REMOTE
 
       - name: Veřejně ověřit článek a zařazení
         shell: bash
