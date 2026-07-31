@@ -41,14 +41,30 @@ python3 scripts/enforce_latest_homepage_hero.py
 python3 scripts/prepare_discovery.py
 python3 scripts/clean_sitemap_technical_entries.py
 
+# Některé starší generátory sitemapy nový článek při souběhu vynechaly.
+# Doplnění je idempotentní a proběhne pouze tehdy, když URL stále chybí.
+python3 - <<'PY'
+from pathlib import Path
+path=Path('sitemap.xml')
+text=path.read_text(encoding='utf-8')
+url='https://nasekadan.cz/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html'
+if url not in text:
+    entry=f'  <url><loc>{url}</loc></url>\n'
+    if '</urlset>' not in text:
+        raise SystemExit('Neplatná sitemap.xml: chybí </urlset>')
+    text=text.replace('</urlset>',entry+'</urlset>',1)
+    path.write_text(text,encoding='utf-8')
+    print('Článek ručně doplněn do sitemap.xml.')
+PY
+
 test -f index.html
 test -f clanky/index.html
 test -f rss.xml
 test -f sitemap.xml
 test -d social
 grep -Fq "$TITLE_MARKER" "$ARTICLE_REL"
+grep -Fq "$SLUG" sitemap.xml
 
-# Tyto výpisy jsou diagnostické; samotné sestavovací skripty už článek vložily.
 printf 'Výskyt článku v titulce: '; grep -Fc "$SLUG" index.html || true
 printf 'Výskyt článku v archivu: '; grep -Fc "$SLUG" clanky/index.html || true
 printf 'Výskyt článku v RSS: '; grep -Fc "$SLUG" rss.xml || true
@@ -103,19 +119,13 @@ sudo docker cp "$tmp/clanky/$SLUG" "$cid:/usr/share/nginx/html/clanky/$SLUG"
 sudo docker cp "$tmp/rss.xml" "$cid:/usr/share/nginx/html/rss.xml"
 sudo docker cp "$tmp/sitemap.xml" "$cid:/usr/share/nginx/html/sitemap.xml"
 sudo docker cp "$tmp/social/." "$cid:/usr/share/nginx/html/social/"
-
-# Statické soubory se projeví okamžitě; reload je pouze pojistka.
 sudo docker exec "$cid" nginx -t
 sudo docker exec "$cid" nginx -s reload || true
 
 verify_url() {
   local path="$1" marker="$2" output="$3"
   curl -fsS --max-time 25 "http://127.0.0.1:3224${path}?direct=$(date +%s)$RANDOM" -o "$output"
-  if ! grep -Fq "$marker" "$output"; then
-    echo "Kontrola selhala pro $path; prvních 40 řádků odpovědi:" >&2
-    head -n 40 "$output" >&2 || true
-    return 1
-  fi
+  grep -Fq "$marker" "$output"
 }
 
 verify_url "/clanky/$SLUG" "$TITLE" /tmp/direct-article.html
@@ -130,8 +140,6 @@ REMOTE
 
 : > /tmp/august-galleries-deploy-success
 
-# Veřejná CDN může mít krátkou prodlevu; nasazení je už ověřeno přímo proti
-# produkčnímu upstreamu. Následující kontrola je informativní a neblokující.
 for attempt in $(seq 1 12); do
   if external_live; then
     echo 'Veřejná doména vrací nový článek i všechny přehledy.'
