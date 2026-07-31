@@ -1,0 +1,117 @@
+name: Simulovat veřejnou publikaci článku o sečení včetně indexace
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/drafts/sekani-travniku-kadan-spravci-vysky-2026.html.gz.b64'
+      - '.github/drafts/sekani-travniku-kadan-spravci-vysky-2026.html.gz.b64.part2'
+      - '.github/workflows/dry-run-greenery-publication-build-v3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dry-run-greenery-publication-build-v3
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Simulovat okamžik po 11. hodině
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug='sekani-travniku-kadan-spravci-vysky-2026'
+          article="clanky/${slug}.html"
+          url="https://nasekadan.cz/clanky/${slug}.html"
+          cat .github/drafts/${slug}.html.gz.b64 .github/drafts/${slug}.html.gz.b64.part2 \
+            | base64 -d | gzip -dc > "$article"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('clanky/sekani-travniku-kadan-spravci-vysky-2026.html')
+          t=p.read_text(encoding='utf-8')
+          t=t.replace('<meta name="robots" content="noindex,nofollow">','<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">')
+          t=t.replace('2026-08-01T11:00:00+02:00','2026-07-31T20:00:00+02:00')
+          t=t.replace('1. SRPNA 2026','31. ČERVENCE 2026')
+          p.write_text(t,encoding='utf-8')
+          PY
+
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/sort_articles_chronologically.py
+
+          grep -Fq 'Sedm centimetrů je smluvní minimum jedné konkrétní lokality' "$article"
+          grep -Fq 'data-poll-id="sekani-travniku-kadan-2026"' "$article"
+          grep -Fq '/api/analytics/pageview' "$article"
+          grep -Fq 'index,follow' "$article"
+          ! grep -Fq 'noindex,nofollow' "$article"
+          grep -Fq "/clanky/${slug}.html" index.html
+          grep -Fq "/clanky/${slug}.html" clanky/index.html
+          grep -Fq "$url" rss.xml
+          grep -Fq "$url" sitemap.xml
+          grep -Fq "$url" news-sitemap.xml
+
+          social_url="$(python3 - <<'PY'
+          import html,re
+          from pathlib import Path
+          text=Path('clanky/sekani-travniku-kadan-spravci-vysky-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)',text,re.I)
+          if not m: raise SystemExit('Chybí og:image')
+          print(html.unescape(m.group(1)))
+          PY
+          )"
+          social_image="social/${social_url##*/}"
+          test -s "$social_image"
+          python3 - "$social_image" <<'PY'
+          import sys
+          from pathlib import Path
+          from PIL import Image
+          p=Path(sys.argv[1])
+          with Image.open(p) as im:
+              assert im.format == 'PNG'
+              assert im.size == (1200,630)
+          assert p.stat().st_size >= 10000
+          PY
+          echo "social_url=$social_url" >> "$GITHUB_OUTPUT"
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek simulace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          BUILD_OK: ${{ steps.build.outputs.ok }}
+          SOCIAL_URL: ${{ steps.build.outputs.social_url }}
+        with:
+          script: |
+            const path='.github/greenery-build-preflight-status.json';
+            const ok=process.env.BUILD_OK==='true';
+            const payload={
+              status:ok?'passed':'failed',
+              checkedAtUtc:new Date().toISOString(),
+              runId:context.runId,
+              sourceSha:context.sha,
+              scheduledFor:'2026-08-01T11:00:00+02:00',
+              mode:'simulated-publication-with-index-switch',
+              socialImage:process.env.SOCIAL_URL||null,
+              verifiedOutputs:['article','homepage','archive','rss','sitemap','news-sitemap','poll','social-image']
+            };
+            const content=Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64');
+            let sha;
+            try{const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});if(!Array.isArray(current.data))sha=current.data.sha;}catch(error){if(error.status!==404)throw error;}
+            await github.rest.repos.createOrUpdateFileContents({owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',message:`Zapsat simulaci publikace článku o sečení: ${payload.status} [skip ci]`,content,...(sha?{sha}:{})});
