@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "fingerprint": "production-source-stale-selfhosted-deploy-20260731",
+  "title": "Produkční source Naše Kadaň zůstal na starším commitu",
+  "summary": "Po jednom bezpečném kanonickém self-hosted OVH pokusu veřejný deployment-health.txt stále uváděl source 7acc039, zatímco kontrolovaný aktuální main byl 64228a0. Obsah nejnovějších článků je dostupný, ale podle přísného pravidla nelze produkci označit za plně aktuální.",
+  "facts": [
+    "Aktuální main zachycený živou kontrolou byl 64228a08d46baba2af9ea6c4e45aae162aa56ecf.",
+    "Veřejný deployment-health.txt po 24 cache-busting kontrolách uváděl source=7acc0393095c7020501be448165c68ba910d6a74.",
+    "Veřejný deployment-health.txt uváděl generated=2026-07-31T17:49:39Z a mode=canonical-ovh.",
+    "Jeden kanonický self-hosted deploy byl vyvolán změnou triggeru; při nezměněném stavu nebyl opakován.",
+    "Živá kontrola od 2026-07-31T18:02:51Z do 2026-07-31T18:08:28Z neprokázala shodu source s aktuálním main.",
+    "V repozitáři byly odstraněny tři statusové commity po deployi nebo kontrole, které uměle posouvaly main, ale produkční účinek nelze potvrdit bez nového odpovídajícího source."
+  ],
+  "sources": [
+    {
+      "title": "GitHub Issue #276 – trvající závada produkčního source",
+      "url": "https://github.com/petrkotab666/nasekadan/issues/276"
+    },
+    {
+      "title": "Servisní živá kontrola – Pull Request #269",
+      "url": "https://github.com/petrkotab666/nasekadan/pull/269"
+    },
+    {
+      "title": "Kanonický deploy trigger commit 64228a0",
+      "url": "https://github.com/petrkotab666/nasekadan/commit/64228a08d46baba2af9ea6c4e45aae162aa56ecf"
+    }
+  ],
+  "observed_at": "2026-07-31T18:08:28Z",
+  "severity": "high",
+  "recommended_action": "Prověřit dostupnost self-hosted runneru a konkrétní běh workflow Nasadit Naše Kadaň na OVH vyvolaný commitem 64228a0. Nový deploy spustit nejvýše jednou až po skutečné změně stavu nebo odstranění překážky. Poté živě ověřit H1 nejnovějších článků, titulku, archiv, RSS, sitemapu a přesnou shodu deployment-health source s aktuálním main."
+}
