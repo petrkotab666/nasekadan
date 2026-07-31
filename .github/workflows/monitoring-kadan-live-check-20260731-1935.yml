@@ -1,0 +1,89 @@
+name: Jednorázová živá kontrola monitoringu Kadaně
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/monitoring-kadan-live-check-20260731-1935.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ověřit živou produkci přes HTTPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          home=Path('index.html').read_text(encoding='utf-8')
+          m=re.search(r'data-latest-article-href="([^"]+)"',home)
+          assert m, 'Chybí latest article href'
+          latest=m.group(1)
+          article=Path(latest.lstrip('/'))
+          text=article.read_text(encoding='utf-8')
+          h1=re.search(r'<h1[^>]*>(.*?)</h1>',text,re.S)
+          assert h1, 'Chybí H1'
+          title=re.sub(r'<[^>]+>','',h1.group(1)).strip()
+          Path('/tmp/latest-path').write_text(latest)
+          Path('/tmp/latest-h1').write_text(title)
+          # Ověřit také další dva články podle published_time.
+          rows=[]
+          for p in Path('clanky').glob('*.html'):
+              if p.name=='index.html': continue
+              t=p.read_text(encoding='utf-8',errors='replace')
+              d=re.search(r'property="article:published_time" content="([^"]+)"',t)
+              hh=re.search(r'<h1[^>]*>(.*?)</h1>',t,re.S)
+              if d and hh:
+                  rows.append((d.group(1),'/clanky/'+p.name,re.sub(r'<[^>]+>','',hh.group(1)).strip()))
+          rows.sort(reverse=True)
+          Path('/tmp/latest-three').write_text('\n'.join(f'{u}\t{h}' for _,u,h in rows[:3]))
+          PY
+
+          main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          latest="$(cat /tmp/latest-path)"
+          h1="$(cat /tmp/latest-h1)"
+
+          for attempt in $(seq 1 18); do
+            key="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?monitor=$key" -o /tmp/live-home || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?monitor=$key" -o /tmp/live-archive || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?monitor=$key" -o /tmp/live-rss || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?monitor=$key" -o /tmp/live-sitemap || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?monitor=$key" -o /tmp/live-health || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz${latest}?monitor=$key" -o /tmp/live-latest || true
+
+            ok=yes
+            grep -Fq "<h1>${h1}</h1>" /tmp/live-latest 2>/dev/null || ok=no
+            grep -Fq "$latest" /tmp/live-home 2>/dev/null || ok=no
+            grep -Fq "$latest" /tmp/live-archive 2>/dev/null || ok=no
+            grep -Fq "https://nasekadan.cz${latest}" /tmp/live-rss 2>/dev/null || ok=no
+            grep -Fq "https://nasekadan.cz${latest}" /tmp/live-sitemap 2>/dev/null || ok=no
+            grep -Fq "source=${main_sha}" /tmp/live-health 2>/dev/null || ok=no
+
+            while IFS=$'\t' read -r path title; do
+              curl -4 -kfsS --max-time 25 "https://nasekadan.cz${path}?monitor=$key" -o /tmp/live-check || { ok=no; continue; }
+              grep -Fq "<h1>${title}</h1>" /tmp/live-check || ok=no
+            done < /tmp/latest-three
+
+            echo "attempt=$attempt main=$main_sha latest=$latest result=$ok"
+            if [[ "$ok" == yes ]]; then
+              echo "HOTOVO source=$main_sha latest=$latest"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo 'Živá produkce neodpovídá aktuálnímu main nebo některá publikační plocha selhala.' >&2
+          echo 'deployment-health:' >&2
+          cat /tmp/live-health >&2 2>/dev/null || true
+          exit 1
