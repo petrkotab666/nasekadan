@@ -145,3 +145,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# Neobsahový operační impuls 2026-07-31 12:32 CEST: spustit existující cloudový kanonický OVH deploy kvůli opravě zastaralého deployment-health.txt.
