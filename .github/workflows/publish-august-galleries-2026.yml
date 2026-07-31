@@ -92,6 +92,8 @@ jobs:
             echo 'changed=false' >> "$GITHUB_OUTPUT"
           else
             git commit -m 'Trvale zařadit srpnový program galerií do webu [skip ci]'
+            git reset --hard HEAD
+            git clean -fd
             saved=false
             for attempt in 1 2 3 4 5 6; do
               if git pull --rebase origin main && git push origin HEAD:main; then
