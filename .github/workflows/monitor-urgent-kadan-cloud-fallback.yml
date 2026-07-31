@@ -11,6 +11,9 @@ on:
       - '.github/workflows/monitor-urgent-kadan-cloud-fallback.yml'
       - 'data/urgent-kadan-sources.json'
       - 'scripts/monitor_urgent_kadan.py'
+  pull_request:
+    paths:
+      - '.github/triggers/urgent-cloud-fallback.txt'
 
 permissions:
   contents: write
