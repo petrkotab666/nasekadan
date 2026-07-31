@@ -1,0 +1,316 @@
+# Jednotlivé plochy veřejné zeleně podle správce
+
+Vícečástové GIS objekty se rozpadají na **282 samostatných polygonů**. Přiřazení správce je přímo z městské vrstvy; názvy okolních ulic a míst jsou pomocné orientační údaje z OpenStreetMap.
+
+## Technické služby Kadaň s r.o.
+
+- **190 samostatných ploch**, celkem **42.141 ha**.
+
+- Plocha 1: **3.9358 ha**, bod 50.3841632, 13.2615004 - Na Průtahu, Na Podlesí, Klášterecká
+- Plocha 2: **3.3652 ha**, bod 50.3797924, 13.2791145 - Hřbitovní, Prunéřovská, Věžní
+- Plocha 3: **3.1179 ha**, bod 50.3888264, 13.2672015 - Zahradní, Golovinova, Nová kolonie
+- Plocha 4: **3.0884 ha**, bod 50.3886354, 13.2690601 - Husova, Golovinova, Jana Roháče, Nad nemocnicí
+- Plocha 5: **2.2623 ha**, bod 50.3841885, 13.2641902 - Na Podlesí, Brožíkova
+- Plocha 6: **1.739 ha**, bod 50.3771818, 13.2737032 - Rokelská, Koželužská, 5. května
+- Plocha 7: **1.5116 ha**, bod 50.3765784, 13.2710697 - Mírové náměstí, Jana Švermy, Katova ulička, Boženy Němcové
+- Plocha 8: **1.3094 ha**, bod 50.388526, 13.2694218 - Husova, Golovinova, Chomutovská, Jana Roháče
+- Plocha 9: **1.1506 ha**, bod 50.3742992, 13.280156 - Polní, Ječná, Jitřní, Žitná
+- Plocha 10: **1.0511 ha**, bod 50.3760897, 13.2731888 - Koželužská, Na Příkopě, Žatecká, Říční, Katova ulička
+- Plocha 11: **1.0013 ha**, bod 50.3933893, 13.275172 - Golovinova, Chomutovská
+- Plocha 12: **0.9984 ha**, bod 50.3835355, 13.2717299 - Na Průtahu, 1. máje, Školní, kpt. Jaroše
+- Plocha 13: **0.988 ha**, bod 50.3832854, 13.2658513 - Na Podlesí
+- Plocha 14: **0.8038 ha**, bod 50.3844286, 13.2658065 - Na Podlesí, Na Průtahu
+- Plocha 15: **0.7452 ha**, bod 50.3779104, 13.2757536 - Věžní, Hřbitovní
+- Plocha 16: **0.739 ha**, bod 50.377007, 13.2603572 - Václava Havla, U Splitu, Nábřeží Maxipsa Fíka
+- Plocha 17: **0.6937 ha**, bod 50.3742136, 13.275198 - Rokelská, Říční
+- Plocha 18: **0.6051 ha**, bod 50.3823595, 13.2721506 - Školní, 1. máje
+- Plocha 19: **0.5706 ha**, bod 50.374758, 13.2729786 - Žatecká, Na Příkopě, Říční
+- Plocha 20: **0.5643 ha**, bod 50.3929138, 13.2659958 - Příčná, Třešňová, Nad nemocnicí
+- Plocha 21: **0.5308 ha**, bod 50.3816658, 13.2761192 - Nové nádraží, Na Průtahu
+- Plocha 22: **0.5161 ha**, bod 50.3721195, 13.283075 - Průmyslová, Žitná, Krátká
+- Plocha 23: **0.5061 ha**, bod 50.3745639, 13.2762663 - Sukova, Zeyerova, Rokelská
+- Plocha 24: **0.4369 ha**, bod 50.3866843, 13.2673641 - Jana Roháče, Golovinova, Nová kolonie
+- Plocha 25: **0.4056 ha**, bod 50.3801434, 13.2757529 - Na Průtahu, Hřbitovní, 5. května
+- Plocha 26: **0.3905 ha**, bod 50.3813387, 13.275061 - Skatepark, Na Průtahu
+- Plocha 27: **0.3739 ha**, bod 50.3742842, 13.2709077 - Říční, Nábřeží Maxipsa Fíka
+- Plocha 28: **0.3552 ha**, bod 50.3771547, 13.2824589 - Obránců míru, Ovesná, CIHELNA KADAŇ a.s.
+- Plocha 29: **0.3476 ha**, bod 50.3821628, 13.2635528 - Klášterecká, Brožíkova, Alešova, Pionýrů
+- Plocha 30: **0.3075 ha**, bod 50.3921672, 13.2668778 - Třešňová, Nad nemocnicí, Příčná
+- Plocha 31: **0.2935 ha**, bod 50.3790816, 13.2732964 - Koželužská, Pastýřská studánka, 5. května
+- Plocha 32: **0.2889 ha**, bod 50.3813925, 13.2728019 - 1. máje, Školní, Turistické informační centrum Kadaň
+- Plocha 33: **0.2877 ha**, bod 50.3702881, 13.2827091 - Vinohrady, Žitná
+- Plocha 34: **0.2814 ha**, bod 50.3835504, 13.2735852 - Na Průtahu
+- Plocha 35: **0.2476 ha**, bod 50.3749534, 13.266415 - Lázeňská, Nerudova, Nábřeží Maxipsa Fíka, Jiráskova
+- Plocha 36: **0.2397 ha**, bod 50.3752152, 13.2765507 - Věžní, Sukova
+- Plocha 37: **0.2157 ha**, bod 50.3760033, 13.2725976 - Na Příkopě, Katova ulička, Žatecká
+- Plocha 38: **0.2121 ha**, bod 50.3745856, 13.2713957 - Říční, Nábřeží Maxipsa Fíka, Zajícův převis
+- Plocha 39: **0.1998 ha**, bod 50.3779914, 13.2763646 - Věžní, Hřbitovní
+- Plocha 40: **0.1996 ha**, bod 50.3861449, 13.259978 - Na Průtahu, Nová kolonie, Klášterecká
+- Plocha 41: **0.1838 ha**, bod 50.3749568, 13.2720301 - Žatecká, Sládkova
+- Plocha 42: **0.1733 ha**, bod 50.3796423, 13.2768168 - Hřbitovní, Věžní
+- Plocha 43: **0.1672 ha**, bod 50.3792554, 13.2794687 - Hřbitovní, Prunéřovská, CIHELNA KADAŇ a.s.
+- Plocha 44: **0.1465 ha**, bod 50.3747513, 13.269051 - Říční, Čechova, Lázeňská, Tyršova, Nábřeží Maxipsa Fíka
+- Plocha 45: **0.1446 ha**, bod 50.3707378, 13.2822647 - Žitná, Vinohrady
+- Plocha 46: **0.1373 ha**, bod 50.3819423, 13.275472 - Na Průtahu
+- Plocha 47: **0.1319 ha**, bod 50.379975, 13.2814973 - Prunéřovská, Hřbitovní, CIHELNA KADAŇ a.s., Obránců míru
+- Plocha 48: **0.1305 ha**, bod 50.3770663, 13.2812635 - Obránců míru, Ovesná, CIHELNA KADAŇ a.s.
+- Plocha 49: **0.1263 ha**, bod 50.3726445, 13.2859047 - Průmyslová, Javorová
+- Plocha 50: **0.1186 ha**, bod 50.3841898, 13.2618849 - Na Podlesí, Klášterecká
+- Plocha 51: **0.1164 ha**, bod 50.3767796, 13.2629082 - Máchova, Havlíčkova, Václava Havla
+- Plocha 52: **0.1149 ha**, bod 50.3726052, 13.2800748 - Červeného kříže, Žitná, Jitřní
+- Plocha 53: **0.1081 ha**, bod 50.3925532, 13.2731717 - Golovinova, Reif - půjčovna nářadí, Chomutovská
+- Plocha 54: **0.1009 ha**, bod 50.3772219, 13.2742289 - Rokelská, Klášterní schody
+- Plocha 55: **0.1002 ha**, bod 50.3771128, 13.2743207 - Rokelská, Klášterní schody
+- Plocha 56: **0.1 ha**, bod 50.3857819, 13.2688814 - Jana Roháče, Chomutovská, Husova, Na Průtahu
+- Plocha 57: **0.0982 ha**, bod 50.3772422, 13.2741166 - Rokelská, Klášterní schody
+- Plocha 58: **0.0936 ha**, bod 50.3792673, 13.2721682 - Školní, Z-Box, AlzaBox, 5. května
+- Plocha 59: **0.0855 ha**, bod 50.3856733, 13.2653602 - Na Průtahu, Nová kolonie, Na Podlesí
+- Plocha 60: **0.0851 ha**, bod 50.3808413, 13.2757165 - Na Průtahu
+- Plocha 61: **0.0845 ha**, bod 50.3749739, 13.2700082 - Tyršova, Sládkova, Říční, Čechova
+- Plocha 62: **0.0803 ha**, bod 50.3773391, 13.2819819 - Obránců míru, CIHELNA KADAŇ a.s., Ovesná
+- Plocha 63: **0.0799 ha**, bod 50.3747375, 13.269748 - Tyršova, Sládkova, Říční
+- Plocha 64: **0.0792 ha**, bod 50.3784715, 13.2735779 - Koželužská, Pastýřská studánka, Na Příkopě, Katova ulička
+- Plocha 65: **0.0609 ha**, bod 50.3742588, 13.2793179 - Ječná, Jitřní, Žitná
+- Plocha 66: **0.0593 ha**, bod 50.3904709, 13.2685212 - Nad nemocnicí, Golovinova, Zahradní
+- Plocha 67: **0.0569 ha**, bod 50.3943847, 13.2758547 - Chomutovská, Prunéřovská, Golovinova
+- Plocha 68: **0.0568 ha**, bod 50.3755082, 13.2637424 - V zahrádkách, U Splitu, Václava Havla, Březinova
+- Plocha 69: **0.0558 ha**, bod 50.3909591, 13.2664729 - Nad nemocnicí, Třešňová
+- Plocha 70: **0.0557 ha**, bod 50.3742509, 13.2853001 - Javorová, Topolová, Borová
+- Plocha 71: **0.0554 ha**, bod 50.3750336, 13.2775571 - Věžní, Sukova, Skalní
+- Plocha 72: **0.0553 ha**, bod 50.3857222, 13.2604337 - Klášterecká, Na Průtahu, Shell
+- Plocha 73: **0.0551 ha**, bod 50.3801111, 13.2755952 - Na Průtahu, Hřbitovní, 5. května
+- Plocha 74: **0.0547 ha**, bod 50.372685, 13.2852228 - Průmyslová, Javorová, Žitná, Krátká
+- Plocha 75: **0.0547 ha**, bod 50.3793386, 13.2822547 - Hřbitovní, Prunéřovská, CIHELNA KADAŇ a.s., Obránců míru
+- Plocha 76: **0.0534 ha**, bod 50.3813624, 13.2733495 - 1. máje, Školní, Turistické informační centrum Kadaň, školní statek
+- Plocha 77: **0.0532 ha**, bod 50.3786709, 13.2765836 - Hřbitovní, CIHELNA KADAŇ a.s., Věžní
+- Plocha 78: **0.0511 ha**, bod 50.3821787, 13.2734362 - Školní, 1. máje
+- Plocha 79: **0.0505 ha**, bod 50.3755848, 13.2677362 - Jiráskova, Střelnice, Čechova, Tyršova, Lázeňská
+- Plocha 80: **0.0505 ha**, bod 50.3737403, 13.2855264 - Javorová, Želinská, Topolová
+- Plocha 81: **0.0495 ha**, bod 50.3776116, 13.2761023 - Věžní, CIHELNA KADAŇ a.s.
+- Plocha 82: **0.0493 ha**, bod 50.3927643, 13.2655427 - Nad nemocnicí, Třešňová, Příčná
+- Plocha 83: **0.0445 ha**, bod 50.3724524, 13.2780553 - Skalní, Sluneční, Luční, Červeného kříže
+- Plocha 84: **0.0436 ha**, bod 50.3741429, 13.2746673 - Žatecká, Bystřický můstek, Říční
+- Plocha 85: **0.0415 ha**, bod 50.3908966, 13.2671457 - Nad nemocnicí, Zahradní
+- Plocha 86: **0.0414 ha**, bod 50.3825272, 13.2710866 - 1. máje, kpt. Jaroše, Poštovní
+- Plocha 87: **0.0405 ha**, bod 50.3891287, 13.2667134 - Zahradní, Nová kolonie, Nad nemocnicí
+- Plocha 88: **0.0392 ha**, bod 50.3776806, 13.2818646 - Obránců míru, CIHELNA KADAŇ a.s., Ovesná
+- Plocha 89: **0.0343 ha**, bod 50.3846605, 13.2707433 - Na Průtahu, Chomutovská
+- Plocha 90: **0.0337 ha**, bod 50.3792844, 13.2751247 - Na Průtahu, 5. května
+- Plocha 91: **0.0324 ha**, bod 50.3829771, 13.2749752 - Na Průtahu, Nové nádraží
+- Plocha 92: **0.0318 ha**, bod 50.386128, 13.2591861 - Klášterecká, Shell, Na Průtahu
+- Plocha 93: **0.0318 ha**, bod 50.3844803, 13.2675862 - Na Podlesí, Na Průtahu
+- Plocha 94: **0.0314 ha**, bod 50.3747076, 13.2855352 - Želinská, Javorová, Borová, Topolová
+- Plocha 95: **0.0312 ha**, bod 50.3752135, 13.2833154 - Javorová, Jedlová, Habrová, Lísková
+- Plocha 96: **0.0311 ha**, bod 50.3777115, 13.2824104 - Obránců míru, CIHELNA KADAŇ a.s., Ovesná
+- Plocha 97: **0.0305 ha**, bod 50.3862705, 13.267942 - Jana Roháče, Husova, Chomutovská, Golovinova
+- Plocha 98: **0.0292 ha**, bod 50.3841599, 13.2730783 - Na Průtahu
+- Plocha 99: **0.0282 ha**, bod 50.3929341, 13.2705615 - Třešňová, Golovinova, Reif - půjčovna nářadí
+- Plocha 100: **0.0268 ha**, bod 50.3731261, 13.2773685 - Skalní, Sluneční, Luční
+- Plocha 101: **0.0267 ha**, bod 50.3812635, 13.2735292 - Školní, 1. máje, Turistické informační centrum Kadaň, školní statek
+- Plocha 102: **0.0245 ha**, bod 50.381719, 13.2721824 - 1. máje, Školní, kpt. Jaroše
+- Plocha 103: **0.0244 ha**, bod 50.3769553, 13.2638504 - Máchova, Březinova, Havlíčkova
+- Plocha 104: **0.0243 ha**, bod 50.3811958, 13.2760149 - Na Průtahu
+- Plocha 105: **0.0237 ha**, bod 50.3841776, 13.2728662 - Na Průtahu, Stop Cafe, Orlen, Školní
+- Plocha 106: **0.0235 ha**, bod 50.3814105, 13.2721992 - 1. máje, Školní, kpt. Jaroše
+- Plocha 107: **0.0231 ha**, bod 50.3766303, 13.261626 - Václava Havla, U Splitu, T. G. Masaryka
+- Plocha 108: **0.0229 ha**, bod 50.3742913, 13.2756082 - Rokelská
+- Plocha 109: **0.0218 ha**, bod 50.3848529, 13.2699748 - Na Průtahu, Chomutovská, Na Podlesí
+- Plocha 110: **0.0197 ha**, bod 50.3775703, 13.2820929 - Obránců míru, CIHELNA KADAŇ a.s., Ovesná
+- Plocha 111: **0.0196 ha**, bod 50.3907593, 13.2681533 - Zahradní, Nad nemocnicí, Golovinova
+- Plocha 112: **0.0192 ha**, bod 50.3750149, 13.2763935 - Sukova, Věžní, Zeyerova, Z-Box
+- Plocha 113: **0.0192 ha**, bod 50.3855393, 13.2664819 - Na Průtahu, Na Podlesí
+- Plocha 114: **0.0187 ha**, bod 50.3916018, 13.2672823 - Nad nemocnicí, Třešňová
+- Plocha 115: **0.0183 ha**, bod 50.3785981, 13.2725487 - Na Příkopě, Pastýřská studánka, Hasičský sbor města Kadaně, Školní
+- Plocha 116: **0.0182 ha**, bod 50.3750888, 13.2761054 - Sukova, Věžní, Z-Box
+- Plocha 117: **0.0181 ha**, bod 50.3844633, 13.2717571 - Na Průtahu, Chomutovská
+- Plocha 118: **0.018 ha**, bod 50.3749874, 13.2676661 - Jiráskova, Lázeňská, Střelnice, Čechova, Říční
+- Plocha 119: **0.0176 ha**, bod 50.3822627, 13.2756212 - Nové nádraží, Na Průtahu
+- Plocha 120: **0.0175 ha**, bod 50.374564, 13.2782513 - Polní, Žitná, Sukova, Ječná
+- Plocha 121: **0.0174 ha**, bod 50.3916077, 13.267128 - Nad nemocnicí, Třešňová
+- Plocha 122: **0.016 ha**, bod 50.3860342, 13.2632746 - Na Průtahu, Nová kolonie, Na Podlesí
+- Plocha 123: **0.0156 ha**, bod 50.393216, 13.2703137 - Třešňová, Příčná
+- Plocha 124: **0.0155 ha**, bod 50.3751504, 13.2758322 - Sukova, Věžní, Rokelská
+- Plocha 125: **0.0148 ha**, bod 50.3853918, 13.2672473 - Na Průtahu, Na Podlesí
+- Plocha 126: **0.0145 ha**, bod 50.3745426, 13.27741 - Sukova, Zeyerova, Skalní, Věžní
+- Plocha 127: **0.0138 ha**, bod 50.3772259, 13.2821198 - Obránců míru, CIHELNA KADAŇ a.s., Ovesná
+- Plocha 128: **0.0138 ha**, bod 50.3858192, 13.2650488 - Na Průtahu, Na Podlesí, Nová kolonie
+- Plocha 129: **0.0136 ha**, bod 50.3921899, 13.2682569 - Třešňová, Příčná, Nad nemocnicí
+- Plocha 130: **0.0129 ha**, bod 50.3744884, 13.2776455 - Sukova, Věžní, Skalní, Žitná
+- Plocha 131: **0.0127 ha**, bod 50.3752412, 13.2842524 - Javorová, Borová, Habrová, Jedlová
+- Plocha 132: **0.0121 ha**, bod 50.3857236, 13.2655438 - Na Průtahu, Na Podlesí, Nová kolonie
+- Plocha 133: **0.0112 ha**, bod 50.3784769, 13.2728545 - Pastýřská studánka, Na Příkopě, Hasičský sbor města Kadaně, Koželužská
+- Plocha 134: **0.0105 ha**, bod 50.3754485, 13.2823908 - Lísková, Lipová, Javorová
+- Plocha 135: **0.0103 ha**, bod 50.3756177, 13.2829528 - Jedlová, Polní, Javorová, Lipová, Habrová
+- Plocha 136: **0.0101 ha**, bod 50.3858791, 13.2646254 - Na Průtahu, Na Podlesí, Nová kolonie
+- Plocha 137: **0.01 ha**, bod 50.3850863, 13.2673493 - Na Průtahu, Na Podlesí
+- Plocha 138: **0.0096 ha**, bod 50.3852029, 13.2682118 - Na Průtahu, Jana Roháče
+- Plocha 139: **0.0085 ha**, bod 50.374762, 13.2685219 - Říční, Lázeňská, Čechova, Nábřeží Maxipsa Fíka, Tyršova
+- Plocha 140: **0.0081 ha**, bod 50.3859728, 13.2639043 - Na Průtahu, Nová kolonie, Na Podlesí
+- Plocha 141: **0.008 ha**, bod 50.3752034, 13.2850965 - Javorová, Želinská, Borová, Habrová
+- Plocha 142: **0.0077 ha**, bod 50.3930588, 13.267855 - Příčná, Třešňová, Nad nemocnicí
+- Plocha 143: **0.0077 ha**, bod 50.3748409, 13.2843528 - Borová, Javorová, Habrová
+- Plocha 144: **0.0076 ha**, bod 50.3753836, 13.2842272 - Javorová, Borová, Habrová, Želinská
+- Plocha 145: **0.0074 ha**, bod 50.3877998, 13.2659484 - Zahradní, Nová kolonie, Golovinova
+- Plocha 146: **0.0074 ha**, bod 50.3795332, 13.2750723 - Na Průtahu, 5. května
+- Plocha 147: **0.0072 ha**, bod 50.3852012, 13.2678595 - Na Průtahu, Růžička Spomat
+- Plocha 148: **0.0072 ha**, bod 50.3773524, 13.2649238 - Březinova, Jana Švermy, Máchova, Jungmannova
+- Plocha 149: **0.0071 ha**, bod 50.3813828, 13.2723903 - 1. máje, Školní, Turistické informační centrum Kadaň
+- Plocha 150: **0.0071 ha**, bod 50.3847327, 13.2703244 - Na Průtahu, Chomutovská
+- Plocha 151: **0.0071 ha**, bod 50.3862786, 13.2684818 - Jana Roháče, Husova, Chomutovská, Z-Box
+- Plocha 152: **0.007 ha**, bod 50.3795682, 13.2750198 - Na Průtahu, 5. května
+- Plocha 153: **0.0068 ha**, bod 50.3766987, 13.2626276 - Havlíčkova, Václava Havla, Máchova
+- Plocha 154: **0.0067 ha**, bod 50.3917994, 13.2670607 - Třešňová, Nad nemocnicí
+- Plocha 155: **0.0065 ha**, bod 50.3925673, 13.2695099 - Třešňová, Příčná
+- Plocha 156: **0.0063 ha**, bod 50.3756659, 13.2823926 - Lipová, Lísková, Polní, Jedlová, Obránců míru
+- Plocha 157: **0.0058 ha**, bod 50.3749892, 13.2825468 - Lísková, Javorová
+- Plocha 158: **0.0056 ha**, bod 50.3860069, 13.2635947 - Na Průtahu, Nová kolonie, Na Podlesí
+- Plocha 159: **0.0056 ha**, bod 50.3845983, 13.2711162 - Na Průtahu, Chomutovská
+- Plocha 160: **0.0055 ha**, bod 50.3754206, 13.28514 - Javorová, Želinská, Borová, Habrová, Polní
+- Plocha 161: **0.0045 ha**, bod 50.3848023, 13.2699376 - Na Průtahu, Chomutovská
+- Plocha 162: **0.0044 ha**, bod 50.3815412, 13.2719942 - 1. máje, kpt. Jaroše, Školní
+- Plocha 163: **0.0044 ha**, bod 50.3817063, 13.2719817 - 1. máje, kpt. Jaroše, Školní
+- Plocha 164: **0.0043 ha**, bod 50.38138, 13.2720072 - 1. máje, kpt. Jaroše, Školní
+- Plocha 165: **0.004 ha**, bod 50.3753655, 13.2839088 - Habrová, Javorová, Borová, Jedlová
+- Plocha 166: **0.0037 ha**, bod 50.3755175, 13.2817911 - Lipová, Lísková, Polní, Obránců míru, Javorová
+- Plocha 167: **0.0036 ha**, bod 50.3839563, 13.2734436 - Na Průtahu, Stop Cafe
+- Plocha 168: **0.0034 ha**, bod 50.39265, 13.2697619 - Třešňová, Příčná
+- Plocha 169: **0.0034 ha**, bod 50.3822536, 13.2714744 - 1. máje, kpt. Jaroše
+- Plocha 170: **0.0025 ha**, bod 50.3859404, 13.2642074 - Na Průtahu, Nová kolonie, Na Podlesí
+- Plocha 171: **0.0024 ha**, bod 50.3857782, 13.2653184 - Na Průtahu, Na Podlesí, Nová kolonie
+- Plocha 172: **0.0023 ha**, bod 50.3738063, 13.2763442 - Zeyerova, Rokelská, Skalní
+- Plocha 173: **0.0022 ha**, bod 50.3752281, 13.282646 - Javorová, Jedlová, Lísková
+- Plocha 174: **0.0021 ha**, bod 50.3928228, 13.2679255 - Příčná, Třešňová, Nad nemocnicí
+- Plocha 175: **0.0019 ha**, bod 50.3738718, 13.2763233 - Zeyerova, Rokelská, Skalní
+- Plocha 176: **0.0018 ha**, bod 50.3755181, 13.282176 - Lipová, Lísková, Polní, Obránců míru, Jedlová
+- Plocha 177: **0.0018 ha**, bod 50.3746416, 13.2845631 - Borová, Javorová, Želinská, Habrová
+- Plocha 178: **0.0018 ha**, bod 50.3856426, 13.2659475 - Na Průtahu, Na Podlesí
+- Plocha 179: **0.0018 ha**, bod 50.3856742, 13.2658253 - Na Průtahu, Na Podlesí
+- Plocha 180: **0.0016 ha**, bod 50.3752914, 13.2708329 - Sládkova, Galerie U Adama, Mírové náměstí, Žatecká
+- Plocha 181: **0.0016 ha**, bod 50.3754127, 13.284554 - Javorová, Borová, Želinská, Habrová
+- Plocha 182: **0.0015 ha**, bod 50.3752558, 13.2829506 - Jedlová, Javorová, Lísková
+- Plocha 183: **0.0015 ha**, bod 50.3753968, 13.2849488 - Javorová, Želinská, Borová, Habrová
+- Plocha 184: **0.0014 ha**, bod 50.3746685, 13.2847957 - Javorová, Borová, Želinská, Topolová
+- Plocha 185: **0.0011 ha**, bod 50.375385, 13.2847349 - Javorová, Borová, Želinská, Habrová
+- Plocha 186: **0.0009 ha**, bod 50.3761488, 13.2717263 - ESCafe, Mírové náměstí, Kadaň, Katova ulička
+- Plocha 187: **0.0008 ha**, bod 50.3741458, 13.281379 - Lipová, Lísková, Ječná, Topolová
+- Plocha 188: **0.0007 ha**, bod 50.3852361, 13.2676566 - Na Průtahu, Na Podlesí
+- Plocha 189: **0.0007 ha**, bod 50.3752217, 13.2708929 - Sládkova, Galerie U Adama, Mírové náměstí, Žatecká
+- Plocha 190: **0.0007 ha**, bod 50.3761533, 13.2715878 - Mírové náměstí, ESCafe, Kadaň, Katova ulička
+
+## Marek Čepelák
+
+- **1 samostatných ploch**, celkem **22.903 ha**.
+
+- Plocha 1: **22.9026 ha**, bod 50.3886609, 13.2786596 - Chomutovská, Nové nádraží, Městské koupaliště
+
+## Jaroslav Kučera KU-KU s r.o.
+
+- **39 samostatných ploch**, celkem **22.512 ha**.
+
+- Plocha 1: **7.8723 ha**, bod 50.3794261, 13.2630806 - Budovatelů, Pionýrů, Klášterecká
+- Plocha 2: **6.8299 ha**, bod 50.3881219, 13.2704262 - Chomutovská, Golovinova
+- Plocha 3: **1.5075 ha**, bod 50.3782906, 13.2674224 - Komenského, Fibichova, Jungmannova
+- Plocha 4: **1.0144 ha**, bod 50.3793669, 13.2715057 - 5. května, Školní, kpt. Jaroše, Na Příkopě
+- Plocha 5: **0.9427 ha**, bod 50.3671957, 13.2654005 - Kadaňská Jeseň
+- Plocha 6: **0.8815 ha**, bod 50.3793242, 13.2688142 - Jungmannova, kpt. Jaroše, Komenského, Fibichova, 5. května
+- Plocha 7: **0.6025 ha**, bod 50.3796454, 13.2672445 - Fibichova, Klášterecká, Jungmannova, Budovatelů
+- Plocha 8: **0.522 ha**, bod 50.3886838, 13.2717529 - Chomutovská, Z-Box, Bystřická, U Stadionu, Česká hospoda Kadaň
+- Plocha 9: **0.4985 ha**, bod 50.3777788, 13.2684884 - Komenského, Studentské náměstí, Jana Švermy
+- Plocha 10: **0.322 ha**, bod 50.3693125, 13.269214 - Pokutická, Rokelská
+- Plocha 11: **0.1919 ha**, bod 50.3783996, 13.2720002 - Na Příkopě, Boženy Němcové, Pastýřská studánka, Hasičský sbor města Kadaně
+- Plocha 12: **0.1786 ha**, bod 50.3662842, 13.2670288 - Kadaňská Jeseň
+- Plocha 13: **0.1599 ha**, bod 50.378404, 13.2711225 - Na Příkopě, Boženy Němcové, kpt. Jaroše, Komenského
+- Plocha 14: **0.1361 ha**, bod 50.3785755, 13.2702409 - Komenského, kpt. Jaroše, Na Příkopě, Löschnerovo náměstí
+- Plocha 15: **0.1196 ha**, bod 50.3774913, 13.2724835 - Katova ulička, Na Příkopě
+- Plocha 16: **0.1124 ha**, bod 50.3771045, 13.2664786 - Raisova, Jana Švermy, Potraviny
+- Plocha 17: **0.0968 ha**, bod 50.3730444, 13.2687652 - Pokutická, Nábřeží Maxipsa Fíka, Loděnice Kadaň, Zajícův převis
+- Plocha 18: **0.0926 ha**, bod 50.3799508, 13.2727139 - 5. května, Školní, Koželužská, kpt. Jaroše
+- Plocha 19: **0.092 ha**, bod 50.3796482, 13.2607021 - Pionýrů, Budovatelů
+- Plocha 20: **0.087 ha**, bod 50.3785557, 13.2614584 - Jana Švermy, Pionýrů
+- Plocha 21: **0.044 ha**, bod 50.3786245, 13.2668925 - Jungmannova, Klášterecká, Budovatelů
+- Plocha 22: **0.0353 ha**, bod 50.3767979, 13.2670249 - Nerudova, Jiráskova, Jana Švermy, Potraviny
+- Plocha 23: **0.0347 ha**, bod 50.3802397, 13.2626259 - Pionýrů, Budovatelů
+- Plocha 24: **0.0294 ha**, bod 50.3778818, 13.264261 - Jana Švermy, Březinova, Havlíčkova, Jungmannova
+- Plocha 25: **0.022 ha**, bod 50.3792523, 13.2669349 - Klášterecká, Budovatelů, Jungmannova
+- Plocha 26: **0.0184 ha**, bod 50.3669195, 13.2634648 - Kadaňská Jeseň
+- Plocha 27: **0.0132 ha**, bod 50.3803289, 13.2623084 - Pionýrů, Budovatelů
+- Plocha 28: **0.0098 ha**, bod 50.3775487, 13.2656842 - Jana Švermy, Jungmannova, Raisova, Březinova
+- Plocha 29: **0.0094 ha**, bod 50.3775423, 13.2661642 - Jungmannova, Jana Švermy, Raisova
+- Plocha 30: **0.0093 ha**, bod 50.3773868, 13.2663384 - Jana Švermy, Raisova, Jungmannova
+- Plocha 31: **0.0087 ha**, bod 50.3801212, 13.2711203 - kpt. Jaroše, 5. května, Jungmannova
+- Plocha 32: **0.0061 ha**, bod 50.3776349, 13.2660155 - Jungmannova, Jana Švermy, Raisova
+- Plocha 33: **0.003 ha**, bod 50.3772581, 13.2677076 - Komenského, Jana Švermy, Jiráskova
+- Plocha 34: **0.0017 ha**, bod 50.377329, 13.2668336 - Jana Švermy, Potraviny, Raisova, Jungmannova
+- Plocha 35: **0.0017 ha**, bod 50.3772741, 13.2674312 - Jana Švermy, Komenského, Jiráskova, Studentské náměstí
+- Plocha 36: **0.0014 ha**, bod 50.3773652, 13.2664897 - Jana Švermy, Potraviny, Raisova, Jungmannova
+- Plocha 37: **0.0012 ha**, bod 50.3788958, 13.2671942 - Jungmannova, Klášterecká
+- Plocha 38: **0.0011 ha**, bod 50.3777639, 13.2661606 - Jungmannova, Jana Švermy, Raisova
+- Plocha 39: **0.001 ha**, bod 50.3772653, 13.2675941 - Jana Švermy, Komenského, Jiráskova
+
+## Josef Zalabák
+
+- **46 samostatných ploch**, celkem **9.329 ha**.
+
+- Plocha 1: **1.2536 ha**, bod 50.3884273, 13.2724006 - Bystřická, Chomutovská, U Stadionu
+- Plocha 2: **1.1099 ha**, bod 50.3903808, 13.2735044 - Bystřická, Chomutovská
+- Plocha 3: **0.9013 ha**, bod 50.3847898, 13.2726058 - U Stadionu, Chomutovská, Na Průtahu
+- Plocha 4: **0.7948 ha**, bod 50.3897179, 13.2754311 - Bystřická, U Stadionu, Chomutovská
+- Plocha 5: **0.7153 ha**, bod 50.3870014, 13.2724202 - U Stadionu, Chomutovská
+- Plocha 6: **0.6926 ha**, bod 50.3858767, 13.2720245 - U Stadionu, Chomutovská
+- Plocha 7: **0.6242 ha**, bod 50.3818626, 13.2683905 - Dvořákova, Poštovní, Fibichova, Na Podlesí
+- Plocha 8: **0.4366 ha**, bod 50.3833452, 13.2689069 - Na Podlesí
+- Plocha 9: **0.3556 ha**, bod 50.3914291, 13.2735686 - Chomutovská, Bystřická, Golovinova
+- Plocha 10: **0.3447 ha**, bod 50.3841958, 13.2691053 - Na Podlesí
+- Plocha 11: **0.1894 ha**, bod 50.3804187, 13.2690327 - Dvořákova, One Box, Jungmannova, Fibichova
+- Plocha 12: **0.1793 ha**, bod 50.3863563, 13.2730217 - U Stadionu
+- Plocha 13: **0.1531 ha**, bod 50.3870588, 13.2744216 - U Stadionu, zimní stadion
+- Plocha 14: **0.1459 ha**, bod 50.3841163, 13.2706266 - Na Průtahu, Chomutovská, kpt. Jaroše
+- Plocha 15: **0.1408 ha**, bod 50.3843924, 13.2679228 - Na Podlesí, Na Průtahu, Růžička Spomat, OC Na Podlesí
+- Plocha 16: **0.1346 ha**, bod 50.382877, 13.2676006 - Na Podlesí, Poštovní, Dvořákova, Fibichova
+- Plocha 17: **0.1322 ha**, bod 50.3785923, 13.2603032 - Jana Švermy, Pionýrů
+- Plocha 18: **0.1114 ha**, bod 50.3840011, 13.2693168 - Na Podlesí, Na Průtahu, Dětský Svět Kadaň
+- Plocha 19: **0.1048 ha**, bod 50.3844918, 13.2676968 - Na Podlesí, Na Průtahu
+- Plocha 20: **0.1002 ha**, bod 50.3864576, 13.2721351 - U Stadionu, Chomutovská
+- Plocha 21: **0.0754 ha**, bod 50.3815517, 13.2686731 - Dvořákova, Fimat group, DEC-Dent, s.r.o.
+- Plocha 22: **0.0709 ha**, bod 50.3834799, 13.2699457 - Dětský Svět Kadaň, Hvězda, Kabelová televize Kadaň, Brothers pizza, Na Podlesí
+- Plocha 23: **0.0662 ha**, bod 50.3829536, 13.27071 - kpt. Jaroše, Na Podlesí, Poštovní, 1. máje
+- Plocha 24: **0.0497 ha**, bod 50.3850381, 13.2678961 - Na Průtahu, Na Podlesí
+- Plocha 25: **0.0458 ha**, bod 50.3842764, 13.2697616 - Na Průtahu, TRAFICON, Chomutovská, AlzaBox
+- Plocha 26: **0.0449 ha**, bod 50.3818549, 13.2685773 - Dvořákova, DEC-Dent, s.r.o., Fimat group
+- Plocha 27: **0.0432 ha**, bod 50.3849178, 13.2746233 - Městské koupaliště, zimní stadion, Orlen, Stop Cafe, Na Průtahu
+- Plocha 28: **0.0426 ha**, bod 50.3830551, 13.2687141 - Na Podlesí, AlzaBox, Kadaň 1, Švejk restaurant U Věžičky
+- Plocha 29: **0.0395 ha**, bod 50.379099, 13.2596458 - Pionýrů, Jana Švermy
+- Plocha 30: **0.0342 ha**, bod 50.3790822, 13.2589436 - Jana Švermy, T. G. Masaryka, Pionýrů
+- Plocha 31: **0.0302 ha**, bod 50.3847761, 13.2747831 - Městské koupaliště, zimní stadion, O2, Orlen, VietbiG
+- Plocha 32: **0.0208 ha**, bod 50.3790372, 13.2600001 - Pionýrů, Jana Švermy
+- Plocha 33: **0.0208 ha**, bod 50.3785891, 13.2591731 - T. G. Masaryka, Jana Švermy, Pionýrů
+- Plocha 34: **0.0189 ha**, bod 50.3812148, 13.2688269 - Dvořákova, Fimat group, Fibichova, Mánesova
+- Plocha 35: **0.0178 ha**, bod 50.3833704, 13.2703945 - Dětský Svět Kadaň, kpt. Jaroše, Hvězda, Kabelová televize Kadaň, Brothers pizza
+- Plocha 36: **0.0171 ha**, bod 50.3785216, 13.2592309 - T. G. Masaryka, Jana Švermy, Pionýrů
+- Plocha 37: **0.017 ha**, bod 50.3790425, 13.2592484 - Jana Švermy, T. G. Masaryka, Pionýrů
+- Plocha 38: **0.0164 ha**, bod 50.3922212, 13.2739957 - Chomutovská, Městská policie Kadaň, Golovinova
+- Plocha 39: **0.0118 ha**, bod 50.3872057, 13.273687 - U Stadionu
+- Plocha 40: **0.0082 ha**, bod 50.3851113, 13.2676093 - Na Průtahu, Na Podlesí
+- Plocha 41: **0.0065 ha**, bod 50.3835363, 13.2706498 - kpt. Jaroše, Dětský Svět Kadaň, Brothers pizza, Hvězda, Kabelová televize Kadaň
+- Plocha 42: **0.0052 ha**, bod 50.3870612, 13.2735862 - U Stadionu
+- Plocha 43: **0.0029 ha**, bod 50.3832179, 13.270587 - kpt. Jaroše, Dětský Svět Kadaň, Hvězda, Kabelová televize Kadaň, Poštovní
+- Plocha 44: **0.0014 ha**, bod 50.3816253, 13.2709213 - kpt. Jaroše, 1. máje, Poštovní
+- Plocha 45: **0.0006 ha**, bod 50.3836708, 13.2706149 - kpt. Jaroše, Dětský Svět Kadaň, Brothers pizza, Hvězda, Kabelová televize Kadaň
+- Plocha 46: **0.0001 ha**, bod 50.3812907, 13.268533 - Dvořákova, Fimat group, DEC-Dent, s.r.o.
+
+## Nemocnice Kadaň s r. o.
+
+- **1 samostatných ploch**, celkem **4.815 ha**.
+
+- Plocha 1: **4.8146 ha**, bod 50.3915208, 13.2703599 - Golovinova, Nad nemocnicí, Husova
+
+## supermarket
+
+- **5 samostatných ploch**, celkem **3.513 ha**.
+
+- Plocha 1: **1.3631 ha**, bod 50.3832981, 13.2753435 - Na Průtahu, Městské koupaliště, Minigolf, Nové nádraží
+- Plocha 2: **0.6717 ha**, bod 50.3845233, 13.2686357 - Na Podlesí, Na Průtahu, Jana Roháče
+- Plocha 3: **0.6622 ha**, bod 50.3856559, 13.2681883 - Jana Roháče, Chomutovská, Na Průtahu
+- Plocha 4: **0.6461 ha**, bod 50.3840132, 13.2713635 - Na Průtahu, kpt. Jaroše
+- Plocha 5: **0.17 ha**, bod 50.3839614, 13.2739082 - Na Průtahu, Orlen, Stop Cafe
+
