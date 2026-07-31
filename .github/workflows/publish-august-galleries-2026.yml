@@ -1,0 +1,102 @@
+name: Publikovat srpnový program galerií
+run-name: Srpen v kadaňských galeriích
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html'
+      - '.github/workflows/publish-august-galleries-2026.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-august-galleries-2026
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit článek a všechny přehledy
+        run: |
+          set -euo pipefail
+          pip install --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/normalize_footers.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/enforce_current_article_order.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/clean_sitemap_technical_entries.py
+          python3 scripts/seo_ai_audit.py --strict
+          grep -Fq '/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html' index.html
+          grep -Fq '/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html' clanky/index.html
+          grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' rss.xml
+          grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' sitemap.xml
+
+      - name: Uložit vygenerované soubory
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html index.html clanky/index.html rss.xml sitemap.xml social/ llms.txt llms-full.txt 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Zařadit srpnový program galerií do všech přehledů'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nasadit na OVH
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          timeout 28m env NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
+          REMOTE
+
+      - name: Ověřit veřejný článek
+        run: |
+          set -euo pipefail
+          success=false
+          for attempt in $(seq 1 36); do
+            token="${GITHUB_SHA}-${attempt}-$(date +%s)"
+            curl -fsS --max-time 20 "https://nasekadan.cz/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html?verify=$token" -o /tmp/article.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/?verify=$token" -o /tmp/home.html || true
+            curl -fsS --max-time 20 "https://nasekadan.cz/rss.xml?verify=$token" -o /tmp/rss.xml || true
+            if grep -Fq 'Srpen v kadaňských galeriích nabídne houby' /tmp/article.html \
+              && grep -Fq '/clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html' /tmp/home.html \
+              && grep -Fq 'srpen-kadanske-galerie-vystavy-workshop-2026.html' /tmp/rss.xml; then
+              success=true
+              break
+            fi
+            sleep 10
+          done
+          test "$success" = true
