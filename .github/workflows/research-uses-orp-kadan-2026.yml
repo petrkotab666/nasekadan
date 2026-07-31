@@ -1,0 +1,144 @@
+name: Vytěžit smlouvu ÚSES pro ORP Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-uses-orp-kadan-2026.yml'
+      - '.github/research-uses-orp-kadan-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-uses-orp-kadan-2026
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils file
+          python3 -m pip install --disable-pip-version-check --quiet requests
+      - name: Vytěžit oficiální záznam a přílohy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/uses-orp-kadan-2026
+          mkdir -p .github/research/uses-orp-kadan-2026/text
+          cat > /tmp/extract_uses.py <<'PY'
+          from __future__ import annotations
+          import hashlib, json, re, subprocess, time, unicodedata
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          import requests
+
+          OUT=Path('.github/research/uses-orp-kadan-2026')
+          TEXT=OUT/'text'
+          S=requests.Session(); S.headers['User-Agent']='NaseKadan contract research/1.0'
+
+          def get(url:str):
+              last=None
+              for i in range(6):
+                  try:
+                      r=S.get(url,timeout=180); r.raise_for_status(); return r
+                  except Exception as e:
+                      last=e; time.sleep(3+i*3)
+              raise last
+          def local(tag:str)->str: return tag.rsplit('}',1)[-1].lower()
+          def norm(value:str)->str:
+              return re.sub(r'\s+',' ',unicodedata.normalize('NFKD',value or '').encode('ascii','ignore').decode().lower()).strip()
+          def run(cmd:list[str]):
+              return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+
+          dump_url='https://data.smlouvy.gov.cz/dump_2026_07.xml'
+          dump=Path('/tmp/dump_2026_07.xml'); dump.write_bytes(get(dump_url).content)
+          matches=[]
+          for event,el in ET.iterparse(dump,events=('end',)):
+              if local(el.tag)!='zaznam': continue
+              all_text=' '.join(el.itertext()); n=norm(all_text)
+              if ('00261912' in n and 'plan' in n and 'uses' in n and 'orp kadan' in n and 'navrhovaneho chko krusne hory' in n):
+                  fields={}; urls=[]
+                  for node in el.iter():
+                      key=local(node.tag); val=(node.text or '').strip()
+                      if val: fields.setdefault(key,[]).append(val)
+                      if val.startswith('http'): urls.append(val)
+                  matches.append({'text':re.sub(r'\s+',' ',all_text).strip(),'fields':fields,'urls':list(dict.fromkeys(urls)),'xml':ET.tostring(el,encoding='unicode')})
+              el.clear()
+          if not matches: raise SystemExit('Cílový záznam nebyl v dumpu nalezen.')
+          OUT.joinpath('record.json').write_text(json.dumps(matches,ensure_ascii=False,indent=2),encoding='utf-8')
+          OUT.joinpath('record.xml').write_text(matches[0]['xml'],encoding='utf-8')
+
+          urls=[]
+          for m in matches:
+              for u in m['urls']:
+                  if u not in urls: urls.append(u)
+          downloads=[]; extracted=[]
+          for idx,u in enumerate(urls,1):
+              try:
+                  r=get(u); data=r.content
+                  ctype=r.headers.get('content-type','').split(';',1)[0].lower()
+                  ext='.pdf' if ('pdf' in ctype or data.startswith(b'%PDF')) else '.bin'
+                  p=Path('/tmp')/f'uses-{idx:02d}{ext}'; p.write_bytes(data)
+                  item={'url':u,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'content_type':ctype}
+                  if ext=='.pdf':
+                      txt=TEXT/f'attachment-{idx:02d}.txt'
+                      res=run(['pdftotext','-layout',str(p),str(txt)])
+                      content=txt.read_text(encoding='utf-8',errors='replace') if txt.exists() else ''
+                      item.update({'text_file':str(txt),'text_chars':len(content),'pdftotext_stderr':res.stderr[-1000:]})
+                      extracted.append({'url':u,'text_file':str(txt),'content':content})
+                  downloads.append(item)
+              except Exception as e:
+                  downloads.append({'url':u,'error':repr(e)})
+          OUT.joinpath('attachments.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          keys=['predmet smlouvy','predmet dila','cena dila','doba plneni','termin','etapa','predani','odevzdani','akceptace','smluvni pokuta','prodleni','soucin','autorske','licence','chko','krusne','dotace','agentura ochrany','metodika','uzemni studie krajiny','obce','katastral','geodatabase','gis','dgn','shp','pdf']
+          findings=[]
+          for e in extracted:
+              source=e['content']; n=norm(source); hits=[]
+              for key in keys:
+                  nk=norm(key); start=0; count=0
+                  while True:
+                      pos=n.find(nk,start)
+                      if pos<0 or count>=12: break
+                      hits.append({'key':key,'snippet':n[max(0,pos-800):pos+2200]})
+                      start=pos+len(nk); count+=1
+              findings.append({'url':e['url'],'text_file':e['text_file'],'hits':hits})
+          OUT.joinpath('findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          f=matches[0]['fields']
+          md=['# Smlouva – plán ÚSES pro ORP Kadaň (2026)','',f'Vytěženo: {time.strftime("%Y-%m-%d %H:%M:%S UTC",time.gmtime())}','',
+              '## Metadata oficiálního záznamu','', '```json', json.dumps(f,ensure_ascii=False,indent=2)[:20000], '```','',
+              '## Přílohy','']
+          for d in downloads:
+              md.append(f"- {d.get('url')} — {d.get('bytes','?')} B, text: {d.get('text_chars','?')} znaků" if 'error' not in d else f"- {d['url']} — CHYBA {d['error']}")
+          md += ['','## Klíčová ustanovení']
+          for item in findings:
+              md.append('### '+item['url'])
+              for h in item['hits']:
+                  md.append(f"- **{h['key']}**: {h['snippet'][:2400]}")
+          OUT.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/extract_uses.py
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/uses-orp-kadan-2026
+          git commit -m 'Vytěžit smlouvu ÚSES pro ORP Kadaň' || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push origin HEAD:main && exit 0
+            sleep $((i*4))
+          done
+          exit 1
