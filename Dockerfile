@@ -88,6 +88,10 @@ RUN python -m json.tool assets/affiliate-site-travel-overlay.json >/dev/null \
  && grep -Fq 'ceskekormidlo-cz' assets/affiliate-site-travel-overlay.json \
  && grep -Fq 'proalergiky-cz' assets/affiliate-site-travel-overlay.json
 
+# Neveřejné rešeršní exporty a pracovní kopie dokumentů nesmějí vstoupit do
+# sitemapy, SEO auditu ani výsledného produkčního obrazu.
+RUN rm -rf research
+
 # Při každém sestavení vytvořit a doplnit strojově čitelné podklady pro
 # vyhledávače, Google News a odpovědi AI. Skript zachovává individuální OG
 # obrázky a metadata jednotlivých článků.
@@ -142,6 +146,7 @@ RUN rm -rf /usr/share/nginx/html/.git \
            /usr/share/nginx/html/.image-parts \
            /usr/share/nginx/html/docker-entrypoint.d \
            /usr/share/nginx/html/nginx \
+           /usr/share/nginx/html/research \
            /usr/share/nginx/html/scripts \
            /usr/share/nginx/html/tools \
            /usr/share/nginx/html/article-layout-fixes.css \
