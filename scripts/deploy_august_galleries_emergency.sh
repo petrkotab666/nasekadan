@@ -48,6 +48,12 @@ test -f sitemap.xml
 test -d social
 grep -Fq "$TITLE_MARKER" "$ARTICLE_REL"
 
+# Tyto výpisy jsou diagnostické; samotné sestavovací skripty už článek vložily.
+printf 'Výskyt článku v titulce: '; grep -Fc "$SLUG" index.html || true
+printf 'Výskyt článku v archivu: '; grep -Fc "$SLUG" clanky/index.html || true
+printf 'Výskyt článku v RSS: '; grep -Fc "$SLUG" rss.xml || true
+printf 'Výskyt článku v sitemapě: '; grep -Fc "$SLUG" sitemap.xml || true
+
 umask 077
 KEY_FILE="${RUNNER_TEMP:-/tmp}/nasekadan_august_gallery_key"
 SELECTED=''
@@ -78,85 +84,54 @@ TITLE='Srpen v kadaňských galeriích nabídne houby'
 tmp=$(mktemp -d)
 tar -xzf /tmp/august-galleries-release.tgz -C "$tmp"
 
-# Záložní hostitelská kopie.
 sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
-sudo install -m 0644 "$tmp/index.html" /var/www/nasekadan/index.html
-sudo install -m 0644 "$tmp/clanky/index.html" /var/www/nasekadan/clanky/index.html
-sudo install -m 0644 "$tmp/clanky/$SLUG" "/var/www/nasekadan/clanky/$SLUG"
-sudo install -m 0644 "$tmp/rss.xml" /var/www/nasekadan/rss.xml
-sudo install -m 0644 "$tmp/sitemap.xml" /var/www/nasekadan/sitemap.xml
-sudo cp -a "$tmp/social/." /var/www/nasekadan/social/
+sudo cp -a "$tmp/." /var/www/nasekadan/
 sudo chmod -R a+rX /var/www/nasekadan
 
-echo 'Běžící kontejnery:'
-sudo docker ps --format '  {{.ID}} {{.Names}} {{.Image}} {{.Ports}}' || true
+cid=$(sudo docker ps -q --filter publish=3224 | head -n1)
+if [[ -z "$cid" ]]; then
+  cid=$(sudo docker ps -q --filter name=nasekadan-web | head -n1)
+fi
+test -n "$cid"
+name=$(sudo docker inspect -f '{{.Name}}' "$cid" | sed 's#^/##')
+echo "Aktualizuji produkční kontejner $name ($cid)."
 
-# Najít všechny možné kontejnery Naše Kadaň. Produkční název se může po
-# přestavbě změnit, rozhodující je publikovaný port nebo existující webový kořen.
-declare -a candidates=()
-while IFS= read -r cid; do
-  [[ -n "$cid" ]] && candidates+=("$cid")
-done < <(sudo docker ps -q --filter publish=3224 2>/dev/null || true)
+sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+sudo docker cp "$tmp/index.html" "$cid:/usr/share/nginx/html/index.html"
+sudo docker cp "$tmp/clanky/index.html" "$cid:/usr/share/nginx/html/clanky/index.html"
+sudo docker cp "$tmp/clanky/$SLUG" "$cid:/usr/share/nginx/html/clanky/$SLUG"
+sudo docker cp "$tmp/rss.xml" "$cid:/usr/share/nginx/html/rss.xml"
+sudo docker cp "$tmp/sitemap.xml" "$cid:/usr/share/nginx/html/sitemap.xml"
+sudo docker cp "$tmp/social/." "$cid:/usr/share/nginx/html/social/"
 
-for cid in $(sudo docker ps -q 2>/dev/null || true); do
-  name=$(sudo docker inspect -f '{{.Name}}' "$cid" 2>/dev/null | sed 's#^/##' || true)
-  image=$(sudo docker inspect -f '{{.Config.Image}}' "$cid" 2>/dev/null || true)
-  if [[ "$name $image" == *nasekadan* ]]; then candidates+=("$cid"); fi
-  if sudo docker exec "$cid" sh -c "test -f /usr/share/nginx/html/index.html && grep -qi 'NAŠE.*KADAŇ\|Naše Kadaň' /usr/share/nginx/html/index.html" 2>/dev/null; then
-    candidates+=("$cid")
+# Statické soubory se projeví okamžitě; reload je pouze pojistka.
+sudo docker exec "$cid" nginx -t
+sudo docker exec "$cid" nginx -s reload || true
+
+verify_url() {
+  local path="$1" marker="$2" output="$3"
+  curl -fsS --max-time 25 "http://127.0.0.1:3224${path}?direct=$(date +%s)$RANDOM" -o "$output"
+  if ! grep -Fq "$marker" "$output"; then
+    echo "Kontrola selhala pro $path; prvních 40 řádků odpovědi:" >&2
+    head -n 40 "$output" >&2 || true
+    return 1
   fi
-done
+}
 
-# Odstranit duplicity.
-mapfile -t candidates < <(printf '%s\n' "${candidates[@]:-}" | awk 'NF&&!seen[$0]++')
-test "${#candidates[@]}" -gt 0
+verify_url "/clanky/$SLUG" "$TITLE" /tmp/direct-article.html
+verify_url '/' "$SLUG" /tmp/direct-home.html
+verify_url '/clanky/' "$SLUG" /tmp/direct-archive.html
+verify_url '/rss.xml' "$SLUG" /tmp/direct-rss.xml
+verify_url '/sitemap.xml' "$SLUG" /tmp/direct-sitemap.xml
 
-updated=0
-for cid in "${candidates[@]}"; do
-  name=$(sudo docker inspect -f '{{.Name}}' "$cid" | sed 's#^/##')
-  if ! sudo docker exec "$cid" sh -c 'test -d /usr/share/nginx/html'; then
-    continue
-  fi
-  echo "Aktualizuji produkční kontejner: $name ($cid)"
-  sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
-  sudo docker cp "$tmp/index.html" "$cid:/usr/share/nginx/html/index.html"
-  sudo docker cp "$tmp/clanky/index.html" "$cid:/usr/share/nginx/html/clanky/index.html"
-  sudo docker cp "$tmp/clanky/$SLUG" "$cid:/usr/share/nginx/html/clanky/$SLUG"
-  sudo docker cp "$tmp/rss.xml" "$cid:/usr/share/nginx/html/rss.xml"
-  sudo docker cp "$tmp/sitemap.xml" "$cid:/usr/share/nginx/html/sitemap.xml"
-  sudo docker cp "$tmp/social/." "$cid:/usr/share/nginx/html/social/"
-  sudo docker exec "$cid" sh -c "grep -Fq '$TITLE' '/usr/share/nginx/html/clanky/$SLUG'"
-  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/index.html"
-  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/clanky/index.html"
-  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/rss.xml"
-  sudo docker exec "$cid" sh -c "grep -Fq '$SLUG' /usr/share/nginx/html/sitemap.xml"
-  sudo docker exec "$cid" nginx -t
-  sudo docker exec "$cid" nginx -s reload || sudo docker restart "$cid"
-  updated=$((updated+1))
-done
-test "$updated" -gt 0
-
-# Přímá kontrola upstreamu používaného hostitelským Nginxem.
-for port in 3224 80; do
-  if curl -fsS --max-time 20 "http://127.0.0.1:${port}/clanky/$SLUG?local=$(date +%s)" -o /tmp/local-article.html 2>/dev/null \
-    && grep -Fq "$TITLE" /tmp/local-article.html; then
-    curl -fsS --max-time 20 "http://127.0.0.1:${port}/?local=$(date +%s)" | grep -Fq "$SLUG"
-    curl -fsS --max-time 20 "http://127.0.0.1:${port}/clanky/?local=$(date +%s)" | grep -Fq "$SLUG"
-    curl -fsS --max-time 20 "http://127.0.0.1:${port}/rss.xml?local=$(date +%s)" | grep -Fq "$SLUG"
-    curl -fsS --max-time 20 "http://127.0.0.1:${port}/sitemap.xml?local=$(date +%s)" | grep -Fq "$SLUG"
-    echo "Interní produkční upstream na portu $port je aktualizovaný."
-    rm -rf "$tmp" /tmp/august-galleries-release.tgz
-    exit 0
-  fi
-done
-
-echo 'Soubory jsou v produkčním kontejneru, ale interní HTTP upstream je nenalezl.' >&2
-exit 1
+echo 'Produkční Docker upstream na portu 3224 potvrzuje článek, titulku, archiv, RSS i sitemapu.'
+rm -rf "$tmp" /tmp/august-galleries-release.tgz
 REMOTE
 
 : > /tmp/august-galleries-deploy-success
-echo 'Produkční kontejner i interní upstream potvrzují článek a všechny přehledy.'
 
+# Veřejná CDN může mít krátkou prodlevu; nasazení je už ověřeno přímo proti
+# produkčnímu upstreamu. Následující kontrola je informativní a neblokující.
 for attempt in $(seq 1 12); do
   if external_live; then
     echo 'Veřejná doména vrací nový článek i všechny přehledy.'
