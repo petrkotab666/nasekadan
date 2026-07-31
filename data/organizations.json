@@ -1,101 +1,371 @@
 {
-  "updatedAt": "2026-07-30",
+  "updatedAt": "2026-07-31",
   "groups": [
     {
       "name": "Město, úřady a městské služby",
       "items": [
-        {"name":"Město Kadaň","description":"Městský úřad, úřední deska, zastupitelstvo, odbory, formuláře a veřejné informace.","address":"Mírové náměstí 1, Kadaň","url":"https://www.mesto-kadan.cz/"},
-        {"name":"Městská policie Kadaň","description":"Bezpečnost ve městě, kontakty, prevence a informace městské policie.","url":"https://www.mpkadan.eu/"},
-        {"name":"Technické služby Kadaň","description":"Údržba komunikací a zeleně, svoz odpadu, veřejné osvětlení a další městské služby.","url":"https://www.tskadan.cz/"},
-        {"name":"Kabelová televize Kadaň","description":"Městská kabelová síť, internetové a televizní služby a místní informační vysílání.","url":"https://www.ktkadan.cz/"},
-        {"name":"Tepelné hospodářství Kadaň","description":"Dodávky tepla, správa tepelných zařízení a informace pro odběratele.","url":"https://www.thkadan.cz/"},
-        {"name":"Kadaňské noviny","description":"Městský zpravodaj, oznámení, rozhovory a informace z organizací města.","url":"https://www.noviny-kadan.cz/vsechny-clanky/"},
-        {"name":"Úřad práce ČR – kontaktní pracoviště Kadaň","description":"Nezaměstnanost, státní sociální podpora, příspěvek na péči a dávky pro osoby se zdravotním postižením.","address":"Vrchlického 172 a Jana Roháče 1381, Kadaň","url":"https://objednavky.uradprace.cz/?IDD=4204","linkLabel":"Služby a objednání"}
+        {
+          "name": "Město Kadaň",
+          "description": "Městský úřad, úřední deska, zastupitelstvo, odbory, formuláře a veřejné informace.",
+          "address": "Mírové náměstí 1, Kadaň",
+          "url": "https://www.mesto-kadan.cz/"
+        },
+        {
+          "name": "Městská policie Kadaň",
+          "description": "Bezpečnost ve městě, kontakty, prevence a informace městské policie.",
+          "url": "https://www.mpkadan.eu/"
+        },
+        {
+          "name": "Technické služby Kadaň",
+          "description": "Údržba komunikací a zeleně, svoz odpadu, veřejné osvětlení a další městské služby.",
+          "url": "https://www.tskadan.cz/"
+        },
+        {
+          "name": "Kabelová televize Kadaň",
+          "description": "Městská kabelová síť, internetové a televizní služby a místní informační vysílání.",
+          "url": "https://www.ktkadan.cz/"
+        },
+        {
+          "name": "Tepelné hospodářství Kadaň",
+          "description": "Dodávky tepla, správa tepelných zařízení a informace pro odběratele.",
+          "url": "https://www.thkadan.cz/"
+        },
+        {
+          "name": "Kadaňské noviny",
+          "description": "Městský zpravodaj, oznámení, rozhovory a informace z organizací města.",
+          "url": "https://www.noviny-kadan.cz/vsechny-clanky/"
+        },
+        {
+          "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
+          "description": "Nezaměstnanost, státní sociální podpora, příspěvek na péči a dávky pro osoby se zdravotním postižením.",
+          "address": "Vrchlického 172 a Jana Roháče 1381, Kadaň",
+          "url": "https://objednavky.uradprace.cz/?IDD=4204",
+          "linkLabel": "Služby a objednání"
+        }
       ]
     },
     {
       "name": "Kultura, památky a volný čas",
       "items": [
-        {"name":"Kultura Kadaň","description":"Kulturní kalendář, městské slavnosti, koncerty, výstavy a vstupenky.","url":"https://www.kultura-kadan.cz/"},
-        {"name":"Turistické informační centrum Kadaň","description":"Informace o městě, mapy, předprodej vstupenek, suvenýry a služby návštěvníkům.","url":"https://kadan.eu/informace/tic/"},
-        {"name":"Turistický portál Kadaň","description":"Památky, výlety, aktivity, historie města a praktické informace pro návštěvníky.","url":"https://kadan.eu/"},
-        {"name":"Kino Hvězda Kadaň","description":"Aktuální filmový program, časy projekcí a online rezervace vstupenek.","url":"https://www.kinokadan.cz/cely-program"},
-        {"name":"Městská knihovna Kadaň","description":"Knihy, přednášky, výstavy, programy pro děti a komunitní akce.","url":"https://www.knihovnakadan.cz/"},
-        {"name":"Městské muzeum v Kadani","description":"Radniční věž, Mikulovická brána, Kadaňský hrad, Minoritská bašta, Františkánský klášter a společná vstupenka Památky v kapse.","url":"https://kadan.eu/informace/mestske-muzeum/"},
-        {"name":"Galerie Josefa Lieslera","description":"Městská galerie s pravidelnými výstavami; v letní sezoně bývá otevřena denně.","url":"https://kadan.eu/aktivity/galerie-josefa-lieslera/"},
-        {"name":"Františkánský klášter Kadaň","description":"Památka, muzejní okruhy, výstavy, zahrady a kulturní program.","url":"https://kadan.eu/pamatky/frantiskansky-klaster/"},
-        {"name":"Kadaňský hrad","description":"Expozice dějin hradu, výstavy a návštěvnický provoz Městského muzea.","url":"https://kadan.eu/pamatky/kadansky-hrad/"},
-        {"name":"Astronomicko přírodovědná observatoř Kadaň","description":"Veřejná astronomická pozorování, přednášky, přírodovědné programy a akce pro školy.","url":"https://tk.gymka.cz/"},
-        {"name":"Dům dětí a mládeže Šuplík","description":"Kroužky, soutěže, tábory, výlety a volnočasové aktivity pro děti a mládež.","url":"https://www.ddmsuplik.cz/"},
-        {"name":"Liďák Kadaň","description":"Kulturní a hudební program na letní zahrádce, koncerty a společenské akce.","url":"https://www.facebook.com/lidovydumkadan/","linkLabel":"Veřejný program na Facebooku"}
+        {
+          "name": "Kultura Kadaň",
+          "description": "Kulturní kalendář, městské slavnosti, koncerty, výstavy a vstupenky.",
+          "url": "https://www.kultura-kadan.cz/"
+        },
+        {
+          "name": "Turistické informační centrum Kadaň",
+          "description": "Informace o městě, mapy, předprodej vstupenek, suvenýry a služby návštěvníkům.",
+          "url": "https://kadan.eu/informace/tic/"
+        },
+        {
+          "name": "Turistický portál Kadaň",
+          "description": "Památky, výlety, aktivity, historie města a praktické informace pro návštěvníky.",
+          "url": "https://kadan.eu/"
+        },
+        {
+          "name": "Kino Hvězda Kadaň",
+          "description": "Aktuální filmový program, časy projekcí a online rezervace vstupenek.",
+          "url": "https://www.kinokadan.cz/cely-program"
+        },
+        {
+          "name": "Městská knihovna Kadaň",
+          "description": "Knihy, přednášky, výstavy, programy pro děti a komunitní akce.",
+          "url": "https://www.knihovnakadan.cz/"
+        },
+        {
+          "name": "Městské muzeum v Kadani",
+          "description": "Radniční věž, Mikulovická brána, Kadaňský hrad, Minoritská bašta, Františkánský klášter a společná vstupenka Památky v kapse.",
+          "url": "https://kadan.eu/informace/mestske-muzeum/"
+        },
+        {
+          "name": "Galerie Josefa Lieslera",
+          "description": "Městská galerie s pravidelnými výstavami; v letní sezoně bývá otevřena denně.",
+          "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/"
+        },
+        {
+          "name": "Františkánský klášter Kadaň",
+          "description": "Památka, muzejní okruhy, výstavy, zahrady a kulturní program.",
+          "url": "https://kadan.eu/pamatky/frantiskansky-klaster/"
+        },
+        {
+          "name": "Kadaňský hrad",
+          "description": "Expozice dějin hradu, výstavy a návštěvnický provoz Městského muzea.",
+          "url": "https://kadan.eu/pamatky/kadansky-hrad/"
+        },
+        {
+          "name": "Astronomicko přírodovědná observatoř Kadaň",
+          "description": "Veřejná astronomická pozorování, přednášky, přírodovědné programy a akce pro školy.",
+          "url": "https://tk.gymka.cz/"
+        },
+        {
+          "name": "Dům dětí a mládeže Šuplík",
+          "description": "Kroužky, soutěže, tábory, výlety a volnočasové aktivity pro děti a mládež.",
+          "url": "https://www.ddmsuplik.cz/"
+        },
+        {
+          "name": "Liďák Kadaň",
+          "description": "Kulturní a hudební program na letní zahrádce, koncerty a společenské akce.",
+          "url": "https://www.facebook.com/lidovydumkadan/",
+          "linkLabel": "Veřejný program na Facebooku"
+        }
       ]
     },
     {
       "name": "Mateřské školy a péče o nejmenší",
       "items": [
-        {"name":"MŠ Husova Kadaň","description":"Mateřská škola v Husově ulici, provozní informace a aktuality pro rodiče.","url":"https://6mskadan.webnode.cz/"},
-        {"name":"MŠ Olgy Havlové Kadaň","description":"Mateřská škola, školní program, dokumenty a informace pro rodiče.","url":"https://www.ms-olgyhavlove.cz/"},
-        {"name":"MŠ Čtyřlístek Kadaň","description":"Mateřská škola v Klášterecké ulici, aktuality, akce a provozní informace.","url":"https://www.msctyrlistekkadan.cz/"},
-        {"name":"MŠ Žitná Kadaň","description":"Mateřská škola v Žitné ulici, informace o provozu, akcích a přijímání dětí.","url":"https://3mskadan.webnode.cz/"},
-        {"name":"MŠ Písnička Kadaň","description":"Mateřská škola ve Školní ulici, program, dokumenty a informace pro rodiče.","url":"https://www.ms-pisnicka.cz/"},
-        {"name":"MŠ Hvězdička Kadaň","description":"Mateřská škola Na Podlesí, aktuality, prázdninový provoz a informace pro rodiče.","url":"https://www.mshvezdicka.eu/"},
-        {"name":"ZAČÍT SPOLU – mateřská škola a dětská skupina","description":"Alternativní vzdělávání, mateřská škola, dětská skupina a navazující základní škola.","url":"https://www.zacitspolukadan.cz/"}
+        {
+          "name": "MŠ Husova Kadaň",
+          "description": "Mateřská škola v Husově ulici, provozní informace a aktuality pro rodiče.",
+          "url": "https://6mskadan.webnode.cz/"
+        },
+        {
+          "name": "MŠ Olgy Havlové Kadaň",
+          "description": "Mateřská škola, školní program, dokumenty a informace pro rodiče.",
+          "url": "https://www.ms-olgyhavlove.cz/"
+        },
+        {
+          "name": "MŠ Čtyřlístek Kadaň",
+          "description": "Mateřská škola v Klášterecké ulici, aktuality, akce a provozní informace.",
+          "url": "https://www.msctyrlistekkadan.cz/"
+        },
+        {
+          "name": "MŠ Žitná Kadaň",
+          "description": "Mateřská škola v Žitné ulici, informace o provozu, akcích a přijímání dětí.",
+          "url": "https://3mskadan.webnode.cz/"
+        },
+        {
+          "name": "MŠ Písnička Kadaň",
+          "description": "Mateřská škola ve Školní ulici, program, dokumenty a informace pro rodiče.",
+          "url": "https://www.ms-pisnicka.cz/"
+        },
+        {
+          "name": "MŠ Hvězdička Kadaň",
+          "description": "Mateřská škola Na Podlesí, aktuality, prázdninový provoz a informace pro rodiče.",
+          "url": "https://www.mshvezdicka.eu/"
+        },
+        {
+          "name": "ZAČÍT SPOLU – mateřská škola a dětská skupina",
+          "description": "Alternativní vzdělávání, mateřská škola, dětská skupina a navazující základní škola.",
+          "url": "https://www.zacitspolukadan.cz/"
+        }
       ]
     },
     {
       "name": "Základní, střední a umělecké školy",
       "items": [
-        {"name":"ZŠ Rudolfa Koblice Kadaň","description":"Základní škola, družina, jídelna, aktuality a informace pro rodiče.","url":"https://www.2zskadan.cz/"},
-        {"name":"ZŠ Školní Kadaň","description":"Základní škola ve Školní ulici, školní program, aktuality a dokumenty.","url":"https://1zskadan.cz/"},
-        {"name":"ZŠ Chomutovská Kadaň","description":"Základní škola, školní družina a jídelna v Chomutovské ulici.","url":"https://3zskadan.cz/"},
-        {"name":"ZŠ Na Podlesí Kadaň","description":"Základní škola, školní družina, klub, jídelna a školní aktuality.","url":"https://www.5zskadan.cz/"},
-        {"name":"ZŠ a MŠ při nemocnici Kadaň","description":"Vzdělávání dětí v nemocnici a speciální školské služby.","url":"https://www.zvskadan.cz/"},
-        {"name":"ZAČÍT SPOLU – základní škola","description":"Soukromá základní škola s programem Začít spolu a návaznými službami pro rodiny.","url":"https://www.zacitspolukadan.cz/"},
-        {"name":"ZUŠ Klementa Slavického Kadaň","description":"Hudební, výtvarné, taneční a literárně-dramatické vzdělávání a veřejná vystoupení.","url":"https://www.zus-kadan.cz/"},
-        {"name":"Gymnázium Kadaň","description":"Všeobecné střední vzdělávání, školní aktuality, projekty a přijímací řízení.","url":"https://www.gymka.cz/news/"},
-        {"name":"SPŠS a OA Kadaň","description":"Střední průmyslová škola stavební a obchodní akademie, obory a přijímací řízení.","url":"https://www.sps-kadan.cz/"},
-        {"name":"Vzdělávání na Kadaňsku","description":"Rozcestník škol, školek a školských zařízení v Kadani a okolí.","url":"https://www.vzdelavani-kadansko.cz/subjekty.php","linkLabel":"Přehled školských zařízení"}
+        {
+          "name": "ZŠ Rudolfa Koblice Kadaň",
+          "description": "Základní škola, družina, jídelna, aktuality a informace pro rodiče.",
+          "url": "https://www.2zskadan.cz/"
+        },
+        {
+          "name": "ZŠ Školní Kadaň",
+          "description": "Základní škola ve Školní ulici, školní program, aktuality a dokumenty.",
+          "url": "https://1zskadan.cz/"
+        },
+        {
+          "name": "ZŠ Chomutovská Kadaň",
+          "description": "Základní škola, školní družina a jídelna v Chomutovské ulici.",
+          "url": "https://3zskadan.cz/"
+        },
+        {
+          "name": "ZŠ Na Podlesí Kadaň",
+          "description": "Základní škola, školní družina, klub, jídelna a školní aktuality.",
+          "url": "https://www.5zskadan.cz/"
+        },
+        {
+          "name": "ZŠ a MŠ při nemocnici Kadaň",
+          "description": "Vzdělávání dětí v nemocnici a speciální školské služby.",
+          "url": "https://www.zvskadan.cz/"
+        },
+        {
+          "name": "ZAČÍT SPOLU – základní škola",
+          "description": "Soukromá základní škola s programem Začít spolu a návaznými službami pro rodiny.",
+          "url": "https://www.zacitspolukadan.cz/"
+        },
+        {
+          "name": "ZUŠ Klementa Slavického Kadaň",
+          "description": "Hudební, výtvarné, taneční a literárně-dramatické vzdělávání a veřejná vystoupení.",
+          "url": "https://www.zus-kadan.cz/"
+        },
+        {
+          "name": "Gymnázium Kadaň",
+          "description": "Všeobecné střední vzdělávání, školní aktuality, projekty a přijímací řízení.",
+          "url": "https://www.gymka.cz/news/"
+        },
+        {
+          "name": "SPŠS a OA Kadaň",
+          "description": "Střední průmyslová škola stavební a obchodní akademie, obory a přijímací řízení.",
+          "url": "https://www.sps-kadan.cz/"
+        },
+        {
+          "name": "Vzdělávání na Kadaňsku",
+          "description": "Rozcestník škol, školek a školských zařízení v Kadani a okolí.",
+          "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
+          "linkLabel": "Přehled školských zařízení"
+        }
       ]
     },
     {
       "name": "Zdravotní, sociální a komunitní služby",
       "items": [
-        {"name":"Nemocnice Kadaň","description":"Oddělení, ambulance, porodnice, ordinační doby, kontakty a aktuality nemocnice.","url":"https://www.nemkadan.cz/"},
-        {"name":"Městská správa sociálních služeb Kadaň","description":"Domov pro seniory, pečovatelská služba a pobytová odlehčovací služba.","address":"Věžní 958, Kadaň","url":"https://www.messskadan.cz/"},
-        {"name":"Domovy sociálních služeb Kadaň a Mašťov","description":"Domovy pro osoby se zdravotním postižením, chráněné bydlení a další krajské sociální služby.","url":"https://www.dsskm.cz/"},
-        {"name":"TILIA Kadaň, z. s.","description":"Bezplatné odborné sociální, rodinné a párové poradenství. Sídlo a poradenské služby jsou na Poštovní 953; sociálně aktivizační služba pro rodiny s dětmi má pracoviště Jana Švermy 5.","url":"https://tiliakadan.cz/kontakty/"},
-        {"name":"RADKA Kadaň","description":"Rodinné a komunitní centrum, vzdělávání, práce s mládeží, dobrovolnictví a mezinárodní projekty.","url":"https://radka.kadan.cz/"},
-        {"name":"Světlo Kadaň","description":"Sociální služby, terénní programy, prevence a pomoc lidem v obtížné životní situaci.","url":"https://www.svetlokadanzs.cz/"}
+        {
+          "name": "Domovy sociálních služeb Kadaň a Mašťov",
+          "description": "Domovy pro osoby se zdravotním postižením, chráněné bydlení a další krajské sociální služby.",
+          "url": "https://www.dsskm.cz/"
+        },
+        {
+          "name": "Kožní ambulance MUDr. Stanislava Voráče",
+          "description": "Soukromá kožní a dermatovenerologická ambulance s pracovišti v Kadani a Klášterci nad Ohří; ordinační doby, dovolené a informace pro pacienty.",
+          "address": "Golovinova 1559, Kadaň; Sadová 528, Klášterec nad Ohří",
+          "url": "https://mudr-vorac.webnode.cz/"
+        },
+        {
+          "name": "Městská správa sociálních služeb Kadaň",
+          "description": "Domov pro seniory, pečovatelská služba a pobytová odlehčovací služba.",
+          "address": "Věžní 958, Kadaň",
+          "url": "https://www.messskadan.cz/"
+        },
+        {
+          "name": "Nemocnice Kadaň",
+          "description": "Oddělení, ambulance, porodnice, ordinační doby, kontakty a aktuality nemocnice.",
+          "url": "https://www.nemkadan.cz/"
+        },
+        {
+          "name": "RADKA Kadaň",
+          "description": "Rodinné a komunitní centrum, vzdělávání, práce s mládeží, dobrovolnictví a mezinárodní projekty.",
+          "url": "https://radka.kadan.cz/"
+        },
+        {
+          "name": "Světlo Kadaň",
+          "description": "Sociální služby, terénní programy, prevence a pomoc lidem v obtížné životní situaci.",
+          "url": "https://www.svetlokadanzs.cz/"
+        },
+        {
+          "name": "TILIA Kadaň, z. s.",
+          "description": "Bezplatné odborné sociální, rodinné a párové poradenství. Sídlo a poradenské služby jsou na Poštovní 953; sociálně aktivizační služba pro rodiny s dětmi má pracoviště Jana Švermy 5.",
+          "url": "https://tiliakadan.cz/kontakty/"
+        }
       ]
     },
     {
       "name": "Sportovní organizace a kluby",
       "items": [
-        {"name":"Sportovní zařízení Kadaň","description":"Sportovní hala, zimní stadion, fotbalový stadion, koupaliště, autokemp a další městská sportoviště.","url":"https://www.sportkadan.cz/"},
-        {"name":"SK Kadaň","description":"Hokejový klub, A-tým, mládež, zápasy, nábory a klubové aktuality.","url":"https://www.skkadan.cz/"},
-        {"name":"FBC DDM Kati Kadaň","description":"Florbalový klub s mládežnickými a seniorskými družstvy, nábory a soutěžemi.","url":"https://www.katikadan.cz/"},
-        {"name":"Fotbalový klub Tatran Kadaň","description":"Fotbalový klub s mládežnickými a dospělými družstvy.","url":"https://www.fotbal.cz/souteze/club/club/5425d203-ea24-490c-801f-4b5f3a5d7d84","linkLabel":"Klub na Fotbal.cz"},
-        {"name":"Tenisový klub Kadaň","description":"Tenisové kurty, hala, rezervace, tréninky a mládežnická činnost.","url":"https://www.tkkadan.cz/"},
-        {"name":"TJ Vodní sporty Kadaň","description":"Rychlostní kanoistika, dračí lodě, závody a sportovní činnost na Ohři.","url":"https://www.tjvskadan.cz/"},
-        {"name":"Gymnastika Kadaň – SK Kosagym","description":"Sportovní gymnastika, teamgym, přípravky, soustředění a závody.","url":"https://www.gymkadan.cz/"},
-        {"name":"Karate klub Kadaň a Klášterec","description":"Karate Shotokan, nábory, tréninky, soustředění a soutěže.","url":"https://karateklubkadan.cz/wp2/"},
-        {"name":"BK DDM Kadaň","description":"Basketbalový klub evidovaný mezi kadaňskými sportovními subjekty.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"},
-        {"name":"FC Betis Kadaň","description":"Fotbalový a futsalový sportovní subjekt evidovaný v Kadani.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"},
-        {"name":"Kajak klub Kadaň","description":"Vodácký a kajakářský sportovní klub evidovaný v Kadani.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"},
-        {"name":"Nohejbalový klub Kadaň","description":"Nohejbalový sportovní klub a soutěžní činnost.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"},
-        {"name":"PK Slávie Kadaň","description":"Plavecký klub evidovaný mezi sportovními subjekty města.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"},
-        {"name":"Spolek oddílů malé kopané Kadaň","description":"Organizace malé kopané a místních soutěží.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"},
-        {"name":"Sportovní klub policie Kadaň","description":"Sportovní, běžecké a další aktivity členů klubu.","url":"https://skmpkadan.cz/o-nas/"},
-        {"name":"TJ DNT Kadaň","description":"Sportovní organizace evidovaná v registru kadaňských klubů.","url":"https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503","linkLabel":"Záznam v České unii sportu"}
+        {
+          "name": "Sportovní zařízení Kadaň",
+          "description": "Sportovní hala, zimní stadion, fotbalový stadion, koupaliště, autokemp a další městská sportoviště.",
+          "url": "https://www.sportkadan.cz/"
+        },
+        {
+          "name": "SK Kadaň",
+          "description": "Hokejový klub, A-tým, mládež, zápasy, nábory a klubové aktuality.",
+          "url": "https://www.skkadan.cz/"
+        },
+        {
+          "name": "FBC DDM Kati Kadaň",
+          "description": "Florbalový klub s mládežnickými a seniorskými družstvy, nábory a soutěžemi.",
+          "url": "https://www.katikadan.cz/"
+        },
+        {
+          "name": "Fotbalový klub Tatran Kadaň",
+          "description": "Fotbalový klub s mládežnickými a dospělými družstvy.",
+          "url": "https://www.fotbal.cz/souteze/club/club/5425d203-ea24-490c-801f-4b5f3a5d7d84",
+          "linkLabel": "Klub na Fotbal.cz"
+        },
+        {
+          "name": "Tenisový klub Kadaň",
+          "description": "Tenisové kurty, hala, rezervace, tréninky a mládežnická činnost.",
+          "url": "https://www.tkkadan.cz/"
+        },
+        {
+          "name": "TJ Vodní sporty Kadaň",
+          "description": "Rychlostní kanoistika, dračí lodě, závody a sportovní činnost na Ohři.",
+          "url": "https://www.tjvskadan.cz/"
+        },
+        {
+          "name": "Gymnastika Kadaň – SK Kosagym",
+          "description": "Sportovní gymnastika, teamgym, přípravky, soustředění a závody.",
+          "url": "https://www.gymkadan.cz/"
+        },
+        {
+          "name": "Karate klub Kadaň a Klášterec",
+          "description": "Karate Shotokan, nábory, tréninky, soustředění a soutěže.",
+          "url": "https://karateklubkadan.cz/wp2/"
+        },
+        {
+          "name": "BK DDM Kadaň",
+          "description": "Basketbalový klub evidovaný mezi kadaňskými sportovními subjekty.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        },
+        {
+          "name": "FC Betis Kadaň",
+          "description": "Fotbalový a futsalový sportovní subjekt evidovaný v Kadani.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        },
+        {
+          "name": "Kajak klub Kadaň",
+          "description": "Vodácký a kajakářský sportovní klub evidovaný v Kadani.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        },
+        {
+          "name": "Nohejbalový klub Kadaň",
+          "description": "Nohejbalový sportovní klub a soutěžní činnost.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        },
+        {
+          "name": "PK Slávie Kadaň",
+          "description": "Plavecký klub evidovaný mezi sportovními subjekty města.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        },
+        {
+          "name": "Spolek oddílů malé kopané Kadaň",
+          "description": "Organizace malé kopané a místních soutěží.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        },
+        {
+          "name": "Sportovní klub policie Kadaň",
+          "description": "Sportovní, běžecké a další aktivity členů klubu.",
+          "url": "https://skmpkadan.cz/o-nas/"
+        },
+        {
+          "name": "TJ DNT Kadaň",
+          "description": "Sportovní organizace evidovaná v registru kadaňských klubů.",
+          "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+          "linkLabel": "Záznam v České unii sportu"
+        }
       ]
     },
     {
       "name": "Bezpečnost, záchranné složky a veřejné instituce",
       "items": [
-        {"name":"Policie ČR – Obvodní oddělení Kadaň","description":"Obvodní oddělení Policie ČR pro Kadaň a široké okolí.","address":"Klášterecká 1483, Kadaň","url":"https://policie.gov.cz/clanek/obvodni-oddeleni-kadan.aspx"},
-        {"name":"Hasičský záchranný sbor Ústeckého kraje","description":"Informace o zásazích, prevenci a činnosti profesionálních hasičů v regionu včetně stanice Kadaň.","url":"https://hzscr.gov.cz/hzs-usteckeho-kraje.aspx"},
-        {"name":"Zdravotnická záchranná služba Ústeckého kraje","description":"Aktuality, první pomoc, kontakty a informace krajské zdravotnické záchranné služby.","url":"https://www.zzsuk.cz/"},
-        {"name":"Římskokatolická farnost Kadaň","description":"Bohoslužby, duchovní a komunitní program, farní kostel a aktuální oznámení.","address":"Mírové náměstí 84, Kadaň","url":"https://farnostkadan.cz/"}
+        {
+          "name": "Policie ČR – Obvodní oddělení Kadaň",
+          "description": "Obvodní oddělení Policie ČR pro Kadaň a široké okolí.",
+          "address": "Klášterecká 1483, Kadaň",
+          "url": "https://policie.gov.cz/clanek/obvodni-oddeleni-kadan.aspx"
+        },
+        {
+          "name": "Hasičský záchranný sbor Ústeckého kraje",
+          "description": "Informace o zásazích, prevenci a činnosti profesionálních hasičů v regionu včetně stanice Kadaň.",
+          "url": "https://hzscr.gov.cz/hzs-usteckeho-kraje.aspx"
+        },
+        {
+          "name": "Zdravotnická záchranná služba Ústeckého kraje",
+          "description": "Aktuality, první pomoc, kontakty a informace krajské zdravotnické záchranné služby.",
+          "url": "https://www.zzsuk.cz/"
+        },
+        {
+          "name": "Římskokatolická farnost Kadaň",
+          "description": "Bohoslužby, duchovní a komunitní program, farní kostel a aktuální oznámení.",
+          "address": "Mírové náměstí 84, Kadaň",
+          "url": "https://farnostkadan.cz/"
+        }
       ]
     }
   ]
