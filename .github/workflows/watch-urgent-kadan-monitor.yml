@@ -1,0 +1,90 @@
+name: Dohled rychlého monitoringu Kadaně
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/watch-urgent-kadan-monitor.yml'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Ověřit stáří poslední rychlé kontroly
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import subprocess
+          import tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          path = Path('data/urgent-kadan-monitoring-status.json')
+          now = datetime.now(timezone.utc)
+          reason = ''
+          age_minutes = None
+          status = {}
+          if not path.exists():
+              reason = 'Soubor posledního stavu zatím neexistuje.'
+          else:
+              try:
+                  status = json.loads(path.read_text(encoding='utf-8'))
+                  checked = datetime.fromisoformat(str(status.get('checkedAt') or '').replace('Z', '+00:00'))
+                  if checked.tzinfo is None:
+                      checked = checked.replace(tzinfo=timezone.utc)
+                  age_minutes = int((now - checked.astimezone(timezone.utc)).total_seconds() // 60)
+                  if age_minutes > 45:
+                      reason = f'Poslední rychlá kontrola je stará {age_minutes} minut.'
+              except Exception as exc:
+                  reason = f'Stav rychlého monitoringu nelze přečíst: {type(exc).__name__}: {exc}'
+
+          healthy = not reason
+          lines = [
+              '## Nezávislý dohled rychlého monitoringu Kadaně',
+              '',
+              f'- Kontrola watchdogu: `{now.isoformat()}`',
+              f'- Poslední běh monitoru: `{status.get("checkedAt", "neuvedeno")}`',
+              f'- Stáří posledního běhu: **{age_minutes if age_minutes is not None else "neznámé"} minut**',
+              f'- Dostupné zdroje v posledním běhu: **{status.get("checkedSources", "?")}/{status.get("sourceCount", "?")}**',
+          ]
+          if reason:
+              lines += ['', '### Problém', reason]
+          else:
+              lines += ['', 'Rychlý monitoring běží v požadovaném intervalu.']
+          lines += ['', '_Tento watchdog běží nezávisle na vlastním OVH runneru._']
+
+          with tempfile.NamedTemporaryFile('w', encoding='utf-8', delete=False, suffix='.md') as handle:
+              handle.write('\n'.join(lines) + '\n')
+              body_path = handle.name
+          try:
+              command = [
+                  'python3', 'scripts/upsert_github_issue.py',
+                  '--fingerprint', 'urgent-kadan-monitor-stale',
+                  '--title', '[RYCHLÝ MONITORING KADAŇ] Monitoring neběží včas [urgent-kadan-monitor-stale]',
+                  '--body-file', body_path,
+                  '--assignee', 'petrkotab666',
+              ]
+              if healthy:
+                  command += ['--close', '--comment-existing']
+              subprocess.run(command, check=True)
+          finally:
+              Path(body_path).unlink(missing_ok=True)
+          if not healthy:
+              raise SystemExit(reason)
+          PY
