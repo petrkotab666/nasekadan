@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-31T03:49:45.235933+00:00",
+  "generatedAt": "2026-07-31T09:16:48.942162+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (0)",
@@ -8,9 +8,9 @@
     "Kultura Kadaň (15)",
     "Liďák Kadaň – kulturní program (0)",
     "Kino Hvězda (0)",
-    "Městská knihovna (0)",
-    "Turistický portál Kadaň (0)",
-    "Městské muzeum v Kadani (0)",
+    "Městská knihovna (12)",
+    "Turistický portál Kadaň (15)",
+    "Městské muzeum v Kadani (15)",
     "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
@@ -72,10 +72,10 @@
     "Chomutovský deník (15)",
     "Úřad práce ČR – kontaktní pracoviště Kadaň (7)",
     "Kultura Kadaň (15)",
-    "Turistické informační centrum Kadaň (0)",
-    "Galerie Josefa Lieslera (0)",
-    "Františkánský klášter Kadaň (0)",
-    "Kadaňský hrad (0)",
+    "Turistické informační centrum Kadaň (15)",
+    "Galerie Josefa Lieslera (11)",
+    "Františkánský klášter Kadaň (15)",
+    "Kadaňský hrad (12)",
     "Vzdělávání na Kadaňsku (15)",
     "Nemocnice Kadaň (15)",
     "Městská správa sociálních služeb Kadaň (15)",
@@ -95,9 +95,6 @@
   "errors": [
     "Městský GIS Kadaň: URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>",
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
-    "Městská knihovna: URLError: <urlopen error timed out>",
-    "Turistický portál Kadaň: URLError: <urlopen error timed out>",
-    "Městské muzeum v Kadani: URLError: <urlopen error timed out>",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
@@ -106,10 +103,6 @@
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
-    "Turistické informační centrum Kadaň: URLError: <urlopen error timed out>",
-    "Galerie Josefa Lieslera: URLError: <urlopen error timed out>",
-    "Františkánský klášter Kadaň: URLError: <urlopen error timed out>",
-    "Kadaňský hrad: URLError: <urlopen error timed out>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Římskokatolická farnost Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
   ],
@@ -177,27 +170,24 @@
       "url": "https://www.knihovnakadan.cz/",
       "category": "Knihovna",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 12
     },
     {
       "name": "Turistický portál Kadaň",
       "url": "https://kadan.eu/",
       "category": "Turistika",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Městské muzeum v Kadani",
       "url": "https://kadan.eu/informace/mestske-muzeum/",
       "category": "Muzeum a památky",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Městské muzeum v Kadani – veřejný Facebook",
@@ -700,36 +690,32 @@
       "url": "https://kadan.eu/informace/tic/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Galerie Josefa Lieslera",
       "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 11
     },
     {
       "name": "Františkánský klášter Kadaň",
       "url": "https://kadan.eu/pamatky/frantiskansky-klaster/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Kadaňský hrad",
       "url": "https://kadan.eu/pamatky/kadansky-hrad/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 12
     },
     {
       "name": "Vzdělávání na Kadaňsku",
@@ -917,8 +903,17 @@
       "title": "Pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více  BOX II. - Inovativní vzdělávání pro 1. i 2. stupeň ZŠ .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"http",
+      "description": "ř akcí Materiály Facebook zobrazit více  Herní sada s brýlemi simulujícími účinky drog a alkoholu .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"ht",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
+      "sourceName": "Vzdělávání na Kadaňsku"
+    },
+    {
+      "id": "289e9294845e",
+      "title": "Herní sada s brýlemi simulujícími účinky drog a alkoholu",
+      "date": "2026-08-26",
+      "category": "Školství",
+      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-for",
+      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=1",
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
@@ -931,22 +926,58 @@
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
-      "id": "3c4d0b5a7d51",
-      "title": "BOX II. - Inovativní vzdělávání pro 1. i 2. stupeň ZŠ",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-forma",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=5",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
       "id": "156f0e19ced0",
       "title": ".. další pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení BOX II. - Inovativní vzdělávání pro 1. i 2. stupeň ZŠ  Kalendář 26.8.202610:00:00: <a href=\"http",
+      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Herní sada s brýlemi simulujícími účinky drog a alkoholu  Kalendář 26.8.202610:00:00: <a href=\"ht",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
       "sourceName": "Vzdělávání na Kadaňsku"
+    },
+    {
+      "id": "a4cea4933edd",
+      "title": "Vodohospodářský dělník",
+      "date": "2026-07-31",
+      "category": "Vodní toky a povodně",
+      "description": "Aktuality Prodej výpočetní techniky - SLEVA 31.7.2026  29.7.2026 pracoviště Libouchec Referent kvality vod a havarijní technik 29.7.2026 pracoviště Karlovy Vary Více aktualit Nabídky zaměstnání Vodohospodářský dělník<",
+      "source": "https://www.povodiohre.cz/vodohospodarsky%2Ddelnik/d-12756",
+      "sourceName": "Povodí Ohře"
+    },
+    {
+      "id": "904829b78a1c",
+      "title": "Protikorupční a compliance program",
+      "date": "2026-07-31",
+      "category": "Vodní toky a povodně",
+      "description": "ce/ms-1005\" >Hydrologická situace Tiskové zprávy Veřejné zakázky Často kladené dotazy Poskytování informací  Informační centrum Fláje Prodej a pronájem majetku Aktuality Prodej výpočetní techniky - SLEVA 31.7.2026 Vodohospo",
+      "source": "https://www.povodiohre.cz/protikorupcni%2Da%2Dcompliance%2Dprogram/d-1346",
+      "sourceName": "Povodí Ohře"
+    },
+    {
+      "id": "6ca533b6686a",
+      "title": "Prodej výpočetní techniky - SLEVA",
+      "date": "2026-07-31",
+      "category": "Vodní toky a povodně",
+      "description": "> Aktuality  31.7.2026 Vodohospodářský dělník 29.7.2026 pracoviště Libouchec Referent kvality vod a havarijní technik 29.7.2026 pracoviště Karlovy Vary Více aktualit",
+      "source": "https://www.povodiohre.cz/prodej%2Dvypocetni%2Dtechniky%2Dsleva/d-12609",
+      "sourceName": "Povodí Ohře"
+    },
+    {
+      "id": "8bf85baa0bbb",
+      "title": "Prodej a pronájem majetku",
+      "date": "2026-07-31",
+      "category": "Vodní toky a povodně",
+      "description": "Často kladené dotazy Poskytování informací Protikorupční a compliance program Informační centrum Fláje  Aktuality Prodej výpočetní techniky - SLEVA 31.7.2026 Vodohospodářský dělník 29.7.2026 pracoviště Libouchec <a href=\"/referent%2Dkvality%2Dvod%2D",
+      "source": "https://www.povodiohre.cz/prodej%2Da%2Dpronajem%2Dmajetku/ds-1019",
+      "sourceName": "Povodí Ohře"
+    },
+    {
+      "id": "f201cb940346",
+      "title": "Poskytování informací",
+      "date": "2026-07-31",
+      "category": "Vodní toky a povodně",
+      "description": "centrovany\"> Témata Hydrologická situace Tiskové zprávy Veřejné zakázky Často kladené dotazy  Protikorupční a compliance program Informační centrum Fláje Prodej a pronájem majetku Aktuality Prodej výpočetní techniky - SLEVA 31.7.2026 <di",
+      "source": "https://www.povodiohre.cz/poskytovani%2Dinformaci/ds-1039",
+      "sourceName": "Povodí Ohře"
     },
     {
       "id": "de0804208d6a",
@@ -976,74 +1007,11 @@
       "sourceName": "Sportovní zařízení Kadaň"
     },
     {
-      "id": "ab78e83fa607",
-      "title": "Často kladené dotazy",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "div> Témata Hydrologická situace Tiskové zprávy Veřejné zakázky  Poskytování informací Protikorupční a compliance program Informační centrum Fláje Prodej a pronájem majetku Aktuality Vodohospodářský dělník 29.7.2026</",
-      "source": "https://www.povodiohre.cz/casto%2Dkladene%2Ddotazy/ds-1017",
-      "sourceName": "Povodí Ohře"
-    },
-    {
-      "id": "a4cea4933edd",
-      "title": "Vodohospodářský dělník",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "> Aktuality  29.7.2026 pracoviště Libouchec Referent kvality vod a havarijní technik 29.7.2026 pracoviště Karlovy Vary Chřibská letos slaví 100 let, v září se otevře návštěvníkům 29.7.2026 Den otevřených dveří se uskuteční první víkend v září na vodním díle Chřibská na Děčínsku a v přilehlé úpravně vody. Návštěvníci si budou moci prohlédnout vodárenskou nádrž, která je kvůli ochrannému pásmu I. stupně veřejnosti běžn",
-      "source": "https://www.povodiohre.cz/vodohospodarsky%2Ddelnik/d-12756",
-      "sourceName": "Povodí Ohře"
-    },
-    {
-      "id": "4b4c24e8fb08",
-      "title": "Referent kvality vod a havarijní technik",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "\"> Aktuality Vodohospodářský dělník 29.7.2026 pracoviště Libouchec  29.7.2026 pracoviště Karlovy Vary Chřibská letos slaví 100 let, v září se otevře návštěvníkům 29.7.2026 Den otevřených dveří se uskuteční první víkend v září na vodním díle Chřibská na Děčínsku a v přilehlé úpravně vody. Návštěvníci si budou moci prohlédnout vodárenskou nádrž, která je kvůli ochrannému pásmu I. stupně veřejnosti běžně uzavřena, sezná",
-      "source": "https://www.povodiohre.cz/referent%2Dkvality%2Dvod%2Da%2Dhavarijni%2Dtechnik/d-12754",
-      "sourceName": "Povodí Ohře"
-    },
-    {
-      "id": "904829b78a1c",
-      "title": "Protikorupční a compliance program",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "ce/ms-1005\" >Hydrologická situace Tiskové zprávy Veřejné zakázky Často kladené dotazy Poskytování informací  Informační centrum Fláje Prodej a pronájem majetku Aktuality Vodohospodářský dělník 29.7.2026 pracoviště Libouchec <a href=\"/referent%2Dkvality%2Dvod%2Da%2Dhavarijni%2Dtechnik/d",
-      "source": "https://www.povodiohre.cz/protikorupcni%2Da%2Dcompliance%2Dprogram/d-1346",
-      "sourceName": "Povodí Ohře"
-    },
-    {
-      "id": "8bf85baa0bbb",
-      "title": "Prodej a pronájem majetku",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "Často kladené dotazy Poskytování informací Protikorupční a compliance program Informační centrum Fláje  Aktuality Vodohospodářský dělník 29.7.2026 pracoviště Libouchec Referent kvality vod a havarijní technik 29.7.2026 pracoviště Karlovy Vary <span clas",
-      "source": "https://www.povodiohre.cz/prodej%2Da%2Dpronajem%2Dmajetku/ds-1019",
-      "sourceName": "Povodí Ohře"
-    },
-    {
-      "id": "f201cb940346",
-      "title": "Poskytování informací",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "centrovany\"> Témata Hydrologická situace Tiskové zprávy Veřejné zakázky Často kladené dotazy  Protikorupční a compliance program Informační centrum Fláje Prodej a pronájem majetku Aktuality Vodohospodářský dělník 29.7.2026 pracoviště Libouchec <div cl",
-      "source": "https://www.povodiohre.cz/poskytovani%2Dinformaci/ds-1039",
-      "sourceName": "Povodí Ohře"
-    },
-    {
-      "id": "a3d78f2e729a",
-      "title": "Chřibská letos slaví 100 let, v září se otevře návštěvníkům",
-      "date": "2026-07-29",
-      "category": "Vodní toky a povodně",
-      "description": "pracoviště Libouchec Referent kvality vod a havarijní technik 29.7.2026 pracoviště Karlovy Vary  29.7.2026 Den otevřených dveří se uskuteční první víkend v září na vodním díle Chřibská na Děčínsku a v přilehlé úpravně vody. Návštěvníci si budou moci prohlédnout vodárenskou nádrž, která je kvůli ochrannému pásmu I. stupně veřejnosti běžně uzavřena, seznámit se s procesy úpravy vody a občerstvit se u... Více aktualit N",
-      "source": "https://www.povodiohre.cz/chribska%2Dletos%2Dslavi%2D100%2Dlet%2Dv%2Dzari%2Dse%2Dotevre%2Dnavstevnikum/d-12748",
-      "sourceName": "Povodí Ohře"
-    },
-    {
       "id": "aed8835ce3e8",
       "title": "❮ Předchozí",
       "date": "2026-07-27",
       "category": "Smlouvy a hospodaření",
-      "description": "ass=\"4\"> 27.07.2026 145 200 CZK s DPH Oldřich Skalický Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "class=\"4\"> 27.07.2026 726 000 CZK s DPH Václav Šťastný Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp;do=searchResultList-setOffset&amp;contract_id=&amp;version_id=&amp;publication_date[from]=&amp;publication_date[to]=&amp;subject_box=uaybdrx&amp;subject_name=&amp;subject_idnum=&amp;subject_address=&amp;party_box=&amp;party_name=&amp;party_idnum=&amp;party_address=&amp;contr_num=&amp;contract_reference_number=&amp;sign_date[from]=&amp;sign_date[to]=&amp;contract_descr=&amp;sign_person_name=&amp;value_no_vat[from]=&amp;value_no_vat[to]=&amp;value_vat[from]=&amp;value_vat[to]=&amp;value_foreign[from]=&amp;value_foreign[to]=&amp;foreign_currency=&amp;file_text=&amp;search_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1061,7 +1029,7 @@
       "title": "Na začátek",
       "date": "2026-07-27",
       "category": "Smlouvy a hospodaření",
-      "description": "ass=\"4\"> 27.07.2026 145 200 CZK s DPH Oldřich Skalický Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "class=\"4\"> 27.07.2026 726 000 CZK s DPH Václav Šťastný Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp;do=searchResultList-setOffset&amp;contract_id=&amp;version_id=&amp;publication_date[from]=&amp;publication_date[to]=&amp;subject_box=uaybdrx&amp;subject_name=&amp;subject_idnum=&amp;subject_address=&amp;party_box=&amp;party_name=&amp;party_idnum=&amp;party_address=&amp;contr_num=&amp;contract_reference_number=&amp;sign_date[from]=&amp;sign_date[to]=&amp;contract_descr=&amp;sign_person_name=&amp;value_no_vat[from]=&amp;value_no_vat[to]=&amp;value_vat[from]=&amp;value_vat[to]=&amp;value_foreign[from]=&amp;value_foreign[to]=&amp;foreign_currency=&amp;file_text=&amp;search_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1732,24 +1700,6 @@
       "sourceName": "Městské divadlo Most – program"
     },
     {
-      "id": "02fea9487cda",
-      "title": "Řidiče v Chomutově čekají v následujících týdnech komplikace. Na frekventovaných místech ve městě začaly práce na modernizaci trakčního vedení, které omezí dopravu.",
-      "date": "",
-      "category": "Regionální média",
-      "description": "lex items-center\" >• Deník pro dobrou náladu • gallery 20 <div class=\"flex flex-col items",
-      "source": "https://chomutovsky.denik.cz/zpravy-region/ridice-v-chomutove-cekaji-omezeni-duvodem-je-modernizace-trakcniho-vedeni/",
-      "sourceName": "Chomutovský deník"
-    },
-    {
-      "id": "9d1c52623008",
-      "title": "Řidiče v Chomutově čekají omezení. Důvodem je modernizace trakčního vedení",
-      "date": "",
-      "category": "Regionální média",
-      "description": "lex items-center\" >• Deník pro dobrou náladu • gallery 20 <div class=\"flex flex-col items",
-      "source": "https://chomutovsky.denik.cz/zpravy-region/ridice-v-chomutove-cekaji-omezeni-duvodem-je-modernizace-trakcniho-vedeni/",
-      "sourceName": "Chomutovský deník"
-    },
-    {
       "id": "e68a41bf6b90",
       "title": "Ředitelé školy",
       "date": "",
@@ -1766,6 +1716,42 @@
       "description": "enuitem\" href=\"/personal/\"> Personál Měsíční plány Vzdělávací centrum  Hodnocení školy vnějšími partnery Pro rodiče Kontakty na poradenská zařízení Jídelníček Školní jídelna Recepty <span class=",
       "source": "https://www.msctyrlistekkadan.cz/m/",
       "sourceName": "MŠ Čtyřlístek Kadaň"
+    },
+    {
+      "id": "de4f2462892a",
+      "title": "Čtenářské konto",
+      "date": "",
+      "category": "Regionální kultura – Litvínov",
+      "description": "t submenu815198092__menuItem itemShared2352141355__menuItem\" tabindex=\"0\"> Online katalog  Prodloužení výpůjčky <a data-item-label=\"t",
+      "source": "https://katalog.knihovna-litvinov.cz/MyResearch/Home",
+      "sourceName": "Městská knihovna Litvínov"
+    },
+    {
+      "id": "ed94d9c8bbe7",
+      "title": "Členské příspěvky",
+      "date": "",
+      "category": "Sportovní organizace a kluby",
+      "description": "O nás Historie TK Kadaň  Hrací řád Stanovy TK Kadaň Valné hromady Povinné brigády pro členy TK Pronájem haly <a class=\"nav-link dropdown-toggle\" href=\"#\" id=\"navbarDropdown\" role=\"button\" data-toggle=\"dropdown\" aria-haspopup=\"true\" aria-expanded=\"true\" title=\"Zá",
+      "source": "https://www.tkkadan.cz/o-nas/clenske-prispevky.html",
+      "sourceName": "Tenisový klub Kadaň"
+    },
+    {
+      "id": "70098e0dd728",
+      "title": "Členské příspěvky",
+      "date": "",
+      "category": "Sportovní organizace a kluby",
+      "description": "em-49\" class=\"menu-item menu-item-type-post_type menu-item-object-page menu-item-has-children menu-item-49\"> Info Info  Pravidla oddílu Kodex gymnasty Kodex rodiče Kodex trenéra Kalendář",
+      "source": "https://www.gymkadan.cz/clenske-prispevky/",
+      "sourceName": "Gymnastika Kadaň – SK Kosagym"
+    },
+    {
+      "id": "534e46880fa0",
+      "title": "Členská sekce",
+      "date": "",
+      "category": "Sport",
+      "description": "apper flex items-center justify-between py-2 md:py-3 lg:py-5\"> FBC DDM Kati Kadaň  Program zápasů Facebook <svg class=\"ic",
+      "source": "https://clen.katikadan.cz/",
+      "sourceName": "FBC DDM Kati Kadaň"
     }
   ]
 }
