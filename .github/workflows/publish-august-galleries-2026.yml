@@ -79,7 +79,15 @@ jobs:
           set -Eeuo pipefail
           git config user.name 'Naše Kadaň – publikace galerií'
           git config user.email 'info@nasekadan.cz'
-          git add clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml social/ llms.txt llms-full.txt 2>/dev/null || true
+          for path in \
+            clanky/srpen-kadanske-galerie-vystavy-workshop-2026.html \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
+            social llms.txt llms-full.txt; do
+            if [[ -e "$path" ]]; then
+              git add -A -- "$path"
+            fi
+          done
+
           if git diff --cached --quiet; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
           else
