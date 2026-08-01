@@ -1,0 +1,76 @@
+name: Nahradit náklady historickým okénkem Císařského dne
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[draft] actual editions and medieval Kadan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Upravit a ověřit návrh
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/replace_cisarsky_den_costs_with_history_window_20260801.py
+          python3 scripts/replace_cisarsky_den_costs_with_history_window_20260801.py
+          f=.github/drafts/cisarsky-den-kadan-historie-2026.html
+          grep -Fq 'data-actual-editions="31-held"' "$f"
+          grep -Fq '31 uskutečněných slavností' "$f"
+          grep -Fq 'Letošní slavnost 22. srpna 2026 bude při uskutečnění ve skutečnosti dvaatřicátou' "$f"
+          grep -Fq 'Jak vypadala Kadaň, do které roku 1367 přijel Karel IV.' "$f"
+          grep -Fq 'Spravedlnost nebyla schovaná před veřejností' "$f"
+          grep -Fq 'Co známe až z pozdějších záznamů' "$f"
+          ! grep -Fq 'data-original-findings="contracts-v1"' "$f"
+          ! grep -Fq 'data-original-findings="contracts-v2"' "$f"
+
+      - name: Uložit návrh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/drafts/cisarsky-den-kadan-historie-2026.html scripts/replace_cisarsky_den_costs_with_history_window_20260801.py
+          git commit -m 'Doplnit skutečný počet ročníků a středověkou Kadaň [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 4 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+
+      - name: Uzavřít kontrolní úkol
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? '✅ Nákladová kapitola byla odstraněna. Návrh nyní uvádí 31 skutečně uskutečněných slavností do roku 2025, letošní plánovanou jako 32. a obsahuje rozšířené historické okénko o životě, soudech, katovi a popravách v Kadani.'
+                : '❌ Úpravu počtu ročníků a historického okénka se nepodařilo dokončit.'
+            });
+            if (ok) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }
