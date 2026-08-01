@@ -1,0 +1,94 @@
+name: Přesně ověřit spisy Hossner v InfoSoudu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-infosoud-exact-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          python3 -m pip install --quiet playwright requests
+          python3 -m playwright install --with-deps chromium
+      - name: Přímé dotazy a síťové odpovědi
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/hossner-court-2026/infosoud-exact
+          mkdir -p .github/research/hossner-court-2026/infosoud-exact
+          cat > /tmp/exact.py <<'PY'
+          import asyncio,json
+          from pathlib import Path
+          from playwright.async_api import async_playwright
+          O=Path('.github/research/hossner-court-2026/infosoud-exact')
+          cases=[84,211]
+          codes=['OSCV','OSCVCHM','KSULKCV','KSULCAB']
+          async def main():
+            results=[]
+            async with async_playwright() as p:
+              b=await p.chromium.launch(headless=True)
+              ctx=await b.new_context(locale='cs-CZ',ignore_https_errors=True,user_agent='Mozilla/5.0 Chrome/127')
+              for n in cases:
+                variants=[]
+                for code in codes:
+                  variants += [
+                    f'https://infosoud.gov.cz/InfoSoud/detail-rizeni?bcVec={n}&cisloSenatu=30&druhVeci=C&okresniSoud={code}&rocnik=2025&typOrganizace=VSECHNY_KRAJE',
+                    f'https://infosoud.gov.cz/InfoSoud/detail-rizeni?bcVec={n}&cisloSenatu=30&druhOrganizace={code}&druhVeci=C&okresniSoud={code}&rocnik=2025&typOrganizace=VSECHNY_KRAJE',
+                    f'https://infosoud.gov.cz/InfoSoud/detail-rizeni?bcVec={n}&cisloSenatu=30&druhOrganizace=KSULK&druhVeci=C&okresniSoud={code}&rocnik=2025&typOrganizace=VSECHNY_KRAJE',
+                    f'https://infojednani.gov.cz/InfoJednani/detail-jednani?bcVec={n}&cisloSenatu=30&druhVeci=C&okresniSoud={code}&rocnik=2025&typHledani=SPZN'
+                  ]
+                for idx,u in enumerate(variants):
+                  page=await ctx.new_page(); net=[]
+                  async def resp(r):
+                    if r.request.resource_type in ('xhr','fetch') or '/api/' in r.url:
+                      x={'url':r.url,'status':r.status,'method':r.request.method,'post':r.request.post_data}
+                      try: x['body']=(await r.text())[:500000]
+                      except Exception as e: x['error']=repr(e)
+                      net.append(x)
+                  page.on('response',resp)
+                  try:
+                    await page.goto(u,wait_until='domcontentloaded',timeout=60000)
+                    await page.wait_for_timeout(6000)
+                    try: await page.wait_for_load_state('networkidle',timeout=20000)
+                    except: pass
+                    txt=await page.locator('body').inner_text()
+                    rec={'case':n,'variant':idx,'requested':u,'final':page.url,'title':await page.title(),'text':txt,'network':net}
+                    (O/f'{n}-{idx}.txt').write_text(txt,encoding='utf-8')
+                    (O/f'{n}-{idx}.html').write_text(await page.content(),encoding='utf-8')
+                    await page.screenshot(path=str(O/f'{n}-{idx}.png'),full_page=True)
+                  except Exception as e: rec={'case':n,'variant':idx,'requested':u,'error':repr(e),'network':net}
+                  results.append(rec); await page.close()
+              await b.close()
+            O.joinpath('results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+            md=['# Přesný test InfoSoudu','']
+            for r in results:
+              if 'error' in r: md.append(f"- {r['case']} v{r['variant']}: CHYBA {r['error']}"); continue
+              text=' '.join(r['text'].split())
+              useful=any(k in text for k in ('Zahájení řízení','Nařízení jednání','Stav věci','Vyřízení věci','Odvolání','Přerušení řízení','30 C'))
+              md.append(f"## {r['case']} v{r['variant']} useful={useful}\n\nURL: {r['final']}\n\n{text[:8000]}\n")
+              for x in r['network']:
+                if x.get('body'): md.append(f"- API {x['status']} {x['url']}: {x['body'][:6000]}")
+            O.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          asyncio.run(main())
+          PY
+          python3 /tmp/exact.py
+      - name: Uložit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-court-2026/infosoud-exact
+          git commit -m 'Přesně ověřit spisy Hossner v InfoSoudu' || true
+          for i in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && exit 0; sleep $((i*4)); done
+          exit 1
