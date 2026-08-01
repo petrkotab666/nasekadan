@@ -1,0 +1,87 @@
+name: Ověřit navazující spisy Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-linked-cases-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          python3 -m pip install --quiet playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Vytěžit 14 Co 104/2026, 93 Ncp 490/2026 a jednání
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-court-2026/linked-cases
+          rm -rf "$OUT"; mkdir -p "$OUT"
+          cat > /tmp/linked.py <<'PY'
+          import asyncio,json
+          from pathlib import Path
+          from playwright.async_api import async_playwright
+          O=Path('.github/research/hossner-court-2026/linked-cases')
+          async def form_query(page, org_type, org_label, senat, druh, cislo, rok, hearing=False):
+              net=[]
+              async def capture(r):
+                  if r.request.resource_type in ('xhr','fetch') or '/api/' in r.url:
+                      x={'url':r.url,'status':r.status,'method':r.request.method,'post':r.request.post_data}
+                      try:x['body']=(await r.text())[:1000000]
+                      except Exception as e:x['error']=repr(e)
+                      net.append(x)
+              page.on('response',capture)
+              await page.goto('https://infojednani.gov.cz/InfoJednani' if hearing else 'https://infosoud.gov.cz/InfoSoud',wait_until='networkidle',timeout=90000)
+              if org_type=='higher': await page.select_option('select[name="druhOrganizace"]',label=org_label)
+              else: await page.select_option('select[name="okresniSoud"]',label=org_label)
+              await page.locator('input[name="znackaSenat"]').fill(str(senat))
+              await page.locator('input[name="znackaDruh"]').fill(druh)
+              await page.locator('input[name="znackaCislo"]').fill(str(cislo))
+              await page.locator('input[name="znackaRok"]').fill(str(rok))
+              await page.locator('form #formSubmitButton').first.click()
+              await page.wait_for_timeout(6000)
+              try: await page.wait_for_load_state('networkidle',timeout=30000)
+              except: pass
+              return {'url':page.url,'text':await page.locator('body').inner_text(),'html':await page.content(),'network':net}
+          async def main():
+              specs=[('14 Co 104/2026','higher','Krajský soud Ústí nad Labem',14,'Co',104,2026),('93 Ncp 490/2026','higher','Vrchní soud Praha',93,'Ncp',490,2026),('30 C 84/2025','district','Okresní soud Chomutov',30,'C',84,2025),('30 C 211/2025','district','Okresní soud Chomutov',30,'C',211,2025)]
+              rows=[]
+              async with async_playwright() as p:
+                  b=await p.chromium.launch(headless=True); c=await b.new_context(locale='cs-CZ',ignore_https_errors=True,user_agent='Mozilla/5.0 Chrome/127')
+                  for label,typ,org,s,d,cis,r in specs:
+                      for hearing in (False,True):
+                          page=await c.new_page()
+                          rec={'case':label,'kind':'hearing' if hearing else 'case'}
+                          try:rec.update(await form_query(page,typ,org,s,d,cis,r,hearing))
+                          except Exception as e:rec['error']=repr(e)
+                          rows.append(rec); await page.close()
+                  await b.close()
+              O.joinpath('results.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
+              md=['# Navazující spisy Hossner','']
+              for x in rows:
+                  md += [f"## {x['case']} – {x['kind']}",f"- URL: {x.get('url')}",f"- Chyba: {x.get('error')}",'',x.get('text','')[:30000],'']
+                  for n in x.get('network',[]):
+                      if n.get('body') and '/api/' in n['url']:md += [f"### API {n['status']} {n['method']} {n['url']}",n['body'][:100000],'']
+              O.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          asyncio.run(main())
+          PY
+          python3 /tmp/linked.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-court-2026/linked-cases
+          git commit -m 'Ověřit navazující spisy Hossner' || true
+          for i in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && exit 0; sleep $((i*4)); done
+          exit 1
