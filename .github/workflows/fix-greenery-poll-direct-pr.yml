@@ -1,0 +1,32 @@
+name: Přímá oprava ankety článku o sečení
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/greenery-poll-direct-trigger.txt'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: fix-greenery-poll-direct-pr
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Opravit, nasadit a veřejně ověřit anketu
+        shell: bash
+        run: bash scripts/run_greenery_poll_hotfix.sh
