@@ -1,4 +1,4 @@
-name: Export městského PDF 27/2025
+name: Export dalších městských skenů 2025
 
 on:
   pull_request:
@@ -17,12 +17,15 @@ jobs:
         with:
           fetch-depth: 1
           sparse-checkout: |
-            .github/research/hossner-fast-missing-docs-20260801/files/27_2025_106_s.pdf
+            .github/research/hossner-fast-missing-docs-20260801/files/28_2025_106_ov.pdf
+            .github/research/hossner-fast-missing-docs-20260801/files/34_2025_106_s.pdf
           sparse-checkout-cone-mode: false
-      - name: Ověřit soubor
-        run: ls -lh .github/research/hossner-fast-missing-docs-20260801/files/27_2025_106_s.pdf
+      - name: Ověřit soubory
+        run: ls -lh .github/research/hossner-fast-missing-docs-20260801/files/28_2025_106_ov.pdf .github/research/hossner-fast-missing-docs-20260801/files/34_2025_106_s.pdf
       - uses: actions/upload-artifact@v4
         with:
-          name: city-27-2025-pdf
-          path: .github/research/hossner-fast-missing-docs-20260801/files/27_2025_106_s.pdf
+          name: city-other-scans-2025
+          path: |
+            .github/research/hossner-fast-missing-docs-20260801/files/28_2025_106_ov.pdf
+            .github/research/hossner-fast-missing-docs-20260801/files/34_2025_106_s.pdf
           retention-days: 1
