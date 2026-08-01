@@ -1,0 +1,108 @@
+name: Hloubkově zkontrolovat anonymizaci právních smluv Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-contract-redactions-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq unzip poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests python-docx lxml
+      - name: Stáhnout a rozebrat DOCX i PDF
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-contract-redactions
+          rm -rf "$OUT"; mkdir -p "$OUT"/{sustek-xml,sustek-media,pdf,text}
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json,re,subprocess,zipfile
+          import requests
+          from lxml import etree
+          from docx import Document
+          O=Path('.github/research/hossner-contract-redactions')
+          urls={
+            'sustek.docx':'https://smlouvy.gov.cz/smlouva/soubor/37957688/Nem.Kada%C5%88%20smlouva%20pr%C3%A1vn%C3%AD%20slu%C5%BEby%20AKSU%20Registr.docx',
+            'deloitte.pdf':'https://smlouvy.gov.cz/smlouva/soubor/38140380/Deloitte%20Legal%20s.r.o.%20-%20Smluvn%C3%AD%20podm%C3%ADnky%20poskytov%C3%A1n%C3%AD%20pr%C3%A1vn%C3%ADch%20slu%C5%BEeb.pdf',
+            'audit22.pdf':'https://smlouvy.gov.cz/smlouva/soubor/38568444/Smlouva%20o%20proveden%C3%AD%20auditu.pdf'
+          }
+          meta={}
+          for name,u in urls.items():
+            r=requests.get(u,timeout=180); r.raise_for_status(); p=O/name; p.write_bytes(r.content)
+            meta[name]={'url':u,'bytes':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest()}
+          # DOCX: extract every XML, including deleted/hidden text, comments, headers, footers, settings and custom XML.
+          p=O/'sustek.docx'
+          with zipfile.ZipFile(p) as z:
+            z.extractall(O/'sustek-xml')
+          rows=[]
+          for xp in sorted((O/'sustek-xml').rglob('*.xml')):
+            raw=xp.read_bytes()
+            try:
+              root=etree.fromstring(raw)
+              texts=root.xpath('//text()')
+              text='\n'.join(x.strip() for x in texts if x and x.strip())
+            except Exception:
+              text=raw.decode('utf-8','replace')
+            rel=xp.relative_to(O/'sustek-xml')
+            tp=O/'text'/('sustek-'+str(rel).replace('/','__')+'.txt'); tp.write_text(text,encoding='utf-8')
+            flags=[]
+            low=raw.lower()
+            for k in (b'w:del',b'w:hidden',b'vanish',b'comment',b'track',b'obchodn',b'odm',b'sazb',b'hossner',b'krusina'):
+              if k in low: flags.append(k.decode('utf-8','ignore'))
+            rows.append({'xml':str(rel),'chars':len(text),'flags':flags,'text_file':str(tp)})
+          # Normal visible text and tables.
+          d=Document(p); chunks=[]
+          for para in d.paragraphs: chunks.append(para.text)
+          for ti,t in enumerate(d.tables,1):
+            chunks.append(f'--- TABLE {ti} ---')
+            for row in t.rows: chunks.append('\t'.join(c.text for c in row.cells))
+          (O/'text/sustek-visible.txt').write_text('\n'.join(chunks),encoding='utf-8')
+          # OCR embedded media and collect strings from every ZIP member.
+          media=[]
+          for mp in (O/'sustek-xml/word/media').glob('*') if (O/'sustek-xml/word/media').exists() else []:
+            dest=O/'sustek-media'/mp.name; dest.write_bytes(mp.read_bytes())
+            rec={'file':str(dest),'bytes':dest.stat().st_size}
+            if dest.suffix.lower() in ('.png','.jpg','.jpeg','.tif','.tiff','.bmp'):
+              q=subprocess.run(['tesseract',str(dest),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+              rec['ocr']=q.stdout; (O/'text'/('ocr-'+dest.name+'.txt')).write_text(q.stdout,encoding='utf-8')
+            media.append(rec)
+          # PDF text plus qpdf-like string scan via pdftotext/strings.
+          for name in ('deloitte.pdf','audit22.pdf'):
+            pp=O/name
+            q=subprocess.run(['pdftotext','-layout',str(pp),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            (O/'text'/(name+'.txt')).write_text(q.stdout,encoding='utf-8')
+            s=subprocess.run(['strings','-a',str(pp)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            (O/'text'/(name+'.strings.txt')).write_text(s.stdout,encoding='utf-8')
+          O.joinpath('metadata.json').write_text(json.dumps({'files':meta,'xml':rows,'media':media},ensure_ascii=False,indent=2),encoding='utf-8')
+          # Report relevant text from all extracted streams.
+          keys=('hossner','krušina','krusina','odměn','odmen','sazb','hodin','paušál','pausal','pracovn','soud','audit','právn','pravn','obchodní tajemství','obchodni tajemstvi','veřejn','verejn','zakáz','zakaz','compliance','governance')
+          md=['# Hloubková kontrola právních smluv Nemocnice Kadaň','', '## Metadata', '```json',json.dumps(meta,ensure_ascii=False,indent=2),'```','']
+          for tp in sorted((O/'text').glob('*.txt')):
+            text=tp.read_text(encoding='utf-8',errors='replace'); low=text.lower()
+            if any(k in low for k in keys):
+              md += ['## '+tp.name,'```',text[:60000],'```','']
+          O.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-contract-redactions
+          git commit -m 'Hloubkově zkontrolovat anonymizaci právních smluv nemocnice' || true
+          for i in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && exit 0; sleep $((i*4)); done
+          exit 1
