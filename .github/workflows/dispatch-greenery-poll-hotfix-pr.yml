@@ -1,0 +1,64 @@
+name: Servisně spustit opravu ankety článku o sečení
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/greenery-poll-pr-trigger.txt'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch-and-wait:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Spustit hlavní opravu na větvi main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo='${{ github.repository }}'
+          workflow='fix-greenery-poll-stale-browser-state.yml'
+          before="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run "$workflow" --repo "$repo" --ref main
+          run_id=''
+          for attempt in $(seq 1 30); do
+            run_id="$(gh run list --repo "$repo" --workflow "$workflow" --branch main --event workflow_dispatch --limit 5 --json databaseId,createdAt,status --jq '[.[] | select(.createdAt >= "'"$before"'")][0].databaseId // empty')"
+            [[ -n "$run_id" ]] && break
+            sleep 2
+          done
+          [[ -n "$run_id" ]] || { echo 'Nepodařilo se najít spuštěný opravný běh.' >&2; exit 1; }
+          echo "Sleduji opravný běh $run_id"
+          gh run watch "$run_id" --repo "$repo" --exit-status
+
+      - name: Ověřit zapsaný veřejný stav
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo='${{ github.repository }}'
+          for attempt in $(seq 1 20); do
+            encoded="$(gh api "repos/$repo/contents/.github/greenery-poll-hotfix-status.json?ref=main" --jq .content 2>/dev/null || true)"
+            if [[ -n "$encoded" ]]; then
+              printf '%s' "$encoded" | tr -d '\n' | base64 -d > "$RUNNER_TEMP/status.json"
+              python3 - "$RUNNER_TEMP/status.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert data.get('status')=='passed',data
+          assert data.get('staleLocalStorageCleared') is True,data
+          assert data.get('realVoteStored') is True,data
+          assert data.get('visibleCountsAndPercentages') is True,data
+          print(data)
+          PY
+              exit 0
+            fi
+            sleep 3
+          done
+          echo 'Ověřený stav opravy se neobjevil.' >&2
+          exit 1
