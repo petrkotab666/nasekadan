@@ -1,0 +1,170 @@
+name: Sjednotit favicon na celém webu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/favicon-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: normalize-favicon-all-pages
+  cancel-in-progress: true
+
+jobs:
+  normalize-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sjednotit favicon a opravit publikační proces
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/install_favicon_system.py
+          python3 - <<'PY'
+          from pathlib import Path
+          from scripts.ensure_favicon import (
+              ROOT, FAVICON_HREF, PRIMARY_TAG, SHORTCUT_TAG, is_public_html,
+          )
+
+          public=[]
+          bad=[]
+          for path in sorted(ROOT.rglob('*.html')):
+              if not is_public_html(path):
+                  continue
+              rel=path.relative_to(ROOT).as_posix()
+              public.append(rel)
+              text=path.read_text(encoding='utf-8',errors='replace')
+              if text.count(PRIMARY_TAG)!=1 or text.count(SHORTCUT_TAG)!=1:
+                  bad.append(rel)
+              if text.count(FAVICON_HREF)!=2:
+                  bad.append(rel+' [chybný počet odkazů]')
+          if bad:
+              raise SystemExit('Chybná favicon:\n'+'\n'.join(bad[:100]))
+          Path('/tmp/favicon-public-files.txt').write_text(
+              '\n'.join(public)+'\n',encoding='utf-8'
+          )
+          print(f'Ověřeno {len(public)} veřejných HTML stránek.')
+          PY
+          grep -Fq 'normalize_favicon_html(text)' scripts/finalize_launch.py
+          ! grep -Fq '(ROOT / "analytics.js").write_text' scripts/finalize_launch.py
+          grep -Fq 'data-nasekadan-favicon' analytics.js
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň automat'
+          git config user.email 'info@nasekadan.cz'
+          while IFS= read -r path; do
+            test -n "$path" && git add -- "$path"
+          done < /tmp/favicon-public-files.txt
+          git add -- analytics.js scripts/ensure_favicon.py scripts/install_favicon_system.py scripts/finalize_launch.py
+          git commit -m 'Sjednotit favicon na všech veřejných stránkách' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Připravit veřejný balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import tarfile
+          from scripts.ensure_favicon import ROOT, is_public_html
+
+          paths=[p for p in sorted(ROOT.rglob('*.html')) if is_public_html(p)]
+          paths += [ROOT/'analytics.js', ROOT/'favicon.svg']
+          target=Path('/tmp/nasekadan-favicon-deploy.tar.gz')
+          with tarfile.open(target,'w:gz') as archive:
+              for path in paths:
+                  archive.add(path,arcname=path.relative_to(ROOT).as_posix())
+          print(f'Balíček obsahuje {len(paths)} souborů: {target}')
+          PY
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit favicon přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 /tmp/nasekadan-favicon-deploy.tar.gz ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          rm -rf /tmp/nasekadan-favicon-deploy
+          mkdir -p /tmp/nasekadan-favicon-deploy
+          tar -xzf /tmp/nasekadan-favicon-deploy.tar.gz -C /tmp/nasekadan-favicon-deploy
+          sudo cp -a /tmp/nasekadan-favicon-deploy/. /var/www/nasekadan/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nasekadan-favicon-deploy/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          grep -Fq '/favicon.svg?v=20260801-2' /var/www/nasekadan/index.html
+          grep -Fq 'data-nasekadan-favicon' /var/www/nasekadan/analytics.js
+          grep -Fq '<svg' /var/www/nasekadan/favicon.svg
+          rm -rf /tmp/nasekadan-favicon-deploy /tmp/nasekadan-favicon-deploy.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit favicon bez cache
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for path in / /clanky/ /prehled-zdroju/ /prakticke/ /pruvodce/; do
+            body="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz${path}?favicon-check=$stamp")"
+            grep -Fq '/favicon.svg?v=20260801-2' <<<"$body"
+            grep -Fq 'data-nasekadan-favicon="primary"' <<<"$body"
+          done
+          js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/analytics.js?v=$stamp")"
+          svg="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/favicon.svg?v=$stamp")"
+          grep -Fq "const faviconHref='/favicon.svg?v=20260801-2'" <<<"$js"
+          grep -Fq 'data-nasekadan-favicon' <<<"$js"
+          grep -Fq '<svg' <<<"$svg"
+          echo 'HOTOVO: favicon je přímo v HTML i chráněná runtime pojistkou.'
+
+      - name: Zapsat stav opravy favicon
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const path='favicon-unification-status.json';
+            const ok=process.env.DEPLOY==='success'&&process.env.VERIFY==='success';
+            const status={
+              status:ok?'success':'failed',
+              checked_at_utc:new Date().toISOString(),
+              run_id:context.runId,
+              server_deploy:process.env.DEPLOY||'skipped',
+              public_verification:process.env.VERIFY||'skipped'
+            };
+            const content=Buffer.from(JSON.stringify(status,null,2)+'\n').toString('base64');
+            let sha;
+            try{
+              const current=await github.rest.repos.getContent({owner:context.repo.owner,repo:context.repo.repo,path,ref:'main'});
+              if(!Array.isArray(current.data))sha=current.data.sha;
+            }catch(error){if(error.status!==404)throw error;}
+            await github.rest.repos.createOrUpdateFileContents({
+              owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',
+              message:`Zapsat stav sjednocení favicon: ${status.status}`,
+              content,...(sha?{sha}:{})
+            });
