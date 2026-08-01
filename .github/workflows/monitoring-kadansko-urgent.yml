@@ -1,0 +1,73 @@
+name: Jednotný monitoring Kadaňska – akutní
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'data/organizations.json'
+      - 'data/city-sources.json'
+      - 'data/kadansko-extra-sources.json'
+      - 'data/urgent-kadan-sources.json'
+      - 'data/national-kadan-sources.json'
+      - 'data/monitoring-supplemental-sources.json'
+      - 'scripts/build_monitoring_registry.py'
+      - 'scripts/monitor_kadansko_unified.py'
+      - 'scripts/publish_monitoring_alerts.py'
+      - 'scripts/commit_monitoring_state.sh'
+      - '.github/workflows/monitoring-kadansko-urgent.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: unified-monitoring-kadansko-urgent
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: self-hosted
+    timeout-minutes: 18
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit a ověřit jednotný registr
+        run: |
+          set -euo pipefail
+          python3 scripts/build_monitoring_registry.py
+          python3 -m unittest tests/test_monitoring_unified.py
+
+      - name: Zkontrolovat akutní zdroje
+        run: |
+          set -euo pipefail
+          python3 scripts/monitor_kadansko_unified.py \
+            --mode urgent \
+            --output "$RUNNER_TEMP/unified-monitoring-urgent.json"
+
+      - name: Doručit nové nálezy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish_monitoring_alerts.py \
+            --mode urgent \
+            --input "$RUNNER_TEMP/unified-monitoring-urgent.json"
+
+      - name: Uložit deduplikační stav pouze při změně
+        run: bash scripts/commit_monitoring_state.sh urgent
+
+      - name: Ověřit aktuální průchod
+        run: |
+          python3 - "$RUNNER_TEMP/unified-monitoring-urgent.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding='utf-8'))['status']
+          assert data['sourceCount'] >= 8, data
+          assert data['checkedSources'] >= max(6, int(data['sourceCount']*0.65)), data
+          print(data)
+          PY
