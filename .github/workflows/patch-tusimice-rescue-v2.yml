@@ -1,0 +1,62 @@
+name: Opravit záchrannou publikaci jaderných Tušimic v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-tusimice-rescue-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Doplnit RSS a vyčistit pracovní strom před rebase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('.github/workflows/rescue-publish-tusimice-v2.yml')
+          text=path.read_text(encoding='utf-8')
+          old1="""          python3 scripts/prepare_discovery.py
+          python3 scripts/enforce_article_visibility.py
+
+          social_url="""
+          new1="""          python3 scripts/prepare_discovery.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/ensure_tusimice_rss.py
+
+          social_url="""
+          if old1 not in text and 'python3 scripts/ensure_tusimice_rss.py' not in text:
+              raise SystemExit('Nenalezena kotva pro RSS')
+          text=text.replace(old1,new1,1)
+          old2="""            git commit -m 'Publikovat: jaderné Tušimice – opravená záchranná cesta'
+            for attempt in 1 2 3 4 5; do"""
+          new2="""            git commit -m 'Publikovat: jaderné Tušimice – opravená záchranná cesta'
+            git reset --hard HEAD
+            git clean -fd
+            for attempt in 1 2 3 4 5; do"""
+          if old2 not in text and "git commit -m 'Publikovat: jaderné Tušimice – opravená záchranná cesta'\n            git reset --hard HEAD" not in text:
+              raise SystemExit('Nenalezena kotva pro čistý rebase')
+          text=text.replace(old2,new2,1)
+          path.write_text(text,encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň oprava workflow'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/workflows/rescue-publish-tusimice-v2.yml
+          git commit -m 'Opravit RSS a rebase záchranné publikace Tušimic'
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
