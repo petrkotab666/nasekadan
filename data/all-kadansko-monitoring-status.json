@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-01T17:31:44.714776+00:00",
+  "checkedAt": "2026-08-01T19:44:29.080240+00:00",
   "bootstrap": false,
   "sourceCount": 106,
-  "checkedSources": 90,
-  "failedSources": 16,
-  "itemsParsed": 6496,
-  "uniqueItems": 3493,
-  "newAlerts": 1,
+  "checkedSources": 92,
+  "failedSources": 14,
+  "itemsParsed": 6511,
+  "uniqueItems": 3525,
+  "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 692,
+    "genericTitle": 701,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 4,
-    "notEditoriallySignificant": 0,
-    "notFreshOrUndated": 0,
-    "duplicate": 2311
+    "broadWithoutLocalMatch": 1,
+    "notEditoriallySignificant": 1,
+    "notFreshOrUndated": 1,
+    "duplicate": 2285
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -90,8 +90,9 @@
       "url": "https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&xuser=",
       "category": "Kultura",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 106
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Liďák Kadaň – kulturní program",
@@ -253,9 +254,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -311,7 +311,7 @@
       "category": "Základní školy",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 245
+      "itemsParsed": 244
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -531,7 +531,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 30
+      "itemsParsed": 29
     },
     {
       "name": "Povodí Ohře",
@@ -539,7 +539,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 47
+      "itemsParsed": 46
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -587,9 +587,8 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -701,9 +700,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 85
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -825,7 +823,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -874,7 +872,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 15
+      "itemsParsed": 13
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -914,7 +912,7 @@
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 5
+      "itemsParsed": 4
     }
   ]
 }
