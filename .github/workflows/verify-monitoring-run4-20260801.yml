@@ -1,0 +1,104 @@
+name: Jednorázově ověřit živou produkci – monitoring 4
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/verify-monitoring-run4-20260801.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ověřit živý web přes HTTPS s cache-bustingem
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from datetime import datetime, timezone, timedelta
+          from pathlib import Path
+          from html import unescape
+          import re
+
+          items=[]
+          for path in Path('clanky').glob('*.html'):
+              if path.name == 'index.html':
+                  continue
+              text=path.read_text(encoding='utf-8', errors='replace')
+              if re.search(r'<meta[^>]+name=["\']robots["\'][^>]+content=["\'][^"\']*noindex', text, re.I):
+                  continue
+              m=(re.search(r'<meta[^>]+property=["\']article:published_time["\'][^>]+content=["\']([^"\']+)', text, re.I)
+                 or re.search(r'"datePublished"\s*:\s*"([^"]+)"', text))
+              if not m:
+                  continue
+              try:
+                  dt=datetime.fromisoformat(m.group(1).replace('Z','+00:00'))
+              except ValueError:
+                  continue
+              if dt.tzinfo is None:
+                  dt=dt.replace(tzinfo=timezone.utc)
+              if dt.astimezone(timezone.utc) > datetime.now(timezone.utc)+timedelta(minutes=2):
+                  continue
+              h=re.search(r'<h1\b[^>]*>(.*?)</h1>', text, re.I|re.S)
+              if not h:
+                  continue
+              title=unescape(re.sub(r'<[^>]+>',' ',h.group(1)))
+              title=re.sub(r'\s+',' ',title).strip()
+              items.append((dt, '/clanky/'+path.name, title))
+          items.sort(reverse=True)
+          with open('/tmp/latest.tsv','w',encoding='utf-8') as f:
+              for dt,url,title in items[:3]:
+                  f.write(f'{url}\t{title}\n')
+          assert len(items) >= 3
+          print('Kontrolované články:')
+          for dt,url,title in items[:3]:
+              print(dt.isoformat(), url, title)
+          PY
+
+          for attempt in $(seq 1 12); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+            rm -f /tmp/nk-{home,archive,rss,sitemap,news,health}
+            home_code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-home -w '%{http_code}' "https://nasekadan.cz/?monitor=${stamp}" || true)
+            archive_code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-archive -w '%{http_code}' "https://nasekadan.cz/clanky/?monitor=${stamp}" || true)
+            rss_code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-rss -w '%{http_code}' "https://nasekadan.cz/rss.xml?monitor=${stamp}" || true)
+            sitemap_code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-sitemap -w '%{http_code}' "https://nasekadan.cz/sitemap.xml?monitor=${stamp}" || true)
+            news_code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-news -w '%{http_code}' "https://nasekadan.cz/news-sitemap.xml?monitor=${stamp}" || true)
+            health_code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-health -w '%{http_code}' "https://nasekadan.cz/deployment-health.txt?monitor=${stamp}" || true)
+
+            pages_ok=no; source_ok=no
+            if [[ "$home_code" == 200 && "$archive_code" == 200 && "$rss_code" == 200 && "$sitemap_code" == 200 && "$news_code" == 200 && "$health_code" == 200 ]]; then
+              pages_ok=yes
+            fi
+            if [[ "$health_code" == 200 ]] && grep -Fq "source=${main_sha}" /tmp/nk-health; then source_ok=yes; fi
+
+            articles_ok=yes
+            while IFS=$'\t' read -r url title; do
+              code=$(curl -4 -k -L -sS --max-time 30 -o /tmp/nk-article -w '%{http_code}' "https://nasekadan.cz${url}?monitor=${stamp}" || true)
+              [[ "$code" == 200 ]] || articles_ok=no
+              grep -Fq "<h1>${title}</h1>" /tmp/nk-article || articles_ok=no
+              grep -Fq "$url" /tmp/nk-home || articles_ok=no
+              grep -Fq "$url" /tmp/nk-archive || articles_ok=no
+              grep -Fq "https://nasekadan.cz${url}" /tmp/nk-rss || articles_ok=no
+              grep -Fq "https://nasekadan.cz${url}" /tmp/nk-sitemap || articles_ok=no
+            done < /tmp/latest.tsv
+
+            echo "attempt=$attempt main=$main_sha pages=$pages_ok articles=$articles_ok source=$source_ok codes=$home_code,$archive_code,$rss_code,$sitemap_code,$news_code,$health_code"
+            sed -n '1,8p' /tmp/nk-health || true
+            if [[ "$pages_ok" == yes && "$articles_ok" == yes && "$source_ok" == yes ]]; then
+              echo "HOTOVO: živá produkce odpovídá main=${main_sha}."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Živá produkce v kontrolním okně neodpovídala aktuálnímu main.' >&2
+          exit 1
