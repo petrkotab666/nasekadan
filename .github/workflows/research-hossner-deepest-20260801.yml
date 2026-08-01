@@ -1,0 +1,329 @@
+name: Nejhlubší rešerše sporů Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-deepest-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces libreoffice unzip jq
+          python3 -m pip install --quiet requests beautifulsoup4 lxml playwright python-docx python-pptx openpyxl
+          python3 -m playwright install --with-deps chromium
+      - name: Vytěžit InfoSoud, městské dokumenty, smlouvy a přílohy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/research/hossner-court-2026/deepest/{infosoud,city,contracts,media,text}
+          cat > /tmp/deepest.py <<'PY'
+          from __future__ import annotations
+          import asyncio, hashlib, json, os, re, subprocess, time, urllib.parse, xml.etree.ElementTree as ET
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          from playwright.async_api import async_playwright
+
+          ROOT=Path('.github/research/hossner-court-2026/deepest')
+          for d in ['infosoud','city','contracts','media','text']: (ROOT/d).mkdir(parents=True,exist_ok=True)
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/127 Safari/537.36'
+          S=requests.Session(); S.headers.update({'User-Agent':UA})
+          def get(url,timeout=120):
+              last=None
+              for i in range(5):
+                  try:
+                      r=S.get(url,timeout=timeout,allow_redirects=True); r.raise_for_status(); return r
+                  except Exception as e:
+                      last=e; time.sleep(2+i*2)
+              raise last
+          def clean_html(html):
+              s=BeautifulSoup(html,'lxml')
+              for x in s(['script','style','noscript']): x.decompose()
+              return '\n'.join(x.strip() for x in s.get_text('\n').splitlines() if x.strip())
+          def slug(s): return re.sub(r'[^a-z0-9]+','-',s.lower()).strip('-')[:120]
+          def run(cmd): return subprocess.run(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+          def extract_file(p:Path):
+              ext=p.suffix.lower(); out=ROOT/'text'/(p.name+'.txt')
+              text=''; method=''
+              if ext=='.pdf':
+                  q=run(['pdftotext','-layout',str(p),'-']); text=q.stdout; method='pdftotext'
+                  if len(text.strip())<300:
+                      tmp=Path('/tmp')/(p.stem+'-ocr'); tmp.mkdir(exist_ok=True)
+                      run(['pdftoppm','-jpeg','-r','180',str(p),str(tmp/'page')])
+                      parts=[]
+                      for img in sorted(tmp.glob('*.jpg')):
+                          q=run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6']); parts.append(q.stdout)
+                      text='\n'.join(parts); method='ocr'
+              elif ext in ('.docx',):
+                  from docx import Document
+                  d=Document(p); text='\n'.join(x.text for x in d.paragraphs); method='python-docx'
+              elif ext in ('.pptx',):
+                  from pptx import Presentation
+                  prs=Presentation(p); chunks=[]
+                  for i,slide in enumerate(prs.slides,1):
+                      chunks.append(f'--- SLIDE {i} ---')
+                      for sh in slide.shapes:
+                          if hasattr(sh,'text') and sh.text: chunks.append(sh.text)
+                  text='\n'.join(chunks); method='python-pptx'
+              elif ext in ('.xlsx',):
+                  from openpyxl import load_workbook
+                  wb=load_workbook(p,data_only=True); chunks=[]
+                  for ws in wb.worksheets:
+                      chunks.append('--- '+ws.title+' ---')
+                      for row in ws.iter_rows(values_only=True): chunks.append('\t'.join('' if v is None else str(v) for v in row))
+                  text='\n'.join(chunks); method='openpyxl'
+              else:
+                  try: text=p.read_text(encoding='utf-8',errors='replace'); method='text'
+                  except: pass
+              if text: out.write_text(text,encoding='utf-8')
+              return {'file':str(p),'text_file':str(out) if text else None,'chars':len(text),'method':method,'text':text}
+
+          # 1) Rozebrat JS balíčky nového InfoSoudu a zjistit API endpointy.
+          home=get('https://infosoud.gov.cz/InfoSoud')
+          html=home.text; (ROOT/'infosoud/home.html').write_text(html,encoding='utf-8')
+          soup=BeautifulSoup(html,'lxml')
+          scripts=[]
+          for sc in soup.find_all('script',src=True):
+              u=urllib.parse.urljoin(home.url,sc['src'])
+              try:
+                  r=get(u); name=u.rsplit('/',1)[-1].split('?')[0]; (ROOT/'infosoud'/name).write_bytes(r.content)
+                  scripts.append({'url':u,'file':name,'bytes':len(r.content)})
+              except Exception as e: scripts.append({'url':u,'error':repr(e)})
+          endpoints=set(); api_strings=set()
+          for item in scripts:
+              if 'file' not in item: continue
+              txt=(ROOT/'infosoud'/item['file']).read_text(encoding='utf-8',errors='ignore')
+              for m in re.findall(r'[/A-Za-z0-9_.?=&{}:-]{0,100}api/v1[/A-Za-z0-9_.?=&{}:-]{1,200}',txt): api_strings.add(m)
+              for m in re.findall(r'["\']([^"\']*(?:rizeni|řízení|spis|jednani|jednání|udalost|událost|soud)[^"\']*)["\']',txt,re.I):
+                  if '/api/' in m or m.startswith('/'): endpoints.add(m)
+          (ROOT/'infosoud/scripts.json').write_text(json.dumps(scripts,ensure_ascii=False,indent=2),encoding='utf-8')
+          (ROOT/'infosoud/api-strings.txt').write_text('\n'.join(sorted(api_strings|endpoints)),encoding='utf-8')
+
+          # 2) Playwright: skutečně vyplnit oba spisy a zachytit všechny XHR/fetch odpovědi.
+          async def infosoud_browser():
+              out=[]
+              async with async_playwright() as p:
+                  browser=await p.chromium.launch(headless=True)
+                  ctx=await browser.new_context(user_agent=UA,locale='cs-CZ',ignore_https_errors=True)
+                  for num in (84,211):
+                      page=await ctx.new_page(); responses=[]
+                      async def capture(resp):
+                          if resp.request.resource_type in ('xhr','fetch'):
+                              rec={'url':resp.url,'status':resp.status,'method':resp.request.method,'post_data':resp.request.post_data}
+                              try:
+                                  body=await resp.text(); rec['body']=body[:300000]
+                              except Exception as e: rec['error']=repr(e)
+                              responses.append(rec)
+                      page.on('response',capture)
+                      try:
+                          await page.goto('https://infosoud.gov.cz/InfoSoud',wait_until='networkidle',timeout=120000)
+                          await page.wait_for_timeout(1500)
+                          # Selecty přes popisky a texty. Zkoušet více variant.
+                          selects=page.locator('select')
+                          count=await selects.count()
+                          for i in range(count):
+                              sel=selects.nth(i)
+                              opts=[(await sel.locator('option').nth(j).inner_text()).strip() for j in range(await sel.locator('option').count())]
+                              joined=' | '.join(opts)
+                              try:
+                                  if 'Okresní soud Chomutov' in joined: await sel.select_option(label='Okresní soud Chomutov')
+                                  elif re.search(r'\bC\b',joined) and len(opts)<80: await sel.select_option(label='C')
+                              except: pass
+                          inputs=page.locator('input')
+                          vals=['30','84' if num==84 else '211','2025']
+                          visible=[]
+                          for i in range(await inputs.count()):
+                              inp=inputs.nth(i)
+                              if await inp.is_visible():
+                                  typ=await inp.get_attribute('type') or 'text'
+                                  if typ in ('text','number','tel'): visible.append(inp)
+                          # podle placeholderů/aria nejdřív, pak poslední tři relevantní
+                          assigned=set()
+                          for inp in visible:
+                              meta=' '.join(filter(None,[await inp.get_attribute('placeholder'),await inp.get_attribute('aria-label'),await inp.get_attribute('name'),await inp.get_attribute('id')])).lower()
+                              try:
+                                  if 'senat' in meta or 'senát' in meta: await inp.fill('30'); assigned.add(0)
+                                  elif 'bezne' in meta or 'běžné' in meta or 'cislo veci' in meta: await inp.fill(str(num)); assigned.add(1)
+                                  elif 'rocnik' in meta or 'ročník' in meta: await inp.fill('2025'); assigned.add(2)
+                              except: pass
+                          if len(assigned)<3:
+                              # vyber textová pole s malou max délkou, vyplň zprava
+                              candidates=[]
+                              for inp in visible:
+                                  try:
+                                      if (await inp.input_value())=='': candidates.append(inp)
+                                  except: pass
+                              for inp,val in zip(candidates[-3:],vals):
+                                  try: await inp.fill(val)
+                                  except: pass
+                          (ROOT/f'infosoud/{num}-before.html').write_text(await page.content(),encoding='utf-8')
+                          await page.screenshot(path=str(ROOT/f'infosoud/{num}-before.png'),full_page=True)
+                          # kliknout primární submit
+                          buttons=page.locator('button')
+                          clicked=False
+                          for i in range(await buttons.count()):
+                              b=buttons.nth(i); label=(await b.inner_text()).strip().lower()
+                              if await b.is_visible() and any(k in label for k in ('vyhled','zobraz','hledat')):
+                                  await b.click(); clicked=True; break
+                          if not clicked:
+                              form=page.locator('form').first
+                              if await form.count(): await form.evaluate('(f)=>f.submit()')
+                          await page.wait_for_timeout(5000)
+                          try: await page.wait_for_load_state('networkidle',timeout=30000)
+                          except: pass
+                          body=await page.locator('body').inner_text()
+                          (ROOT/f'infosoud/{num}-after.html').write_text(await page.content(),encoding='utf-8')
+                          (ROOT/f'infosoud/{num}-after.txt').write_text(body,encoding='utf-8')
+                          await page.screenshot(path=str(ROOT/f'infosoud/{num}-after.png'),full_page=True)
+                          out.append({'case':f'30 C {num}/2025','url':page.url,'title':await page.title(),'body':body[:300000],'responses':responses})
+                      except Exception as e: out.append({'case':str(num),'error':repr(e),'responses':responses})
+                      await page.close()
+                  await browser.close()
+              return out
+          br=asyncio.run(infosoud_browser())
+          (ROOT/'infosoud/browser-results.json').write_text(json.dumps(br,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 3) Hossnerův WP REST: všechny posty a média, ne jen odkazy v HTML.
+          wp=[]; page=1
+          while True:
+              try:
+                  r=get(f'https://petrhossnerkadan.cz/wp-json/wp/v2/media?per_page=100&page={page}')
+                  arr=r.json()
+                  if not arr: break
+                  wp.extend(arr); page+=1
+              except: break
+          media_results=[]
+          keywords=('hossner','nemocnic','kadan','smir','zalob','audit','deloitte','soud','vypoved','odmen','mzda','pravni','vyzva','arc-med','pracovn')
+          for item in wp:
+              u=item.get('source_url') or ''; title=BeautifulSoup(item.get('title',{}).get('rendered',''),'lxml').get_text(' ')
+              if not any(k in (u+' '+title).lower() for k in keywords): continue
+              try:
+                  r=get(u); ext=Path(urllib.parse.urlparse(r.url).path).suffix.lower() or '.bin'; name=f"wp-{item.get('id')}-{slug(Path(urllib.parse.urlparse(r.url).path).stem)}{ext}"
+                  p=ROOT/'media'/name; p.write_bytes(r.content)
+                  ex=extract_file(p)
+                  media_results.append({'id':item.get('id'),'title':title,'url':u,'bytes':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest(),**{k:v for k,v in ex.items() if k!='text'}})
+              except Exception as e: media_results.append({'id':item.get('id'),'title':title,'url':u,'error':repr(e)})
+          (ROOT/'media/media.json').write_text(json.dumps(media_results,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 4) Městské a nemocniční weby: sitemapy, filemanager, úřední deska, zápisy rady/zastupitelstva.
+          seeds=[
+              'https://www.mesto-kadan.cz/sitemap.xml','https://www.mesto-kadan.cz/sitemap_index.xml',
+              'https://www.nemkadan.cz/sitemap.xml','https://www.nemkadan.cz/sitemap_index.xml',
+              'https://www.mesto-kadan.cz/mesto/rada-mesta/usneseni-rady-mesta/',
+              'https://www.mesto-kadan.cz/mesto/zastupitelstvo-mesta/zapisy-a-usneseni/'
+          ]
+          urls=set(seeds)
+          # obecný crawl přes sitemapy a odkazy do 2 úrovní
+          queue=list(seeds); seen=set(); city_results=[]
+          for depth in range(3):
+              nxt=[]
+              for u in queue[:800]:
+                  if u in seen: continue
+                  seen.add(u)
+                  try:
+                      r=get(u); ct=r.headers.get('content-type','').lower(); data=r.content
+                      if 'xml' in ct or data.lstrip().startswith(b'<?xml'):
+                          txt=data.decode('utf-8','replace')
+                          for loc in re.findall(r'<loc>(.*?)</loc>',txt,re.I|re.S):
+                              loc=loc.replace('&amp;','&').strip()
+                              if any(h in loc for h in ('mesto-kadan.cz','nemkadan.cz')): nxt.append(loc)
+                      elif 'html' in ct:
+                          html=r.text; plain=clean_html(html)
+                          low=plain.lower()
+                          if any(k in low for k in ('hossner','30 c 84/2025','30 c 211/2025','deloitte legal','25,9','25.9 mil','52,9','52.9 mil','nemocnice kadaň')):
+                              fn=f'page-{len(city_results):04d}.html'; (ROOT/'city'/fn).write_text(html,encoding='utf-8')
+                              city_results.append({'url':u,'file':fn,'text':plain[:100000]})
+                          s=BeautifulSoup(html,'lxml')
+                          for a in s.find_all('a',href=True):
+                              v=urllib.parse.urljoin(r.url,a['href'])
+                              if any(h in v for h in ('mesto-kadan.cz','nemkadan.cz')) and v not in seen: nxt.append(v)
+                              if any(v.lower().split('?')[0].endswith(e) for e in ('.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx')):
+                                  try:
+                                      rr=get(v); ext=Path(urllib.parse.urlparse(rr.url).path).suffix.lower(); p=ROOT/'city'/f'doc-{len(city_results):04d}{ext}'; p.write_bytes(rr.content)
+                                      ex=extract_file(p); low=ex['text'].lower()
+                                      if any(k in low for k in ('hossner','30 c 84/2025','30 c 211/2025','deloitte','nemocnice kadaň','smír','smir')):
+                                          city_results.append({'url':v,'file':str(p),'text_file':ex['text_file'],'text':ex['text'][:200000]})
+                                      else:
+                                          p.unlink(missing_ok=True); Path(ex['text_file']).unlink(missing_ok=True) if ex['text_file'] else None
+                                  except: pass
+                  except: pass
+              queue=list(dict.fromkeys(nxt))
+          (ROOT/'city/results.json').write_text(json.dumps(city_results,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 5) Registr smluv: dumpy 2024-2026, hledat nemocnici/město + právní/auditní subjekty a klíčová slova.
+          contracts=[]
+          for year in (2024,2025,2026):
+              months=range(1,13) if year<2026 else range(1,9)
+              for month in months:
+                  u=f'https://data.smlouvy.gov.cz/dump_{year}_{month:02d}.xml'
+                  try:
+                      p=Path('/tmp')/f'dump-{year}-{month:02d}.xml'; p.write_bytes(get(u,timeout=240).content)
+                      for ev,el in ET.iterparse(p,events=('end',)):
+                          if el.tag.rsplit('}',1)[-1].lower()!='zaznam': continue
+                          txt=' '.join(el.itertext()); low=re.sub(r'\s+',' ',txt).lower()
+                          if ('25479300' in low or 'nemocnice kadaň' in low or 'nemocnice kadan' in low or '00261912' in low) and any(k in low for k in ('deloitte','právní','pravni','advok','audit','soudní','soudni','hossner','pracovněpráv','pracovneprav')):
+                              contracts.append({'year':year,'month':month,'text':re.sub(r'\s+',' ',txt).strip(),'xml':ET.tostring(el,encoding='unicode')})
+                          el.clear()
+                  except Exception as e: contracts.append({'year':year,'month':month,'error':repr(e)})
+          (ROOT/'contracts/contracts.json').write_text(json.dumps(contracts,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 6) Souhrn všech konkrétních stop.
+          texts=[]
+          for p in ROOT.rglob('*.txt'):
+              try: texts.append((str(p),p.read_text(encoding='utf-8',errors='replace')))
+              except: pass
+          patterns={
+              'case_numbers':r'\b\d{1,3}\s+(?:C|Co|Nc|Nco|Cm)\s+\d{1,5}/20\d{2}\b',
+              'dates':r'\b(?:0?[1-9]|[12]\d|3[01])[. /-](?:0?[1-9]|1[0-2])[. /-](?:20)?\d{2}\b',
+              'amounts':r'\b\d{1,3}(?:[ .]\d{3})*(?:,\d{1,2})?\s*(?:Kč|mil(?:ionu|iony|\.)?\s*Kč)\b'
+          }
+          summary={'generated_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime()),'findings':[]}
+          for fn,txt in texts:
+              low=txt.lower()
+              if any(k in low for k in ('hossner','30 c 84/2025','30 c 211/2025','nemocnice kadaň','nemocnice kadan')):
+                  rec={'file':fn}
+                  for k,pat in patterns.items(): rec[k]=sorted(set(re.findall(pat,txt,re.I)))[:500]
+                  snippets=[]
+                  for key in ('30 C 84/2025','30 C 211/2025','předběžné opatření','predbezne opatreni','smír','mediace','soudní poplatek','Deloitte','základní mzda','mimořádné odměny','jednání dne'):
+                      for m in re.finditer(re.escape(key),txt,re.I): snippets.append(re.sub(r'\s+',' ',txt[max(0,m.start()-600):m.start()+1800]))
+                  rec['snippets']=snippets[:100]
+                  summary['findings'].append(rec)
+          (ROOT/'SUMMARY.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Nejhlubší rešerše sporů Petr Hossner × Nemocnice Kadaň','',f"Vygenerováno: {summary['generated_utc']}",'']
+          for rec in summary['findings']:
+              md.append('## '+rec['file'])
+              if rec['case_numbers']: md.append('- Spisy: '+', '.join(rec['case_numbers']))
+              if rec['dates']: md.append('- Data: '+', '.join(rec['dates'][:50]))
+              if rec['amounts']: md.append('- Částky: '+', '.join(rec['amounts'][:50]))
+              for sn in rec['snippets'][:15]: md.append('- '+sn)
+              md.append('')
+          (ROOT/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/deepest.py
+      - name: Uložit výsledky
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-court-2026/deepest
+          git commit -m 'Doplnit nejhlubší rešerši sporů Hossner' || true
+          for i in 1 2 3 4 5 6; do
+            git pull --rebase origin main || true
+            git push origin HEAD:main && exit 0
+            sleep $((i*6))
+          done
+          exit 1
