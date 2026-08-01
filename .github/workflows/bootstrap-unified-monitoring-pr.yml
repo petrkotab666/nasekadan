@@ -19,7 +19,7 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Sestavit a zapsat jednotný monitoring
+      - name: Zapsat registr, skripty, testy a dokumentaci
         run: |
           set -euo pipefail
           cat \
@@ -33,5 +33,37 @@ jobs:
             .github/bootstrap-chunks/part06 \
             > "$RUNNER_TEMP/bootstrap.b64"
           base64 -d "$RUNNER_TEMP/bootstrap.b64" > "$RUNNER_TEMP/bootstrap.py"
-          git rm -r .github/bootstrap-chunks
-          python3 "$RUNNER_TEMP/bootstrap.py"
+          export BOOTSTRAP_FILE="$RUNNER_TEMP/bootstrap.py"
+          python3 - <<'PY'
+          import ast
+          import base64
+          import json
+          import os
+          import subprocess
+          import zlib
+          from pathlib import Path
+
+          source = Path(os.environ['BOOTSTRAP_FILE']).read_text(encoding='utf-8')
+          tree = ast.parse(source)
+          payload = None
+          for node in tree.body:
+              if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'PAYLOAD' for t in node.targets):
+                  payload = ast.literal_eval(node.value)
+                  break
+          if not payload:
+              raise SystemExit('Bootstrap neobsahuje PAYLOAD.')
+          files = json.loads(zlib.decompress(base64.b85decode(payload)).decode('utf-8'))
+          files = {path: content for path, content in files.items() if not path.startswith('.github/workflows/')}
+          for relative, content in files.items():
+              path = Path(relative)
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text(content, encoding='utf-8', newline='\n')
+          subprocess.run(['git', 'rm', '-r', '.github/bootstrap-chunks'], check=True)
+          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'add', *files.keys()], check=True)
+          subprocess.run(['git', 'commit', '-m', 'Přidat jednotný engine a registr monitoringu Kadaňska'], check=True)
+          branch = os.environ.get('GITHUB_HEAD_REF') or os.environ.get('GITHUB_REF_NAME')
+          subprocess.run(['git', 'push', 'origin', f'HEAD:{branch}'], check=True)
+          print(json.dumps({'ok': True, 'files': len(files), 'branch': branch}, ensure_ascii=False))
+          PY
