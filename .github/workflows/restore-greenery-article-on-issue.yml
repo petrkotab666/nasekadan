@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 concurrency:
@@ -33,6 +33,32 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Obnovit záznam článku na titulní straně
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ensure_greenery_homepage.py
+          grep -Fq 'data-auto-article="sekani-travniku-kadan-spravci-vysky-2026"' index.html
+          grep -Fq 'href="/clanky/sekani-travniku-kadan-spravci-vysky-2026.html"' index.html
+          grep -Fq '<p class="aside-date">1. 8. 2026 v 11:00</p>' index.html
+
+      - name: Uložit trvalou opravu titulní strany
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň opravný automat'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html scripts/ensure_greenery_homepage.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Vrátit článek o sečení na titulní stranu [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 4 ]] && exit 1
+              sleep $((attempt * 4))
+            done
+          fi
 
       - name: Připravit článek a aktuální přehledy
         id: prepare
@@ -86,6 +112,7 @@ jobs:
             sudo docker exec nasekadan-web rm -f /tmp/greenery-restore.tar.gz
           fi
           grep -Fq 'Sedm centimetrů i dvě seče ročně' /var/www/nasekadan/clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+          grep -Fq 'data-auto-article="sekani-travniku-kadan-spravci-vysky-2026"' /var/www/nasekadan/index.html
           rm -f /tmp/greenery-restore.tar.gz
           REMOTE
 
@@ -121,14 +148,13 @@ jobs:
         if: always() && github.event_name == 'issues'
         uses: actions/github-script@v7
         env:
-          PREPARE: ${{ steps.prepare.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
           VERIFIED: ${{ steps.verify.outputs.ok }}
         with:
           script: |
             const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
             const body = ok
-              ? '✅ Článek o sečení je znovu veřejný. Ověřen je článek, titulní strana, archiv, RSS, sitemap i news sitemap.\n\nhttps://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
-              : `❌ Obnova nebyla potvrzena. Příprava: ${process.env.PREPARE || 'unknown'}, nasazení: ${process.env.DEPLOY || 'unknown'}, veřejná kontrola: ${process.env.VERIFIED || 'false'}.`;
+              ? '✅ Článek o sečení je znovu veřejný a vrácený na titulní stranu. Ověřen je článek, titulní stránka, archiv, RSS, sitemap i news sitemap.\n\nhttps://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+              : `❌ Obnova nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}, veřejná kontrola: ${process.env.VERIFIED || 'false'}.`;
             await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
             if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
