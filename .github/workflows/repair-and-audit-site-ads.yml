@@ -78,17 +78,14 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – reklamní kontrola'
           git config user.email 'info@nasekadan.cz'
-          git add -A -- clanky index.html .github/ad-audit-status.json \
+          git add -A -- ':(glob)**/*.html' .github/ad-audit-status.json \
             scripts/repair_and_audit_ads_20260801.py scripts/normalize_articles.py \
             reklamy.js reklamy-sidebar.js reklamy-sidebar.css reklamy-oprava-obrazku.js \
-            obsah-doplnky.js ad-spacing-guard.js site.js \
-            404.html doprava prakticke pruvodce zpravy organizace zapojte-se o-webu inzerce 2>/dev/null || true
+            obsah-doplnky.js ad-spacing-guard.js site.js 2>/dev/null || true
           if ! git diff --cached --quiet; then
             git commit -m 'Opravit a sjednotit reklamy na veřejném webu [skip ci]'
             for attempt in 1 2 3 4 5; do
-              if git pull --rebase origin main && git push origin HEAD:main; then
-                break
-              fi
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
               git rebase --abort 2>/dev/null || true
               [[ "$attempt" == 5 ]] && exit 1
               sleep $((attempt * 5))
@@ -119,16 +116,13 @@ jobs:
           set -euo pipefail
           python3 - <<'PY' > "$RUNNER_TEMP/public-html-files.txt"
           from pathlib import Path
-          root=Path('.')
           excluded={'.git','.github','nahled','research','node_modules'}
-          for path in sorted(root.rglob('*.html')):
+          for path in sorted(Path('.').rglob('*.html')):
               if any(part in excluded for part in path.parts):
                   continue
               print(path.as_posix())
           PY
-          for path in \
-            reklamy.js reklamy-sidebar.js reklamy-sidebar.css reklamy-oprava-obrazku.js \
-            obsah-doplnky.js ad-spacing-guard.js site.js mobile.css; do
+          for path in reklamy.js reklamy-sidebar.js reklamy-sidebar.css reklamy-oprava-obrazku.js obsah-doplnky.js ad-spacing-guard.js site.js mobile.css; do
             test -s "$path"
             printf '%s\n' "$path" >> "$RUNNER_TEMP/public-html-files.txt"
           done
@@ -165,56 +159,33 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, time, urllib.parse, urllib.request
+          import json, time, urllib.request
           from pathlib import Path
-
           report=json.loads(Path('.github/ad-audit-status.json').read_text(encoding='utf-8'))
           base='https://nasekadan.cz'
-          article_markers=(
-              'data-promos data-context="sidebar"',
-              '/site.js',
-              '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3',
-              '/ad-spacing-guard.js',
-              '/reklamy-oprava-obrazku.js',
-              '/obsah-doplnky.js',
-          )
-          general_markers=(
-              'data-promos',
-              '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3',
-              '/ad-spacing-guard.js',
-              '/reklamy-oprava-obrazku.js',
-              '/obsah-doplnky.js',
-          )
-
+          article_markers=('data-promos data-context="sidebar"','/site.js','/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3','/ad-spacing-guard.js','/reklamy-oprava-obrazku.js','/obsah-doplnky.js')
+          general_markers=('data-promos','/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3','/ad-spacing-guard.js','/reklamy-oprava-obrazku.js','/obsah-doplnky.js')
           def fetch(path):
-              separator='&' if '?' in path else '?'
-              url=base+path+separator+'ad_audit='+str(int(time.time()*1000))
+              sep='&' if '?' in path else '?'
+              url=base+path+sep+'ad_audit='+str(int(time.time()*1000))
               last=''
               for attempt in range(4):
                   try:
-                      request=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-Ad-Audit/1.0','Cache-Control':'no-cache'})
-                      with urllib.request.urlopen(request,timeout=25) as response:
-                          last=response.read().decode('utf-8','replace')
-                      if last:
-                          return last
+                      req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-Ad-Audit/1.0','Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=25) as response:
+                          body=response.read().decode('utf-8','replace')
+                      if body: return body
                   except Exception as exc:
-                      last=str(exc)
-                      time.sleep(3+attempt*2)
+                      last=str(exc); time.sleep(3+attempt*2)
               raise RuntimeError(f'{path}: nelze načíst: {last}')
-
           failures=[]
           for path in report['articles']:
-              html=fetch(path)
-              missing=[marker for marker in article_markers if marker not in html]
-              if missing:
-                  failures.append(f'{path}: chybí {missing}')
+              html=fetch(path); missing=[m for m in article_markers if m not in html]
+              if missing: failures.append(f'{path}: chybí {missing}')
           for path in report['ad_pages']:
-              html=fetch(path)
-              missing=[marker for marker in general_markers if marker not in html]
-              if missing:
-                  failures.append(f'{path}: chybí {missing}')
-          if failures:
-              raise SystemExit('\n'.join(failures))
+              html=fetch(path); missing=[m for m in general_markers if m not in html]
+              if missing: failures.append(f'{path}: chybí {missing}')
+          if failures: raise SystemExit('\n'.join(failures))
           print(f"Veřejně ověřeno {len(report['articles'])} článků a {len(report['ad_pages'])} dalších reklamních stránek.")
           PY
           echo 'source_ok=true' >> "$GITHUB_OUTPUT"
@@ -255,26 +226,25 @@ jobs:
           set -euo pipefail
           ok=false
           [[ "${SOURCE_OUTCOME:-}" == success && "${DEPLOY_OUTCOME:-}" == success && "${LIVE_OK:-}" == true && "${RENDER_OK:-}" == true ]] && ok=true
-          python3 - <<PY
-          import json
+          OK="$ok" python3 - <<'PY'
+          import json, os
           from datetime import datetime, timezone
           from pathlib import Path
-          path=Path('.github/ad-live-audit-status.json')
           data={
-            'ok': ${ok},
+            'ok': os.environ.get('OK') == 'true',
             'checked_at': datetime.now(timezone.utc).isoformat(),
-            'run_id': '${GITHUB_RUN_ID}',
-            'source': '${SOURCE_OUTCOME:-unknown}',
-            'deploy': '${DEPLOY_OUTCOME:-unknown}',
-            'live_source': '${LIVE_OK:-false}',
-            'rendered_ads': '${RENDER_OK:-false}',
-            'public_pages': int('${PUBLIC_PAGES:-0}' or 0),
-            'articles': int('${ARTICLES:-0}' or 0),
-            'ad_pages': int('${AD_PAGES:-0}' or 0),
-            'changed_files': int('${CHANGED:-0}' or 0),
-            'assets_checked': int('${ASSETS:-0}' or 0),
+            'run_id': os.environ.get('GITHUB_RUN_ID',''),
+            'source': os.environ.get('SOURCE_OUTCOME','unknown'),
+            'deploy': os.environ.get('DEPLOY_OUTCOME','unknown'),
+            'live_source': os.environ.get('LIVE_OK','false'),
+            'rendered_ads': os.environ.get('RENDER_OK','false'),
+            'public_pages': int(os.environ.get('PUBLIC_PAGES') or 0),
+            'articles': int(os.environ.get('ARTICLES') or 0),
+            'ad_pages': int(os.environ.get('AD_PAGES') or 0),
+            'changed_files': int(os.environ.get('CHANGED') or 0),
+            'assets_checked': int(os.environ.get('ASSETS') or 0),
           }
-          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          Path('.github/ad-live-audit-status.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           PY
           git config user.name 'Naše Kadaň – reklamní kontrola'
           git config user.email 'info@nasekadan.cz'
