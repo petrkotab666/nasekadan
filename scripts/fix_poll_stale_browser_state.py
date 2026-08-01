@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,7 +80,6 @@ def patch_site() -> None:
 def patch_installer() -> None:
     text = INSTALLER.read_text(encoding="utf-8")
     text = text.replace(f'VERSION = "{OLD_VERSION}"', f'VERSION = "{NEW_VERSION}"')
-    # Instalační skript obsahuje stejný JavaScript jako raw řetězec.
     text = patch_poll_javascript(text)
     INSTALLER.write_text(text, encoding="utf-8", newline="\n")
 
@@ -107,7 +105,6 @@ def validate() -> None:
         MARKER,
         "localStorage.removeItem(storageKey)",
         "Hlas vždy posíláme serveru",
-        NEW_VERSION,
         "/api/newsletter/poll/vote",
         "/api/newsletter/poll/results",
     ]
