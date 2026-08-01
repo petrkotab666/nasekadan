@@ -1,0 +1,275 @@
+name: Zachránit publikaci jaderných Tušimic v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/rescue-publish-tusimice-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: rescue-publish-tusimice-v2
+  cancel-in-progress: false
+
+env:
+  SLUG: jaderne-tusimice-smr-voda-doprava-eia-2026
+  ARTICLE: clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+  DRAFT: .github/drafts/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+  EXPECTED_TEXT: 'Úplná EIA měla být na ministerstvu už 12. května'
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  rescue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit článek a zopakovat generování přehledů ve správném pořadí
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$DRAFT" "$ARTICLE"
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/enforce_article_visibility.py
+
+          social_url="$(python3 - <<'PY'
+          import html,re
+          from pathlib import Path
+          p=Path('clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html')
+          text=p.read_text(encoding='utf-8')
+          m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)',text,re.I)
+          if not m: raise SystemExit('Chybí og:image')
+          print(html.unescape(m.group(1)))
+          PY
+          )"
+          social_image="social/${social_url##*/}"
+          test -s "$ARTICLE"
+          test -s "$social_image"
+          grep -Fq "$EXPECTED_TEXT" "$ARTICLE"
+          grep -Fq 'Chcete, aby v Tušimicích vznikla nová jaderná elektrárna?' "$ARTICLE"
+          grep -Fq "$social_url" "$ARTICLE"
+          python3 - "$social_image" <<'PY'
+          import sys
+          from pathlib import Path
+          from PIL import Image
+          p=Path(sys.argv[1])
+          with Image.open(p) as im:
+              if im.format!='PNG' or im.size!=(1200,630):
+                  raise SystemExit(f'Chybný obrázek: {im.format} {im.size}')
+          if p.stat().st_size < 10000:
+              raise SystemExit('Obrázek je podezřele malý')
+          PY
+
+          # Výpis přesné matice; nepřeruší commit, protože po něm následuje veřejná kontrola.
+          for spec in \
+            "homepage|index.html|/clanky/${SLUG}.html" \
+            "archive|clanky/index.html|/clanky/${SLUG}.html" \
+            "rss|rss.xml|https://nasekadan.cz/clanky/${SLUG}.html" \
+            "sitemap|sitemap.xml|https://nasekadan.cz/clanky/${SLUG}.html" \
+            "news|news-sitemap.xml|https://nasekadan.cz/clanky/${SLUG}.html"; do
+            IFS='|' read -r label file needle <<< "$spec"
+            if grep -Fq "$needle" "$file"; then echo "$label=YES"; else echo "::warning::$label=NO"; fi
+          done
+          echo "social_url=$social_url" >> "$GITHUB_OUTPUT"
+          echo "social_image=$social_image" >> "$GITHUB_OUTPUT"
+
+      - name: Uložit veřejnou verzi do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň záchranná publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- "$ARTICLE" "${{ steps.build.outputs.social_image }}" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt style.css
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publikovat: jaderné Tušimice – opravená záchranná cesta'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 5 ]] && exit 1
+              sleep $((attempt * 5))
+            done
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key";
+          elif [[ -n "${KEY2:-}" ]]; then printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key";
+          else echo 'Chybí SSH klíč pro OVH' >&2; exit 1; fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit přímo na OVH a do aktivního kontejneru
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          bundle="$RUNNER_TEMP/nk-tusimice-rescue"
+          rm -rf "$bundle" && mkdir -p "$bundle/clanky" "$bundle/social"
+          cp "$ARTICLE" "$bundle/clanky/"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          cp "${{ steps.build.outputs.social_image }}" "$bundle/social/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$bundle/"
+          for attempt in 1 2 3; do
+            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/nk-tusimice-rescue; then break; fi
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep $((attempt * 8))
+          done
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -m 0644 /tmp/nk-tusimice-rescue/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/nk-tusimice-rescue/clanky/index.html /var/www/nasekadan/clanky/index.html
+          find /tmp/nk-tusimice-rescue/social -maxdepth 1 -type f -name '*.png' -exec sudo install -m 0644 {} /var/www/nasekadan/social/ \;
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do sudo install -m 0644 "/tmp/nk-tusimice-rescue/$f" "/var/www/nasekadan/$f"; done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp /tmp/nk-tusimice-rescue/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp /tmp/nk-tusimice-rescue/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in /tmp/nk-tusimice-rescue/social/*.png; do sudo docker cp "$f" nasekadan-web:/usr/share/nginx/html/social/; done
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do sudo docker cp "/tmp/nk-tusimice-rescue/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+          fi
+          sudo chmod -R a+rX /var/www/nasekadan
+          rm -rf /tmp/nk-tusimice-rescue
+          REMOTE
+
+      - name: Veřejně ověřit web, přehledy, feedy a obrázek
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          social_url='${{ steps.build.outputs.social_url }}'
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for attempt in $(seq 1 30); do
+            article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/${SLUG}.html?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            image="$RUNNER_TEMP/social-${attempt}.png"
+            curl -4 -kfsS --max-time 25 "${social_url}?v=${stamp}-${attempt}" -o "$image" 2>/dev/null || true
+            image_ok="$(python3 - "$image" <<'PY'
+          import sys
+          from pathlib import Path
+          try:
+              from PIL import Image
+              p=Path(sys.argv[1])
+              with Image.open(p) as im: print('yes' if im.format=='PNG' and im.size==(1200,630) and p.stat().st_size>=10000 else 'no')
+          except Exception: print('no')
+          PY
+            )"
+            if grep -Fq "$EXPECTED_TEXT" <<< "$article" \
+              && grep -Fq 'Chcete, aby v Tušimicích vznikla nová jaderná elektrárna?' <<< "$article" \
+              && grep -Fq "$social_url" <<< "$article" \
+              && grep -Fq "/clanky/${SLUG}.html" <<< "$home" \
+              && grep -Fq "/clanky/${SLUG}.html" <<< "$archive" \
+              && grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" <<< "$rss" \
+              && grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" <<< "$sitemap" \
+              && grep -Fq "https://nasekadan.cz/clanky/${SLUG}.html" <<< "$news" \
+              && [[ "$image_ok" == yes ]]; then
+              echo 'web_ok=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'web_ok=false' >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Zveřejnit nebo potvrdit Facebook přímou pojistkou
+        id: facebook
+        if: steps.verify.outputs.web_ok == 'true'
+        env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+          FACEBOOK_WAIT_TIMEOUT: '600'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          git clean -fd
+          git pull --rebase origin main
+          python3 scripts/process_facebook_queue_live.py "$ARTICLE"
+          git config user.name 'Naše Kadaň Facebook pojistka'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- .github/facebook-publish-pending.txt .github/facebook-last-status.json .github/facebook-published 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Potvrdit Facebook: jaderné Tušimice'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 4 ]] && exit 1
+              sleep $((attempt * 5))
+            done
+          fi
+          marker="$(python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          article='clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html'
+          digest=hashlib.sha256(article.encode()).hexdigest()[:10]
+          print(f'.github/facebook-published/{Path(article).stem}-{digest}.json')
+          PY
+          )"
+          for attempt in $(seq 1 18); do
+            git fetch -q origin main
+            if git cat-file -e "origin/main:$marker" 2>/dev/null; then
+              git show "origin/main:$marker"
+              echo 'facebook_ok=true' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'facebook_ok=false' >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Uzavřít kontrolní issue při úplném úspěchu
+        if: steps.verify.outputs.web_ok == 'true' && steps.facebook.outputs.facebook_ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh issue close 278 --repo "$GITHUB_REPOSITORY" --reason completed --comment 'Web, titulní stránka, archiv, RSS, obě sitemapy, sociální obrázek 1200 × 630 i Facebook byly záchranným během veřejně a technicky potvrzeny.'
+
+      - name: Zapsat přesnou překážku, pokud záchrana nebyla úplná
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEB_OK: ${{ steps.verify.outputs.web_ok }}
+          FACEBOOK_OK: ${{ steps.facebook.outputs.facebook_ok }}
+        shell: bash
+        run: |
+          body=$(cat <<EOF
+          Záchranný běh publikace jaderných Tušimic nebyl kompletní.
+
+          - Web: ${WEB_OK:-NEOVĚŘEN}
+          - Facebook: ${FACEBOOK_OK:-NEOVĚŘEN}
+          - Běh: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Další hodinová pojistka může navázat. Podrobnost je v logu prvního neúspěšného kroku.
+          EOF
+          )
+          gh issue edit 278 --repo "$GITHUB_REPOSITORY" --body "$body"
