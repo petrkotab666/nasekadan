@@ -1,0 +1,68 @@
+name: Aktualizovat KZK a připravit Císařský den
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update-drafts:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] KZK a Cisarsky den')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Aktualizovat oba návrhy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/update_kzk_and_prepare_cisarsky_den_20260801.py
+          python3 scripts/update_kzk_and_prepare_cisarsky_den_20260801.py
+          grep -Fq 'Císařský den je největší kadaňská kulturní akce' .github/drafts/kulturni-zarizeni-kadan.html
+          grep -Fq '22. srpna 2026' .github/drafts/kulturni-zarizeni-kadan.html
+          grep -Fq 'od návštěvy Karla IV. k největší městské slavnosti' .github/drafts/cisarsky-den-kadan-historie-2026.html
+          grep -Fq '29. května 1367' .github/drafts/cisarsky-den-kadan-historie-2026.html
+          grep -Fq 'data' .github/research/cisarsky-den-2026/README.md || true
+
+      - name: Uložit návrhy do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – redakční příprava'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/drafts/kulturni-zarizeni-kadan.html \
+                  .github/drafts/cisarsky-den-kadan-historie-2026.html \
+                  .github/research/cisarsky-den-2026/README.md \
+                  scripts/update_kzk_and_prepare_cisarsky_den_20260801.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit KZK a připravit historii Císařského dne [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 4 ]] && exit 1
+              sleep $((attempt * 4))
+            done
+          fi
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            const body = ok
+              ? '✅ Návrh článku o KZK byl doplněn o Císařský den a vznikl samostatný neveřejný návrh kompletního článku o historii slavnosti a ročníku 2026.'
+              : '❌ Aktualizace návrhů KZK a Císařského dne se nedokončila.';
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed'});
