@@ -100,9 +100,15 @@ def enforce_poll_markup_after_pipeline() -> None:
     )
     matches = list(pattern.finditer(text))
     if matches:
-        first = matches[0]
-        text = text[:first.start()] + site_tag + text[first.end():]
-        text = pattern.sub("", text, count=max(0, len(matches) - 1))
+        pieces = []
+        cursor = 0
+        for index, match in enumerate(matches):
+            pieces.append(text[cursor:match.start()])
+            if index == 0:
+                pieces.append(site_tag)
+            cursor = match.end()
+        pieces.append(text[cursor:])
+        text = "".join(pieces)
     elif "</body>" in text:
         text = text.replace("</body>", site_tag + "\n</body>", 1)
     else:
