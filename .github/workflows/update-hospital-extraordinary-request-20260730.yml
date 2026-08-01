@@ -1,4 +1,4 @@
-name: Aktualizovat článek o žádosti na mimořádné zastupitelstvo
+name: Aktualizovat článek o vedení nemocnice a mimořádném zastupitelstvu
 
 on:
   push:
@@ -27,14 +27,15 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit žádost ANO a neoficiální termín
+      - name: Aktualizovat účinnost vedení a stav zastupitelstva
         run: |
           set -euo pipefail
-          python3 scripts/update_hospital_extraordinary_request_20260730.py
+          python3 scripts/update_hospital_effective_20260801.py
           python3 scripts/enforce_article_visibility.py
-          grep -Fq 'data-extraordinary-request="20260730"' "$ARTICLE"
+          grep -Fq 'data-leadership-effective="20260801"' "$ARTICLE"
+          grep -Fq 'Nemocnice Kadaň má od soboty 1. srpna nové vedení.' "$ARTICLE"
           grep -Fq '17. srpna 2026 v 8:00' "$ARTICLE"
-          grep -Fq '2026-07-30T18:51:00+02:00' "$ARTICLE"
+          grep -Fq '2026-08-01T03:45:00+02:00' "$ARTICLE"
           grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' index.html
           grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' clanky/index.html
 
@@ -47,7 +48,7 @@ jobs:
           if git diff --cached --quiet; then
             echo 'Zdrojové soubory už jsou aktualizované.'
           else
-            git commit -m 'Aktualizovat: ANO podalo žádost o mimořádné zastupitelstvo'
+            git commit -m 'Aktualizovat vedení nemocnice k 1. srpnu'
             git pull --rebase --autostash origin main
             git push origin HEAD:main
           fi
@@ -95,12 +96,12 @@ jobs:
             article="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html?update=${stamp}-${attempt}" 2>/dev/null || true)"
             home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?update=${stamp}-${attempt}" 2>/dev/null || true)"
             archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?update=${stamp}-${attempt}" 2>/dev/null || true)"
-            if grep -Fq 'data-extraordinary-request="20260730"' <<<"$article" \
-              && grep -Fq '17. srpna 2026 v 8:00' <<<"$article" \
-              && grep -Fq 'Aktualizace 30. července v 18:51' <<<"$article" \
+            if grep -Fq 'data-leadership-effective="20260801"' <<<"$article" \
+              && grep -Fq 'Nemocnice Kadaň má od soboty 1. srpna nové vedení.' <<<"$article" \
+              && grep -Fq '2026-08-01T03:45:00+02:00' <<<"$article" \
               && grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$home" \
               && grep -Fq '/clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html' <<<"$archive"; then
-              echo 'HOTOVO: aktualizace žádosti ANO je veřejná.'
+              echo 'HOTOVO: účinnost nového vedení je veřejně aktualizovaná.'
               exit 0
             fi
             sleep 5
@@ -135,6 +136,6 @@ jobs:
             }
             await github.rest.repos.createOrUpdateFileContents({
               owner:context.repo.owner,repo:context.repo.repo,path,branch:'main',
-              message:`Zapsat stav aktualizace mimořádného zastupitelstva: ${state.status}`,
+              message:`Zapsat stav aktualizace nemocnice: ${state.status}`,
               content,...(sha?{sha}:{})
             });
