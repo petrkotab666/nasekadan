@@ -59,29 +59,40 @@ jobs:
           python3 -m py_compile newsletter/server.py scripts/install_poll_system_v2.py scripts/test_poll_system_v2.py scripts/prepare_greenery_publication_20260801.py
           python3 scripts/test_poll_system_v2.py
           python3 scripts/prepare_greenery_publication_20260801.py
-          article='clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
-          grep -Fq 'data-poll-id="sekani-travniku-kadan-2026"' "$article"
-          grep -Fq '/site.js?v=20260801-poll-system-v2' "$article"
-          grep -Eiq 'počt(y|u) hlasů|průběžné výsledky|procenta' "$article"
-          ! grep -Fq '/api/analytics/pageview' "$article"
-          grep -Fq '/api/newsletter/poll/vote' site.js
-          grep -Fq '/api/newsletter/poll/results' site.js
-          grep -Fq 'Průběžné výsledky' site.js
-          grep -Fq 'poll-result-value' site.js
-          grep -Fq '# BEGIN POLL_RESULTS_API' newsletter/server.py
-          grep -Fq 'POLL_POST_PIPELINE_V2' scripts/prepare_greenery_publication_20260801.py
-          test -s .github/greenery-publication-bundle.json
           python3 - <<'PY'
           import json
           from pathlib import Path
           from PIL import Image
+
+          article=Path('clanky/sekani-travniku-kadan-spravci-vysky-2026.html').read_text(encoding='utf-8')
+          site=Path('site.js').read_text(encoding='utf-8')
+          server=Path('newsletter/server.py').read_text(encoding='utf-8')
+          prepare=Path('scripts/prepare_greenery_publication_20260801.py').read_text(encoding='utf-8')
           data=json.loads(Path('.github/greenery-publication-bundle.json').read_text(encoding='utf-8'))
+
+          checks={
+              'poll_id':'data-poll-id="sekani-travniku-kadan-2026"' in article,
+              'versioned_site_js':'/site.js?v=20260801-poll-system-v2' in article,
+              'legacy_script_removed':'/api/analytics/pageview' not in article,
+              'vote_endpoint':'/api/newsletter/poll/vote' in site,
+              'results_endpoint':'/api/newsletter/poll/results' in site,
+              'visible_results_heading':'Průběžné výsledky' in site,
+              'per_option_counts':'poll-result-value' in site,
+              'server_api':'# BEGIN POLL_RESULTS_API' in server,
+              'post_pipeline_patch':'POLL_POST_PIPELINE_V2' in prepare,
+              'publication_time':data.get('published')=='2026-08-01T11:00:00+02:00',
+          }
+          failed=[name for name,ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit('Neprošly kontroly: '+', '.join(failed))
+
           image=Path(data['socialFile'])
-          assert image.exists() and image.stat().st_size>10000
+          if not image.exists() or image.stat().st_size <= 10_000:
+              raise SystemExit(f'Sociální obrázek chybí nebo je malý: {image}')
           with Image.open(image) as im:
-              assert im.format=='PNG' and im.size==(1200,630)
-          assert data['published']=='2026-08-01T11:00:00+02:00'
-          print('Předletová publikace včetně ankety a obrázku je v pořádku.')
+              if im.format!='PNG' or im.size!=(1200,630):
+                  raise SystemExit(f'Chybný sociální obrázek: {im.format}, {im.size}')
+          print('Předletová publikace, databázové hlasování, viditelné výsledky i obrázek jsou v pořádku.')
           PY
           echo 'ok=true' >> "$GITHUB_OUTPUT"
 
