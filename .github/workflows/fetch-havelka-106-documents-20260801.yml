@@ -1,0 +1,113 @@
+name: Stáhnout dokumenty Havelka – TS a TH Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-havelka-106-documents-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Stáhnout a vytěžit dokumenty
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          OUT=.github/research/havelka-106-ts-th-20260801
+          rm -rf "$OUT" && mkdir -p "$OUT"/{raw,text}
+          cat > /tmp/fetch106.py <<'PY'
+          import hashlib, json, re, subprocess, time, urllib.parse
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('.github/research/havelka-106-ts-th-20260801')
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0','Accept-Language':'cs,en;q=0.7'})
+          seeds=[
+            'https://www.tskadan.cz/dokumenty/dotaz_JUDr._Havelka_17.9.2025.pdf',
+            'https://www.tskadan.cz/dokumenty/odpoved_JUDr._Havelka_1.10.2025.pdf',
+          ]
+          pages=[
+            'https://www.thkadan.cz/rubrika/odpovedi-na-zadost-o-informace-zakonem-c-106-1999-sb/',
+            'https://www.thkadan.cz/rubrika/odpovedi-na-zadost-o-informace-zakonem-c-106-1999-sb/page/2/',
+          ]
+          result=[]; errors=[]
+          def get(url,tries=5):
+            last=None
+            for i in range(tries):
+              try:
+                r=S.get(url,timeout=60,allow_redirects=True)
+                if r.status_code in (429,500,502,503,504): raise RuntimeError(r.status_code)
+                r.raise_for_status(); return r
+              except Exception as e:
+                last=e; time.sleep(1+i*2)
+            raise last
+          for page in pages:
+            try:
+              r=get(page); (OUT/'raw'/(hashlib.sha1(page.encode()).hexdigest()[:10]+'.html')).write_bytes(r.content)
+              soup=BeautifulSoup(r.text,'lxml')
+              for a in soup.find_all('a',href=True):
+                full=urllib.parse.urljoin(r.url,a['href'])
+                label=(a.get_text(' ',strip=True)+' '+full).lower()
+                if ('17.9.2025' in label or '17-9-2025' in label or '17_9_2025' in label or 'havelka' in label) and ('.pdf' in full.lower() or '/odpoved-' in full.lower() or '/zadost-' in full.lower()):
+                  seeds.append(full)
+                if ('odpověď 17.9.2025' in label or 'odpoved-17-9-2025' in label or 'žádost 17.9.2025' in label or 'zadost-17-9-2025' in label):
+                  try:
+                    rr=get(full); ss=BeautifulSoup(rr.text,'lxml')
+                    (OUT/'raw'/(hashlib.sha1(full.encode()).hexdigest()[:10]+'.html')).write_bytes(rr.content)
+                    for b in ss.find_all('a',href=True):
+                      u=urllib.parse.urljoin(rr.url,b['href'])
+                      if '.pdf' in u.lower(): seeds.append(u)
+                  except Exception as e: errors.append({'url':full,'error':repr(e)})
+            except Exception as e: errors.append({'url':page,'error':repr(e)})
+          seen=set()
+          for url in seeds:
+            if url in seen: continue
+            seen.add(url)
+            try:
+              r=get(url); data=r.content
+              name=Path(urllib.parse.urlparse(r.url).path).name or hashlib.sha1(url.encode()).hexdigest()+'.bin'
+              name=re.sub(r'[^A-Za-z0-9._-]+','_',urllib.parse.unquote(name))
+              if not Path(name).suffix and data.startswith(b'%PDF'): name+='.pdf'
+              p=OUT/'raw'/name; p.write_bytes(data)
+              text=''
+              if data.startswith(b'%PDF'):
+                q=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+                text=q.stdout
+                if len(re.sub(r'\s+','',text))<120:
+                  d=Path('/tmp/ocr-'+hashlib.sha1(str(p).encode()).hexdigest()[:8]); d.mkdir(exist_ok=True)
+                  subprocess.run(['pdftoppm','-r','180','-png',str(p),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                  parts=[]
+                  for im in sorted(d.glob('p-*.png')):
+                    z=subprocess.run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); parts.append(z.stdout)
+                  text='\n'.join(parts)
+              tp=None
+              if text:
+                tp=OUT/'text'/(name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace')
+              result.append({'url':url,'final_url':r.url,'file':str(p),'bytes':len(data),'text_file':str(tp) if tp else None,'chars':len(text),'sha256':hashlib.sha256(data).hexdigest()})
+            except Exception as e: errors.append({'url':url,'error':repr(e)})
+          (OUT/'downloads.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Dokumenty JUDr. Havelky – Technické služby a Tepelné hospodářství Kadaň','',f'- Staženo: {len(result)}',f'- Chyby: {len(errors)}','']
+          for x in result: lines.append(f"- {x['final_url']} — `{x['file']}` — text {x['chars']} znaků")
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/fetch106.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/havelka-106-ts-th-20260801
+          git commit -m 'Přidat primární dokumenty Havelka z TS a TH Kadaň' || exit 0
+          git push origin main
