@@ -1,0 +1,311 @@
+name: Opravit a zkontrolovat reklamy na celém webu
+
+on:
+  issues:
+    types: [opened, reopened]
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/*.html'
+      - 'index.html'
+      - '**/index.html'
+      - 'reklamy.js'
+      - 'reklamy-sidebar.js'
+      - 'reklamy-sidebar.css'
+      - 'reklamy-oprava-obrazku.js'
+      - 'obsah-doplnky.js'
+      - 'ad-spacing-guard.js'
+      - 'site.js'
+      - 'scripts/normalize_articles.py'
+      - 'scripts/repair_and_audit_ads_20260801.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-and-audit-site-ads
+  cancel-in-progress: true
+
+env:
+  PETITION_URL: https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  repair-audit-deploy:
+    if: github.event_name != 'issues' || (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] audit site ads')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Stáhnout aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit a zkontrolovat zdroj celého webu
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/normalize_articles.py scripts/repair_and_audit_ads_20260801.py
+          python3 scripts/repair_and_audit_ads_20260801.py --write --report .github/ad-audit-status.json
+          python3 scripts/repair_and_audit_ads_20260801.py --report .github/ad-audit-status.json
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          data=json.loads(Path('.github/ad-audit-status.json').read_text(encoding='utf-8'))
+          assert data['ok'] is True, data['errors']
+          print(f"public_pages={data['public_html_pages']}")
+          print(f"articles={data['article_pages']}")
+          print(f"ad_pages={data['ad_enabled_non_article_pages']}")
+          print(f"changed={len(data['changed_files'])}")
+          print(f"assets={data['local_ad_assets_checked']}")
+          PY
+          grep -Fq 'data-promos data-context="sidebar"' clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          grep -Fq '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          grep -Fq '/site.js' clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+
+      - name: Uložit samoopravu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – reklamní kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- clanky index.html .github/ad-audit-status.json \
+            scripts/repair_and_audit_ads_20260801.py scripts/normalize_articles.py \
+            reklamy.js reklamy-sidebar.js reklamy-sidebar.css reklamy-oprava-obrazku.js \
+            obsah-doplnky.js ad-spacing-guard.js site.js \
+            404.html doprava prakticke pruvodce zpravy organizace zapojte-se o-webu inzerce 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit a sjednotit reklamy na veřejném webu [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 5 ]] && exit 1
+              sleep $((attempt * 5))
+            done
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/repair_and_audit_ads_20260801.py --report .github/ad-audit-status.json
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+              break
+            fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Sestavit bezpečný statický balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/public-html-files.txt"
+          from pathlib import Path
+          root=Path('.')
+          excluded={'.git','.github','nahled','research','node_modules'}
+          for path in sorted(root.rglob('*.html')):
+              if any(part in excluded for part in path.parts):
+                  continue
+              print(path.as_posix())
+          PY
+          for path in \
+            reklamy.js reklamy-sidebar.js reklamy-sidebar.css reklamy-oprava-obrazku.js \
+            obsah-doplnky.js ad-spacing-guard.js site.js mobile.css; do
+            test -s "$path"
+            printf '%s\n' "$path" >> "$RUNNER_TEMP/public-html-files.txt"
+          done
+          [ -d assets/reklamy ] && printf '%s\n' assets/reklamy >> "$RUNNER_TEMP/public-html-files.txt"
+          [ -s assets/affiliate-site-snapshot.json ] && printf '%s\n' assets/affiliate-site-snapshot.json >> "$RUNNER_TEMP/public-html-files.txt"
+          sort -u "$RUNNER_TEMP/public-html-files.txt" -o "$RUNNER_TEMP/public-html-files.txt"
+          tar -czf "$RUNNER_TEMP/site-ads-repair.tar.gz" -T "$RUNNER_TEMP/public-html-files.txt"
+
+      - name: Nasadit opravené stránky a reklamní systém
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/site-ads-repair.tar.gz" ubuntu@57.129.43.215:/tmp/site-ads-repair.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/site-ads-repair.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/site-ads-repair.tar.gz nasekadan-web:/tmp/site-ads-repair.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/site-ads-repair.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/site-ads-repair.tar.gz
+          fi
+          grep -Fq 'data-promos data-context="sidebar"' /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          grep -Fq '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          rm -f /tmp/site-ads-repair.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit zdroj všech reklamních stránek
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, time, urllib.parse, urllib.request
+          from pathlib import Path
+
+          report=json.loads(Path('.github/ad-audit-status.json').read_text(encoding='utf-8'))
+          base='https://nasekadan.cz'
+          article_markers=(
+              'data-promos data-context="sidebar"',
+              '/site.js',
+              '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3',
+              '/ad-spacing-guard.js',
+              '/reklamy-oprava-obrazku.js',
+              '/obsah-doplnky.js',
+          )
+          general_markers=(
+              'data-promos',
+              '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3',
+              '/ad-spacing-guard.js',
+              '/reklamy-oprava-obrazku.js',
+              '/obsah-doplnky.js',
+          )
+
+          def fetch(path):
+              separator='&' if '?' in path else '?'
+              url=base+path+separator+'ad_audit='+str(int(time.time()*1000))
+              last=''
+              for attempt in range(4):
+                  try:
+                      request=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-Ad-Audit/1.0','Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(request,timeout=25) as response:
+                          last=response.read().decode('utf-8','replace')
+                      if last:
+                          return last
+                  except Exception as exc:
+                      last=str(exc)
+                      time.sleep(3+attempt*2)
+              raise RuntimeError(f'{path}: nelze načíst: {last}')
+
+          failures=[]
+          for path in report['articles']:
+              html=fetch(path)
+              missing=[marker for marker in article_markers if marker not in html]
+              if missing:
+                  failures.append(f'{path}: chybí {missing}')
+          for path in report['ad_pages']:
+              html=fetch(path)
+              missing=[marker for marker in general_markers if marker not in html]
+              if missing:
+                  failures.append(f'{path}: chybí {missing}')
+          if failures:
+              raise SystemExit('\n'.join(failures))
+          print(f"Veřejně ověřeno {len(report['articles'])} článků a {len(report['ad_pages'])} dalších reklamních stránek.")
+          PY
+          echo 'source_ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Ověřit skutečně vykreslené reklamy v prohlížeči
+        id: browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser"
+          for url in \
+            'https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' \
+            'https://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html' \
+            'https://nasekadan.cz/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html'; do
+            output="$RUNNER_TEMP/$(basename "$url").dom.html"
+            timeout 55s "$browser" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+              --window-size=1440,1200 --virtual-time-budget=9000 --dump-dom "${url}?render_ads=${GITHUB_RUN_ID}" > "$output"
+            grep -Fq 'article-aside-adstream' "$output"
+            grep -Eq 'article-aside-ad-|promo-card|article-ad-auto' "$output"
+          done
+          echo 'render_ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledný stav
+        if: always()
+        env:
+          SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          LIVE_OK: ${{ steps.live.outputs.source_ok }}
+          RENDER_OK: ${{ steps.browser.outputs.render_ok }}
+          PUBLIC_PAGES: ${{ steps.source.outputs.public_pages }}
+          ARTICLES: ${{ steps.source.outputs.articles }}
+          AD_PAGES: ${{ steps.source.outputs.ad_pages }}
+          CHANGED: ${{ steps.source.outputs.changed }}
+          ASSETS: ${{ steps.source.outputs.assets }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=false
+          [[ "${SOURCE_OUTCOME:-}" == success && "${DEPLOY_OUTCOME:-}" == success && "${LIVE_OK:-}" == true && "${RENDER_OK:-}" == true ]] && ok=true
+          python3 - <<PY
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('.github/ad-live-audit-status.json')
+          data={
+            'ok': ${ok},
+            'checked_at': datetime.now(timezone.utc).isoformat(),
+            'run_id': '${GITHUB_RUN_ID}',
+            'source': '${SOURCE_OUTCOME:-unknown}',
+            'deploy': '${DEPLOY_OUTCOME:-unknown}',
+            'live_source': '${LIVE_OK:-false}',
+            'rendered_ads': '${RENDER_OK:-false}',
+            'public_pages': int('${PUBLIC_PAGES:-0}' or 0),
+            'articles': int('${ARTICLES:-0}' or 0),
+            'ad_pages': int('${AD_PAGES:-0}' or 0),
+            'changed_files': int('${CHANGED:-0}' or 0),
+            'assets_checked': int('${ASSETS:-0}' or 0),
+          }
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – reklamní kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/ad-live-audit-status.json .github/ad-audit-status.json
+          git commit -m 'Zapsat stav reklamního auditu [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
+
+      - name: Zapsat výsledek do spouštěcího issue
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_OUTCOME: ${{ steps.source.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          LIVE_OK: ${{ steps.live.outputs.source_ok }}
+          RENDER_OK: ${{ steps.browser.outputs.render_ok }}
+          PUBLIC_PAGES: ${{ steps.source.outputs.public_pages }}
+          ARTICLES: ${{ steps.source.outputs.articles }}
+          AD_PAGES: ${{ steps.source.outputs.ad_pages }}
+          CHANGED: ${{ steps.source.outputs.changed }}
+          ASSETS: ${{ steps.source.outputs.assets }}
+        with:
+          script: |
+            const ok = process.env.SOURCE_OUTCOME === 'success' && process.env.DEPLOY_OUTCOME === 'success' && process.env.LIVE_OK === 'true' && process.env.RENDER_OK === 'true';
+            const details = `Veřejných HTML: ${process.env.PUBLIC_PAGES || 0}\nČlánků: ${process.env.ARTICLES || 0}\nDalších reklamních stránek: ${process.env.AD_PAGES || 0}\nOpravených souborů: ${process.env.CHANGED || 0}\nLokálních reklamních assetů: ${process.env.ASSETS || 0}`;
+            const body = ok
+              ? `✅ Reklamy byly doplněny do posledního článku o petici a proběhl audit celého webu. Zdroj všech článků i reklamních stránek je v pořádku a na třech nejnovějších článcích bylo v prohlížeči potvrzeno skutečné vykreslení reklam.\n\n${details}\n\n${process.env.PETITION_URL || 'https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html'}`
+              : `❌ Reklamní oprava nebyla plně potvrzena. Zdroj: ${process.env.SOURCE_OUTCOME || 'unknown'}, nasazení: ${process.env.DEPLOY_OUTCOME || 'unknown'}, živé HTML: ${process.env.LIVE_OK || 'false'}, vykreslení: ${process.env.RENDER_OK || 'false'}.\n\n${details}`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
