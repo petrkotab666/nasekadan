@@ -9,6 +9,7 @@ import importlib.util
 import re
 import subprocess
 import sys
+from ensure_favicon import normalize_favicon_html
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = "https://nasekadan.cz"
@@ -157,17 +158,13 @@ def process_html(path: Path) -> None:
         "/pruvodce/mirove-namesti.html", "/pruvodce/mestske-namesti.html"
     )
     text = ensure_head_meta(text, path)
+    text = normalize_favicon_html(text)
     text = add_analytics(text)
     text = add_footer_links(text)
     path.write_text(text, encoding="utf-8")
 
 
 def ensure_support_files() -> None:
-    (ROOT / "analytics.js").write_text(
-        """(()=>{try{if(navigator.doNotTrack==='1')return;const payload={path:location.pathname,title:document.title,referrer:document.referrer?new URL(document.referrer).hostname:''};const body=JSON.stringify(payload);if(navigator.sendBeacon){navigator.sendBeacon('/api/analytics/pageview',new Blob([body],{type:'application/json'}));}else{fetch('/api/analytics/pageview',{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true,credentials:'omit'}).catch(()=>{});}}catch(_){}})();
-""",
-        encoding="utf-8",
-    )
 
     error = ROOT / "404.html"
     if not error.exists():
