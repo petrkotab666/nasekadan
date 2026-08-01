@@ -1,0 +1,76 @@
+name: Kontrolní dotaz InfoSoudu pro Hossnera
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hossner-infosoud-smoke-trigger.txt'
+      - '.github/workflows/research-hossner-infosoud-smoke-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: python3 -m pip install --disable-pip-version-check --quiet infosoud requests
+      - name: Ověřit klienta na známém spise
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/hossner-infosoud-smoke-20260801
+          mkdir -p .github/research/hossner-infosoud-smoke-20260801
+          python3 - <<'PY'
+          import dataclasses, inspect, json, traceback
+          from pathlib import Path
+          import infosoud
+          from infosoud import InfoSoudClient
+
+          out=Path('.github/research/hossner-infosoud-smoke-20260801')
+          def plain(x):
+              if dataclasses.is_dataclass(x): return plain(dataclasses.asdict(x))
+              if isinstance(x,dict): return {str(k):plain(v) for k,v in x.items()}
+              if isinstance(x,(list,tuple,set)): return [plain(v) for v in x]
+              if hasattr(x,'model_dump'): return plain(x.model_dump())
+              if hasattr(x,'dict'):
+                  try:return plain(x.dict())
+                  except:pass
+              if hasattr(x,'__dict__') and not isinstance(x,(str,bytes,int,float,bool)):
+                  return {k:plain(v) for k,v in vars(x).items() if not k.startswith('_')}
+              try: json.dumps(x); return x
+              except:return str(x)
+
+          c=InfoSoudClient()
+          result={'module':getattr(infosoud,'__file__',None),'class_signature':str(inspect.signature(InfoSoudClient)),'methods':{}}
+          for n in ['resolve_court_name','search_case','search_hearings','get_event_detail']:
+              if hasattr(InfoSoudClient,n):
+                  a=getattr(InfoSoudClient,n)
+                  try: result['methods'][n]={'signature':str(inspect.signature(a)),'source':inspect.getsource(a)}
+                  except Exception as e: result['methods'][n]={'error':repr(e)}
+          for q in ['Chomutov','Okresní soud v Chomutově','OS Chomutov']:
+              try: result.setdefault('resolve',{})[q]=plain(c.resolve_court_name(q))
+              except Exception as e: result.setdefault('resolve',{})[q]={'error':repr(e)}
+          for court in ['OSCHOM','OSSCEDC','OSCV']:
+              try: result.setdefault('known_case',{})[court]=plain(c.search_case('30 C 131/2025',court))
+              except Exception as e: result.setdefault('known_case',{})[court]={'error':repr(e),'trace':traceback.format_exc()}
+              try: result.setdefault('known_hearings',{})[court]=plain(c.search_hearings('30 C 131/2025',court))
+              except Exception as e: result.setdefault('known_hearings',{})[court]={'error':repr(e)}
+          out.joinpath('result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2)[:20000])
+          PY
+      - name: Uložit výsledek
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/research/hossner-infosoud-smoke-20260801
+          git commit -m 'Ověřit rozhraní InfoSoudu pro spisy Hossner' || true
+          for n in 1 2 3 4; do git pull --rebase origin main && git push origin HEAD:main && exit 0; sleep $((n*3)); done
+          exit 1
