@@ -1,0 +1,56 @@
+name: Opravit přiřazení pohádkového festivalu
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  correct:
+    if: github.event_name != 'issues' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] opravit poradatele pohadkoveho festivalu')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit neveřejný návrh
+        run: |
+          set -euo pipefail
+          python3 scripts/correct_kzk_festival_attribution_20260801.py
+          grep -Fq 'Kadaňský pohádkový festival není akcí KZK.' .github/drafts/kulturni-zarizeni-kadan.html
+          ! grep -Fq 'Císařský den, Narozeniny Maxipsa Fíka, Kadaňský pohádkový festival' .github/drafts/kulturni-zarizeni-kadan.html
+
+      - name: Uložit opravu
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/drafts/kulturni-zarizeni-kadan.html scripts/correct_kzk_festival_attribution_20260801.py
+          git commit -m 'Opravit pořadatele Kadaňského pohádkového festivalu [skip ci]' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Potvrdit dokončení
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '✅ V návrhu článku o KZK je opraveno, že Kadaňský pohádkový festival pořádají Kabelová televize Kadaň a Kino Hvězda ve spolupráci s městem. KZK je uvedeno pouze jako případný partner jednotlivých programových prostor.'
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
