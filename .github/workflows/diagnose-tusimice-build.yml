@@ -1,0 +1,89 @@
+name: Diagnostikovat sestavení jaderných Tušimic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-tusimice-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Sestavit a zapsat přesnou diagnostiku
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug='jaderne-tusimice-smr-voda-doprava-eia-2026'
+          article="clanky/${slug}.html"
+          draft=".github/drafts/${slug}.html"
+          cp "$draft" "$article"
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/sort_articles_chronologically.py
+          social_url="$(python3 - <<'PY'
+          import html,re
+          from pathlib import Path
+          text=Path('clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)',text,re.I)
+          print(html.unescape(m.group(1)) if m else '')
+          PY
+          )"
+          social_image="social/${social_url##*/}"
+          report='.github/tusimice-build-diagnostic.txt'
+          : > "$report"
+          printf 'commit=%s\n' "$GITHUB_SHA" >> "$report"
+          printf 'social_url=%s\n' "$social_url" >> "$report"
+          printf 'social_image=%s\n' "$social_image" >> "$report"
+          check() {
+            local label="$1" file="$2" needle="$3"
+            if [[ -f "$file" ]] && grep -Fq "$needle" "$file"; then
+              printf '%s=YES\n' "$label" >> "$report"
+            else
+              printf '%s=NO\n' "$label" >> "$report"
+            fi
+          }
+          check article_expected "$article" 'Úplná EIA měla být na ministerstvu už 12. května'
+          check article_poll "$article" 'Chcete, aby v Tušimicích vznikla nová jaderná elektrárna?'
+          check article_social "$article" "$social_url"
+          check homepage index.html "/clanky/${slug}.html"
+          check archive clanky/index.html "/clanky/${slug}.html"
+          check rss rss.xml "https://nasekadan.cz/clanky/${slug}.html"
+          check sitemap sitemap.xml "https://nasekadan.cz/clanky/${slug}.html"
+          check news_sitemap news-sitemap.xml "https://nasekadan.cz/clanky/${slug}.html"
+          if [[ -s "$social_image" ]]; then printf 'social_file=YES\n' >> "$report"; else printf 'social_file=NO\n' >> "$report"; fi
+          printf '\n--- homepage matches ---\n' >> "$report"
+          grep -n -F "$slug" index.html | head -10 >> "$report" || true
+          printf '\n--- archive matches ---\n' >> "$report"
+          grep -n -F "$slug" clanky/index.html | head -10 >> "$report" || true
+          printf '\n--- rss matches ---\n' >> "$report"
+          grep -n -F "$slug" rss.xml | head -10 >> "$report" || true
+          printf '\n--- sitemap matches ---\n' >> "$report"
+          grep -n -F "$slug" sitemap.xml | head -10 >> "$report" || true
+          printf '\n--- news matches ---\n' >> "$report"
+          grep -n -F "$slug" news-sitemap.xml | head -10 >> "$report" || true
+          cat "$report"
+          git config user.name 'Naše Kadaň diagnostika'
+          git config user.email 'info@nasekadan.cz'
+          git add "$report"
+          git commit -m 'Zapsat diagnostiku sestavení jaderných Tušimic'
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
