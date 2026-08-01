@@ -1,0 +1,266 @@
+name: Prohledat městské archivy ke sporu Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-city-archives-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-hossner-city-archives-20260801
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+
+      - name: Projít současný web, archiv a související dokumenty
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-city-archives-20260801
+          rm -rf "$OUT"
+          mkdir -p "$OUT"/{pages,documents,text,wayback}
+          cat > /tmp/city_archives.py <<'PY'
+          from __future__ import annotations
+          import hashlib, json, re, subprocess, time, urllib.parse
+          from collections import deque
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('.github/research/hossner-city-archives-20260801')
+          S=requests.Session()
+          S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan archive research; +https://nasekadan.cz/)','Accept-Language':'cs,en;q=0.8'})
+          errors=[]; pages=[]; docs=[]; hits=[]
+          KEYWORDS=[
+            '619/2024','621/2024','723/2025','24. 7. 2024','24.07.2024','24. 07. 2024',
+            'vladimír tőgl','vladimír togl','vladimír tögl','pravý souběh','souběh funkcí',
+            'luboš herejk','dušan kučera','petr hossner','nemocnice kadaň',
+            'pracovní smlouva','smlouva o výkonu funkce','dodatečné schválení'
+          ]
+          DOC_EXT=('.pdf','.doc','.docx','.xls','.xlsx','.ppt','.pptx','.rtf','.odt')
+
+          def get(url,timeout=120,tries=5):
+              last=None
+              for i in range(tries):
+                  try:
+                      r=S.get(url,timeout=timeout,allow_redirects=True)
+                      if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                      r.raise_for_status(); return r
+                  except Exception as e:
+                      last=e; time.sleep(2+i*2)
+              raise last
+
+          def safe(s): return re.sub(r'[^A-Za-z0-9._-]+','_',s)[:170]
+          def text_from_pdf(p):
+              q=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+              text=q.stdout
+              if len(re.sub(r'\s+','',text))<200:
+                  tmp=Path('/tmp')/('ocr-'+hashlib.sha1(str(p).encode()).hexdigest()[:10]); tmp.mkdir(exist_ok=True)
+                  subprocess.run(['pdftoppm','-r','180','-png',str(p),str(tmp/'page')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                  parts=[]
+                  for img in sorted(tmp.glob('page-*.png')):
+                      z=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+                      parts.append(z.stdout)
+                  text='\n'.join(parts)
+              return text
+
+          def register_text(source,text,kind,path=None,meta=None):
+              low=text.lower()
+              found=[k for k in KEYWORDS if k in low]
+              # Flexible forms for resolution numbers and names with OCR noise.
+              if re.search(r'\b619\s*/\s*2024\b',text,re.I) and '619/2024' not in found: found.append('619/2024')
+              if re.search(r'\b621\s*/\s*2024\b',text,re.I) and '621/2024' not in found: found.append('621/2024')
+              if re.search(r'vladim.r\s+t.[oőö]gl',low,re.I) and 'Vladimír Tőgl variant' not in found: found.append('Vladimír Tőgl variant')
+              if found:
+                  rec={'source':source,'kind':kind,'keywords':found,'path':str(path) if path else None,'meta':meta or {}}
+                  snippets=[]
+                  for key in found:
+                      needle=key.lower().replace(' variant','')
+                      pos=low.find(needle)
+                      if pos>=0: snippets.append(text[max(0,pos-350):pos+900])
+                  rec['snippets']=snippets[:20]
+                  hits.append(rec)
+              return found
+
+          def save_doc(url,referrer=None):
+              if any(d.get('url')==url for d in docs): return
+              try:
+                  r=get(url,180)
+                  ctype=r.headers.get('content-type','').lower()
+                  name=Path(urllib.parse.urlparse(r.url).path).name or 'document'
+                  name=safe(urllib.parse.unquote(name))
+                  if not Path(name).suffix:
+                      if r.content.startswith(b'%PDF') or 'pdf' in ctype: name+='.pdf'
+                      else: name+='.bin'
+                  name=hashlib.sha1(r.url.encode()).hexdigest()[:10]+'-'+name
+                  p=OUT/'documents'/name; p.write_bytes(r.content)
+                  rec={'url':url,'final_url':r.url,'referrer':referrer,'path':str(p),'status':r.status_code,'content_type':ctype,'bytes':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest()}
+                  text=''
+                  if r.content.startswith(b'%PDF') or p.suffix.lower()=='.pdf': text=text_from_pdf(p)
+                  elif 'text' in ctype or 'html' in ctype or p.suffix.lower() in ('.txt','.rtf','.csv','.xml'):
+                      text=r.text
+                  if text:
+                      tp=OUT/'text'/(p.name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace'); rec['text_path']=str(tp); rec['chars']=len(text)
+                      rec['keywords']=register_text(r.url,text,'document',p,{'referrer':referrer})
+                  docs.append(rec)
+              except Exception as e: errors.append({'stage':'document','url':url,'referrer':referrer,'error':repr(e)})
+
+          # Current city site crawl. Start from root, sitemaps, search pages and known document pages.
+          seeds=[
+            'https://www.mesto-kadan.cz/',
+            'https://www.mesto-kadan.cz/sitemap.xml',
+            'https://www.mesto-kadan.cz/sitemap_index.xml',
+            'https://www.mesto-kadan.cz/mesto/rada-mesta/usneseni-rady-mesta/',
+            'https://www.mesto-kadan.cz/mesto/zastupitelstvo-mesta/zapisy-a-usneseni/',
+            'https://www.mesto-kadan.cz/vyhledavani/?search=619%2F2024',
+            'https://www.mesto-kadan.cz/vyhledavani/?search=621%2F2024',
+            'https://www.mesto-kadan.cz/vyhledavani/?search=soub%C4%9Bh+funkc%C3%AD',
+            'https://www.mesto-kadan.cz/vyhledavani/?search=T%C5%91gl',
+          ]
+          q=deque((u,0,None) for u in seeds); seen=set()
+          while q and len(seen)<3500:
+              url,depth,ref=q.popleft()
+              canonical=url.split('#')[0]
+              if canonical in seen: continue
+              if not any(h in canonical for h in ('mesto-kadan.cz','edesky.cz')): continue
+              seen.add(canonical)
+              try:
+                  r=get(canonical); ct=r.headers.get('content-type','').lower()
+                  if r.content.startswith(b'%PDF') or any(urllib.parse.urlparse(r.url).path.lower().endswith(e) for e in DOC_EXT):
+                      save_doc(r.url,ref); continue
+                  body=r.text
+                  if 'xml' in ct or body.lstrip().startswith('<?xml'):
+                      for loc in re.findall(r'<loc>(.*?)</loc>',body,re.I|re.S):
+                          loc=loc.replace('&amp;','&').strip()
+                          if 'mesto-kadan.cz' in loc and loc not in seen: q.append((loc,min(depth+1,3),canonical))
+                      continue
+                  if 'html' not in ct and '<html' not in body[:1000].lower(): continue
+                  soup=BeautifulSoup(body,'lxml')
+                  plain='\n'.join(x.strip() for x in soup.get_text('\n').splitlines() if x.strip())
+                  found=register_text(r.url,plain,'page',None,{'depth':depth,'referrer':ref})
+                  if found or 'filemanager/files/' in body or depth<=1:
+                      fn=f'{len(pages):05d}-{safe(urllib.parse.urlparse(r.url).path or "root")}.html'
+                      p=OUT/'pages'/fn; p.write_text(body,encoding='utf-8',errors='replace')
+                      pages.append({'url':r.url,'path':str(p),'depth':depth,'referrer':ref,'keywords':found})
+                  for a in soup.find_all('a',href=True):
+                      v=urllib.parse.urljoin(r.url,a['href']).split('#')[0]
+                      low=v.lower().split('?')[0]
+                      if 'filemanager/files/' in v or low.endswith(DOC_EXT): save_doc(v,r.url)
+                      elif 'mesto-kadan.cz' in v and depth<3 and v not in seen:
+                          anchor=(a.get_text(' ',strip=True)+' '+v).lower()
+                          priority=any(k in anchor for k in ('rada','zastup','usnes','zápis','zapis','nemocnic','hossner','informac','smlouv','dokument','archiv'))
+                          if priority or depth<1: q.append((v,depth+1,r.url))
+              except Exception as e: errors.append({'stage':'page','url':canonical,'referrer':ref,'error':repr(e)})
+
+          # Internet Archive: archived versions of likely council/document pages and all file links exposed there.
+          archive_targets=[
+            'www.mesto-kadan.cz/mesto/rada-mesta/usneseni-rady-mesta/',
+            'www.mesto-kadan.cz/mesto/zastupitelstvo-mesta/zapisy-a-usneseni/',
+            'www.mesto-kadan.cz/*usneseni*rady*',
+            'www.mesto-kadan.cz/*rada-mesta*',
+            'www.mesto-kadan.cz/*zastupitelstvo*',
+          ]
+          archived=[]
+          for target in archive_targets:
+              cdx='https://web.archive.org/cdx/search/cdx?'+urllib.parse.urlencode({
+                'url':target,'from':'2023','to':'2026','output':'json','fl':'timestamp,original,statuscode,mimetype,digest',
+                'filter':'statuscode:200','collapse':'digest','limit':'1000'
+              })
+              try:
+                  arr=get(cdx,180).json()
+                  for row in arr[1:] if isinstance(arr,list) and arr else []:
+                      ts,orig,status,mime,digest=(row+['','','','',''])[:5]
+                      rec={'timestamp':ts,'original':orig,'status':status,'mimetype':mime,'digest':digest}; archived.append(rec)
+              except Exception as e: errors.append({'stage':'wayback-cdx','target':target,'error':repr(e)})
+          # Prefer snapshots from 2024/2025 and unique originals.
+          done=set()
+          for rec in sorted(archived,key=lambda x:x['timestamp'],reverse=True):
+              key=rec['original']
+              if key in done or len(done)>=800: continue
+              done.add(key)
+              u=f"https://web.archive.org/web/{rec['timestamp']}id_/{rec['original']}"
+              try:
+                  r=get(u,180); body=r.text
+                  p=OUT/'wayback'/(rec['timestamp']+'-'+safe(urllib.parse.urlparse(rec['original']).path or 'root')+'.html')
+                  p.write_text(body,encoding='utf-8',errors='replace')
+                  soup=BeautifulSoup(body,'lxml'); plain=soup.get_text('\n',strip=True)
+                  register_text(u,plain,'wayback-page',p,rec)
+                  for a in soup.find_all('a',href=True):
+                      v=urllib.parse.urljoin(rec['original'],a['href'])
+                      # Strip replay wrapper when present.
+                      m=re.search(r'https?://web\.archive\.org/web/\d+(?:id_)?/(https?://.*)',v)
+                      if m: v=m.group(1)
+                      if 'mesto-kadan.cz/filemanager/files/' in v or urllib.parse.urlparse(v).path.lower().endswith(DOC_EXT):
+                          # Fetch archived binary at the same snapshot first.
+                          av=f"https://web.archive.org/web/{rec['timestamp']}id_/{v}"
+                          save_doc(av,u)
+              except Exception as e: errors.append({'stage':'wayback-page','url':u,'error':repr(e)})
+
+          # eDesky search pages often retain OCR snippets after documents disappear from the source board.
+          edesky_queries=['619/2024 Kadaň','621/2024 Kadaň','Tőgl Kadaň','souběh funkcí Kadaň','Nemocnice Kadaň Hossner']
+          for term in edesky_queries:
+              for template in ('https://edesky.cz/hledat?query={}','https://edesky.cz/vyhledavani?query={}'): 
+                  u=template.format(urllib.parse.quote(term))
+                  try:
+                      r=get(u); soup=BeautifulSoup(r.text,'lxml'); plain=soup.get_text('\n',strip=True)
+                      p=OUT/'pages'/('edesky-'+safe(term)+'-'+hashlib.sha1(u.encode()).hexdigest()[:6]+'.html'); p.write_text(r.text,encoding='utf-8')
+                      register_text(r.url,plain,'edesky-search',p,{'term':term})
+                      for a in soup.find_all('a',href=True):
+                          v=urllib.parse.urljoin(r.url,a['href'])
+                          if '/dokument/' in v:
+                              try:
+                                  rr=get(v); ss=BeautifulSoup(rr.text,'lxml'); txt=ss.get_text('\n',strip=True)
+                                  pp=OUT/'pages'/('edesky-document-'+safe(v.rsplit('/',1)[-1])+'.html'); pp.write_text(rr.text,encoding='utf-8')
+                                  register_text(rr.url,txt,'edesky-document',pp,{'term':term})
+                                  for aa in ss.find_all('a',href=True):
+                                      vv=urllib.parse.urljoin(rr.url,aa['href'])
+                                      if 'mesto-kadan.cz' in vv and (urllib.parse.urlparse(vv).path.lower().endswith(DOC_EXT) or 'filemanager/files/' in vv): save_doc(vv,rr.url)
+                              except Exception as e: errors.append({'stage':'edesky-document','url':v,'error':repr(e)})
+                  except Exception as e: errors.append({'stage':'edesky-search','url':u,'error':repr(e)})
+
+          (OUT/'pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'documents.json').write_text(json.dumps(docs,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'hits.json').write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'wayback/cdx.json').write_text(json.dumps(archived,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Městské archivy – Hossner / Nemocnice Kadaň','',f'- Navštívené URL: {len(seen)}',f'- Uložené relevantní stránky: {len(pages)}',f'- Stažené dokumenty: {len(docs)}',f'- Obsahové nálezy: {len(hits)}',f'- Archivní záznamy CDX: {len(archived)}',f'- Chyby: {len(errors)}','','## Nálezy','']
+          for h in hits:
+              md.append(f"- **{', '.join(h['keywords'])}** — {h['source']} — {h.get('path') or ''}")
+          md+=['','## Stažené dokumenty','']
+          for d in docs: md.append(f"- {d.get('final_url')} — {d.get('bytes')} B — {d.get('keywords',[])} — {d.get('path')}")
+          (OUT/'README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/city_archives.py
+
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-city-archives-20260801
+          git commit -m 'Prohledat městské archivy ke sporu Hossner' || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push origin HEAD:main && exit 0
+            sleep $((i*5))
+          done
+          exit 1
