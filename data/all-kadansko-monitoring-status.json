@@ -1,14 +1,22 @@
 {
-  "version": 1,
-  "checkedAt": "2026-08-01T04:52:39.193646+00:00",
+  "version": 2,
+  "checkedAt": "2026-08-01T06:19:04.223983+00:00",
   "bootstrap": false,
   "sourceCount": 102,
-  "checkedSources": 87,
-  "failedSources": 15,
-  "itemsParsed": 6455,
-  "uniqueItems": 3659,
-  "newAlerts": 20,
+  "checkedSources": 86,
+  "failedSources": 16,
+  "itemsParsed": 6421,
+  "uniqueItems": 3483,
+  "newAlerts": 1,
   "alertsCapped": false,
+  "suppressed": {
+    "genericTitle": 656,
+    "missingUrl": 0,
+    "broadWithoutLocalMatch": 236,
+    "notEditoriallySignificant": 1088,
+    "notFreshOrUndated": 157,
+    "duplicate": 2282
+  },
   "coverage": {
     "directoryOrganizations": 63,
     "directoryOrganizationsWithUrl": 63,
@@ -54,7 +62,7 @@
     },
     {
       "name": "Městský GIS Kadaň",
-      "url": "https://gis.mesto-kadan.cz/portal/",
+      "url": "https://gis.mesto-kadan.cz/portal",
       "category": "Město a územní plánování",
       "tier": "organization",
       "status": "failed",
@@ -71,9 +79,9 @@
     },
     {
       "name": "Kadaňské noviny",
-      "url": "https://www.noviny-kadan.cz/vsechny-clanky/",
+      "url": "https://www.noviny-kadan.cz/vsechny-clanky",
       "category": "Zprávy",
-      "tier": "organization",
+      "tier": "regional_media",
       "status": "checked",
       "itemsParsed": 21
     },
@@ -87,7 +95,7 @@
     },
     {
       "name": "Liďák Kadaň – kulturní program",
-      "url": "https://www.facebook.com/lidovydumkadan/",
+      "url": "https://www.facebook.com/lidovydumkadan",
       "category": "Kultura a volný čas",
       "tier": "organization",
       "status": "checked",
@@ -120,7 +128,7 @@
     },
     {
       "name": "Městské muzeum v Kadani",
-      "url": "https://kadan.eu/informace/mestske-muzeum/",
+      "url": "https://kadan.eu/informace/mestske-muzeum",
       "category": "Muzeum a památky",
       "tier": "organization",
       "status": "checked",
@@ -128,7 +136,7 @@
     },
     {
       "name": "Městské muzeum v Kadani – veřejný Facebook",
-      "url": "https://www.facebook.com/muzeumvKadani/",
+      "url": "https://www.facebook.com/muzeumvKadani",
       "category": "Muzeum a památky",
       "tier": "organization",
       "status": "checked",
@@ -136,17 +144,17 @@
     },
     {
       "name": "Nemocnice Kadaň",
-      "url": "https://www.nemkadan.cz/pro-verejnost/verejnost/aktuality/",
+      "url": "https://www.nemkadan.cz/pro-verejnost/verejnost/aktuality",
       "category": "Zdravotnictví",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 134
+      "itemsParsed": 136
     },
     {
       "name": "Městská policie Kadaň",
       "url": "https://www.mpkadan.eu/",
       "category": "Bezpečnost",
-      "tier": "organization",
+      "tier": "police",
       "status": "checked",
       "itemsParsed": 9
     },
@@ -170,7 +178,7 @@
       "name": "Tepelné hospodářství Kadaň",
       "url": "https://www.thkadan.cz/",
       "category": "Teplo",
-      "tier": "organization",
+      "tier": "utility",
       "status": "checked",
       "itemsParsed": 8
     },
@@ -217,7 +225,7 @@
     },
     {
       "name": "TILIA Kadaň, z. s.",
-      "url": "https://tiliakadan.cz/aktuality/",
+      "url": "https://tiliakadan.cz/aktuality",
       "category": "Sociální a poradenské služby",
       "tier": "organization",
       "status": "checked",
@@ -225,11 +233,11 @@
     },
     {
       "name": "TILIA Kadaň – kontakty a pracoviště",
-      "url": "https://tiliakadan.cz/kontakty/",
+      "url": "https://tiliakadan.cz/kontakty",
       "category": "Sociální a poradenské služby",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 14
     },
     {
       "name": "Světlo Kadaň",
@@ -356,11 +364,11 @@
     },
     {
       "name": "Gymnázium Kadaň",
-      "url": "https://www.gymka.cz/news/",
+      "url": "https://www.gymka.cz/news",
       "category": "Střední školy",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 87
+      "itemsParsed": 88
     },
     {
       "name": "Astronomicko přírodovědná observatoř Kadaň",
@@ -404,11 +412,12 @@
     },
     {
       "name": "Městské divadlo Most – program",
-      "url": "https://www.divadlo-most.cz/cz/program/",
+      "url": "https://www.divadlo-most.cz/cz/program",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 53
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not found"
     },
     {
       "name": "Muzeum a galerie Most – program",
@@ -428,7 +437,7 @@
     },
     {
       "name": "Let It Roll – akce",
-      "url": "https://letitroll.cz/akce/",
+      "url": "https://letitroll.cz/akce",
       "category": "Velké regionální festivaly",
       "tier": "organization",
       "status": "failed",
@@ -437,11 +446,11 @@
     },
     {
       "name": "Let It Roll 2026 – Jezero Most",
-      "url": "https://letitroll.cz/akce/let-it-roll-2026/",
+      "url": "https://letitroll.cz/akce/let-it-roll-2026",
       "category": "Velké regionální festivaly",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 89
+      "itemsParsed": 91
     },
     {
       "name": "Město Litvínov",
@@ -453,11 +462,11 @@
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
-      "url": "https://www.masnadeje.cz/kalendar-akci/",
+      "url": "https://www.masnadeje.cz/kalendar-akci",
       "category": "Regionální kultura – Most a Litvínov",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 227
+      "itemsParsed": 228
     },
     {
       "name": "Městská knihovna Litvínov",
@@ -480,7 +489,7 @@
       "name": "Policie ČR – Ústecký kraj",
       "url": "https://policie.gov.cz/ustecky-kraj",
       "category": "Bezpečnost a kriminalita",
-      "tier": "organization",
+      "tier": "police",
       "status": "checked",
       "itemsParsed": 119
     },
@@ -488,23 +497,23 @@
       "name": "HZS Ústeckého kraje",
       "url": "https://hzscr.gov.cz/hzs-usteckeho-kraje",
       "category": "Hasiči a mimořádné události",
-      "tier": "organization",
+      "tier": "emergency",
       "status": "checked",
       "itemsParsed": 122
     },
     {
       "name": "ZZS Ústeckého kraje",
-      "url": "https://www.zzsuk.cz/aktuality/",
+      "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
-      "tier": "organization",
+      "tier": "emergency",
       "status": "checked",
-      "itemsParsed": 71
+      "itemsParsed": 81
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
       "url": "https://pkr.kr-ustecky.cz/",
       "category": "Krizové řízení",
-      "tier": "organization",
+      "tier": "emergency",
       "status": "checked",
       "itemsParsed": 57
     },
@@ -512,7 +521,7 @@
       "name": "ČEZ – tiskové zprávy",
       "url": "https://www.cez.cz/cs/pro-media/tiskove-zpravy",
       "category": "Energetika",
-      "tier": "organization",
+      "tier": "utility",
       "status": "checked",
       "itemsParsed": 0
     },
@@ -520,7 +529,7 @@
       "name": "ČEZ Distribuce – plánované odstávky",
       "url": "https://www.cezdistribuce.cz/pro-zakazniky/potrebuji-vyresit/stavajici-pripojeni/overeni-planovane-odstavky",
       "category": "Elektřina a odstávky",
-      "tier": "organization",
+      "tier": "utility",
       "status": "checked",
       "itemsParsed": 30
     },
@@ -528,9 +537,9 @@
       "name": "Povodí Ohře",
       "url": "https://www.povodiohre.cz/",
       "category": "Vodní toky a povodně",
-      "tier": "organization",
+      "tier": "utility",
       "status": "checked",
-      "itemsParsed": 46
+      "itemsParsed": 47
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -544,16 +553,16 @@
       "name": "Dopravníinfo.cz",
       "url": "https://www.dopravniinfo.cz/",
       "category": "Silniční doprava",
-      "tier": "organization",
+      "tier": "transport",
       "status": "failed",
       "itemsParsed": 0,
       "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "ŘSD – Ústecký kraj",
-      "url": "https://kraje.rsd.cz/ustecky/",
+      "url": "https://kraje.rsd.cz/ustecky",
       "category": "Silnice a stavby",
-      "tier": "organization",
+      "tier": "transport",
       "status": "checked",
       "itemsParsed": 50
     },
@@ -561,32 +570,32 @@
       "name": "Správa železnic – cestující",
       "url": "https://www.spravazeleznic.cz/cestujici",
       "category": "Železnice",
-      "tier": "organization",
+      "tier": "transport",
       "status": "checked",
       "itemsParsed": 485
     },
     {
       "name": "České dráhy – omezení provozu",
-      "url": "https://www.cd.cz/jizdni-rad/omezeni-provozu/",
+      "url": "https://www.cd.cz/jizdni-rad/omezeni-provozu",
       "category": "Železniční doprava",
-      "tier": "organization",
+      "tier": "transport",
       "status": "checked",
-      "itemsParsed": 84
+      "itemsParsed": 85
     },
     {
       "name": "Doprava Ústeckého kraje",
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
-      "tier": "organization",
+      "tier": "transport",
       "status": "failed",
       "itemsParsed": 0,
       "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
-      "url": "https://www.scvk.cz/udalosti/",
+      "url": "https://www.scvk.cz/udalosti",
       "category": "Voda a havárie",
-      "tier": "organization",
+      "tier": "utility",
       "status": "failed",
       "itemsParsed": 0,
       "error": "HTTPError: HTTP Error 404: Not Found"
@@ -595,17 +604,17 @@
       "name": "Český rozhlas Sever",
       "url": "https://sever.rozhlas.cz/",
       "category": "Regionální média",
-      "tier": "organization",
+      "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 124
+      "itemsParsed": 123
     },
     {
       "name": "Chomutovský deník",
       "url": "https://chomutovsky.denik.cz/",
       "category": "Regionální média",
-      "tier": "organization",
+      "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 265
+      "itemsParsed": 266
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -625,7 +634,7 @@
     },
     {
       "name": "Turistické informační centrum Kadaň",
-      "url": "https://kadan.eu/informace/tic/",
+      "url": "https://kadan.eu/informace/tic",
       "category": "Kultura, památky a volný čas",
       "tier": "organization",
       "status": "checked",
@@ -633,7 +642,7 @@
     },
     {
       "name": "Galerie Josefa Lieslera",
-      "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/",
+      "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera",
       "category": "Kultura, památky a volný čas",
       "tier": "organization",
       "status": "checked",
@@ -641,7 +650,7 @@
     },
     {
       "name": "Františkánský klášter Kadaň",
-      "url": "https://kadan.eu/pamatky/frantiskansky-klaster/",
+      "url": "https://kadan.eu/pamatky/frantiskansky-klaster",
       "category": "Kultura, památky a volný čas",
       "tier": "organization",
       "status": "checked",
@@ -649,7 +658,7 @@
     },
     {
       "name": "Kadaňský hrad",
-      "url": "https://kadan.eu/pamatky/kadansky-hrad/",
+      "url": "https://kadan.eu/pamatky/kadansky-hrad",
       "category": "Kultura, památky a volný čas",
       "tier": "organization",
       "status": "checked",
@@ -731,15 +740,15 @@
     },
     {
       "name": "Karate klub Kadaň a Klášterec",
-      "url": "https://karateklubkadan.cz/wp2/",
+      "url": "https://karateklubkadan.cz/wp2",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 41
+      "itemsParsed": 43
     },
     {
       "name": "BK DDM Kadaň",
-      "url": "https://iscus.cz/web/sportovni-subjekty/?city=kada%C5%88&region=3503",
+      "url": "https://iscus.cz/web/sportovni-subjekty?city=kada%C5%88&region=3503",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
       "status": "checked",
@@ -747,9 +756,9 @@
     },
     {
       "name": "Sportovní klub policie Kadaň",
-      "url": "https://skmpkadan.cz/o-nas/",
+      "url": "https://skmpkadan.cz/o-nas",
       "category": "Sportovní organizace a kluby",
-      "tier": "organization",
+      "tier": "police",
       "status": "checked",
       "itemsParsed": 11
     },
@@ -757,7 +766,7 @@
       "name": "Policie ČR – Obvodní oddělení Kadaň",
       "url": "https://policie.gov.cz/clanek/obvodni-oddeleni-kadan.aspx",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
-      "tier": "organization",
+      "tier": "police",
       "status": "checked",
       "itemsParsed": 111
     },
@@ -765,7 +774,7 @@
       "name": "Hasičský záchranný sbor Ústeckého kraje",
       "url": "https://hzscr.gov.cz/hzs-usteckeho-kraje.aspx",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
-      "tier": "organization",
+      "tier": "emergency",
       "status": "checked",
       "itemsParsed": 121
     },
@@ -773,7 +782,7 @@
       "name": "Zdravotnická záchranná služba Ústeckého kraje",
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
-      "tier": "organization",
+      "tier": "emergency",
       "status": "checked",
       "itemsParsed": 72
     },
@@ -829,7 +838,7 @@
     },
     {
       "name": "Google News – Kadaň a Klášterec",
-      "url": "https://news.google.com/rss/search?q=(%22Kada%C5%88%22+OR+%22Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22)+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "url": "https://news.google.com/rss/search?q=%28%22Kada%C5%88%22+OR+%22Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
@@ -837,7 +846,7 @@
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
-      "url": "https://news.google.com/rss/search?q=(Doma%C5%A1%C3%ADn+OR+Chbany+OR+Lib%C4%9Bdice+OR+Ma%C5%A1%C5%A5ov+OR+Ra%C4%8Detice)+(Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "url": "https://news.google.com/rss/search?q=%28Doma%C5%A1%C3%ADn+OR+Chbany+OR+Lib%C4%9Bdice+OR+Ma%C5%A1%C5%A5ov+OR+Ra%C4%8Detice%29+%28Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – jižní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
@@ -845,15 +854,15 @@
     },
     {
       "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
-      "url": "https://news.google.com/rss/search?q=(Kov%C3%A1%C5%99sk%C3%A1+OR+M%C4%9Bd%C4%9Bnec+OR+Okounov+OR+Per%C5%A1tejn+OR+%22Kry%C5%A1tofovy+Hamry%22)+(%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "url": "https://news.google.com/rss/search?q=%28Kov%C3%A1%C5%99sk%C3%A1+OR+M%C4%9Bd%C4%9Bnec+OR+Okounov+OR+Per%C5%A1tejn+OR+%22Kry%C5%A1tofovy+Hamry%22%29+%28%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – Krušné hory a Ohře",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 1
+      "itemsParsed": 0
     },
     {
       "name": "Google News – Pětipsy, Radonice, Rokle, Veliká Ves a Vilémov",
-      "url": "https://news.google.com/rss/search?q=(P%C4%9Btipsy+OR+Radonice+OR+Rokle+OR+%22Velik%C3%A1+Ves%22+OR+Vil%C3%A9mov)+(Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "url": "https://news.google.com/rss/search?q=%28P%C4%9Btipsy+OR+Radonice+OR+Rokle+OR+%22Velik%C3%A1+Ves%22+OR+Vil%C3%A9mov%29+%28Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
@@ -861,7 +870,7 @@
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
-      "url": "https://news.google.com/rss/search?q=(Vejprty+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22)+(%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "url": "https://news.google.com/rss/search?q=%28Vejprty+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22%29+%28%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
@@ -869,11 +878,11 @@
     },
     {
       "name": "Google News – kadaňské organizace a služby",
-      "url": "https://news.google.com/rss/search?q=(%22Nemocnice+Kada%C5%88%22+OR+%22Technick%C3%A9+slu%C5%BEby+Kada%C5%88%22+OR+%22Kultura+Kada%C5%88%22+OR+%22M%C4%9Bstsk%C3%A1+policie+Kada%C5%88%22+OR+%22Sportovn%C3%AD+za%C5%99%C3%ADzen%C3%AD+Kada%C5%88%22)+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "url": "https://news.google.com/rss/search?q=%28%22Nemocnice+Kada%C5%88%22+OR+%22Technick%C3%A9+slu%C5%BEby+Kada%C5%88%22+OR+%22Kultura+Kada%C5%88%22+OR+%22M%C4%9Bstsk%C3%A1+policie+Kada%C5%88%22+OR+%22Sportovn%C3%AD+za%C5%99%C3%ADzen%C3%AD+Kada%C5%88%22%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 5
+      "itemsParsed": 4
     }
   ]
 }
