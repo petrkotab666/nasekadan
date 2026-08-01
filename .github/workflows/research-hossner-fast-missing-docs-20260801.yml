@@ -1,0 +1,251 @@
+name: Rychle dohledat chybějící dokumenty Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-fast-missing-docs-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Prohledat přesné stránky, sitemapy a archivované odkazy
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          OUT=.github/research/hossner-fast-missing-docs-20260801
+          rm -rf "$OUT" && mkdir -p "$OUT"/{files,text,pages,metadata}
+          cat > /tmp/fast.py <<'PY'
+          from __future__ import annotations
+          import hashlib, html, json, re, subprocess, time, urllib.parse
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('.github/research/hossner-fast-missing-docs-20260801')
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan public document research)','Accept-Language':'cs,en;q=0.8'})
+          terms=['hossner','nemocnice kadaň','nemocnice kadan','tőgl','tögl','togel','odměnám jednatele','odmenam jednatele','zápisům dozorčí rady','zapisum dozorci rady','pracovní smlouv','deloitte','30 c 211/2025','30 c 84/2025','93 ncp 490/2026','14 co 104/2026','žaloba','zaloba']
+          pages=[]; docs=[]; hits=[]; errors=[]; seen_pages=set(); seen_docs={}
+
+          def get(url, tries=4, timeout=60):
+              last=None
+              for i in range(tries):
+                  try:
+                      r=S.get(url,timeout=timeout,allow_redirects=True)
+                      if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                      r.raise_for_status(); return r
+                  except Exception as e:
+                      last=e; time.sleep(1+i*1.5)
+              raise last
+
+          def safe(s):
+              return re.sub(r'[^A-Za-z0-9._-]+','_',urllib.parse.unquote(s or '')).strip('_')[:180] or 'file'
+
+          def text_hits(text):
+              low=text.lower(); return [x for x in terms if x in low]
+
+          def save_page(url, tag='page'):
+              if url in seen_pages: return None
+              seen_pages.add(url)
+              try:
+                  r=get(url); soup=BeautifulSoup(r.text,'lxml')
+                  text=soup.get_text('\n',strip=True); hh=text_hits(text)
+                  stem=f'{tag}-{hashlib.sha1(r.url.encode()).hexdigest()[:12]}'
+                  hp=OUT/'pages'/(stem+'.html'); hp.write_bytes(r.content)
+                  tp=OUT/'text'/(stem+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace')
+                  rec={'url':url,'final_url':r.url,'title':soup.title.get_text(' ',strip=True) if soup.title else '', 'hits':hh,'html':str(hp),'text':str(tp)}
+                  pages.append(rec)
+                  if hh: hits.append({'type':'page',**rec,'snippet':re.sub(r'\s+',' ',text)[:8000]})
+                  return r,soup,text
+              except Exception as e:
+                  errors.append({'stage':'page','url':url,'error':repr(e)}); return None
+
+          def save_doc(url, label='document'):
+              if url in seen_docs: return seen_docs[url]
+              try:
+                  r=get(url,timeout=120); data=r.content
+                  if len(data)>35_000_000: return None
+                  sha=hashlib.sha256(data).hexdigest()
+                  for x in docs:
+                      if x['sha256']==sha:
+                          seen_docs[url]=x; return x
+                  name=Path(urllib.parse.urlparse(r.url).path).name
+                  cd=r.headers.get('content-disposition','')
+                  m=re.search(r"filename\*?=(?:UTF-8''|\")?([^\";]+)",cd,re.I)
+                  if m: name=m.group(1)
+                  name=safe(name or label)
+                  ct=r.headers.get('content-type','').lower()
+                  if not Path(name).suffix:
+                      if data.startswith(b'%PDF') or 'pdf' in ct: name+='.pdf'
+                      elif 'word' in ct: name+='.docx'
+                      elif 'html' in ct: name+='.html'
+                      else: name+='.bin'
+                  p=OUT/'files'/name
+                  if p.exists(): p=OUT/'files'/(sha[:10]+'-'+name)
+                  p.write_bytes(data); text=''
+                  if data.startswith(b'%PDF') or p.suffix.lower()=='.pdf':
+                      text=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False).stdout
+                  elif 'html' in ct or p.suffix.lower() in ('.html','.htm'):
+                      text=BeautifulSoup(data,'lxml').get_text('\n',strip=True)
+                  hh=text_hits(text) if text else []
+                  tp=None
+                  if text:
+                      tp=OUT/'text'/(p.name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace')
+                  rec={'source_url':url,'final_url':r.url,'file':str(p),'bytes':len(data),'sha256':sha,'content_type':ct,'text':str(tp) if tp else None,'chars':len(text),'hits':hh}
+                  docs.append(rec); seen_docs[url]=rec
+                  if hh: hits.append({'type':'document',**rec,'snippet':re.sub(r'\s+',' ',text)[:12000]})
+                  return rec
+              except Exception as e:
+                  errors.append({'stage':'document','url':url,'error':repr(e)}); return None
+
+          def linked_docs(r,soup):
+              out=[]
+              for a in soup.find_all('a',href=True):
+                  u=urllib.parse.urljoin(r.url,a['href'])
+                  label=(a.get_text(' ',strip=True)+' '+u).lower()
+                  if re.search(r'\.(pdf|docx?|xlsx?|pptx?|rtf)(?:\?|$)',u,re.I) or 'e_download.php' in u or '/filemanager/files/' in u or '/soubor/' in u:
+                      out.append((u,label))
+              return out
+
+          # 1) Městská sekce 106: staré i nové adresy, všechny stránky a přesný titul.
+          city_urls=[]
+          bases=[
+            'https://www.mesto-kadan.cz/redakce/index.php?clanek=235681&lanG=cs&slozka=237763',
+            'https://www.mesto-kadan.cz/cs/mestsky-urad/zadosti-o-poskytnuti-informaci-dle-zakona-c-106-1999-sb/',
+          ]
+          for base in bases:
+              for off in range(0,400,10):
+                  u=base+(('&entry='+str(off)) if '?' in base else ('?entry='+str(off)))
+                  got=save_page(u,'city106-list')
+                  if not got: continue
+                  r,soup,text=got
+                  for a in soup.find_all('a',href=True):
+                      full=urllib.parse.urljoin(r.url,a['href']); label=(a.get_text(' ',strip=True)+' '+full).lower()
+                      if 'mesto-kadan.cz' in urllib.parse.urlparse(full).netloc and any(t in label for t in ('nemocnice','hossner','odměnám jednatele','odmenam jednatele','dozorčí rady','dozorci rady','106')):
+                          city_urls.append(full)
+                      if re.search(r'\.(pdf|docx?)(?:\?|$)',full,re.I) or '/filemanager/files/' in full:
+                          if any(t in label for t in ('nemocnice','hossner','odměn','odmen','dozorčí','dozorci','tőgl','tögl','togel')): save_doc(full,'city106')
+          for u in list(dict.fromkeys(city_urls))[:500]:
+              got=save_page(u,'city106-detail')
+              if not got: continue
+              r,soup,text=got
+              for full,label in linked_docs(r,soup): save_doc(full,'city106-attachment')
+
+          # 2) Městské sitemapy a všechny relevantní URL z nich.
+          sitemap_seeds=['https://www.mesto-kadan.cz/sitemap.xml','https://www.mesto-kadan.cz/sitemap_index.xml','https://www.mesto-kadan.cz/cs/sitemap.xml']
+          sitemap_urls=[]
+          for u in sitemap_seeds:
+              try:
+                  r=get(u); raw=r.text
+                  (OUT/'pages'/('sitemap-'+hashlib.sha1(u.encode()).hexdigest()[:10]+'.xml')).write_text(raw,encoding='utf-8',errors='replace')
+                  for loc in re.findall(r'<loc>(.*?)</loc>',raw,re.I|re.S):
+                      loc=html.unescape(loc.strip())
+                      if loc.endswith('.xml'): sitemap_urls.append(loc)
+                      elif any(x in loc.lower() for x in ('nemocnic','hossner','informaci','rada-mesta','usneseni')): city_urls.append(loc)
+              except Exception as e: errors.append({'stage':'sitemap','url':u,'error':repr(e)})
+          for sm in list(dict.fromkeys(sitemap_urls))[:100]:
+              try:
+                  r=get(sm); raw=r.text
+                  for loc in re.findall(r'<loc>(.*?)</loc>',raw,re.I|re.S):
+                      loc=html.unescape(loc.strip())
+                      if any(x in loc.lower() for x in ('nemocnic','hossner','informaci','rada-mesta','usneseni')): city_urls.append(loc)
+              except Exception as e: errors.append({'stage':'sitemap-child','url':sm,'error':repr(e)})
+          for u in list(dict.fromkeys(city_urls))[:700]:
+              got=save_page(u,'city-sitemap-hit')
+              if got:
+                  r,soup,text=got
+                  for full,label in linked_docs(r,soup):
+                      if text_hits(label) or text_hits(text): save_doc(full,'city-linked')
+
+          # 3) Nemocnice: přesně vytáhnout všechny zveřejněné INF odkazy včetně 2026-05.
+          hospital_pages=[
+            'https://www.nemkadan.cz/cs/o-nas/poskytovani-informaci-dle-zakona-106-1999-sb/',
+            'https://www.nemkadan.cz/cs/o-nas/zakon-c-106-1999-sb/',
+            'https://www.nemkadan.cz/cs/pro-verejnost/o-nas/',
+          ]
+          for u in hospital_pages:
+              got=save_page(u,'hospital-info')
+              if not got: continue
+              r,soup,text=got
+              for full,label in linked_docs(r,soup):
+                  if 'inf' in label or '268cs_' in full or 'e_download.php' in full: save_doc(full,'hospital-inf')
+
+          # 4) Veškeré odkazy v obsahu všech článků Hossnerova webu, nejen media API.
+          for page in range(1,12):
+              u=f'https://petrhossnerkadan.cz/wp-json/wp/v2/posts?per_page=100&page={page}&_fields=id,date,slug,link,title,content'
+              try:
+                  r=get(u); arr=r.json()
+                  if not arr: break
+                  (OUT/'pages'/(f'hossner-posts-{page}.json')).write_text(json.dumps(arr,ensure_ascii=False,indent=2),encoding='utf-8')
+                  for post in arr:
+                      raw=html.unescape((post.get('content') or {}).get('rendered',''))
+                      low=BeautifulSoup(raw,'lxml').get_text(' ',strip=True).lower()
+                      if not any(t in low for t in ('soud','žalob','zalob','nemocnic','deloitte','smír','smir')): continue
+                      soup=BeautifulSoup(raw,'lxml')
+                      for a in soup.find_all('a',href=True):
+                          full=urllib.parse.urljoin(post.get('link') or 'https://petrhossnerkadan.cz/',a['href'])
+                          label=(a.get_text(' ',strip=True)+' '+full).lower()
+                          if re.search(r'\.(pdf|docx?|pptx?)(?:\?|$)',full,re.I) or 'download' in label: save_doc(full,'hossner-post-link')
+              except Exception as e:
+                  if '400' not in repr(e): errors.append({'stage':'hossner-posts','url':u,'error':repr(e)})
+                  break
+
+          # 5) Wayback CDX pro přesné městské/hospital dokumentové větve.
+          patterns=[
+            'www.mesto-kadan.cz/*odmenam*jednatele*',
+            'www.mesto-kadan.cz/*dozorci*rady*',
+            'www.mesto-kadan.cz/*Hossner*',
+            'www.mesto-kadan.cz/filemanager/files/*',
+            'www.nemkadan.cz/e_download.php*',
+          ]
+          archive=[]
+          for pat in patterns:
+              u='https://web.archive.org/cdx/search/cdx?'+urllib.parse.urlencode({'url':pat,'from':'2024','to':'2026','output':'json','fl':'timestamp,original,statuscode,mimetype,digest','filter':'statuscode:200','collapse':'digest','limit':'4000'})
+              try:
+                  r=get(u,timeout=120); data=r.json(); rows=data[1:] if data and isinstance(data[0],list) else []
+                  for row in rows: archive.append(row)
+              except Exception as e: errors.append({'stage':'wayback-cdx','url':u,'error':repr(e)})
+          for row in archive:
+              ts,orig,status,mime,digest=row
+              low=orig.lower()
+              if any(x in low for x in ('hossner','odmen','odm%C4%9Bn','dozor','nemocnic','268cs_')):
+                  snap=f'https://web.archive.org/web/{ts}id_/{orig}'
+                  if re.search(r'\.(pdf|docx?)(?:\?|$)',orig,re.I) or 'e_download.php' in orig or '/filemanager/files/' in orig: save_doc(snap,'wayback-doc')
+                  else:
+                      got=save_page(snap,'wayback-page')
+                      if got:
+                          r,soup,text=got
+                          for full,label in linked_docs(r,soup): save_doc(full,'wayback-linked')
+
+          (OUT/'metadata/pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/documents.json').write_text(json.dumps(docs,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/hits.json').write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/archive.json').write_text(json.dumps(archive,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Rychlé dohledání chybějících dokumentů Hossner / Nemocnice Kadaň','',f'- Uložené stránky: {len(pages)}',f'- Unikátní dokumenty: {len(docs)}',f'- Relevantní obsahové nálezy: {len(hits)}',f'- Chyby: {len(errors)}','', '## Dokumenty','']
+          for d in docs:
+              lines.append(f"- **{', '.join(d.get('hits',[])) or 'bez textové shody'}** — {d['final_url']} — `{d['file']}` — {d['bytes']} B")
+          lines+=['','## Relevantní stránky','']
+          for p in pages:
+              if p.get('hits'): lines.append(f"- **{', '.join(p['hits'])}** — {p['final_url']} — `{p['html']}`")
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/fast.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-fast-missing-docs-20260801
+          git commit -m 'Výsledky rychlého dohledání chybějících dokumentů Hossner' || exit 0
+          git push origin main
