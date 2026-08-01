@@ -1,0 +1,76 @@
+name: Hloubková rešerše sporů Petr Hossner
+
+on:
+  push:
+    branches:
+      - research/hossner-cases-20260801
+    paths:
+      - scripts/research_hossner_cases_20260801.py
+      - .github/workflows/research-hossner-cases-20260801.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-hossner-cases-20260801
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Načíst výzkumnou větev
+        uses: actions/checkout@v4
+        with:
+          ref: research/hossner-cases-20260801
+          fetch-depth: 0
+
+      - name: Připravit Python a nástroje pro dokumenty
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat závislosti
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils unzip
+          python -m pip install --disable-pip-version-check requests beautifulsoup4 lxml playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Projít InfoSoud, webové archivy a dokumenty
+        run: |
+          set -euo pipefail
+          python scripts/research_hossner_cases_20260801.py
+
+      - name: Uložit získané podklady do výzkumné větve
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/research/hossner-cases-2026
+          if git diff --cached --quiet; then
+            echo 'Rešerše nevytvořila žádná nová data.'
+            exit 0
+          fi
+          git commit -m 'Uložit výsledky hloubkové rešerše sporů Petra Hossnera'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:research/hossner-cases-20260801; then
+              exit 0
+            fi
+            git fetch origin research/hossner-cases-20260801
+            git rebase origin/research/hossner-cases-20260801
+            sleep $((attempt * 3))
+          done
+          exit 1
+
+      - name: Přiložit výzkumný balík
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hossner-cases-research
+          path: .github/research/hossner-cases-2026
+          if-no-files-found: warn
+          retention-days: 30
