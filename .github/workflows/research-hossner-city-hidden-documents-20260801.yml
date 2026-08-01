@@ -1,0 +1,290 @@
+name: Dohledat skryté dokumenty Hossner – město a registr smluv
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-city-hidden-documents-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-hossner-city-hidden-documents-20260801
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces antiword
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+
+      - name: Prohledat městský archiv, filemanager, registr smluv a webové archivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-city-hidden-documents-20260801
+          rm -rf "$OUT"
+          mkdir -p "$OUT"/{documents,text,pages,metadata}
+          cat > /tmp/research.py <<'PY'
+          from __future__ import annotations
+          import hashlib, io, json, re, subprocess, time, urllib.parse, zipfile
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          from lxml import etree
+
+          OUT=Path('.github/research/hossner-city-hidden-documents-20260801')
+          for x in ('documents','text','pages','metadata'): (OUT/x).mkdir(parents=True,exist_ok=True)
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan public-document research; +https://nasekadan.cz/)','Accept-Language':'cs,en;q=0.7'})
+          TERMS=[
+            'hossner','nemocnice kadaň','nemocnice kadan','deloitte','tőgl','tögl','togel',
+            'pracovní smlouv','pracovni smlouv','kritéria hodnocení','kriteria hodnoceni',
+            'právní stanovisko','pravni stanovisko','právní prověr','pravni prover',
+            '614/2024','619/2024','621/2024','55/2026','30 c 211/2025','30 c 84/2025','93 ncp 490/2026',
+            '25,9','25.9','52,9','52.9','souběh funkcí','soubeh funkci'
+          ]
+          findings=[]; downloads=[]; errors=[]; pages=[]; seen_urls=set(); seen_hashes=set()
+
+          def req(url, method='get', timeout=45, tries=3):
+              last=None
+              for i in range(tries):
+                  try:
+                      r=S.request(method,url,timeout=timeout,allow_redirects=True)
+                      if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                      return r
+                  except Exception as e:
+                      last=e; time.sleep(1.0+i*1.5)
+              raise last
+
+          def safe(s):
+              s=urllib.parse.unquote(s or '')
+              return re.sub(r'[^A-Za-z0-9._-]+','_',s).strip('_')[:170] or 'file'
+
+          def extract(path:Path):
+              ext=path.suffix.lower(); text=''
+              try:
+                  if ext=='.pdf':
+                      q=subprocess.run(['pdftotext','-layout',str(path),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+                      text=q.stdout
+                      if len(re.sub(r'\s+','',text))<120 and path.stat().st_size<18_000_000:
+                          d=Path('/tmp/ocr-'+hashlib.sha1(str(path).encode()).hexdigest()[:12]); d.mkdir(exist_ok=True)
+                          subprocess.run(['pdftoppm','-f','1','-l','60','-r','170','-png',str(path),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                          parts=[]
+                          for img in sorted(d.glob('p-*.png')):
+                              z=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+                              parts.append(z.stdout)
+                          text='\n'.join(parts)
+                  elif ext=='.docx':
+                      with zipfile.ZipFile(path) as z:
+                          raw=z.read('word/document.xml')
+                      root=etree.fromstring(raw); text='\n'.join(root.itertext())
+                  elif ext=='.doc':
+                      q=subprocess.run(['antiword',str(path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); text=q.stdout
+                  elif ext in ('.txt','.html','.htm','.xml','.json','.csv'):
+                      text=path.read_text(encoding='utf-8',errors='replace')
+              except Exception as e: errors.append({'stage':'extract','file':str(path),'error':repr(e)})
+              return text
+
+          def score_text(text):
+              low=text.lower()
+              return [t for t in TERMS if t in low]
+
+          def save_bytes(url, content, ctype='', hint=''):
+              sha=hashlib.sha256(content).hexdigest()
+              if sha in seen_hashes: return None
+              seen_hashes.add(sha)
+              name=Path(urllib.parse.urlparse(url).path).name or hint or 'file'
+              name=safe(name)
+              ext=Path(name).suffix.lower()
+              if not ext:
+                  cl=(ctype or '').lower()
+                  if content.startswith(b'%PDF') or 'pdf' in cl: name+='.pdf'
+                  elif 'wordprocessingml' in cl: name+='.docx'
+                  elif 'msword' in cl: name+='.doc'
+                  elif 'html' in cl: name+='.html'
+                  else: name+='.bin'
+              p=OUT/'documents'/name
+              if p.exists(): p=OUT/'documents'/(sha[:10]+'-'+name)
+              p.write_bytes(content)
+              text=extract(p)
+              hits=score_text(text) if text else []
+              rec={'url':url,'file':str(p),'bytes':len(content),'sha256':sha,'content_type':ctype,'hits':hits}
+              if text:
+                  tp=OUT/'text'/(p.name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace'); rec['text_file']=str(tp); rec['chars']=len(text)
+              downloads.append(rec)
+              if hits:
+                  snippets=[]; low=text.lower()
+                  for hit in hits[:15]:
+                      i=low.find(hit); snippets.append(re.sub(r'\s+',' ',text[max(0,i-300):i+700]))
+                  findings.append({**rec,'snippets':snippets})
+              return rec
+
+          def fetch_doc(url, hint=''):
+              if url in seen_urls: return None
+              seen_urls.add(url)
+              try:
+                  r=req(url,timeout=90)
+                  if r.status_code!=200: return None
+                  if len(r.content)>25_000_000: return None
+                  return save_bytes(r.url,r.content,r.headers.get('content-type',''),hint)
+              except Exception as e: errors.append({'stage':'fetch_doc','url':url,'error':repr(e)}); return None
+
+          def save_page(url, tag='page'):
+              try:
+                  r=req(url,timeout=60)
+                  if r.status_code!=200: return None
+                  soup=BeautifulSoup(r.text,'lxml'); text=soup.get_text('\n',strip=True); hits=score_text(text)
+                  pid=hashlib.sha1(r.url.encode()).hexdigest()[:12]
+                  (OUT/'pages'/f'{tag}-{pid}.html').write_bytes(r.content)
+                  (OUT/'text'/f'{tag}-{pid}.txt').write_text(text,encoding='utf-8',errors='replace')
+                  rec={'url':r.url,'status':r.status_code,'hits':hits,'title':soup.title.get_text(' ',strip=True) if soup.title else ''}
+                  pages.append(rec)
+                  if hits: findings.append({**rec,'type':'html','snippet':re.sub(r'\s+',' ',text)[:5000]})
+                  return r,soup
+              except Exception as e: errors.append({'stage':'page','url':url,'error':repr(e)}); return None
+
+          DOC_RX=re.compile(r'\.(pdf|docx?|xlsx?|pptx?|rtf|txt)(?:\?|$)',re.I)
+
+          # 1) Všech 33 stran zveřejněných odpovědí podle zákona 106.
+          article_urls=[]
+          base='https://www.mesto-kadan.cz/redakce/index.php?clanek=235681&lanG=cs&slozka=237763'
+          for entry in range(0,340,10):
+              got=save_page(base+f'&entry={entry}','info106')
+              if not got: continue
+              r,soup=got
+              for a in soup.find_all('a',href=True):
+                  full=urllib.parse.urljoin(r.url,a['href'])
+                  if 'mesto-kadan.cz' not in urllib.parse.urlparse(full).netloc: continue
+                  if DOC_RX.search(full) or '/filemanager/files/' in full: fetch_doc(full,'106-attachment')
+                  if ('clanek=' in full or '/cs/' in full) and full not in article_urls: article_urls.append(full)
+          for u in article_urls:
+              got=save_page(u,'info106-article')
+              if not got: continue
+              r,soup=got
+              for a in soup.find_all('a',href=True):
+                  full=urllib.parse.urljoin(r.url,a['href'])
+                  if DOC_RX.search(full) or '/filemanager/files/' in full: fetch_doc(full,'106-article-attachment')
+
+          # 2) Rada města, známé dokumenty a odkazy na přílohy.
+          seed_pages=[
+            'https://www.mesto-kadan.cz/cs/mesto/rada-mesta/',
+            'https://www.mesto-kadan.cz/cs/mesto/rada-mesta/usneseni-rady-mesta/',
+            'https://www.mesto-kadan.cz/cs/mestsky-urad/zadosti-o-poskytnuti-informaci-dle-zakona-c-106-1999-sb/',
+          ]
+          for u in seed_pages:
+              got=save_page(u,'city-seed')
+              if not got: continue
+              r,soup=got
+              for a in soup.find_all('a',href=True):
+                  full=urllib.parse.urljoin(r.url,a['href'])
+                  if DOC_RX.search(full) or '/filemanager/files/' in full: fetch_doc(full,'city-document')
+          for fid in (3895222,4957305,3805054,3837143,3750240,4871082):
+              fetch_doc(f'https://www.mesto-kadan.cz/filemanager/files/{fid}.pdf','known-city-pdf')
+
+          # 3) Modestní průchod sousedními veřejnými ID kolem klíčových dokumentů.
+          # Přílohy z jednoho vložení bývají číselně blízko; požadavky jsou zpomalené.
+          ranges=[(3894820,3895425),(4957000,4957500)]
+          adjacent=[]
+          for lo,hi in ranges:
+              for fid in range(lo,hi+1):
+                  url=f'https://www.mesto-kadan.cz/filemanager/files/{fid}.pdf'
+                  try:
+                      r=req(url,method='head',timeout=15,tries=1)
+                      if r.status_code==200 and ('pdf' in r.headers.get('content-type','').lower() or int(r.headers.get('content-length','0') or 0)>500):
+                          rec=fetch_doc(url,'adjacent-city-pdf')
+                          if rec: adjacent.append(rec)
+                  except Exception: pass
+                  time.sleep(0.08)
+          (OUT/'metadata/adjacent.json').write_text(json.dumps(adjacent,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 4) Registr smluv: přesné kombinace nemocnice + právní kanceláře a jejich přílohy.
+          rs_queries=[
+            {'subject_name':'Nemocnice Kadaň s.r.o.','party_name':'Deloitte Legal'},
+            {'subject_name':'Nemocnice Kadaň s.r.o.','party_name':'Petr Šustek'},
+            {'subject_name':'Nemocnice Kadaň s.r.o.','contract_descr':'právních služeb'},
+            {'subject_name':'Město Kadaň','party_name':'Vladimír Tögel'},
+            {'subject_name':'Město Kadaň','party_name':'Vladimír Tőgl'},
+          ]
+          rs_details=[]
+          for q in rs_queries:
+              params={'do':'searchResultList-setOffset','searchResultList-offset':0,'search_type':0,**q}
+              url='https://smlouvy.gov.cz/vyhledavani?'+urllib.parse.urlencode(params)
+              got=save_page(url,'registr-search')
+              if not got: continue
+              r,soup=got
+              for a in soup.find_all('a',href=True):
+                  full=urllib.parse.urljoin(r.url,a['href'])
+                  if re.search(r'/smlouva/\d+',full) and full not in rs_details: rs_details.append(full)
+          for u in rs_details:
+              got=save_page(u,'registr-detail')
+              if not got: continue
+              r,soup=got
+              for a in soup.find_all('a',href=True):
+                  full=urllib.parse.urljoin(r.url,a['href'])
+                  if DOC_RX.search(full) or '/smlouva/soubor/' in full or '/smlouva/soubor/' in urllib.parse.unquote(full): fetch_doc(full,'registr-attachment')
+
+          # 5) Internet Archive: archivované verze klíčových městských stránek a jejich přílohy.
+          cdx_specs=[
+            'www.mesto-kadan.cz/cs/mesto/rada-mesta/*',
+            'www.mesto-kadan.cz/redakce/index.php?clanek=235681*',
+            'www.mesto-kadan.cz/cs/mestsky-urad/zadosti-o-poskytnuti-informaci-dle-zakona-c-106-1999-sb/*',
+          ]
+          archive_rows=[]
+          for spec in cdx_specs:
+              params={'url':spec,'from':'2024','to':'2026','output':'json','filter':['statuscode:200','mimetype:text/html'],'fl':'timestamp,original,digest','collapse':'digest','limit':'3000'}
+              # requests neumí opakované filter z dictu spolehlivě, sestavíme URL ručně
+              url='https://web.archive.org/cdx/search/cdx?'+urllib.parse.urlencode({'url':spec,'from':2024,'to':2026,'output':'json','fl':'timestamp,original,digest','collapse':'digest','limit':3000})+'&filter=statuscode%3A200&filter=mimetype%3Atext%2Fhtml'
+              try:
+                  r=req(url,timeout=120)
+                  if r.status_code!=200: continue
+                  data=r.json()
+                  for row in data[1:] if data and isinstance(data[0],list) else []:
+                      ts,orig,digest=row; archive_rows.append({'timestamp':ts,'original':orig,'digest':digest})
+              except Exception as e: errors.append({'stage':'cdx','url':url,'error':repr(e)})
+          # poslední unikátní snapshot každého URL
+          latest={}
+          for x in archive_rows: latest[x['original']]=x
+          for x in list(latest.values())[-700:]:
+              snap=f"https://web.archive.org/web/{x['timestamp']}id_/{x['original']}"
+              got=save_page(snap,'wayback')
+              if not got: continue
+              r,soup=got
+              for a in soup.find_all('a',href=True):
+                  full=urllib.parse.urljoin(r.url,a['href'])
+                  if DOC_RX.search(full) or '/filemanager/files/' in full: fetch_doc(full,'wayback-attachment')
+          (OUT/'metadata/wayback.json').write_text(json.dumps(archive_rows,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          (OUT/'metadata/pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Cílené hledání skrytých dokumentů Hossner / Nemocnice Kadaň','',f'- Prohledané stránky: {len(pages)}',f'- Stažené unikátní dokumenty: {len(downloads)}',f'- Obsahové nálezy: {len(findings)}',f'- Zaznamenané chyby: {len(errors)}','', '## Nálezy','']
+          for f in findings:
+              lines.append(f"- **{', '.join(f.get('hits',[])) or f.get('type','nález')}** — {f.get('url','')} — `{f.get('file','')}`")
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/research.py
+
+      - name: Uložit nalezené dokumenty
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-city-hidden-documents-20260801
+          if git diff --cached --quiet; then
+            echo 'Žádné změny.'
+          else
+            git commit -m 'Výsledky cíleného hledání dokumentů Hossner a Nemocnice Kadaň'
+            git push origin main
+          fi
