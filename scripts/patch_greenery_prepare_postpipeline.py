@@ -6,6 +6,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'scripts/prepare_greenery_publication_20260801.py'
 MARKER = 'POLL_POST_PIPELINE_V2'
+BUGGY = '''    if matches:
+        first = matches[0]
+        text = text[:first.start()] + site_tag + text[first.end():]
+        text = pattern.sub("", text, count=max(0, len(matches) - 1))
+'''
+FIXED = '''    if matches:
+        pieces = []
+        cursor = 0
+        for index, match in enumerate(matches):
+            pieces.append(text[cursor:match.start()])
+            if index == 0:
+                pieces.append(site_tag)
+            cursor = match.end()
+        pieces.append(text[cursor:])
+        text = "".join(pieces)
+'''
 
 HELPER = r'''
 
@@ -28,9 +44,15 @@ def enforce_poll_markup_after_pipeline() -> None:
     )
     matches = list(pattern.finditer(text))
     if matches:
-        first = matches[0]
-        text = text[:first.start()] + site_tag + text[first.end():]
-        text = pattern.sub("", text, count=max(0, len(matches) - 1))
+        pieces = []
+        cursor = 0
+        for index, match in enumerate(matches):
+            pieces.append(text[cursor:match.start()])
+            if index == 0:
+                pieces.append(site_tag)
+            cursor = match.end()
+        pieces.append(text[cursor:])
+        text = "".join(pieces)
     elif "</body>" in text:
         text = text.replace("</body>", site_tag + "\n</body>", 1)
     else:
@@ -41,20 +63,26 @@ def enforce_poll_markup_after_pipeline() -> None:
 
 def main() -> None:
     text = PATH.read_text(encoding='utf-8')
-    if MARKER in text:
-        print('Povinné vložení ankety po normalizaci už je nastavené.')
-        return
-    anchor = '\ndef run_common_pipeline() -> None:\n'
-    if anchor not in text:
-        raise RuntimeError('Nelze najít funkci společného publikačního pipeline.')
-    text = text.replace(anchor, HELPER + f'\n# {MARKER}\n' + anchor, 1)
-    old = '    run_common_pipeline()\n    payload = validate()\n'
-    new = '    run_common_pipeline()\n    enforce_poll_markup_after_pipeline()\n    payload = validate()\n'
-    if old not in text:
-        raise RuntimeError('Nelze najít hlavní publikační posloupnost.')
-    text = text.replace(old, new, 1)
-    PATH.write_text(text, encoding='utf-8')
-    print('Vložení funkční ankety po normalizaci bylo doplněno.')
+    changed = False
+    if BUGGY in text:
+        text = text.replace(BUGGY, FIXED, 1)
+        changed = True
+    if MARKER not in text:
+        anchor = '\ndef run_common_pipeline() -> None:\n'
+        if anchor not in text:
+            raise RuntimeError('Nelze najít funkci společného publikačního pipeline.')
+        text = text.replace(anchor, HELPER + f'\n# {MARKER}\n' + anchor, 1)
+        old = '    run_common_pipeline()\n    payload = validate()\n'
+        new = '    run_common_pipeline()\n    enforce_poll_markup_after_pipeline()\n    payload = validate()\n'
+        if old not in text:
+            raise RuntimeError('Nelze najít hlavní publikační posloupnost.')
+        text = text.replace(old, new, 1)
+        changed = True
+    if changed:
+        PATH.write_text(text, encoding='utf-8')
+        print('Vložení funkční ankety po normalizaci bylo opraveno.')
+    else:
+        print('Vložení ankety po normalizaci už používá správnou deduplikaci.')
 
 
 if __name__ == '__main__':
