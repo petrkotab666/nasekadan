@@ -27,6 +27,21 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+      - name: Zajistit ukončení živého testovacího prohlížeče
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('scripts/run_greenery_poll_hotfix.sh')
+          text=path.read_text(encoding='utf-8')
+          old="console.log('Živý test prošel:',text.replace(/\\s+/g,' ').trim());"
+          new=old+"\nw.close();process.exit(0);"
+          if 'w.close();process.exit(0);' not in text:
+              if old not in text:
+                  raise SystemExit('Nelze najít konec živého DOM testu.')
+              text=text.replace(old,new,1)
+              path.write_text(text,encoding='utf-8',newline='\n')
+          PY
       - name: Opravit, nasadit a veřejně ověřit anketu
         shell: bash
         run: bash scripts/run_greenery_poll_hotfix.sh
