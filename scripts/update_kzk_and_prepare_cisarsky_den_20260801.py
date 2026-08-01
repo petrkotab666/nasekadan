@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+KZK = ROOT / ".github/drafts/kulturni-zarizeni-kadan.html"
+CISARSKY = ROOT / ".github/drafts/cisarsky-den-kadan-historie-2026.html"
+RESEARCH = ROOT / ".github/research/cisarsky-den-2026/README.md"
+
+kzk = KZK.read_text(encoding="utf-8")
+
+marker = '''    <div class="event-cloud"><span>Koncerty</span><span>Divadla</span><span>Slavnosti</span><span>Výstavy</span><span>Program pro děti</span><span>Besedy</span><span>Trhy</span><span>Taneční</span><span>Prohlídky</span><span>Venkovní scény</span></div>'''
+
+section = '''    <div class="callout" id="cisarsky-den">
+      <strong>Císařský den je největší kadaňská kulturní akce</strong>
+      <p>Za největší kulturní událost města označují Císařský den také oficiální turistické stránky Kadaně. Historická slavnost letos připadne na sobotu <strong>22. srpna 2026</strong> a pořadatelé ji uvádějí jako <strong>34. ročník</strong>. Program má probíhat od 10 do 22 hodin v historickém centru a jeho okolí.</p>
+      <p>Myšlenka slavnosti vznikla v roce 1992, kdy tehdejší tajemník městského úřadu pan Malý oslovil archivářku Kateřinu Mertovou. Ta spolu s Janem Gažou připravila námět a scénář založený na návštěvě Karla IV. v Kadani roku 1367. Oficiální historie slavnosti datuje pravidelné pořádání od roku 1993.</p>
+      <p>Hlavním obrazem dne zůstává příjezd Karla IV. a jeho družiny. Letošní průvod má vyjít ve 14 hodin od františkánského kláštera, ve 14:30 následuje slavnostní ceremonie na Mírovém náměstí a v 18 hodin rytířský turnaj na koních ve Smetanových sadech. Oficiální historie popisuje Císařský den jako městské divadlo rozprostřené přibližně do osmi herních prostor, na němž se podílí více než šest set účinkujících ze zhruba čtyřiceti skupin.</p>
+    </div>
+
+'''
+
+if 'id="cisarsky-den"' not in kzk:
+    if marker not in kzk:
+        raise SystemExit("V návrhu KZK nebyl nalezen bod pro vložení Císařského dne.")
+    kzk = kzk.replace(marker, section + marker, 1)
+
+source_anchor = '''        <li><a href="https://www.kultura-kadan.cz/cs/provozni-doby.html" target="_blank" rel="noopener">Aktuální provozní doby</a></li>'''
+source_add = '''        <li><a href="https://www.kultura-kadan.cz/cs/provozni-doby.html" target="_blank" rel="noopener">Aktuální provozní doby</a></li>
+        <li><a href="https://cisarskyden.cz/" target="_blank" rel="noopener">Císařský den 2026 – oficiální web a základní program</a></li>
+        <li><a href="https://cisarskyden.cz/historie/" target="_blank" rel="noopener">Oficiální historie Císařského dne a návštěv Karla IV.</a></li>
+        <li><a href="https://kadan.eu/kultura/cisarsky-den/" target="_blank" rel="noopener">Turistický web města – Císařský den jako největší kadaňská kulturní akce</a></li>'''
+if 'https://cisarskyden.cz/historie/' not in kzk:
+    if source_anchor not in kzk:
+        raise SystemExit("V návrhu KZK nebyl nalezen seznam zdrojů.")
+    kzk = kzk.replace(source_anchor, source_add, 1)
+
+KZK.write_text(kzk, encoding="utf-8", newline="\n")
+
+article = '''<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti | Naše Kadaň</title>
+  <meta name="description" content="Jak vznikl Císařský den, co se skutečně stalo při návštěvách Karla IV. v letech 1367 a 1374 a co nabídne 34. ročník 22. srpna 2026.">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <link rel="canonical" href="https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .article-shell{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:56px 0}
+    .article h1{font:800 clamp(38px,6vw,64px)/1.02 Georgia,serif;letter-spacing:-.035em;margin:.25em 0}
+    .article h2{font:800 34px/1.15 Georgia,serif;margin:52px 0 14px}
+    .article h3{font:800 24px/1.2 Georgia,serif;margin:30px 0 10px}
+    .article p,.article li{font-size:18px;line-height:1.7}.article .leadtext{font-size:23px;color:#465862;line-height:1.55}
+    .article a{color:#9f2626;text-decoration:underline;text-underline-offset:3px}
+    .hero{min-height:400px;margin:30px 0;padding:34px;border-radius:26px;display:flex;align-items:flex-end;position:relative;overflow:hidden;color:#fff;background:radial-gradient(circle at 78% 14%,rgba(255,255,255,.19),transparent 25%),linear-gradient(135deg,#172632,#72522f 58%,#a9232b);box-shadow:var(--shadow)}
+    .hero:after{content:'KAREL IV.';position:absolute;right:-18px;top:15px;font:900 104px/1 Arial;color:#ffffff12;letter-spacing:-.06em}
+    .hero strong{position:relative;z-index:1;max-width:660px;font:800 35px/1.18 Georgia,serif}.hero small{display:block;margin-bottom:10px;color:#ffe1a0;font:900 13px/1.2 Arial;letter-spacing:.12em;text-transform:uppercase}
+    .facts{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;margin:30px 0}.facts div{padding:22px;border:1px solid var(--line);border-radius:17px;background:#fff;box-shadow:0 10px 28px rgba(18,35,45,.05)}.facts b{display:block;color:#9f2626;font:800 29px/1.1 Georgia,serif;margin-bottom:6px}.facts span{font-size:14px;color:var(--muted)}
+    .timeline{margin:30px 0;padding-left:24px;border-left:4px solid #d6dde0}.timeline-item{position:relative;padding:0 0 27px}.timeline-item:before{content:'';position:absolute;left:-33px;top:7px;width:14px;height:14px;border-radius:50%;background:#9f2626;border:4px solid #f7f8f8}.timeline-item b{display:block;font:850 21px Georgia,serif}.timeline-item p{margin:5px 0}.timeline-item:last-child{padding-bottom:0}
+    .callout{margin:34px 0;padding:23px 27px;border-left:6px solid #9f2626;border-radius:0 17px 17px 0;background:#f7f1e7}.callout strong{display:block;font:800 24px Georgia,serif;margin-bottom:7px}.callout p{margin:0}
+    .program{display:grid;gap:12px;margin:28px 0}.program div{display:grid;grid-template-columns:90px 1fr;gap:16px;padding:19px 21px;border:1px solid var(--line);border-radius:16px;background:#fff}.program time{color:#9f2626;font-weight:900;font-size:20px}.program b{font:800 20px Georgia,serif}.program p{margin:4px 0 0;font-size:15px;color:var(--muted)}
+    .source-list{margin-top:44px;padding:24px;border-radius:18px;background:#eef3f5}.source-list li{font-size:15px;margin-bottom:8px}.source-list small{color:var(--muted)}
+    .sticky{position:sticky;top:100px}.sidebox{padding:20px;margin-bottom:18px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(18,35,45,.05)}.sidebox h3{font:800 23px Georgia,serif;margin:0 0 12px}.sidebox p,.sidebox li{font-size:14px}.editor{background:#fff1c9;border-color:#e0c36f}.editor strong{color:#7b5511}
+    @media(max-width:980px){.article-shell{grid-template-columns:1fr}.sticky{position:static}}
+    @media(max-width:700px){.facts{grid-template-columns:1fr}.program div{grid-template-columns:1fr}.hero{min-height:315px}.hero:after{font-size:68px}.article h1{font-size:42px}.article .leadtext{font-size:20px}}
+  </style>
+</head>
+<body>
+<header><div class="wrap head"><a class="logo" href="/"><span class="logo-mark"></span><span>NAŠE <b>KADAŇ</b></span></a><nav><a href="/">Úvod</a><a href="/clanky/">Články</a><a href="/pruvodce/">Průvodce</a></nav></div></header>
+<main class="wrap article-shell">
+<article class="article">
+  <p class="tag">HISTORIE · KULTURA · KADAŇ · PŘIPRAVOVANÝ ČLÁNEK</p>
+  <h1>Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti</h1>
+  <p class="leadtext">Každý rok zaplní historické centrum Kadaně císařský průvod, tržiště, šermíři, rytíři a stovky účinkujících. Císařský den ale nevznikl jako obecná středověká podívaná. Jeho příběh stojí na skutečných návštěvách Karla IV., privilegiích udělených městu a nápadu, který se začal rodit v roce 1992. Letošní 34. ročník se uskuteční 22. srpna 2026.</p>
+
+  <div class="hero"><strong><small>Historie, která každé léto znovu ožije</small>Císařský den proměňuje Kadaň v rozsáhlé městské divadlo a připomíná dobu, kdy zde několik dní úřadoval Karel IV.</strong></div>
+
+  <div class="facts">
+    <div><b>22. 8. 2026</b><span>datum letošního 34. ročníku</span></div>
+    <div><b>1367 a 1374</b><span>doložené návštěvy Karla IV. v Kadani</span></div>
+    <div><b>1992–1993</b><span>vznik námětu a začátek pravidelné slavnosti</span></div>
+    <div><b>600+ účinkujících</b><span>rozsah uváděný oficiální historií akce</span></div>
+  </div>
+
+  <h2>Největší kulturní akce města</h2>
+  <p>Oficiální turistický web Kadaně označuje Císařský den za největší kadaňskou kulturní akci. Nejde přitom jen o několikahodinový program na hlavním pódiu. Historický příběh se rozlévá přes náměstí, ulice, hrad, městské hradby, Studentské náměstí, františkánský klášter i Smetanovy sady.</p>
+  <p>Oficiální historie popisuje slavnost jako obrovské historické divadlo. Program se obvykle odehrává přibližně na osmi místech a podílí se na něm více než šest set účinkujících ze zhruba čtyřiceti skupin. Pořadatelé připravují tržiště, řemesla, hudbu, pouliční divadlo, dětské úkoly, vojenské ležení, jezdecké turnaje i večerní finále.</p>
+
+  <h2>Co se v Kadani stalo roku 1367</h2>
+  <p>První doložená návštěva Karla IV. začala 29. května 1367. Císař a český král v Kadani nepobýval pouze při krátké zastávce. Na zdejším hradě několik dní úřadoval a vydával listiny týkající se města, Českého království i Svaté říše římské.</p>
+  <p>Jedním z nejdůležitějších výsledků návštěvy bylo povolení konat osmidenní výroční trh. Další listina vydaná 1. června se týkala venkovských statků kadaňských měšťanů. Právě tento skutečný pobyt panovníka se stal hlavním dějovým základem pozdější městské slavnosti.</p>
+
+  <div class="callout"><strong>Císařský den není připomínkou smyšlené legendy</strong><p>Základní příběh vychází z archivně doloženého několikadenního pobytu Karla IV. ve městě. Slavnost jej převádí do podoby veřejného divadla, průvodu a císařského slyšení.</p></div>
+
+  <h2>Druhá návštěva a počátek vinařské tradice</h2>
+  <p>Karel IV. navštívil Kadaň znovu roku 1374. Dne 8. září vydal privilegium, které obyvatelům umožnilo zakládat vinohrady a pěstovat vinnou révu za obdobných podmínek, jaké měli Pražané. Kadaň se tak zařadila mezi vinařské obce a město na tuto tradici dodnes navazuje.</p>
+  <p>S Karlovou dobou souvisí také potvrzení mílového práva z ledna 1367, které chránilo hospodářské postavení města. Tato listina však nebyla vydána při císařově pobytu v Kadani, nýbrž v Karlových Varech. Pro přesné vyprávění historie je proto důležité jednotlivé události nerozmělňovat do jediného příběhu.</p>
+
+  <h2>Jak vznikla novodobá slavnost</h2>
+  <p>Nápad uspořádat v Kadani historickou slavnost se začal rodit v roce 1992. Tehdejší tajemník městského úřadu pan Malý oslovil ředitelku místní pobočky okresního archivu Kateřinu Mertovou. Ta společně s kolegou Janem Gažou připravila námět a scénář prvního Císařského dne.</p>
+  <p>Nosným tématem se stal příjezd Karla IV. v roce 1367. Oficiální historie akce uvádí, že Kadaň slavnost pravidelně pořádá od roku 1993. Některé městské materiály používají jako počátek rok 1992, kdy vznikala její příprava. Nejpřesnější je proto rozlišovat vznik myšlenky a scénáře v roce 1992 od pravidelné tradice datované oficiální historií od roku 1993.</p>
+
+  <div class="timeline">
+    <div class="timeline-item"><b>29. května 1367</b><p>Začíná první doložený pobyt Karla IV. v Kadani.</p></div>
+    <div class="timeline-item"><b>1. června 1367</b><p>Panovník v Kadani vydává další listinu týkající se kadaňských záležitostí.</p></div>
+    <div class="timeline-item"><b>8. září 1374</b><p>Druhá návštěva přináší privilegium k zakládání vinohradů.</p></div>
+    <div class="timeline-item"><b>Rok 1992</b><p>Vzniká námět a scénář novodobé historické slavnosti.</p></div>
+    <div class="timeline-item"><b>Od roku 1993</b><p>Oficiální historie datuje pravidelné pořádání Císařského dne.</p></div>
+    <div class="timeline-item"><b>22. srpna 2026</b><p>Kadaň hostí 34. ročník slavnosti.</p></div>
+  </div>
+
+  <h2>Jak vypadá tradiční scénář</h2>
+  <p>Ráno se otevírá historické tržiště a město postupně zaplňují řemeslníci, hudebníci, trhovci a účinkující v dobových kostýmech. Nejočekávanější částí dne je císařský průvod, který vyráží od františkánského kláštera a přes ulici Jana Švermy a Mikulovickou bránu vstupuje na Mírové náměstí.</p>
+  <p>Následuje slavnostní ceremonie a císařské slyšení. Příběh připomíná privilegia a význam Kadaně v době Karla IV. Další části programu se odehrávají na hradě, hradbách a v parcích. Děti procházejí Sedmerem rytířských ctností, ve Smetanových sadech vzniká vojenské ležení a kolbiště a den tradičně uzavírá ohňový program a závěrečné loučení císaře s městem.</p>
+
+  <h2>Co je zatím zveřejněno pro rok 2026</h2>
+  <p>Letošní Císařský den se uskuteční v sobotu 22. srpna od 10 do 22 hodin. Pořadatelé už zveřejnili tři hlavní body programu:</p>
+  <div class="program">
+    <div><time>14:00</time><div><b>Příjezd císaře Karla IV.</b><p>Průvod vychází od františkánského kláštera.</p></div></div>
+    <div><time>14:30</time><div><b>Slavnostní ceremonie</b><p>Hlavní dějová část na Mírovém náměstí.</p></div></div>
+    <div><time>18:00</time><div><b>Rytířský turnaj na koních</b><p>Turnaj ve Smetanových sadech.</p></div></div>
+  </div>
+  <p>Další program má probíhat současně na několika místech. Počítá se s historickým tržištěm, dobovými řemesly, hudbou, pouličním divadlem, dětskými aktivitami a programem ve Smetanových sadech. Podrobný časový rozpis bude vhodné do článku doplnit po jeho úplném zveřejnění.</p>
+
+  <h2>Proč slavnost přežila více než tři desetiletí</h2>
+  <p>Císařský den spojuje několik věcí, které se u městských slavností nepotkávají automaticky: skutečný místní historický příběh, zachované kulisy královského města, výraznou hlavní postavu a program rozprostřený do ulic. Návštěvníci nejsou pouze publikem před pódiem, ale pohybují se uvnitř příběhu.</p>
+  <p>Akce současně vytváří společnou značku města. Označení CÍSAŘSKÝ DEN® je chráněnou ochrannou známkou, jejímž držitelem je podle turistického webu město Kadaň. Slavnost získala také certifikaci regionálního zážitku Poohří.</p>
+
+  <div class="source-list">
+    <strong>Zdroje</strong>
+    <ul>
+      <li><a href="https://cisarskyden.cz/" target="_blank" rel="noopener">Oficiální web Císařského dne – 34. ročník a základní program 2026</a></li>
+      <li><a href="https://cisarskyden.cz/historie/" target="_blank" rel="noopener">Oficiální historie slavnosti a návštěv Karla IV.</a></li>
+      <li><a href="https://kadan.eu/kultura/cisarsky-den/" target="_blank" rel="noopener">Turistický web města – význam a tradiční podoba Císařského dne</a></li>
+      <li><a href="https://www.noviny-kadan.cz/l/650-let-od-druhe-navstevy-karla-iv-v-kadani/" target="_blank" rel="noopener">Kadaňské noviny – druhá návštěva Karla IV. roku 1374</a></li>
+      <li><a href="https://www.regionalni-znacky.cz/poohri/zazitky/cisarsky-den-v-kadani" target="_blank" rel="noopener">Poohří regionální produkt – certifikovaný zážitek Císařský den</a></li>
+    </ul>
+    <small>Před vydáním aktualizovat kompletní program, dopravní omezení, případné historické vlaky, vstupné a praktické informace pro návštěvníky.</small>
+  </div>
+</article>
+<aside class="sticky">
+  <div class="sidebox editor"><h3>Stav návrhu</h3><p><strong>Neveřejný rozpracovaný článek.</strong></p><p>Historická osa a základní program 2026 jsou připravené. Před publikací doplnit úplný program, dopravu, parkování, vstupné a finální sociální grafiku.</p></div>
+  <div class="sidebox"><h3>Rychlý přehled 2026</h3><ul><li>sobota 22. srpna</li><li>34. ročník</li><li>program 10–22 hodin</li><li>průvod od kláštera ve 14:00</li><li>ceremonie ve 14:30</li><li>turnaj v 18:00</li></ul></div>
+  <div class="sidebox"><h3>Hlavní historická osa</h3><ul><li>první návštěva 1367</li><li>druhá návštěva 1374</li><li>námět vznikl 1992</li><li>pravidelná slavnost od 1993</li></ul></div>
+</aside>
+</main>
+<footer><div class="wrap"><p><strong>Naše Kadaň</strong> · Nezávislý místní informační web</p></div></footer>
+</body>
+</html>
+'''
+
+CISARSKY.parent.mkdir(parents=True, exist_ok=True)
+CISARSKY.write_text(article, encoding="utf-8", newline="\n")
+
+memo = '''# Císařský den 2026 – redakční podklady
+
+## Ověřené základní údaje
+
+- Pořadatelé označují rok 2026 jako 34. ročník.
+- Termín: sobota 22. srpna 2026, základní čas 10:00–22:00.
+- Průvod: 14:00 od františkánského kláštera.
+- Slavnostní ceremonie: 14:30 na Mírovém náměstí.
+- Rytířský turnaj na koních: 18:00 ve Smetanových sadech.
+- Turistický web města označuje Císařský den jako největší kadaňskou kulturní akci.
+- Oficiální historie uvádí více než 600 účinkujících, zhruba 40 skupin a program přibližně na osmi herních prostorech.
+
+## Vznik slavnosti
+
+- Nápad vznikal v roce 1992 z podnětu tehdejšího tajemníka městského úřadu pana Malého.
+- Kateřina Mertová a Jan Gaža připravili námět a scénář.
+- Oficiální historie datuje pravidelné pořádání od roku 1993.
+- Některé městské materiály uvádějí počátek už v roce 1992; v článku proto rozlišujeme přípravu a první pravidelný ročník.
+
+## Historický základ
+
+- 29. 5. 1367 začala první doložená návštěva Karla IV. v Kadani.
+- Panovník zde několik dní pobýval a povolil osmidenní výroční trh.
+- 1. 6. 1367 vydal další listinu ke kadaňským záležitostem.
+- Roku 1374 navštívil město znovu; 8. 9. udělil privilegium k zakládání vinohradů.
+
+## Před vydáním doplnit
+
+- kompletní program jednotlivých scén,
+- dopravu, uzavírky a parkování,
+- historické vlaky nebo posílené spoje,
+- vstupné a režim jednotlivých částí programu,
+- aktuální pořadatele, partnery a bezpečnostní informace,
+- finální fotografie a sociální grafiku,
+- případně současné náklady a návštěvnost pouze z doložitelného aktuálního zdroje.
+
+## Primární zdroje
+
+- https://cisarskyden.cz/
+- https://cisarskyden.cz/historie/
+- https://kadan.eu/kultura/cisarsky-den/
+- https://www.noviny-kadan.cz/l/650-let-od-druhe-navstevy-karla-iv-v-kadani/
+- https://www.regionalni-znacky.cz/poohri/zazitky/cisarsky-den-v-kadani
+'''
+RESEARCH.parent.mkdir(parents=True, exist_ok=True)
+RESEARCH.write_text(memo, encoding="utf-8", newline="\n")
+
+print(f"Aktualizováno: {KZK.relative_to(ROOT)}")
+print(f"Vytvořeno: {CISARSKY.relative_to(ROOT)}")
+print(f"Vytvořeno: {RESEARCH.relative_to(ROOT)}")
