@@ -1,5 +1,36 @@
 (()=>{
   try{
+    const faviconHref='/favicon.svg?v=20260801-2';
+    document.head.querySelectorAll('link[rel]').forEach(link=>{
+      const rel=(link.getAttribute('rel')||'').toLowerCase().split(/\s+/);
+      if(rel.includes('icon'))link.remove();
+    });
+
+    const primary=document.createElement('link');
+    primary.rel='icon';
+    primary.type='image/svg+xml';
+    primary.sizes='any';
+    primary.href=faviconHref;
+    primary.setAttribute('data-nasekadan-favicon','primary');
+    document.head.appendChild(primary);
+
+    const shortcut=document.createElement('link');
+    shortcut.rel='shortcut icon';
+    shortcut.type='image/svg+xml';
+    shortcut.href=faviconHref;
+    shortcut.setAttribute('data-nasekadan-favicon','shortcut');
+    document.head.appendChild(shortcut);
+
+    let theme=document.head.querySelector('meta[name="theme-color"]');
+    if(!theme){
+      theme=document.createElement('meta');
+      theme.name='theme-color';
+      document.head.appendChild(theme);
+    }
+    theme.content='#9f2626';
+  }catch(_){ }
+
+  try{
     if(navigator.doNotTrack!=='1'){
       const payload={
         path:location.pathname,
