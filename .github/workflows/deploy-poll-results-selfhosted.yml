@@ -1,0 +1,164 @@
+name: Nasadit živé výsledky ankety SMR
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/poll-results-trigger.txt'
+      - '.github/workflows/deploy-poll-results-selfhosted.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-poll-results-selfhosted
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit zdrojový kód ankety a výsledků
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/enable_poll_results.py
+          python3 -m py_compile newsletter/server.py scripts/enable_poll_results.py
+          grep -Fq '# BEGIN POLL_RESULTS_API' newsletter/server.py
+          grep -Fq '/api/newsletter/poll/results' site.js
+          grep -Fq 'Průběžné výsledky' site.js
+          grep -Fq '/site.js?v=20260801-poll-results-1' clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+
+      - name: Uložit opravu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň deploy bot'
+          git config user.email 'info@nasekadan.cz'
+          git add newsletter/server.py site.js clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html scripts/enable_poll_results.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Zapnout živé výsledky ankety SMR Tušimice [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              if [ "$attempt" = 4 ]; then exit 1; fi
+              sleep $((attempt * 3))
+            done
+          fi
+
+      - name: Nasadit frontend a hlasovací backend přímo na server
+        id: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n true
+          sudo install -m 0644 site.js /var/www/nasekadan/site.js
+          sudo install -m 0644 clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+          sudo install -m 0644 newsletter/server.py /opt/nasekadan/newsletter/server.py
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp site.js nasekadan-web:/usr/share/nginx/html/site.js
+            sudo docker cp clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html nasekadan-web:/usr/share/nginx/html/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+          fi
+
+          sudo systemctl restart nasekadan-newsletter.service
+          for attempt in $(seq 1 20); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8765/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 20 ]; then
+              sudo journalctl -u nasekadan-newsletter.service -n 100 --no-pager
+              exit 1
+            fi
+            sleep 2
+          done
+          sudo systemctl is-active --quiet nasekadan-newsletter.service
+
+      - name: Veřejně ověřit výsledky a ochranu proti dvojímu hlasu
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          test_poll="healthcheck-${GITHUB_RUN_ID}"
+          article_url='https://nasekadan.cz/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html'
+
+          for attempt in $(seq 1 12); do
+            js="$(curl -kfsS --max-time 20 "https://nasekadan.cz/site.js?v=${stamp}-${attempt}" || true)"
+            article="$(curl -kfsS --max-time 20 "${article_url}?v=${stamp}-${attempt}" || true)"
+            actual="$(curl -kfsS --max-time 20 "https://nasekadan.cz/api/newsletter/poll/results?poll=smr-tusimice-2026&t=${stamp}-${attempt}" || true)"
+            first="$(curl -kfsS --max-time 20 -A 'NaseKadan-Poll-Healthcheck' -X POST \
+              'https://nasekadan.cz/api/newsletter/poll/vote' \
+              -H 'Content-Type: application/json' \
+              --data "{\"pollId\":\"${test_poll}\",\"choice\":\"ok\"}" || true)"
+            second="$(curl -kfsS --max-time 20 -A 'NaseKadan-Poll-Healthcheck' -X POST \
+              'https://nasekadan.cz/api/newsletter/poll/vote' \
+              -H 'Content-Type: application/json' \
+              --data "{\"pollId\":\"${test_poll}\",\"choice\":\"jiny\"}" || true)"
+            test_results="$(curl -kfsS --max-time 20 "https://nasekadan.cz/api/newsletter/poll/results?poll=${test_poll}&t=${stamp}-${attempt}" || true)"
+
+            if JS="$js" ARTICLE_HTML="$article" ACTUAL="$actual" FIRST="$first" SECOND="$second" TEST_RESULTS="$test_results" python3 - <<'PY'
+          import json, os, sys
+          try:
+              actual = json.loads(os.environ['ACTUAL'])
+              first = json.loads(os.environ['FIRST'])
+              second = json.loads(os.environ['SECOND'])
+              test = json.loads(os.environ['TEST_RESULTS'])
+          except Exception:
+              raise SystemExit(1)
+          checks = [
+              'Průběžné výsledky' in os.environ['JS'],
+              '/api/newsletter/poll/results' in os.environ['JS'],
+              '/api/newsletter/poll/vote' in os.environ['JS'],
+              'Průběžné výsledky se zobrazují hned' in os.environ['ARTICLE_HTML'],
+              '/site.js?v=20260801-poll-results-1' in os.environ['ARTICLE_HTML'],
+              actual.get('ok') is True and isinstance(actual.get('counts'), dict),
+              first.get('ok') is True and first.get('selected') == 'ok',
+              second.get('ok') is True and second.get('accepted') is False and second.get('selected') == 'ok',
+              test.get('total') == 1 and test.get('counts', {}).get('ok') == 1,
+          ]
+          sys.exit(0 if all(checks) else 1)
+          PY
+            then
+              printf '%s\n' "$actual" > /tmp/poll-results-live.json
+              echo 'verified=true' >> "$GITHUB_OUTPUT"
+              cat /tmp/poll-results-live.json
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'verified=false' >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Zapsat výsledek produkční kontroly
+        if: always()
+        env:
+          PRODUCTION: ${{ steps.production.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.verified }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=false
+          if [ "${PRODUCTION:-}" = success ] && [ "${VERIFIED:-}" = true ]; then ok=true; fi
+          printf '{"ok":%s,"run_id":"%s","checked_at":"%s","production":"%s","verified":"%s","poll_id":"smr-tusimice-2026","version":"20260801-poll-results-1"}\n' \
+            "$ok" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${PRODUCTION:-unknown}" "${VERIFIED:-false}" > .github/poll-results-status.json
+          git config user.name 'Naše Kadaň deploy bot'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/poll-results-status.json
+          git commit -m 'Zapsat stav živých výsledků ankety [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+          exit 1
