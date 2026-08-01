@@ -1,0 +1,65 @@
+name: Vytěžit rozhodující pasáže INF Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/analyze-nemkadan-inf-documents-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Vytvořit index všech relevantních stran
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,re
+          ROOT=Path('.github/research/nemkadan-inf-2025-20260801/text')
+          OUT=Path('.github/research/nemkadan-inf-analysis-20260801'); OUT.mkdir(parents=True,exist_ok=True)
+          terms={
+            'odměny':['odměn','odmena','prémie','premie','dvojnásob','trojnásob','čtyřnásob','pětinásob','milion'],
+            'smlouvy':['pracovní smlouv','smlouva o pracovním','smlouva o výkonu','ředitel nemocnice','jednateli náleží'],
+            'schvalování':['dozorčí rada','valná hromada','rada města','schvál','hlasov'],
+            'žaloba':['žalob','předžalob','bezdůvodné obohacení','náhrada škody','25 979','53 726','52 882','33 501','19 381'],
+            'Deloitte':['deloitte','právní stanovisko','právní prověr','40 hodin','35 hodin'],
+            'soud':['30 c 211/2025','30 c 84/2025','14 co 104/2026','93 ncp 490/2026','okresní soud'],
+            'práce':['zdravotní péče','zdravotní pojišťovn','přístrojové techniky','lékař gynekolog','obchodní vedení','vedení společnosti'],
+          }
+          rows=[]
+          for p in sorted(ROOT.glob('INF-*-page-*.txt')):
+            text=p.read_text(encoding='utf-8',errors='replace'); low=text.lower()
+            cats={cat:[t for t in ts if t in low] for cat,ts in terms.items()}
+            cats={k:v for k,v in cats.items() if v}
+            if cats:
+              snippets=[]
+              needles=sum(cats.values(),[])
+              for n in needles[:10]:
+                i=low.find(n)
+                if i>=0: snippets.append(re.sub(r'\s+',' ',text[max(0,i-220):i+700]))
+              rows.append({'file':str(p),'document':p.name.split('-page-')[0],'page':int(re.search(r'page-(\d+)',p.name).group(1)),'categories':cats,'snippets':snippets})
+          (OUT/'index.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Index rozhodujících pasáží INF Nemocnice Kadaň','',f'- Relevantní strany: {len(rows)}','']
+          for r in rows:
+            lines.append(f"## {r['document']} – strana {r['page']}")
+            lines.append(f"Kategorie: {', '.join(r['categories'])}")
+            for s in r['snippets'][:5]: lines.append(f'- {s}')
+            lines.append('')
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+      - name: Uložit index
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/nemkadan-inf-analysis-20260801
+          git commit -m 'Přidat index rozhodujících pasáží INF nemocnice' || exit 0
+          git push origin main
