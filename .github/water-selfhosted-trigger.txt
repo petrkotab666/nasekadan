@@ -1,5 +1,5 @@
-Spuštěno 2026-07-31 20:03 Europe/Prague
-Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH po technické opravě.
-Požadavek: nasadit aktuální main včetně článku „Další plán krajiny pro Kadaň za 1,45 milionu“ a oprav, které již po deployi nevytvářejí provozní stavové commity.
-Veřejně ověřit: aktuální source v deployment-health.txt, správný H1 nejnovějších článků, titulku, archiv, RSS a sitemap.xml.
-Důvod: předchozí produkce odpovídala dřívějšímu main; stav se od té doby skutečně změnil. Při nezměněném stavu se žádný další deploy nespouští.
+Spuštěno 2026-08-02 01:44 Europe/Prague
+Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH po živém HTTPS ověření.
+Požadavek: nasadit aktuální main 1d1bf0e462f7b1696b5261cbed46661fc96ffec7.
+Veřejně ověřit: source v deployment-health.txt, správný H1 tří nejnovějších článků, titulku, archiv, RSS a sitemap.xml.
+Důvod: veřejný obsah je funkční, ale deployment-health stále uvádí source 186727ba4f76940ee4b772a9436bf8102dd95a3a z 2026-08-01T15:05:28Z. Od posledního opravného pokusu se stav main skutečně změnil. Při nezměněném výsledku se další deploy nespouští.
