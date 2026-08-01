@@ -1,0 +1,170 @@
+name: Kontrolovaný PR průchod InfoSoudu Hossner
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-infosoud-pr-probe-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nainstalovat klienta z veřejného indexu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet requests
+          if ! python3 -m pip install --disable-pip-version-check --quiet --index-url https://pypi.org/simple infosoud==0.1.0; then
+            curl -fL --retry 4 -o /tmp/infosoud.whl https://archive1.piwheels.org/simple/infosoud/infosoud-0.1.0-py3-none-any.whl
+            python3 -m pip install --disable-pip-version-check --quiet /tmp/infosoud.whl
+          fi
+
+      - name: Vytěžit InfoSoud a určit kandidáty
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/hossner-result
+          mkdir -p /tmp/hossner-result
+          cat > /tmp/probe.py <<'PY'
+          from __future__ import annotations
+          import concurrent.futures, dataclasses, inspect, json, re, traceback
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from typing import Any
+          import infosoud
+          from infosoud import InfoSoudClient
+
+          OUT=Path('/tmp/hossner-result')
+          def plain(x:Any)->Any:
+              if dataclasses.is_dataclass(x): return plain(dataclasses.asdict(x))
+              if isinstance(x,dict): return {str(k):plain(v) for k,v in x.items()}
+              if isinstance(x,(list,tuple,set)): return [plain(v) for v in x]
+              if hasattr(x,'model_dump'): return plain(x.model_dump())
+              if hasattr(x,'dict'):
+                  try:return plain(x.dict())
+                  except Exception:pass
+              if hasattr(x,'__dict__') and not isinstance(x,(str,bytes,int,float,bool)):
+                  return {k:plain(v) for k,v in vars(x).items() if not k.startswith('_')}
+              if isinstance(x,datetime): return x.isoformat()
+              try: json.dumps(x); return x
+              except Exception:return str(x)
+          def txt(x): return json.dumps(plain(x),ensure_ascii=False,sort_keys=True,default=str)
+
+          client=InfoSoudClient()
+          diagnostic={'module':getattr(infosoud,'__file__',None),'version':getattr(infosoud,'__version__',None),'client_signature':str(inspect.signature(InfoSoudClient)),'methods':{}}
+          for n in dir(InfoSoudClient):
+              if n.startswith('_'):continue
+              a=getattr(InfoSoudClient,n)
+              if callable(a):
+                  try: diagnostic['methods'][n]={'signature':str(inspect.signature(a)),'source':inspect.getsource(a)[:20000]}
+                  except Exception as e: diagnostic['methods'][n]={'error':repr(e)}
+          OUT.joinpath('diagnostic.json').write_text(json.dumps(diagnostic,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          resolutions={}
+          for q in ['Chomutov','Okresní soud v Chomutově','OS Chomutov']:
+              try: resolutions[q]=plain(client.resolve_court_name(q))
+              except Exception as e: resolutions[q]={'error':repr(e)}
+          OUT.joinpath('court-resolution.json').write_text(json.dumps(resolutions,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # Zachytit všechny možné argumenty soudu z resolveru i obvyklé kódy.
+          court_args=[]
+          def collect(v):
+              if isinstance(v,str) and v and v not in court_args: court_args.append(v)
+              elif isinstance(v,dict):
+                  for value in v.values(): collect(value)
+              elif isinstance(v,list):
+                  for value in v: collect(value)
+          collect(resolutions)
+          for v in ['OSUSTCV','OSCHOM','OSSCEDC','OSCV','Okresní soud v Chomutově']:
+              if v not in court_args:court_args.append(v)
+
+          def useful(v):
+              p=plain(v)
+              if not p:return False
+              t=txt(p).lower()
+              if any(s in t for s in ['nenalezen','not found','nebylo nalezeno','žádné řízení','zadane rizeni nebylo']):return False
+              return len(t)>30
+
+          attempts=[]
+          def query(spis):
+              local=[]
+              for court in court_args:
+                  try:
+                      c=client.search_case(spis,court)
+                      local.append({'court':plain(court),'case':plain(c)})
+                      if useful(c):
+                          try:h=client.search_hearings(spis,court)
+                          except Exception as e:h={'error':repr(e)}
+                          return {'file_no':spis,'court':plain(court),'case':plain(c),'hearings':plain(h),'attempts':local}
+                  except Exception as e:
+                      local.append({'court':plain(court),'error':repr(e)})
+              return {'file_no':spis,'not_found':True,'attempts':local[:8]}
+
+          # Ověřit rozhraní na veřejně známém spise.
+          known=query('30 C 131/2025')
+          OUT.joinpath('known-case.json').write_text(json.dumps(known,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('KNOWN CASE:',txt(known)[:20000])
+
+          # Pokud známý spis nevyšel, neplýtvat stovkami dotazů; diagnostika ukáže proč.
+          if known.get('not_found'):
+              raise SystemExit('Klient nedokázal najít známý spis 30 C 131/2025.')
+
+          # Dotazujeme spisy senátu 30 C s rozumnou rezervou. Pracovní žaloba byla podle veřejných zdrojů podána v březnu 2025.
+          numbers=[f'30 C {n}/2025' for n in range(1,351)]
+          numbers += [f'30 C {n}/2024' for n in range(250,351)]
+          numbers += [f'30 C {n}/2026' for n in range(1,101)]
+          valid=[]; failures=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+              future={ex.submit(query,s):s for s in numbers}
+              for i,f in enumerate(concurrent.futures.as_completed(future),1):
+                  try:r=f.result()
+                  except Exception as e:r={'file_no':future[f],'error':repr(e),'trace':traceback.format_exc()}
+                  if r.get('not_found') or r.get('error'): failures.append(r)
+                  else: valid.append(r)
+                  if i%50==0:print(f'{i}/{len(numbers)} valid={len(valid)}')
+
+          def score(item):
+              t=txt(item).lower();s=0;why=[]
+              groups=[
+                (['23.03.2026','23. 3. 2026','2026-03-23'],30,'jednání 23. 3. 2026'),
+                (['jakubcov','hana jakubc'],20,'Hana Jakubcová'),
+                (['mediac','mediátor','mediator'],18,'mediace'),
+                (['přerušen','prerusen'],12,'přerušení'),
+                (['leden 2026','2026-01-'],8,'leden 2026'),
+                (['pracovní poměr','pracovni pomer','neplatnost rozvázání','neplatnost rozvazani'],20,'pracovněprávní spor'),
+                (['24.09.2024','2024-09-24'],5,'datum odvolání'),
+              ]
+              for terms,p,r in groups:
+                  if any(term in t for term in terms):s+=p;why.append(r)
+              return s,why
+          candidates=[]
+          for v in valid:
+              s,why=score(v)
+              if s:candidates.append({'score':s,'reasons':why,**v})
+          candidates.sort(key=lambda x:-x['score'])
+          valid.sort(key=lambda x:x['file_no'])
+          OUT.joinpath('valid.json').write_text(json.dumps(valid,ensure_ascii=False,indent=2),encoding='utf-8')
+          OUT.joinpath('candidates.json').write_text(json.dumps(candidates,ensure_ascii=False,indent=2),encoding='utf-8')
+          OUT.joinpath('failures-sample.json').write_text(json.dumps(failures[:30],ensure_ascii=False,indent=2),encoding='utf-8')
+          summary={'generated_at_utc':datetime.now(timezone.utc).isoformat(),'queried':len(numbers),'valid':len(valid),'top_candidates':[{'file_no':c['file_no'],'score':c['score'],'reasons':c['reasons'],'case':c['case'],'hearings':c['hearings']} for c in candidates[:20]]}
+          OUT.joinpath('summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('SUMMARY:',json.dumps(summary,ensure_ascii=False,indent=2)[:50000])
+          PY
+          python3 /tmp/probe.py
+
+      - name: Nahrát výsledek
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hossner-infosoud-pr-probe
+          path: /tmp/hossner-result
+          if-no-files-found: warn
+          retention-days: 7
