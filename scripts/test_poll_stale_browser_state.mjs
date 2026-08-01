@@ -70,3 +70,4 @@ if (!text.includes('1 hlas') || !text.includes('100 %')) {
   throw new Error(`Výsledky nejsou viditelné: ${text}`);
 }
 console.log('Regresní test prošel: starý localStorage neblokuje hlas a výsledek je viditelný.');
+window.close();
