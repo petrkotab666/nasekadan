@@ -1,0 +1,28 @@
+name: Bootstrap jednotného monitoringu Kadaňska
+
+on:
+  pull_request:
+    paths:
+      - '.github/bootstrap-chunks/**'
+      - '.github/workflows/bootstrap-unified-monitoring-pr.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Sestavit a zapsat jednotný monitoring
+        run: |
+          set -euo pipefail
+          cat .github/bootstrap-chunks/part* > "$RUNNER_TEMP/bootstrap.b64"
+          base64 -d "$RUNNER_TEMP/bootstrap.b64" > "$RUNNER_TEMP/bootstrap.py"
+          git rm -r .github/bootstrap-chunks
+          python3 "$RUNNER_TEMP/bootstrap.py"
