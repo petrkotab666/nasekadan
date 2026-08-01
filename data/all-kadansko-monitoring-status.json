@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-01T15:37:43.985262+00:00",
+  "checkedAt": "2026-08-01T17:31:44.714776+00:00",
   "bootstrap": false,
   "sourceCount": 106,
-  "checkedSources": 85,
-  "failedSources": 21,
-  "itemsParsed": 5957,
-  "uniqueItems": 3162,
-  "newAlerts": 0,
+  "checkedSources": 90,
+  "failedSources": 16,
+  "itemsParsed": 6496,
+  "uniqueItems": 3493,
+  "newAlerts": 1,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 593,
+    "genericTitle": 692,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 2,
+    "broadWithoutLocalMatch": 4,
     "notEditoriallySignificant": 0,
     "notFreshOrUndated": 0,
-    "duplicate": 2202
+    "duplicate": 2311
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -67,7 +67,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -163,9 +163,8 @@
       "url": "https://www.tskadan.cz/",
       "category": "Městské služby",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 20
     },
     {
       "name": "Kabelová televize Kadaň",
@@ -360,9 +359,8 @@
       "url": "https://www.zus-kadan.cz/",
       "category": "Umělecké školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 46
     },
     {
       "name": "Gymnázium Kadaň",
@@ -401,9 +399,8 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 124
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -460,9 +457,8 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 82
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -535,7 +531,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 30
     },
     {
       "name": "Povodí Ohře",
@@ -543,7 +539,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 46
+      "itemsParsed": 47
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -617,9 +613,8 @@
       "url": "https://chomutovsky.denik.cz/",
       "category": "Regionální média",
       "tier": "regional_media",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 403: Forbidden"
+      "status": "checked",
+      "itemsParsed": 266
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -879,7 +874,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 16
+      "itemsParsed": 15
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
