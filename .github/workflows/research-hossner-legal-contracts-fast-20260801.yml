@@ -1,0 +1,109 @@
+name: Rychle vytěžit právní smlouvy Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-legal-contracts-fast-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+      - name: Vytěžit tři cílové smlouvy
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-legal-contracts-fast
+          rm -rf "$OUT"; mkdir -p "$OUT"/{files,text}
+          cat > /tmp/x.py <<'PY'
+          import hashlib,json,re,subprocess,time,urllib.parse,xml.etree.ElementTree as ET
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          O=Path('.github/research/hossner-legal-contracts-fast'); S=requests.Session(); S.headers['User-Agent']='NaseKadan/1.0'
+          def get(u):
+            for i in range(5):
+              try:
+                r=S.get(u,timeout=180,allow_redirects=True); r.raise_for_status(); return r
+              except Exception as e:
+                if i==4: raise
+                time.sleep(2+i*2)
+          def tag(t): return t.rsplit('}',1)[-1].lower()
+          targets=[]
+          for y,m in ((2024,8),(2024,11),(2024,12)):
+            p=Path('/tmp')/f'd{y}{m}.xml'; p.write_bytes(get(f'https://data.smlouvy.gov.cz/dump_{y}_{m:02d}.xml').content)
+            for ev,el in ET.iterparse(p,events=('end',)):
+              if tag(el.tag)!='zaznam': continue
+              txt=' '.join(el.itertext()); low=re.sub(r'\s+',' ',txt).lower()
+              if ('25479300' in low or 'nemocnice kadaň' in low or 'nemocnice kadan' in low) and any(k in low for k in ('deloitte','šustek','sustek','ak audit','právních služeb','pravnich sluzeb','provedení auditu','provedeni auditu')):
+                urls=[]; fields={}
+                for n in el.iter():
+                  k=tag(n.tag); v=(n.text or '').strip()
+                  if v: fields.setdefault(k,[]).append(v)
+                  if v.startswith('http'): urls.append(v)
+                targets.append({'month':f'{y}-{m:02d}','text':re.sub(r'\s+',' ',txt).strip(),'fields':fields,'urls':list(dict.fromkeys(urls)),'xml':ET.tostring(el,encoding='unicode')})
+              el.clear()
+          O.joinpath('records.json').write_text(json.dumps(targets,ensure_ascii=False,indent=2),encoding='utf-8')
+          queue=[]
+          for t in targets: queue.extend(t['urls'])
+          seen=set(); rows=[]
+          while queue:
+            u=queue.pop(0)
+            if u in seen: continue
+            seen.add(u)
+            try:
+              r=get(u); data=r.content; ct=r.headers.get('content-type','').lower()
+              if 'html' in ct:
+                s=BeautifulSoup(r.text,'lxml'); links=[]
+                for a in s.find_all('a',href=True):
+                  v=urllib.parse.urljoin(r.url,a['href'])
+                  if 'smlouvy.gov.cz' in v and (v.lower().endswith('.pdf') or '/soubor/' in v): links.append(v)
+                queue.extend(v for v in links if v not in seen)
+                rows.append({'url':u,'final':r.url,'type':'html','text':s.get_text(' ',strip=True)[:30000],'links':links})
+              elif data.startswith(b'%PDF') or 'pdf' in ct:
+                name=f'{len(rows):03d}.pdf'; p=O/'files'/name; p.write_bytes(data)
+                q=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True); text=q.stdout
+                if len(text.strip())<250:
+                  tmp=Path('/tmp')/(name+'ocr'); tmp.mkdir(exist_ok=True); subprocess.run(['pdftoppm','-jpeg','-r','180',str(p),str(tmp/'p')])
+                  parts=[]
+                  for im in sorted(tmp.glob('*.jpg')):
+                    z=subprocess.run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True); parts.append(z.stdout)
+                  text='\n'.join(parts)
+                tp=O/'text'/(name+'.txt'); tp.write_text(text,encoding='utf-8')
+                rows.append({'url':u,'final':r.url,'type':'pdf','file':str(p),'text_file':str(tp),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'chars':len(text)})
+              else: rows.append({'url':u,'final':r.url,'type':ct,'bytes':len(data)})
+            except Exception as e: rows.append({'url':u,'error':repr(e)})
+          O.joinpath('downloads.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# Právní a auditní smlouvy Nemocnice Kadaň','']
+          for t in targets: md += ['## Záznam '+t['month'],t['text'],'']
+          keys=('hodin','sazb','odměn','odmen','paušál','pausal','limit','strop','audit','právní','pravni','soud','spor','hossner','pracovn','zastup','výpověď','vypoved','trestn','veřejn','verejn')
+          for p in (O/'text').glob('*.txt'):
+            text=p.read_text(encoding='utf-8',errors='replace'); low=text.lower(); md.append('## '+p.name)
+            for k in keys:
+              for x in list(re.finditer(k,low))[:10]: md.append('- '+re.sub(r'\s+',' ',text[max(0,x.start()-500):x.start()+1800]))
+            md.append('')
+          O.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/x.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-legal-contracts-fast
+          git commit -m 'Rychle vytěžit právní smlouvy Nemocnice Kadaň' || true
+          for i in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && exit 0; sleep $((i*4)); done
+          exit 1
