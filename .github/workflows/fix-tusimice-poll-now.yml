@@ -19,12 +19,12 @@ env:
   KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
   MARKER: 'Ankety jsou obsluhované z externího skriptu'
   ARTICLE: clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
-  SCRIPT_VERSION: '20260801-poll-fix-2'
+  SCRIPT_VERSION: '20260801-poll-fix-3'
 
 jobs:
   deploy-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,6 +47,9 @@ jobs:
               raise SystemExit('V článku nebyl nalezen právě jeden odkaz na site.js')
           p.write_text(updated,encoding='utf-8')
           PY
+          test -s site.js
+          grep -Fq "$MARKER" site.js
+          grep -Fq "/api/analytics/pageview" site.js
           grep -Fq "/site.js?v=${SCRIPT_VERSION}" "$ARTICLE"
 
       - name: Uložit cache-bust opravu do hlavní větve
@@ -66,16 +69,6 @@ jobs:
             done
           fi
 
-      - name: Ověřit opravený skript
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s site.js
-          grep -Fq "$MARKER" site.js
-          grep -Fq "data-poll-id" site.js
-          grep -Fq "/api/analytics/pageview" site.js
-          grep -Fq "/site.js?v=${SCRIPT_VERSION}" "$ARTICLE"
-
       - name: Připravit SSH klíč
         shell: bash
         run: |
@@ -86,6 +79,7 @@ jobs:
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
       - name: Nasadit opravený skript i článek na OVH a do kontejneru
+        id: deploy
         shell: bash
         run: |
           set -euo pipefail
@@ -101,48 +95,71 @@ jobs:
             sudo docker cp /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html nasekadan-web:/usr/share/nginx/html/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           fi
           grep -Fq 'Ankety jsou obsluhované z externího skriptu' /var/www/nasekadan/site.js
-          grep -Fq '/site.js?v=20260801-poll-fix-2' /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+          grep -Fq '/site.js?v=20260801-poll-fix-3' /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           rm -f /tmp/site.js /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           REMOTE
 
       - name: Veřejně ověřit skript, článek a přijímání hlasů
+        id: verify
+        if: steps.deploy.outcome == 'success'
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           stamp="${GITHUB_RUN_ID}-$(date +%s)"
           article_url='https://nasekadan.cz/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html'
-          for attempt in $(seq 1 24); do
+          last_code='000'; js_ok='false'; article_ok='false'
+          for attempt in $(seq 1 8); do
             js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/site.js?v=${stamp}-${attempt}" 2>/dev/null || true)"
             article="$(curl -4 -kfsS --max-time 25 "${article_url}?v=${stamp}-${attempt}" 2>/dev/null || true)"
-            code="$(curl -4 -ksS --max-time 25 -o /dev/null -w '%{http_code}' \
+            last_code="$(curl -4 -ksS --max-time 25 -o /dev/null -w '%{http_code}' \
               -X POST 'https://nasekadan.cz/api/analytics/pageview' \
               -H 'Content-Type: application/json' \
               --data "{\"path\":\"/healthchecks/anketa-smr-tusimice/${GITHUB_RUN_ID}\",\"title\":\"Kontrola ankety SMR Tušimice\",\"referrer\":\"github-actions\"}" || true)"
-            if grep -Fq "$MARKER" <<< "$js" \
-              && grep -Fq 'data-poll-id="smr-tusimice-2026"' <<< "$article" \
-              && grep -Fq "/site.js?v=${SCRIPT_VERSION}" <<< "$article" \
-              && [[ "$code" == '204' ]]; then
-              echo "Oprava ankety je veřejně nasazená; endpoint vrátil HTTP 204."
-              printf '{"ok":true,"workflow_run_id":"%s","verified_at":"%s","site_js_marker":true,"article_poll":true,"cache_bust":"%s","analytics_http":204}\n' \
-                "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_VERSION" > .github/poll-fix-last-status.json
+            grep -Fq "$MARKER" <<< "$js" && js_ok='true' || js_ok='false'
+            if grep -Fq 'data-poll-id="smr-tusimice-2026"' <<< "$article" && grep -Fq "/site.js?v=${SCRIPT_VERSION}" <<< "$article"; then article_ok='true'; else article_ok='false'; fi
+            if [[ "$js_ok" == true && "$article_ok" == true && "$last_code" == 204 ]]; then
+              echo 'ok=true' >> "$GITHUB_OUTPUT"
+              echo 'js_ok=true' >> "$GITHUB_OUTPUT"
+              echo 'article_ok=true' >> "$GITHUB_OUTPUT"
+              echo 'analytics_http=204' >> "$GITHUB_OUTPUT"
               exit 0
             fi
             sleep 10
           done
-          echo 'Veřejné ověření opravy ankety neprošlo.' >&2
-          exit 1
+          echo 'ok=false' >> "$GITHUB_OUTPUT"
+          echo "js_ok=$js_ok" >> "$GITHUB_OUTPUT"
+          echo "article_ok=$article_ok" >> "$GITHUB_OUTPUT"
+          echo "analytics_http=$last_code" >> "$GITHUB_OUTPUT"
+          exit 0
 
-      - name: Uložit potvrzení veřejného ověření
+      - name: Uložit diagnostiku veřejného ověření
+        if: always()
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OK: ${{ steps.verify.outputs.ok }}
+          JS_OK: ${{ steps.verify.outputs.js_ok }}
+          ARTICLE_OK: ${{ steps.verify.outputs.article_ok }}
+          ANALYTICS_HTTP: ${{ steps.verify.outputs.analytics_http }}
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p .github
+          ok=false
+          [[ "${DEPLOY_OUTCOME:-}" == success && "${VERIFY_OK:-}" == true ]] && ok=true
+          printf '{"ok":%s,"workflow_run_id":"%s","verified_at":"%s","deploy":"%s","site_js_marker":"%s","article_poll":"%s","cache_bust":"%s","analytics_http":"%s"}\n' \
+            "$ok" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DEPLOY_OUTCOME:-unknown}" "${JS_OK:-false}" "${ARTICLE_OK:-false}" "$SCRIPT_VERSION" "${ANALYTICS_HTTP:-unknown}" > .github/poll-fix-last-status.json
           git config user.name 'Naše Kadaň deploy bot'
           git config user.email 'info@nasekadan.cz'
           git add .github/poll-fix-last-status.json
-          git commit -m 'Potvrdit funkční anketu SMR Tušimice [skip ci]'
+          git commit -m 'Zapsat stav opravy ankety SMR Tušimice [skip ci]' || true
           for attempt in 1 2 3 4; do
             if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
             git rebase --abort 2>/dev/null || true
             sleep $((attempt * 4))
           done
           exit 1
+
+      - name: Selhat při nepotvrzené opravě
+        if: steps.deploy.outcome != 'success' || steps.verify.outputs.ok != 'true'
+        shell: bash
+        run: exit 1
