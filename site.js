@@ -58,6 +58,114 @@ document.addEventListener('DOMContentLoaded', () => {
     head.appendChild(button);
   });
 
+  // Ankety jsou obsluhované z externího skriptu, aby fungovaly i při blokování inline JavaScriptu.
+  document.querySelectorAll('[data-poll-id]').forEach((section) => {
+    if (section.dataset.pollBound === '1') return;
+    section.dataset.pollBound = '1';
+
+    const pollId = section.getAttribute('data-poll-id') || 'poll';
+    const storageKey = `nk-poll-${pollId}`;
+    const buttons = Array.from(section.querySelectorAll('[data-poll-vote]'));
+    const message = section.querySelector('.poll-message');
+    let sending = false;
+
+    const setMessage = (text, type = 'success') => {
+      if (!message) return;
+      message.textContent = text;
+      message.style.background = type === 'error' ? '#fff0f0' : '#eaf4ed';
+      message.style.color = type === 'error' ? '#8e2525' : '#245d36';
+      message.classList.add('show');
+    };
+
+    const setLocked = (vote) => {
+      buttons.forEach((button) => {
+        button.disabled = true;
+        if (button.getAttribute('data-poll-vote') === vote) {
+          button.style.borderColor = '#9f2626';
+          button.style.background = '#fff4f4';
+        }
+      });
+    };
+
+    const setUnlocked = () => {
+      buttons.forEach((button) => {
+        button.disabled = false;
+        button.style.borderColor = '';
+        button.style.background = '';
+      });
+    };
+
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setLocked(saved);
+        setMessage('Děkujeme, váš hlas už byl zaznamenán.');
+      }
+    } catch (_) {}
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        // Zachytávací posluchač zároveň zastaví starší vložený skript v článku,
+        // aby se jeden hlas neodeslal dvakrát.
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (sending) return;
+
+        let saved = '';
+        try { saved = localStorage.getItem(storageKey) || ''; } catch (_) {}
+        if (saved) {
+          setLocked(saved);
+          setMessage('Děkujeme, váš hlas už byl zaznamenán.');
+          return;
+        }
+
+        const vote = button.getAttribute('data-poll-vote');
+        if (!vote) return;
+
+        sending = true;
+        setLocked(vote);
+        setMessage('Odesíláme váš hlas…');
+
+        const payload = {
+          path: `/anketa/${pollId}/${vote}`,
+          title: `Anketa ${pollId}: ${vote}`,
+          referrer: location.pathname,
+        };
+        const body = JSON.stringify(payload);
+        let recorded = false;
+
+        try {
+          const response = await fetch('/api/analytics/pageview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            keepalive: true,
+            credentials: 'same-origin',
+          });
+          recorded = response.ok;
+        } catch (_) {}
+
+        if (!recorded && navigator.sendBeacon) {
+          try {
+            recorded = navigator.sendBeacon(
+              '/api/analytics/pageview',
+              new Blob([body], { type: 'application/json' }),
+            );
+          } catch (_) {}
+        }
+
+        if (recorded) {
+          try { localStorage.setItem(storageKey, vote); } catch (_) {}
+          setMessage('Děkujeme, váš hlas byl zaznamenán.');
+        } else {
+          setUnlocked();
+          setMessage('Hlas se nyní nepodařilo odeslat. Zkuste to prosím znovu.', 'error');
+        }
+        sending = false;
+      }, true);
+    });
+  });
+
   // U článků se statickými reklamami se žádný starý dynamický reklamní skript nenačítá.
   const articleShell = document.querySelector('main.article-shell');
   if (articleShell && !document.querySelector('.static-article-ads') && !document.querySelector('script[data-article-adstream]')) {
