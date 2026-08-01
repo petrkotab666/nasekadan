@@ -42,6 +42,13 @@ jobs:
               text=text.replace(old,new,1)
               path.write_text(text,encoding='utf-8',newline='\n')
           PY
+      - name: Přidat kontrastní pojistku přímo do článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          POLL_CONTRAST_KEEP_VERSION=1 python3 scripts/fix_greenery_poll_contrast.py
+          grep -Fq 'nk-greenery-poll-contrast-v4' clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+          grep -Fq 'POLL_GREENERY_HIGH_CONTRAST_V4' site.js
       - name: Opravit, nasadit a veřejně ověřit anketu
         shell: bash
         run: bash scripts/run_greenery_poll_hotfix.sh
