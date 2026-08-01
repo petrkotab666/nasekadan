@@ -1,0 +1,82 @@
+name: OCR všech obrazových médií Hossnerova webu
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/ocr-all-hossner-images-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stáhnout a OCR všechny obrázky
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-ces imagemagick
+          python3 -m pip install --quiet requests pillow
+          rm -rf result-images && mkdir -p result-images/{files,text}
+          cat > /tmp/scan_images.py <<'PY'
+          import json,re,subprocess,urllib.parse,hashlib,concurrent.futures
+          from pathlib import Path
+          import requests
+          from PIL import Image
+          S=requests.Session(); S.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadan public document research; +https://nasekadan.cz/)'
+          out=Path('result-images'); media=[]
+          for page in range(1,30):
+              r=S.get(f'https://petrhossnerkadan.cz/wp-json/wp/v2/media?per_page=100&page={page}',timeout=60)
+              if r.status_code==400: break
+              r.raise_for_status(); arr=r.json()
+              if not arr: break
+              media.extend(arr)
+              if len(arr)<100: break
+          imgs=[]
+          for m in media:
+              mime=(m.get('mime_type') or '').lower(); url=m.get('source_url') or ''
+              if mime.startswith('image/') and not url.lower().endswith(('-pdf-212x300.jpg','-pdf.jpg')):
+                  imgs.append({'id':m.get('id'),'date':m.get('date'),'modified':m.get('modified'),'slug':m.get('slug'),'title':(m.get('title') or {}).get('rendered'),'caption':(m.get('caption') or {}).get('rendered'),'description':(m.get('description') or {}).get('rendered'),'post':m.get('post'),'mime':mime,'url':url})
+          (out/'all-images.json').write_text(json.dumps(imgs,ensure_ascii=False,indent=2),encoding='utf-8')
+          terms=['jaro 2024','červen 2024','cerven 2024','souběh','soubeh','smlouv','dodatek','kritéri','kriteri','hossner','losenický','losenicky','starosta','nemocnice','deloitte','tögel','tőgl','tögl','24. 7. 2024','26.9.2024','26. 9. 2024','25 979 821','žalob','zalob','mzda','odměn','odmen','e-mail','email','odesláno','odeslano','komu:','předmět','predmet']
+          def one(x):
+              try:
+                  r=S.get(x['url'],timeout=90); r.raise_for_status(); data=r.content
+                  ext=Path(urllib.parse.urlparse(x['url']).path).suffix or '.img'
+                  name=f"{x['id']}-{re.sub(r'[^A-Za-z0-9._-]+','_',x.get('slug') or 'image')}{ext}"
+                  p=out/'files'/name; p.write_bytes(data)
+                  try:
+                      im=Image.open(p); w,h=im.size
+                  except Exception as e: return {**x,'file':str(p),'error':f'PIL {e!r}'}
+                  # Skip tiny decorative assets, but keep metadata.
+                  text=''; method='skipped-small'
+                  if w>=500 and h>=300:
+                      z=subprocess.run(['tesseract',str(p),'stdout','-l','ces+eng','--psm','6'],capture_output=True,text=True,timeout=120)
+                      text=z.stdout or ''; method='ocr'
+                      (out/'text'/(name+'.txt')).write_text(text,encoding='utf-8',errors='replace')
+                  combined=' '.join(str(x.get(k) or '') for k in ('title','caption','description','slug'))+' '+text
+                  low=combined.lower(); found=[t for t in terms if t.lower() in low]
+                  return {**x,'file':str(p),'width':w,'height':h,'method':method,'chars':len(text),'found':found,'text':text[:12000]}
+              except Exception as e: return {**x,'error':repr(e)}
+          with concurrent.futures.ThreadPoolExecutor(max_workers=5) as ex:
+              rows=list(ex.map(one,imgs))
+          (out/'results.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
+          hits=[x for x in rows if x.get('found')]
+          lines=['# OCR obrazových médií Hossnerova webu','',f'- Všechna média: {len(media)}',f'- Obrázky: {len(imgs)}',f'- Obrázky se shodou: {len(hits)}','']
+          for x in hits:
+              lines += [f"## {x.get('id')} – {x.get('title') or x.get('slug')}",f"- Datum: {x.get('date')}",f"- Rozměry: {x.get('width')} × {x.get('height')}",f"- URL: {x.get('url')}",f"- Shody: {', '.join(x.get('found',[]))}",'',re.sub(r'\s+',' ',x.get('text',''))[:5000],'']
+          (out/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          print('\n'.join(lines))
+          PY
+          python3 /tmp/scan_images.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hossner-all-images-ocr
+          path: result-images
+          retention-days: 2
