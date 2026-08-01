@@ -1,0 +1,66 @@
+name: Spustit hloubkovou rešerši sporů Petra Hossnera
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/run-hossner-research-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hossner-court-research-20260801
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Načíst výzkumnou větev
+        uses: actions/checkout@v4
+        with:
+          ref: research/hossner-cases-20260801
+          fetch-depth: 0
+
+      - name: Připravit Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat nástroje
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils unzip
+          python -m pip install --disable-pip-version-check requests beautifulsoup4 lxml playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Projít InfoSoud, přílohy a webové archivy
+        run: |
+          set -euo pipefail
+          python scripts/research_hossner_cases_20260801.py
+
+      - name: Uložit výsledky
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/research/hossner-cases-2026
+          if git diff --cached --quiet; then
+            echo 'Bez nových výsledků.'
+            exit 0
+          fi
+          git commit -m 'Uložit výsledky hloubkové rešerše sporů Petra Hossnera'
+          git push origin HEAD:research/hossner-cases-20260801
+
+      - name: Přiložit výzkumný balík
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hossner-cases-research
+          path: .github/research/hossner-cases-2026
+          if-no-files-found: warn
+          retention-days: 30
