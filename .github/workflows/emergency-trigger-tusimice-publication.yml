@@ -1,0 +1,26 @@
+name: Nouzově spustit publikaci jaderných Tušimic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-trigger-tusimice-publication.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Spustit hlavní publikační workflow s force=true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh workflow run publish-tusimice-2026-08-01-0400.yml --ref main -f force=true
+          echo 'Hlavní publikační workflow bylo nouzově spuštěno.'
