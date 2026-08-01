@@ -1,0 +1,73 @@
+name: Uložit veřejnou publikaci jaderných Tušimic nyní
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/commit-tusimice-publication-now.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  commit-publication:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Sestavit a bezpečně pushnout vybrané veřejné soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug='jaderne-tusimice-smr-voda-doprava-eia-2026'
+          article="clanky/${slug}.html"
+          cp ".github/drafts/${slug}.html" "$article"
+          python3 -m pip install --disable-pip-version-check --quiet Pillow
+          python3 scripts/normalize_articles.py --write --check
+          python3 scripts/generate_social_cards.py --write --check
+          python3 scripts/finalize_launch.py
+          python3 scripts/normalize_search_snippets.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/ensure_tusimice_rss.py
+          social_url="$(python3 - <<'PY'
+          import html,re
+          from pathlib import Path
+          text=Path('clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)',text,re.I)
+          if not m: raise SystemExit('Chybí og:image')
+          print(html.unescape(m.group(1)))
+          PY
+          )"
+          social_image="social/${social_url##*/}"
+          test -s "$article" && test -s "$social_image"
+          grep -Fq "/clanky/${slug}.html" index.html
+          grep -Fq "/clanky/${slug}.html" clanky/index.html
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" sitemap.xml
+          grep -Fq "https://nasekadan.cz/clanky/${slug}.html" news-sitemap.xml
+          git config user.name 'Naše Kadaň publikační záchrana'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- "$article" "$social_image" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt style.css
+          if git diff --cached --quiet; then
+            echo 'Vybrané veřejné soubory už jsou v hlavní větvi.'
+            exit 0
+          fi
+          git commit -m 'Publikovat: jaderné Tušimice – web a feedy'
+          # Ostatní normalizační změny nejsou součástí publikace a nesmí blokovat rebase.
+          git reset --hard HEAD
+          git clean -fd
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            git reset --hard HEAD
+            git clean -fd
+            sleep $((attempt * 5))
+          done
+          exit 1
