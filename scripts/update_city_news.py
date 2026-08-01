@@ -5,34 +5,90 @@ import hashlib
 import html
 import json
 import re
+import ssl
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.error import HTTPError
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "city-news.json"
 SOURCES_FILE = ROOT / "data" / "city-sources.json"
 ORGANIZATIONS_FILE = ROOT / "data" / "organizations.json"
-UA = "NaseKadanBot/1.3 (+https://nasekadan.cz; info@nasekadan.cz)"
+UA = "NaseKadanBot/1.4 (+https://nasekadan.cz; info@nasekadan.cz)"
+BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/150 Safari/537.36"
 MIN_SAFE_ITEMS = 3
 MAX_WORKERS = 8
+VOLATILE_QUERY_KEYS = {
+    "tmstv", "timestamp", "tstamp", "cache", "nocache", "_", "rand",
+    "ver", "version", "drawerurl", "cartdraweropened",
+}
+GENERIC_TITLES = {
+    "číst více", "čtěte více", "zobrazit více", "více", "detail", "aktuality",
+    "novinky", "program", "kalendář akcí", "úvod", "hlavní stránka", "domů",
+    "kontakt", "kontakty", "menu", "facebook", "instagram", "přeskočit na obsah",
+    "prezentace",
+}
 
 
-def fetch(url: str) -> str:
+def ssl_context(allow_legacy: bool = False) -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    if allow_legacy and hasattr(ssl, "OP_LEGACY_SERVER_CONNECT"):
+        context.options |= ssl.OP_LEGACY_SERVER_CONNECT
+    return context
+
+
+def fetch_once(url: str, user_agent: str, *, allow_legacy: bool = False) -> str:
     request = Request(
         url,
         headers={
-            "User-Agent": UA,
+            "User-Agent": user_agent,
             "Accept-Language": "cs,en;q=0.7",
-            "Accept": "text/html,application/xhtml+xml",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.7",
+            "Cache-Control": "no-cache",
         },
     )
-    with urlopen(request, timeout=25) as response:
+    with urlopen(request, timeout=30, context=ssl_context(allow_legacy)) as response:
         return response.read().decode(
             response.headers.get_content_charset() or "utf-8", errors="replace"
         )
+
+
+def fetch(url: str) -> str:
+    errors: list[Exception] = []
+    attempts = (
+        (UA, False),
+        (BROWSER_UA, False),
+        (BROWSER_UA, True),
+    )
+    for index, (user_agent, allow_legacy) in enumerate(attempts, start=1):
+        try:
+            return fetch_once(url, user_agent, allow_legacy=allow_legacy)
+        except HTTPError as exc:
+            errors.append(exc)
+            if exc.code not in {403, 406, 408, 425, 429, 500, 502, 503, 504}:
+                raise
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                delay = min(8, max(1, int(retry_after or index)))
+            except ValueError:
+                delay = index
+            time.sleep(delay)
+        except ssl.SSLError as exc:
+            errors.append(exc)
+            if allow_legacy:
+                raise
+        except Exception as exc:
+            errors.append(exc)
+            if index == len(attempts):
+                raise
+            time.sleep(index)
+    if errors:
+        raise errors[-1]
+    raise RuntimeError("Zdroj se nepodařilo načíst.")
 
 
 def clean(value: object) -> str:
@@ -49,8 +105,12 @@ def normalize_url(value: object) -> str:
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return ""
     path = re.sub(r"/+$", "", parsed.path) or "/"
+    query = [
+        (key, val) for key, val in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() not in VOLATILE_QUERY_KEYS
+    ]
     return urlunsplit(
-        (parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, "")
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, urlencode(query, doseq=True), "")
     )
 
 
@@ -60,25 +120,27 @@ def parse(page: str, source: dict[str, str]) -> list[dict[str, str]]:
         r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', page, re.I | re.S
     ):
         title = clean(body)
+        folded_title = title.casefold()
         if len(title) < 10 or len(title) > 180:
             continue
-        lower = title.lower()
+        if folded_title in {value.casefold() for value in GENERIC_TITLES}:
+            continue
         if any(
-            token in lower
+            token in folded_title
             for token in (
-                "více",
-                "menu",
-                "kontakt",
-                "facebook",
-                "instagram",
+                "číst více",
+                "čtěte více",
+                "zobrazit více",
+                "pokračovat",
+                "přeskočit na obsah",
                 "cookies",
-                "úvodní stránka",
                 "přihlásit",
             )
         ):
             continue
         url = urljoin(source["url"], href)
-        if not url.startswith("http") or normalize_url(url) == normalize_url(source["url"]):
+        normalized = normalize_url(url)
+        if not normalized or normalized == normalize_url(source["url"]):
             continue
         position = page.find(href)
         around = clean(page[max(0, position - 450) : position + 1100]) if position >= 0 else ""
@@ -88,8 +150,14 @@ def parse(page: str, source: dict[str, str]) -> list[dict[str, str]]:
             if match
             else ""
         )
+        title = re.sub(
+            r"\s*\(\s*staženo\s+[\d\s.,]+[×x]\s*\)\s*",
+            "",
+            title,
+            flags=re.I,
+        ).strip()
         description = around.replace(title, "", 1)[:420].strip(" -|")
-        key = hashlib.sha1(f"{title}|{url}".encode()).hexdigest()[:12]
+        key = hashlib.sha1(f"{title}|{normalized}".encode()).hexdigest()[:12]
         output.append(
             {
                 "id": key,
@@ -97,7 +165,7 @@ def parse(page: str, source: dict[str, str]) -> list[dict[str, str]]:
                 "date": date,
                 "category": source["category"],
                 "description": description,
-                "source": url,
+                "source": normalized,
                 "sourceName": source["name"],
             }
         )
@@ -201,7 +269,7 @@ def load_sources() -> tuple[list[dict[str, str]], dict[str, object]]:
 def collect(source: dict[str, str]) -> tuple[dict[str, str], list[dict[str, str]], str]:
     try:
         return source, parse(fetch(source["url"]), source), ""
-    except Exception as exc:  # jednotlivý výpadek nesmí shodit celý přehled
+    except Exception as exc:
         return source, [], f"{type(exc).__name__}: {exc}"
 
 
