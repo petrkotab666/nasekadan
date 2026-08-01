@@ -1,0 +1,127 @@
+name: Rychle obnovit článek o sečení
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: restore-greenery-article-fast
+  cancel-in-progress: true
+
+env:
+  SLUG: sekani-travniku-kadan-spravci-vysky-2026
+  ARTICLE: clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+  PUBLIC_URL: https://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  restore:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] restore greenery article fast')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit aktuální soubory bez blokace obrázkem
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$ARTICLE"
+          grep -Fq 'Sedm centimetrů i dvě seče ročně' "$ARTICLE"
+          files=("$ARTICLE" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt site.js)
+          for file in "${files[@]}"; do test -s "$file"; done
+          social="$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          t=Path('clanky/sekani-travniku-kadan-spravci-vysky-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'https://nasekadan\.cz/(social/[^\"?]+)',t)
+          print(m.group(1) if m else '')
+          PY
+          )"
+          if [[ -n "$social" && -f "$social" ]]; then files+=("$social"); fi
+          printf '%s\n' "${files[@]}" > "$RUNNER_TEMP/greenery-files.txt"
+          tar -czf "$RUNNER_TEMP/greenery-fast.tar.gz" -T "$RUNNER_TEMP/greenery-files.txt"
+          echo "social=$social" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nasadit aktuální článek a přehledy
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/greenery-fast.tar.gz" ubuntu@57.129.43.215:/tmp/greenery-fast.tar.gz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/greenery-fast.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/greenery-fast.tar.gz nasekadan-web:/tmp/greenery-fast.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/greenery-fast.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/greenery-fast.tar.gz
+          fi
+          grep -Fq 'Sedm centimetrů i dvě seče ročně' /var/www/nasekadan/clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+          rm -f /tmp/greenery-fast.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit návrat článku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=false
+          for attempt in $(seq 1 12); do
+            article="$(curl -4 -kfsS --max-time 25 "${PUBLIC_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'Sedm centimetrů i dvě seče ročně' <<<"$article" \
+              && grep -Fq "$SLUG" <<<"$home" \
+              && grep -Fq "$SLUG" <<<"$archive"; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          [[ "$ok" == true ]]
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
+            const body = ok
+              ? '✅ Článek o sečení je znovu veřejný a je opět dostupný z titulní strany i archivu.\n\nhttps://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+              : `❌ Rychlá obnova nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}, kontrola: ${process.env.VERIFIED || 'false'}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
