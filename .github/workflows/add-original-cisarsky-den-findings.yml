@@ -3,11 +3,6 @@ name: Doplnit vlastní zjištění k Císařskému dni
 on:
   issues:
     types: [opened, reopened]
-  push:
-    branches: [main]
-    paths:
-      - scripts/add_original_cisarsky_den_findings_20260801.py
-      - .github/workflows/add-original-cisarsky-den-findings.yml
   workflow_dispatch:
 
 permissions:
@@ -20,7 +15,7 @@ concurrency:
 
 jobs:
   enrich:
-    if: github.event_name != 'issues' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] original Cisarsky den findings')
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] original Cisarsky den findings')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -51,15 +46,11 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň'
           git config user.email 'info@nasekadan.cz'
-          git add .github/drafts/cisarsky-den-kadan-historie-2026.html scripts/add_original_cisarsky_den_findings_20260801.py
+          git add .github/drafts/cisarsky-den-kadan-historie-2026.html
           if ! git diff --cached --quiet; then
             git commit -m 'Doplnit vlastní zjištění k Císařskému dni [skip ci]'
-            for attempt in 1 2 3 4 5; do
-              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
-              git rebase --abort 2>/dev/null || true
-              [[ "$attempt" == 5 ]] && exit 1
-              sleep $((attempt * 4))
-            done
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
 
       - name: Ověřit hlavní větev
