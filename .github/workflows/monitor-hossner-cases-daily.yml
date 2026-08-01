@@ -1,0 +1,237 @@
+name: Denní dohled soudních spisů Hossner
+
+on:
+  schedule:
+    - cron: '25 4 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/monitor-hossner-cases-daily.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: monitor-hossner-cases-daily
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zkontrolovat InfoSoud a nová rozhodnutí
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          cat > /tmp/monitor_hossner.py <<'PY'
+          from __future__ import annotations
+          import datetime as dt
+          import hashlib
+          import json
+          import re
+          import time
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          ROOT = Path('.github/research/hossner-court-monitor')
+          ROOT.mkdir(parents=True, exist_ok=True)
+          PREVIOUS = ROOT / 'current.json'
+          OLD = json.loads(PREVIOUS.read_text(encoding='utf-8')) if PREVIOUS.exists() else None
+          session = requests.Session()
+          session.headers.update({
+              'User-Agent': 'Mozilla/5.0 (compatible; NaseKadan court monitor; +https://nasekadan.cz/)',
+              'Accept-Language': 'cs,en;q=0.8',
+          })
+
+          cases = [
+              {
+                  'label': '93 Ncp 490/2026',
+                  'payload': {'typOrganizace':'VSECHNY_KRAJE','druhOrganizace':'VSPHAAB','cisloSenatu':'93','druhVeci':'Ncp','bcVec':'490','rocnik':'2026'},
+                  'rx': r'93\s*NCP\s*490\s*/\s*2026',
+              },
+              {
+                  'label': '30 C 211/2025',
+                  'payload': {'typOrganizace':'VSECHNY_KRAJE','okresniSoud':'OSSCECV','cisloSenatu':'30','druhVeci':'C','bcVec':'211','rocnik':'2025'},
+                  'rx': r'30\s*C\s*211\s*/\s*2025',
+              },
+              {
+                  'label': '14 Co 104/2026',
+                  'payload': {'typOrganizace':'VSECHNY_KRAJE','druhOrganizace':'KSSCEUL','cisloSenatu':'14','druhVeci':'Co','bcVec':'104','rocnik':'2026'},
+                  'rx': r'14\s*CO\s*104\s*/\s*2026',
+              },
+              {
+                  'label': '30 C 84/2025',
+                  'payload': {'typOrganizace':'VSECHNY_KRAJE','okresniSoud':'OSSCECV','cisloSenatu':'30','druhVeci':'C','bcVec':'84','rocnik':'2025'},
+                  'rx': r'30\s*C\s*84\s*/\s*2025',
+              },
+          ]
+
+          def request(method: str, url: str, **kwargs):
+              last = None
+              for i in range(5):
+                  try:
+                      r = session.request(method, url, timeout=90, **kwargs)
+                      if r.status_code in (429,500,502,503,504):
+                          raise RuntimeError(f'HTTP {r.status_code}')
+                      r.raise_for_status()
+                      return r
+                  except Exception as exc:
+                      last = exc
+                      time.sleep(2 + i * 3)
+              raise last
+
+          current = {
+              'checked_at_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+              'cases': {},
+              'published_decisions': [],
+              'errors': [],
+          }
+
+          for case in cases:
+              try:
+                  data = request('POST', 'https://infosoud.gov.cz/api/v1/rizeni/vyhledej', json=case['payload']).json()
+                  # platneK changes on every query and would create false alerts.
+                  data.pop('platneK', None)
+                  current['cases'][case['label']] = data
+              except Exception as exc:
+                  current['errors'].append({'case':case['label'],'stage':'infosoud','error':repr(exc)})
+
+          # Scan only recently published open-data batches. The decision itself can be
+          # older; publication date is what matters for this rolling window.
+          cutoff = dt.date.today() - dt.timedelta(days=45)
+          seen_urls = set()
+          try:
+              for year in sorted({cutoff.year, dt.date.today().year}):
+                  months = request('GET', f'https://rozhodnuti.justice.cz/api/opendata/{year}').json()
+                  for month in months:
+                      month_url = month.get('odkaz')
+                      if not month_url:
+                          continue
+                      try:
+                          days = request('GET', month_url).json()
+                      except Exception as exc:
+                          current['errors'].append({'stage':'opendata-month','url':month_url,'error':repr(exc)})
+                          continue
+                      for day in days:
+                          day_url = day.get('odkaz')
+                          if not day_url:
+                              continue
+                          day_date = None
+                          raw_day = json.dumps(day, ensure_ascii=False)
+                          m = re.search(r'(20\d{2})[-_/]?(\d{2})[-_/]?(\d{2})', raw_day)
+                          if m:
+                              try: day_date = dt.date(int(m.group(1)),int(m.group(2)),int(m.group(3)))
+                              except ValueError: pass
+                          if day_date and day_date < cutoff:
+                              continue
+                          page = 0
+                          while page < 100:
+                              sep = '&' if '?' in day_url else '?'
+                              try:
+                                  payload = request('GET', f'{day_url}{sep}page={page}').json()
+                              except Exception as exc:
+                                  current['errors'].append({'stage':'opendata-day','url':day_url,'page':page,'error':repr(exc)})
+                                  break
+                              items = payload if isinstance(payload,list) else payload.get('polozky') or payload.get('rozhodnuti') or payload.get('items') or payload.get('content') or []
+                              if isinstance(items,dict): items = list(items.values())
+                              if not isinstance(items,list): items = []
+                              for item in items:
+                                  raw = json.dumps(item,ensure_ascii=False)
+                                  labels = [c['label'] for c in cases if re.search(c['rx'],raw,re.I)]
+                                  if not labels:
+                                      continue
+                                  urls = [v for v in item.values() if isinstance(v,str) and v.startswith('http')] if isinstance(item,dict) else []
+                                  record = {'labels':labels,'published_batch':day_url,'item':item,'files':[]}
+                                  for url in urls:
+                                      if url in seen_urls: continue
+                                      seen_urls.add(url)
+                                      try:
+                                          r = request('GET',url)
+                                          name = hashlib.sha1(url.encode()).hexdigest()[:12]
+                                          ext = '.pdf' if r.content.startswith(b'%PDF') else '.bin'
+                                          out = ROOT / 'documents' / f'{name}{ext}'
+                                          out.parent.mkdir(parents=True,exist_ok=True)
+                                          out.write_bytes(r.content)
+                                          record['files'].append({'url':url,'path':str(out),'bytes':len(r.content),'sha256':hashlib.sha256(r.content).hexdigest()})
+                                      except Exception as exc:
+                                          record['files'].append({'url':url,'error':repr(exc)})
+                                  current['published_decisions'].append(record)
+                              if len(items) < 100:
+                                  break
+                              page += 1
+          except Exception as exc:
+              current['errors'].append({'stage':'opendata-root','error':repr(exc)})
+
+          PREVIOUS.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          def normalized(obj):
+              if not obj: return None
+              x = json.loads(json.dumps(obj,ensure_ascii=False))
+              x.pop('checked_at_utc',None)
+              # Errors may be transient. They are recorded, but do not themselves trigger a case alert.
+              x.pop('errors',None)
+              return x
+
+          changed = OLD is not None and normalized(OLD) != normalized(current)
+          decision_found = bool(current['published_decisions'])
+          summary = []
+          for label,data in current['cases'].items():
+              summary.append(f"- **{label}:** {data.get('stav','stav neuveden')} (od {data.get('stavDatum','?')}); událostí {len(data.get('udalosti') or [])}")
+          if current['published_decisions']:
+              summary.append(f"- **Nově nalezená zveřejněná rozhodnutí:** {len(current['published_decisions'])}")
+          if current['errors']:
+              summary.append(f"- Technické chyby při dílčích kontrolách: {len(current['errors'])}")
+          (ROOT/'STATUS.md').write_text('# Denní dohled Hossner – soudní spisy\n\n'+'\n'.join(summary)+'\n',encoding='utf-8')
+          print(f'changed={str(changed).lower()}')
+          print(f'decision_found={str(decision_found).lower()}')
+          with open('/tmp/monitor-output.txt','w',encoding='utf-8') as f:
+              f.write(f"changed={str(changed).lower()}\n")
+              f.write(f"decision_found={str(decision_found).lower()}\n")
+          PY
+          python3 /tmp/monitor_hossner.py | tee /tmp/monitor-console.txt
+          cat /tmp/monitor-output.txt >> "$GITHUB_OUTPUT"
+
+      - name: Uložit aktuální stav
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-court-monitor
+          git commit -m 'Aktualizovat dohled soudních spisů Hossner [skip ci]' || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push origin HEAD:main && exit 0
+            sleep $((i*5))
+          done
+          exit 1
+
+      - name: Upozornit na změnu nebo získané rozhodnutí
+        if: steps.check.outputs.changed == 'true' || steps.check.outputs.decision_found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TITLE='Nový posun v soudních spisech Hossner'
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title Nový posun v soudních spisech Hossner' --json number --jq '.[0].number // empty')
+          BODY=$(cat .github/research/hossner-court-monitor/STATUS.md)
+          BODY="$BODY
+
+Automatická kontrola zaznamenala změnu proti předchozímu stavu nebo nově zveřejněné rozhodnutí. Zkontrolujte soubor \`.github/research/hossner-court-monitor/current.json\` a případné dokumenty ve složce \`documents\`."
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "$BODY"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          fi
