@@ -23,10 +23,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/add_original_cisarsky_den_findings_20260801.py
+          python3 scripts/correct_cisarsky_den_2026_contracts_20260801.py
           f=.github/drafts/cisarsky-den-kadan-historie-2026.html
           grep -Fq 'data-original-findings="contracts-v1"' "$f"
-          grep -Fq 'Nejméně 614 956 Kč' "$f"
+          grep -Fq 'data-2026-contract-minimum="861257"' "$f"
+          grep -Fq 'Nejméně 861 257 Kč' "$f"
           grep -Fq '864 595 Kč' "$f"
+          grep -Fq '726 000 korun' "$f"
           grep -Fq '2,8krát vyšší' "$f"
       - shell: bash
         run: |
@@ -34,7 +37,7 @@ jobs:
           git config user.name 'Naše Kadaň'
           git config user.email 'info@nasekadan.cz'
           git add .github/drafts/cisarsky-den-kadan-historie-2026.html
-          git commit -m 'Doplnit vlastní zjištění k Císařskému dni [skip ci]' || true
+          git commit -m 'Rozšířit vlastní účet Císařského dne [skip ci]' || true
           git pull --rebase origin main
           git push origin HEAD:main
       - if: always() && github.event_name == 'issues'
@@ -42,5 +45,5 @@ jobs:
         with:
           script: |
             const ok='${{ job.status }}'==='success';
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?'✅ Vlastní rekonstrukce nákladů, programu a přerušených ročníků byla uložena do neveřejného článku.':'❌ Uložení vlastních zjištění selhalo.'});
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?'✅ Neveřejný článek nyní obsahuje vlastní rekonstrukci ročníků, šest konkrétních smluv roku 2026 v součtu 861 257 Kč, minimální účet roku 2025, vývoj položky KZK a samostatně označenou reklamní smlouvu za 726 000 Kč.':'❌ Aktualizace vlastních zjištění selhala.'});
             if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
