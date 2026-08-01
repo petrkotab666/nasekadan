@@ -1,0 +1,72 @@
+name: Dočasně ověřit živý web pro monitoring
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/verify-monitor-live-20260801-1934.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Živě ověřit produkci s cache-bustingem
+        shell: bash
+        run: |
+          set -u
+          paths=(
+            '/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html'
+            '/clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+            '/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html'
+          )
+          titles=(
+            'Petice za nemocnici míří do ulic. Podepisovat se bude na třech místech'
+            'Sedm centimetrů i dvě seče ročně. Jak Kadaň skutečně udržuje městské trávníky'
+            'Jaderné Tušimice se připravují naplno. O vodě, dopravě i připojení ale stále není rozhodnuto'
+          )
+          for attempt in $(seq 1 12); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+            rm -f /tmp/nk-{home,archive,rss,sitemap,news,health,a0,a1,a2}
+            home_http=no; archive_http=no; rss_http=no; sitemap_http=no; news_http=no; health_http=no
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?monitor=${stamp}" -o /tmp/nk-home && home_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?monitor=${stamp}" -o /tmp/nk-archive && archive_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?monitor=${stamp}" -o /tmp/nk-rss && rss_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?monitor=${stamp}" -o /tmp/nk-sitemap && sitemap_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?monitor=${stamp}" -o /tmp/nk-news && news_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?monitor=${stamp}" -o /tmp/nk-health && health_http=yes || true
+            content_ok=yes
+            for i in 0 1 2; do
+              article_http=no; h1=no; home_has=no; archive_has=no; rss_has=no; sitemap_has=no
+              curl -4 -kfsS --max-time 25 "https://nasekadan.cz${paths[$i]}?monitor=${stamp}" -o "/tmp/nk-a${i}" && article_http=yes || true
+              [[ "$article_http" == yes ]] && grep -Fq "<h1>${titles[$i]}</h1>" "/tmp/nk-a${i}" && h1=yes
+              [[ "$home_http" == yes ]] && grep -Fq "${paths[$i]}" /tmp/nk-home && home_has=yes
+              [[ "$archive_http" == yes ]] && grep -Fq "${paths[$i]}" /tmp/nk-archive && archive_has=yes
+              [[ "$rss_http" == yes ]] && grep -Fq "https://nasekadan.cz${paths[$i]}" /tmp/nk-rss && rss_has=yes
+              [[ "$sitemap_http" == yes ]] && grep -Fq "https://nasekadan.cz${paths[$i]}" /tmp/nk-sitemap && sitemap_has=yes
+              echo "article=$i http=$article_http h1=$h1 home=$home_has archive=$archive_has rss=$rss_has sitemap=$sitemap_has path=${paths[$i]}"
+              [[ "$article_http" == yes && "$h1" == yes && "$home_has" == yes && "$archive_has" == yes && "$rss_has" == yes && "$sitemap_has" == yes ]] || content_ok=no
+            done
+            source_sha="$(sed -n 's/^source=//p' /tmp/nk-health 2>/dev/null | head -1)"
+            generated="$(sed -n 's/^generated=//p' /tmp/nk-health 2>/dev/null | head -1)"
+            source_ok=no
+            [[ -n "$main_sha" && "$source_sha" == "$main_sha" ]] && source_ok=yes
+            echo "attempt=$attempt main=$main_sha source=$source_sha generated=$generated home_http=$home_http archive_http=$archive_http rss_http=$rss_http sitemap_http=$sitemap_http news_http=$news_http health_http=$health_http content_ok=$content_ok source_ok=$source_ok"
+            if [[ "$content_ok" == yes && "$source_ok" == yes && "$home_http" == yes && "$archive_http" == yes && "$rss_http" == yes && "$sitemap_http" == yes && "$health_http" == yes ]]; then
+              echo "MONITOR_RESULT=success main=${main_sha} source=${source_sha} generated=${generated}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "MONITOR_RESULT=failure"
+          echo 'Poslední deployment-health:'
+          cat /tmp/nk-health 2>/dev/null || true
+          exit 1
