@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-01T06:19:04.223983+00:00",
+  "checkedAt": "2026-08-01T06:27:21.297700+00:00",
   "bootstrap": false,
   "sourceCount": 102,
-  "checkedSources": 86,
-  "failedSources": 16,
-  "itemsParsed": 6421,
-  "uniqueItems": 3483,
-  "newAlerts": 1,
+  "checkedSources": 89,
+  "failedSources": 13,
+  "itemsParsed": 6548,
+  "uniqueItems": 3573,
+  "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 656,
+    "genericTitle": 671,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 236,
-    "notEditoriallySignificant": 1088,
-    "notFreshOrUndated": 157,
-    "duplicate": 2282
+    "broadWithoutLocalMatch": 0,
+    "notEditoriallySignificant": 6,
+    "notFreshOrUndated": 0,
+    "duplicate": 2304
   },
   "coverage": {
     "directoryOrganizations": 63,
@@ -253,9 +253,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -587,9 +586,8 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -669,9 +667,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 85
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -793,7 +790,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -866,7 +863,7 @@
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 2
+      "itemsParsed": 1
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
@@ -882,7 +879,7 @@
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 4
+      "itemsParsed": 5
     }
   ]
 }
