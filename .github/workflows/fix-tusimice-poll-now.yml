@@ -17,57 +17,373 @@ concurrency:
 env:
   KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
   KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-  MARKER: 'Ankety jsou obsluhované z externího skriptu'
-  ENDPOINT: '/api/newsletter/analytics/pageview'
   ARTICLE: clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
-  SCRIPT_VERSION: '20260801-poll-fix-4'
+  SCRIPT_VERSION: '20260801-poll-results-1'
+  POLL_ID: 'smr-tusimice-2026'
 
 jobs:
   deploy-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Přidat článku verzované odkazy na opravené skripty
+      - name: Doplnit serverové sčítání a živé výsledky ankety
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os,re
           from pathlib import Path
-          p=Path(os.environ['ARTICLE'])
-          text=p.read_text(encoding='utf-8')
-          version=os.environ['SCRIPT_VERSION']
-          replacements=[
-            (r'<script src="/site\.js(?:\?v=[^"]+)?" defer></script>',f'<script src="/site.js?v={version}" defer></script>'),
-            (r'<script src="/analytics\.js(?:\?v=[^"]+)?" defer></script>',f'<script src="/analytics.js?v={version}" defer></script>'),
-          ]
-          for pattern,replacement in replacements:
-              text,count=re.subn(pattern,replacement,text,count=1)
-              if count!=1: raise SystemExit(f'Nenalezen právě jeden skript: {pattern}')
-          p.write_text(text,encoding='utf-8')
-          PY
-          test -s site.js
-          test -s analytics.js
-          grep -Fq "$MARKER" site.js
-          grep -Fq "$ENDPOINT" site.js
-          grep -Fq "$ENDPOINT" analytics.js
-          grep -Fq "/site.js?v=${SCRIPT_VERSION}" "$ARTICLE"
-          grep -Fq "/analytics.js?v=${SCRIPT_VERSION}" "$ARTICLE"
+          import re
 
-      - name: Uložit cache-bust opravu do hlavní větve
+          server_path = Path('newsletter/server.py')
+          server = server_path.read_text(encoding='utf-8')
+
+          if '# BEGIN POLL_RESULTS_API' not in server:
+              server = server.replace(
+                  'import hashlib,json,os,secrets,smtplib,sqlite3,sys,traceback',
+                  'import hashlib,json,os,re,secrets,smtplib,sqlite3,sys,traceback',
+                  1,
+              )
+
+              old_db_tail = """ c.execute('CREATE INDEX IF NOT EXISTS idx_pageviews_day ON pageviews(day)')
+ c.execute('CREATE INDEX IF NOT EXISTS idx_pageviews_path ON pageviews(path)')
+ return c
+"""
+              new_db_tail = """ c.execute('CREATE INDEX IF NOT EXISTS idx_pageviews_day ON pageviews(day)')
+ c.execute('CREATE INDEX IF NOT EXISTS idx_pageviews_path ON pageviews(path)')
+ c.execute('''CREATE TABLE IF NOT EXISTS poll_votes(id INTEGER PRIMARY KEY,poll_id TEXT NOT NULL,choice TEXT NOT NULL,visitor_hash TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(poll_id,visitor_hash))''')
+ c.execute('CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id)')
+ migrate_legacy_poll_votes(c)
+ return c
+"""
+              if old_db_tail not in server:
+                  raise SystemExit('Nelze najít konec inicializace databáze')
+              server = server.replace(old_db_tail, new_db_tail, 1)
+
+              poll_api = r'''
+# BEGIN POLL_RESULTS_API
+def valid_poll_token(value,max_length=80):
+ token=str(value or '').strip().lower()
+ return token if re.fullmatch(r'[a-z0-9][a-z0-9-]{0,%d}'%(max_length-1),token) else ''
+
+
+def migrate_legacy_poll_votes(c):
+ try:
+  rows=c.execute("SELECT path,day,visitor_hash,created_at FROM pageviews WHERE path LIKE '/anketa/%/%'").fetchall()
+  for path,day,old_hash,created_at in rows:
+   parts=str(path or '').strip('/').split('/')
+   if len(parts)!=3 or parts[0]!='anketa':continue
+   poll_id=valid_poll_token(parts[1]);choice=valid_poll_token(parts[2],40)
+   if not poll_id or not choice:continue
+   legacy_raw=f'legacy|{day}|{old_hash}'
+   legacy_hash=hashlib.sha256(legacy_raw.encode()).hexdigest()[:32]
+   c.execute('INSERT OR IGNORE INTO poll_votes(poll_id,choice,visitor_hash,created_at) VALUES(?,?,?,?)',(poll_id,choice,legacy_hash,created_at or datetime.now(timezone.utc).isoformat()))
+  c.commit()
+ except Exception as exc:
+  log_error('POLL_MIGRATION',exc)
+
+
+def poll_visitor_hash(env,poll_id):
+ raw=f'{ANALYTICS_SECRET}|poll|{poll_id}|{client_ip(env)}|{env.get("HTTP_USER_AGENT","")[:180]}'
+ return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def poll_results_payload(c,poll_id):
+ rows=c.execute('SELECT choice,COUNT(*) FROM poll_votes WHERE poll_id=? GROUP BY choice ORDER BY choice',(poll_id,)).fetchall()
+ counts={str(choice):int(count) for choice,count in rows}
+ return {'ok':True,'pollId':poll_id,'total':sum(counts.values()),'counts':counts}
+
+
+def poll_results(env,start):
+ try:
+  poll_id=valid_poll_token(parse_qs(env.get('QUERY_STRING','')).get('poll',[''])[0])
+  if not poll_id:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Chybí platné ID ankety.'},ensure_ascii=False))
+  c=db();payload=poll_results_payload(c,poll_id);c.close()
+  return response(start,'200 OK',json.dumps(payload,ensure_ascii=False))
+ except Exception as exc:
+  log_error('POLL_RESULTS',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False},ensure_ascii=False))
+
+
+def poll_vote(env,start):
+ try:
+  data=read_json(env)
+  poll_id=valid_poll_token(data.get('pollId'));choice=valid_poll_token(data.get('choice'),40)
+  if not poll_id or not choice:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Neplatný hlas.'},ensure_ascii=False))
+  now=datetime.now(timezone.utc).isoformat();vhash=poll_visitor_hash(env,poll_id);c=db()
+  existing=c.execute('SELECT choice FROM poll_votes WHERE poll_id=? AND visitor_hash=?',(poll_id,vhash)).fetchone()
+  accepted=existing is None
+  selected=choice if accepted else str(existing[0])
+  if accepted:
+   c.execute('INSERT INTO poll_votes(poll_id,choice,visitor_hash,created_at) VALUES(?,?,?,?)',(poll_id,choice,vhash,now));c.commit()
+  payload=poll_results_payload(c,poll_id);payload.update({'accepted':accepted,'selected':selected});c.close()
+  return response(start,'200 OK',json.dumps(payload,ensure_ascii=False))
+ except Exception as exc:
+  log_error('POLL_VOTE',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False},ensure_ascii=False))
+# END POLL_RESULTS_API
+
+'''
+              marker = '\ndef smtp_configured():'
+              if marker not in server:
+                  raise SystemExit('Nelze najít místo pro API ankety')
+              server = server.replace(marker, '\n' + poll_api + 'def smtp_configured():', 1)
+
+              old_routes = """ if path=='/analytics/pageview' and method=='POST':return analytics_pageview(env,start)
+ if path=='/analytics/summary' and method=='GET':return analytics_summary(start)
+"""
+              new_routes = """ if path=='/analytics/pageview' and method=='POST':return analytics_pageview(env,start)
+ if path=='/analytics/summary' and method=='GET':return analytics_summary(start)
+ if path=='/poll/results' and method=='GET':return poll_results(env,start)
+ if path=='/poll/vote' and method=='POST':return poll_vote(env,start)
+"""
+              if old_routes not in server:
+                  raise SystemExit('Nelze najít směrování analytiky')
+              server = server.replace(old_routes, new_routes, 1)
+
+          server_path.write_text(server,encoding='utf-8')
+
+          site_path = Path('site.js')
+          site = site_path.read_text(encoding='utf-8')
+          start = site.find('  // Ankety jsou obsluhované z externího skriptu')
+          end = site.find('  // U článků se statickými reklamami', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Nelze najít blok ankety v site.js')
+
+          poll_block = r'''  // Ankety jsou obsluhované z externího skriptu, aby fungovaly i při blokování inline JavaScriptu.
+  // Hlas se ukládá samostatně a veřejné průběžné výsledky se načítají ze serveru.
+  const pollVoteEndpoint = '/api/newsletter/poll/vote';
+  const pollResultsEndpoint = '/api/newsletter/poll/results';
+
+  if (!document.getElementById('nk-poll-results-style')) {
+    const style = document.createElement('style');
+    style.id = 'nk-poll-results-style';
+    style.textContent = `
+      .poll-results{margin-top:20px;padding-top:18px;border-top:1px solid #d9e0e3}
+      .poll-results[hidden]{display:none}
+      .poll-results-head{display:flex;justify-content:space-between;gap:16px;align-items:baseline;margin-bottom:13px;color:#20313a}
+      .poll-results-head strong{font:800 20px Georgia,serif}
+      .poll-results-total{font-size:13px;color:#667780;font-weight:700}
+      .poll-result-row{margin:0 0 13px}
+      .poll-result-meta{display:flex;justify-content:space-between;gap:14px;margin-bottom:5px;font-size:14px;line-height:1.4}
+      .poll-result-label{color:#20313a;font-weight:800}
+      .poll-result-value{color:#667780;white-space:nowrap}
+      .poll-result-track{height:10px;overflow:hidden;border-radius:999px;background:#e7ecee}
+      .poll-result-fill{height:100%;width:0;border-radius:inherit;background:#9f2626;transition:width .35s ease}
+      .poll-results-status{margin:8px 0 0!important;color:#73818a;font-size:12px!important}
+    `;
+    document.head.appendChild(style);
+  }
+
+  document.querySelectorAll('[data-poll-id]').forEach((section) => {
+    if (section.dataset.pollBound === '1') return;
+    section.dataset.pollBound = '1';
+
+    const pollId = section.getAttribute('data-poll-id') || 'poll';
+    const storageKey = `nk-poll-${pollId}`;
+    const buttons = Array.from(section.querySelectorAll('[data-poll-vote]'));
+    const message = section.querySelector('.poll-message');
+    const options = section.querySelector('.poll-options');
+    let sending = false;
+
+    const choices = buttons.map((button) => ({
+      key: button.getAttribute('data-poll-vote') || '',
+      label: (button.textContent || '').trim(),
+    })).filter((item) => item.key);
+
+    const results = document.createElement('div');
+    results.className = 'poll-results';
+    results.hidden = true;
+    results.setAttribute('aria-live', 'polite');
+    results.innerHTML = `
+      <div class="poll-results-head">
+        <strong>Průběžné výsledky</strong>
+        <span class="poll-results-total" data-poll-total></span>
+      </div>
+      ${choices.map((item) => `
+        <div class="poll-result-row" data-poll-result="${item.key}">
+          <div class="poll-result-meta">
+            <span class="poll-result-label">${item.label}</span>
+            <span class="poll-result-value">0 hlasů · 0 %</span>
+          </div>
+          <div class="poll-result-track"><div class="poll-result-fill"></div></div>
+        </div>
+      `).join('')}
+      <p class="poll-results-status">Načítáme aktuální výsledky…</p>
+    `;
+    if (options) options.after(results);
+    else section.appendChild(results);
+
+    const setMessage = (text, type = 'success') => {
+      if (!message) return;
+      message.textContent = text;
+      message.style.background = type === 'error' ? '#fff0f0' : '#eaf4ed';
+      message.style.color = type === 'error' ? '#8e2525' : '#245d36';
+      message.classList.add('show');
+    };
+
+    const setLocked = (vote) => {
+      buttons.forEach((button) => {
+        button.disabled = true;
+        if (button.getAttribute('data-poll-vote') === vote) {
+          button.style.borderColor = '#9f2626';
+          button.style.background = '#fff4f4';
+        }
+      });
+    };
+
+    const setUnlocked = () => {
+      buttons.forEach((button) => {
+        button.disabled = false;
+        button.style.borderColor = '';
+        button.style.background = '';
+      });
+    };
+
+    const voteWord = (count) => {
+      if (count === 1) return 'hlas';
+      if (count >= 2 && count <= 4) return 'hlasy';
+      return 'hlasů';
+    };
+
+    const renderResults = (payload) => {
+      const counts = payload && payload.counts ? payload.counts : {};
+      const total = Number(payload && payload.total) || 0;
+      const totalEl = results.querySelector('[data-poll-total]');
+      if (totalEl) totalEl.textContent = `${total} ${voteWord(total)} celkem`;
+
+      choices.forEach((item) => {
+        const count = Number(counts[item.key]) || 0;
+        const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+        const row = results.querySelector(`[data-poll-result="${item.key}"]`);
+        if (!row) return;
+        const value = row.querySelector('.poll-result-value');
+        const fill = row.querySelector('.poll-result-fill');
+        if (value) value.textContent = `${count} ${voteWord(count)} · ${percent} %`;
+        if (fill) fill.style.width = `${percent}%`;
+      });
+
+      const status = results.querySelector('.poll-results-status');
+      if (status) status.textContent = total > 0 ? 'Výsledky se aktualizují průběžně.' : 'Zatím nebyl odevzdán žádný hlas.';
+      results.hidden = false;
+    };
+
+    const loadResults = async () => {
+      try {
+        const response = await fetch(`${pollResultsEndpoint}?poll=${encodeURIComponent(pollId)}&t=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        renderResults(await response.json());
+      } catch (_) {
+        const status = results.querySelector('.poll-results-status');
+        if (status) status.textContent = 'Výsledky se nyní nepodařilo načíst.';
+        results.hidden = false;
+      }
+    };
+
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setLocked(saved);
+        setMessage('Děkujeme, váš hlas už byl zaznamenán.');
+      }
+    } catch (_) {}
+
+    loadResults();
+
+    buttons.forEach((button) => {
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (sending) return;
+
+        let saved = '';
+        try { saved = localStorage.getItem(storageKey) || ''; } catch (_) {}
+        if (saved) {
+          setLocked(saved);
+          setMessage('Děkujeme, váš hlas už byl zaznamenán.');
+          await loadResults();
+          return;
+        }
+
+        const vote = button.getAttribute('data-poll-vote');
+        if (!vote) return;
+
+        sending = true;
+        setLocked(vote);
+        setMessage('Odesíláme váš hlas…');
+
+        try {
+          const response = await fetch(pollVoteEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pollId, choice: vote }),
+            keepalive: true,
+            credentials: 'same-origin',
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json();
+          const selected = payload.selected || vote;
+          try { localStorage.setItem(storageKey, selected); } catch (_) {}
+          setLocked(selected);
+          setMessage(payload.accepted === false
+            ? 'Z tohoto zařízení už byl hlas zaznamenán. Zobrazujeme aktuální výsledky.'
+            : 'Děkujeme, váš hlas byl zaznamenán.');
+          renderResults(payload);
+        } catch (_) {
+          setUnlocked();
+          setMessage('Hlas se nyní nepodařilo odeslat. Zkuste to prosím znovu.', 'error');
+          await loadResults();
+        }
+        sending = false;
+      }, true);
+    });
+
+    window.setInterval(() => {
+      if (!document.hidden) loadResults();
+    }, 30000);
+  });
+
+'''
+          site = site[:start] + poll_block + site[end:]
+          site_path.write_text(site,encoding='utf-8')
+
+          article_path = Path('clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html')
+          article = article_path.read_text(encoding='utf-8')
+          article = article.replace(
+              'Hlasujte podle informací, které jsou nyní veřejně dostupné. Výsledky čtenářské ankety později zveřejníme.',
+              'Hlasujte podle informací, které jsou nyní veřejně dostupné. Průběžné výsledky se zobrazují hned pod možnostmi.',
+              1,
+          )
+          version = '20260801-poll-results-1'
+          article, count_site = re.subn(r'<script src="/site\.js(?:\?v=[^"]+)?" defer></script>', f'<script src="/site.js?v={version}" defer></script>', article, count=1)
+          article, count_analytics = re.subn(r'<script src="/analytics\.js(?:\?v=[^"]+)?" defer></script>', f'<script src="/analytics.js?v={version}" defer></script>', article, count=1)
+          if count_site != 1 or count_analytics != 1:
+              raise SystemExit('Nelze verzovat skripty v článku')
+          article_path.write_text(article,encoding='utf-8')
+          PY
+
+          python3 -m py_compile newsletter/server.py
+          grep -Fq '# BEGIN POLL_RESULTS_API' newsletter/server.py
+          grep -Fq '/poll/results' newsletter/server.py
+          grep -Fq 'Průběžné výsledky' site.js
+          grep -Fq '/api/newsletter/poll/vote' site.js
+          grep -Fq "/site.js?v=${SCRIPT_VERSION}" "$ARTICLE"
+
+      - name: Uložit opravu do hlavní větve
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň deploy bot'
           git config user.email 'info@nasekadan.cz'
-          git add "$ARTICLE"
+          git add newsletter/server.py site.js "$ARTICLE"
           if ! git diff --cached --quiet; then
-            git commit -m 'Načíst funkční anketu SMR Tušimice [skip ci]'
+            git commit -m 'Zobrazovat živé výsledky ankety SMR Tušimice [skip ci]'
             for attempt in 1 2 3 4; do
               if git pull --rebase origin main && git push origin HEAD:main; then break; fi
               git rebase --abort 2>/dev/null || true
@@ -85,90 +401,108 @@ jobs:
           else echo 'Chybí SSH klíč pro OVH' >&2; exit 1; fi
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit opravené skripty i článek na OVH a do kontejneru
+      - name: Nasadit frontend i hlasovací backend
         id: deploy
         shell: bash
         run: |
           set -euo pipefail
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            site.js analytics.js "$ARTICLE" ubuntu@57.129.43.215:/tmp/
+            site.js newsletter/server.py "$ARTICLE" ubuntu@57.129.43.215:/tmp/
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
+          python3 -m py_compile /tmp/server.py
           sudo install -m 0644 /tmp/site.js /var/www/nasekadan/site.js
-          sudo install -m 0644 /tmp/analytics.js /var/www/nasekadan/analytics.js
           sudo install -m 0644 /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+          sudo install -m 0644 /tmp/server.py /opt/nasekadan/newsletter/server.py
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker cp /tmp/site.js nasekadan-web:/usr/share/nginx/html/site.js
-            sudo docker cp /tmp/analytics.js nasekadan-web:/usr/share/nginx/html/analytics.js
             sudo docker cp /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html nasekadan-web:/usr/share/nginx/html/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           fi
-          grep -Fq '/api/newsletter/analytics/pageview' /var/www/nasekadan/site.js
-          grep -Fq '/api/newsletter/analytics/pageview' /var/www/nasekadan/analytics.js
-          grep -Fq '/site.js?v=20260801-poll-fix-4' /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
-          rm -f /tmp/site.js /tmp/analytics.js /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+          sudo systemctl restart nasekadan-newsletter.service
+          for attempt in $(seq 1 15); do
+            if curl -fsS --max-time 3 http://127.0.0.1:8765/health >/dev/null; then break; fi
+            [[ "$attempt" == 15 ]] && { sudo journalctl -u nasekadan-newsletter.service -n 80 --no-pager; exit 1; }
+            sleep 2
+          done
+          sudo systemctl is-active --quiet nasekadan-newsletter.service
+          grep -Fq '/api/newsletter/poll/vote' /var/www/nasekadan/site.js
+          grep -Fq '# BEGIN POLL_RESULTS_API' /opt/nasekadan/newsletter/server.py
+          rm -f /tmp/site.js /tmp/server.py /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           REMOTE
 
-      - name: Veřejně ověřit skripty, článek a přijímání hlasů
+      - name: Veřejně ověřit hlasování i průběžné výsledky
         id: verify
         if: steps.deploy.outcome == 'success'
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
           stamp="${GITHUB_RUN_ID}-$(date +%s)"
           article_url='https://nasekadan.cz/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html'
-          last_code='000'; js_ok='false'; article_ok='false'; analytics_ok='false'
-          for attempt in $(seq 1 8); do
+          test_poll="healthcheck-${GITHUB_RUN_ID}"
+          ok=false
+
+          for attempt in $(seq 1 10); do
             js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/site.js?v=${stamp}-${attempt}" 2>/dev/null || true)"
-            analytics="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/analytics.js?v=${stamp}-${attempt}" 2>/dev/null || true)"
             article="$(curl -4 -kfsS --max-time 25 "${article_url}?v=${stamp}-${attempt}" 2>/dev/null || true)"
-            last_code="$(curl -4 -ksS --max-time 25 -o /dev/null -w '%{http_code}' \
-              -X POST "https://nasekadan.cz${ENDPOINT}" \
+            actual="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/api/newsletter/poll/results?poll=${POLL_ID}&t=${stamp}-${attempt}" 2>/dev/null || true)"
+
+            first="$(curl -4 -kfsS --max-time 25 -A 'NaseKadan-Poll-Healthcheck' \
+              -X POST 'https://nasekadan.cz/api/newsletter/poll/vote' \
               -H 'Content-Type: application/json' \
-              --data "{\"path\":\"/healthchecks/anketa-smr-tusimice/${GITHUB_RUN_ID}\",\"title\":\"Kontrola ankety SMR Tušimice\",\"referrer\":\"github-actions\"}" || true)"
-            if grep -Fq "$MARKER" <<< "$js" && grep -Fq "$ENDPOINT" <<< "$js"; then js_ok='true'; else js_ok='false'; fi
-            grep -Fq "$ENDPOINT" <<< "$analytics" && analytics_ok='true' || analytics_ok='false'
-            if grep -Fq 'data-poll-id="smr-tusimice-2026"' <<< "$article" \
-              && grep -Fq "/site.js?v=${SCRIPT_VERSION}" <<< "$article" \
-              && grep -Fq "/analytics.js?v=${SCRIPT_VERSION}" <<< "$article"; then article_ok='true'; else article_ok='false'; fi
-            if [[ "$js_ok" == true && "$analytics_ok" == true && "$article_ok" == true && "$last_code" == 204 ]]; then
-              echo 'ok=true' >> "$GITHUB_OUTPUT"
-              echo 'js_ok=true' >> "$GITHUB_OUTPUT"
-              echo 'analytics_ok=true' >> "$GITHUB_OUTPUT"
-              echo 'article_ok=true' >> "$GITHUB_OUTPUT"
-              echo 'analytics_http=204' >> "$GITHUB_OUTPUT"
-              exit 0
+              --data "{\"pollId\":\"${test_poll}\",\"choice\":\"ok\"}" 2>/dev/null || true)"
+            second="$(curl -4 -kfsS --max-time 25 -A 'NaseKadan-Poll-Healthcheck' \
+              -X POST 'https://nasekadan.cz/api/newsletter/poll/vote' \
+              -H 'Content-Type: application/json' \
+              --data "{\"pollId\":\"${test_poll}\",\"choice\":\"jiny\"}" 2>/dev/null || true)"
+            test_results="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/api/newsletter/poll/results?poll=${test_poll}&t=${stamp}-${attempt}" 2>/dev/null || true)"
+
+            if JS="$js" ARTICLE_HTML="$article" ACTUAL="$actual" FIRST="$first" SECOND="$second" TEST_RESULTS="$test_results" python3 - <<'PY'
+          import json,os,sys
+          js=os.environ['JS'];article=os.environ['ARTICLE_HTML']
+          actual=json.loads(os.environ['ACTUAL']);first=json.loads(os.environ['FIRST']);second=json.loads(os.environ['SECOND']);test=json.loads(os.environ['TEST_RESULTS'])
+          checks=[
+            'Průběžné výsledky' in js,
+            '/api/newsletter/poll/results' in js,
+            '/api/newsletter/poll/vote' in js,
+            'Průběžné výsledky se zobrazují hned' in article,
+            '/site.js?v=20260801-poll-results-1' in article,
+            actual.get('ok') is True and isinstance(actual.get('counts'),dict),
+            first.get('ok') is True and first.get('selected')=='ok',
+            second.get('ok') is True and second.get('selected')=='ok' and second.get('accepted') is False,
+            test.get('total')==1 and test.get('counts',{}).get('ok')==1,
+          ]
+          sys.exit(0 if all(checks) else 1)
+          PY
+            then
+              ok=true
+              printf '%s' "$actual" > /tmp/actual-poll-results.json
+              break
             fi
             sleep 10
           done
-          echo 'ok=false' >> "$GITHUB_OUTPUT"
-          echo "js_ok=$js_ok" >> "$GITHUB_OUTPUT"
-          echo "analytics_ok=$analytics_ok" >> "$GITHUB_OUTPUT"
-          echo "article_ok=$article_ok" >> "$GITHUB_OUTPUT"
-          echo "analytics_http=$last_code" >> "$GITHUB_OUTPUT"
-          exit 0
 
-      - name: Uložit diagnostiku veřejného ověření
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          if [[ "$ok" != true ]]; then exit 1; fi
+          cat /tmp/actual-poll-results.json
+
+      - name: Uložit stav ověření
         if: always()
         env:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           VERIFY_OK: ${{ steps.verify.outputs.ok }}
-          JS_OK: ${{ steps.verify.outputs.js_ok }}
-          ANALYTICS_OK: ${{ steps.verify.outputs.analytics_ok }}
-          ARTICLE_OK: ${{ steps.verify.outputs.article_ok }}
-          ANALYTICS_HTTP: ${{ steps.verify.outputs.analytics_http }}
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .github
           ok=false
           [[ "${DEPLOY_OUTCOME:-}" == success && "${VERIFY_OK:-}" == true ]] && ok=true
-          printf '{"ok":%s,"workflow_run_id":"%s","verified_at":"%s","deploy":"%s","site_js":"%s","analytics_js":"%s","article_poll":"%s","cache_bust":"%s","endpoint":"%s","analytics_http":"%s"}\n' \
-            "$ok" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DEPLOY_OUTCOME:-unknown}" "${JS_OK:-false}" "${ANALYTICS_OK:-false}" "${ARTICLE_OK:-false}" "$SCRIPT_VERSION" "$ENDPOINT" "${ANALYTICS_HTTP:-unknown}" > .github/poll-fix-last-status.json
+          printf '{"ok":%s,"workflow_run_id":"%s","verified_at":"%s","deploy":"%s","live_results":"%s","poll_id":"%s","script_version":"%s"}\n' \
+            "$ok" "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${DEPLOY_OUTCOME:-unknown}" "${VERIFY_OK:-false}" "$POLL_ID" "$SCRIPT_VERSION" > .github/poll-fix-last-status.json
           git config user.name 'Naše Kadaň deploy bot'
           git config user.email 'info@nasekadan.cz'
           git add .github/poll-fix-last-status.json
-          git commit -m 'Zapsat stav opravy ankety SMR Tušimice [skip ci]' || true
+          git commit -m 'Zapsat stav živých výsledků ankety [skip ci]' || true
           for attempt in 1 2 3 4; do
             if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
             git rebase --abort 2>/dev/null || true
