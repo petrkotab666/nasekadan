@@ -1,0 +1,16 @@
+[
+  {
+    "url": "https://infosoud.gov.cz/api/v1/stranka/hlasky?jazyk=cs-CZ&druhStranky=DULEZ_INFO",
+    "status": 200,
+    "method": "GET",
+    "post_data": null,
+    "body": "[{\"id\":5,\"poradi\":40,\"text\":\"Chyba prohlížeče Mozilla Firefox při zobrazování rozbalovacího seznamu byla s novou aktualizací prohlížeče Firefox opravena.\"},{\"id\":1,\"poradi\":10,\"text\":\"V aplikaci infoSoud se zobrazují pouze spisové značky okresních soudů, které mají ročník vyšší než 2006 a spisové značky krajských soudů s ročníkem vyšším než 2007.\"},{\"id\":2,\"poradi\":20,\"text\":\"Průběh řízení vedených u Nejvyššího správního soudu lze sledovat na <a href=\\\"https://www.nssoud.cz\\\" target=\\\"_blank\\\">internetových stránkách organizace</a>.\"},{\"id\":3,\"poradi\":30,\"text\":\"Průběh insolvenčního řízení (včetně incidenčních sporů) lze sledovat v <a href=\\\"https://isir.justice.cz\\\" target=\\\"_blank\\\">insolvenčním rejstříku</a>.\"}]"
+  },
+  {
+    "url": "https://infosoud.gov.cz/api/v1/spisova-znacka/druh/lovkod?typ=rizeni",
+    "status": 200,
+    "method": "GET",
+    "post_data": null,
+    "body": "[{\"kod\":\"T\"},{\"kod\":\"P A NC\"},{\"kod\":\"C\"},{\"kod\":\"D\"},{\"kod\":\"E\"},{\"kod\":\"P\"},{\"kod\":\"NC\"},{\"kod\":\"ERO\"},{\"kod\":\"RO\"},{\"kod\":\"EC\"},{\"kod\":\"ECM\"},{\"kod\":\"CDO\"},{\"kod\":\"ODO\"},{\"kod\":\"TDO\"},{\"kod\":\"TZ\"},{\"kod\":\"CM\"},{\"kod\":\"SM\"},{\"kod\":\"K\"},{\"kod\":\"KV\"},{\"kod\":\"INS\"},{\"kod\":\"CA\"},{\"kod\":\"CAD\"},{\"kod\":\"AZ\"},{\"kod\":\"TO\"},{\"kod\":\"NT\"},{\"kod\":\"CO\"},{\"kod\":\"NTD\"},{\"kod\":\"CMO\"},{\"kod\":\"KO\"},{\"kod\":\"NCO\"},{\"kod\":\"NCD\"},{\"kod\":\"NCP\"},{\"kod\":\"NCU\"},{\"kod\":\"ICM\"},{\"kod\":\"EVCM\"},{\"kod\":\"A\"},{\"kod\":\"AD\"},{\"kod\":\"AF\"},{\"kod\":\"NA\"},{\"kod\":\"EXE\"},{\"kod\":\"EVC\"},{\"kod\":\"PP\"},{\"kod\":\"UL\"},{\"kod\":\"EPR\"}]"
+  }
+]
