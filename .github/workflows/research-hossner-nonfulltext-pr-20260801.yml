@@ -1,0 +1,175 @@
+name: Vytěžit nefulltextové dokumenty Hossner
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-nonfulltext-pr-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nainstalovat extrakční nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils unzip file
+          python3 -m pip install --disable-pip-version-check --quiet requests beautifulsoup4 lxml python-pptx pypdf
+
+      - name: Stáhnout a vytěžit dokumenty
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/hossner-nonfulltext
+          mkdir -p /tmp/hossner-nonfulltext/{raw,text,pptx,images,html}
+          cat > /tmp/extract.py <<'PY'
+          from __future__ import annotations
+          import hashlib,json,re,subprocess,time,zipfile
+          from pathlib import Path
+          from urllib.parse import urljoin,urlparse,unquote
+          import requests
+          from bs4 import BeautifulSoup
+          from pypdf import PdfReader
+          from pptx import Presentation
+
+          ROOT=Path('/tmp/hossner-nonfulltext');RAW=ROOT/'raw';TEXT=ROOT/'text';HTML=ROOT/'html';PPTX=ROOT/'pptx';IMAGES=ROOT/'images'
+          s=requests.Session();s.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadanResearch/1.0; +https://nasekadan.cz)'})
+          seed_pages=[
+            'https://petrhossnerkadan.cz/aktuality/informace-k-2-soudnimu-projednanim-u-okresniho-soudu-v-chomutove-z-23-3-2026/',
+            'https://petrhossnerkadan.cz/aktuality/misto-do-pece-o-pacienty-investuje-nemocnice-miliony-do-pravniku/',
+            'https://petrhossnerkadan.cz/aktuality/prezentace-na-jednani-zastupitelstva-mesta-kadane/',
+            'https://petrhossnerkadan.cz/aktuality/prohlaseni-na-jednani-zastupitelstva-mesta-kadane/',
+            'https://petrhossnerkadan.cz/category/aktuality/',
+          ]
+          direct=[
+            'https://petrhossnerkadan.cz/wp-content/uploads/2025/09/6.-Prezentace_Kadan_Nemocnice_25.9.2026.pptx',
+            'https://petrhossnerkadan.cz/wp-content/uploads/2025/12/Priloha_1_Dopis-starostovi-_12-11-2025.pdf',
+            'https://petrhossnerkadan.cz/wp-content/uploads/2025/12/Priloha_2_Odpoved_na_vyzvu_ke_smiru.pdf',
+            'https://msp.gov.cz/documents/d/okresni-soud-v-chomutove/obdobi-1-15-1-2026-pdf',
+            'https://msp.gov.cz/documents/d/okresni-soud-v-chomutove/obdobi-16-31-1-2026-pdf',
+            'https://msp.gov.cz/documents/d/okresni-soud-v-chomutove/obdobi-16-31-3-2026-pdf',
+          ]
+          def get(url):
+            last=None
+            for i in range(5):
+              try:
+                r=s.get(url,timeout=90,allow_redirects=True)
+                r.raise_for_status();return r
+              except Exception as e:
+                last=e;time.sleep(2+i*2)
+            raise last
+          pages=[];urls=list(direct)
+          for idx,u in enumerate(seed_pages,1):
+            try:
+              r=get(u);p=HTML/f'page-{idx:02d}.html';p.write_bytes(r.content)
+              soup=BeautifulSoup(r.content,'lxml')
+              txt='\n'.join(x.strip() for x in soup.get_text('\n').splitlines() if x.strip())
+              TEXT.joinpath(f'page-{idx:02d}.txt').write_text(txt,encoding='utf-8')
+              links=[]
+              for a in soup.select('a[href],img[src],source[src]'):
+                v=a.get('href') or a.get('src');
+                if not v:continue
+                link=urljoin(r.url,v)
+                low=link.lower()
+                if any(ext in low for ext in ['.pdf','.pptx','.docx','.xlsx','.png','.jpg','.jpeg']) or '/wp-content/uploads/' in low:
+                  links.append(link)
+                  if link not in urls:urls.append(link)
+              pages.append({'seed':u,'final_url':r.url,'status':r.status_code,'chars':len(txt),'links':links})
+            except Exception as e:pages.append({'seed':u,'error':repr(e)})
+          ROOT.joinpath('pages.json').write_text(json.dumps(pages,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          downloads=[]
+          for i,u in enumerate(urls,1):
+            try:
+              r=get(u);name=Path(unquote(urlparse(r.url).path)).name or f'doc-{i:03d}'
+              suffix=Path(name).suffix.lower()
+              if not suffix:
+                ct=r.headers.get('content-type','').lower()
+                suffix='.pdf' if 'pdf' in ct else '.bin'
+              p=RAW/f'{i:03d}{suffix}';p.write_bytes(r.content)
+              downloads.append({'index':i,'requested':u,'final_url':r.url,'path':str(p),'bytes':len(r.content),'content_type':r.headers.get('content-type'),'sha256':hashlib.sha256(r.content).hexdigest(),'filename':name})
+            except Exception as e:downloads.append({'index':i,'requested':u,'error':repr(e)})
+          ROOT.joinpath('downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          extracts=[]
+          for d in downloads:
+            if not d.get('path'):continue
+            p=Path(d['path']);mime=subprocess.run(['file','-b','--mime-type',str(p)],capture_output=True,text=True).stdout.strip();entry={'index':d['index'],'url':d['final_url'],'path':str(p),'mime':mime}
+            try:
+              if mime=='application/pdf' or p.suffix.lower()=='.pdf':
+                out=TEXT/f'doc-{d["index"]:03d}.txt'
+                subprocess.run(['pdftotext','-layout',str(p),str(out)],check=False)
+                txt=out.read_text(encoding='utf-8',errors='ignore') if out.exists() else ''
+                entry.update({'method':'pdftotext','text_file':str(out),'chars':len(txt)})
+                try:
+                  rd=PdfReader(str(p));entry['pdf_pages']=len(rd.pages);entry['metadata']={str(k):str(v) for k,v in (rd.metadata or {}).items()}
+                except Exception as e:entry['pdf_error']=repr(e)
+              elif 'presentationml' in mime or p.suffix.lower()=='.pptx':
+                prs=Presentation(str(p));lines=[];media=[]
+                for si,slide in enumerate(prs.slides,1):
+                  lines.append(f'\n### SLIDE {si}\n')
+                  for shape in slide.shapes:
+                    if hasattr(shape,'text') and shape.text.strip():lines.append(shape.text.strip())
+                out=TEXT/f'doc-{d["index"]:03d}-pptx.txt';out.write_text('\n'.join(lines),encoding='utf-8')
+                zdir=PPTX/f'doc-{d["index"]:03d}';zdir.mkdir(parents=True,exist_ok=True)
+                with zipfile.ZipFile(p) as z:
+                  for n in z.namelist():
+                    if n.startswith('ppt/media/'):
+                      target=zdir/Path(n).name;target.write_bytes(z.read(n));media.append(str(target))
+                entry.update({'method':'python-pptx','text_file':str(out),'chars':len(out.read_text(encoding='utf-8')),'slides':len(prs.slides),'media':media})
+              elif mime.startswith('image/'):
+                target=IMAGES/p.name;target.write_bytes(p.read_bytes());entry.update({'method':'image-copy','image_file':str(target)})
+              elif mime.startswith('text/') or p.suffix.lower() in ['.html','.xml','.json']:
+                out=TEXT/f'doc-{d["index"]:03d}.txt';out.write_text(p.read_text(encoding='utf-8',errors='ignore'),encoding='utf-8');entry.update({'method':'text','text_file':str(out),'chars':out.stat().st_size})
+            except Exception as e:entry['extract_error']=repr(e)
+            extracts.append(entry)
+          ROOT.joinpath('extracts.json').write_text(json.dumps(extracts,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          keys=['spisová značka','sp. zn.','č. j.','30 c','25,9','52,9','žalob','soud','23.3.2026','23. 3. 2026','mediac','přerušen','předběžné opatření','neplatnost','pracovní poměr','odměn','270 000','5 880 000']
+          findings=[]
+          for e in extracts:
+            tf=e.get('text_file')
+            if not tf:continue
+            t=Path(tf).read_text(encoding='utf-8',errors='ignore');low=t.lower();hits=[]
+            for k in keys:
+              start=0
+              while True:
+                pos=low.find(k.lower(),start)
+                if pos<0:break
+                hits.append({'key':k,'snippet':t[max(0,pos-800):pos+1800]});start=pos+len(k)
+                if sum(1 for h in hits if h['key']==k)>=20:break
+            if hits:findings.append({'index':e['index'],'url':e['url'],'hits':hits})
+          # Hledat i ve stažených HTML stránkách.
+          for p in sorted(TEXT.glob('page-*.txt')):
+            t=p.read_text(encoding='utf-8',errors='ignore');low=t.lower();hits=[]
+            for k in keys:
+              pos=low.find(k.lower())
+              if pos>=0:hits.append({'key':k,'snippet':t[max(0,pos-1000):pos+2500]})
+            if hits:findings.append({'page':p.name,'hits':hits})
+          ROOT.joinpath('findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          md=['# Hossner – nefulltextové dokumenty','',f'Staženo souborů: {sum(1 for d in downloads if d.get("path"))}','', '## Dokumenty']
+          for e in extracts:
+            md.append(f"- {e.get('index')}: {e.get('url')} — {e.get('mime')} — {e.get('chars','?')} znaků — {e.get('pdf_pages','?')} stran")
+          md+=['','## Nálezy']
+          for f in findings:
+            md.append(f"### {f.get('url') or f.get('page')}")
+            for h in f['hits'][:40]:md.append(f"- **{h['key']}**: {h['snippet'][:2500]}")
+          ROOT.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/extract.py
+
+      - name: Nahrát nefulltextový archiv
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hossner-nonfulltext-20260801
+          path: /tmp/hossner-nonfulltext
+          if-no-files-found: warn
+          retention-days: 7
