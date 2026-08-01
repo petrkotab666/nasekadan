@@ -1,0 +1,247 @@
+name: Dohledat chybějící soudní dokumenty Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-missing-documents-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-hossner-missing-documents-20260801
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+
+      - name: Prohledat databáze rozhodnutí, úřední desky a skryté přílohy
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-missing-documents-20260801
+          rm -rf "$OUT"
+          mkdir -p "$OUT"/{decisions,boards,media,text,raw}
+          cat > /tmp/hossner_missing.py <<'PY'
+          from __future__ import annotations
+          import hashlib, json, re, subprocess, time, urllib.parse
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('.github/research/hossner-missing-documents-20260801')
+          for d in ('decisions','boards','media','text','raw'): (OUT/d).mkdir(parents=True,exist_ok=True)
+          S=requests.Session()
+          S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan investigative research; +https://nasekadan.cz/)','Accept-Language':'cs,en;q=0.8'})
+
+          TARGETS={
+            '14 Co 104/2026': re.compile(r'14\s*CO\s*104\s*/\s*2026',re.I),
+            '93 Ncp 490/2026': re.compile(r'93\s*NCP\s*490\s*/\s*2026',re.I),
+            '30 C 211/2025': re.compile(r'30\s*C\s*211\s*/\s*2025',re.I),
+            '30 C 84/2025': re.compile(r'30\s*C\s*84\s*/\s*2025',re.I),
+          }
+          KEYWORDS=('hossner','nemocnice kadaň','nemocnice kadan','deloitte legal','souběh funkcí','soubeh funkci','25,9','25.9','52,9','52.9')
+          errors=[]; findings=[]; downloaded=[]
+
+          def get(url,timeout=90,tries=5):
+              last=None
+              for i in range(tries):
+                  try:
+                      r=S.get(url,timeout=timeout,allow_redirects=True)
+                      if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                      r.raise_for_status(); return r
+                  except Exception as e:
+                      last=e; time.sleep(1+i*2)
+              raise last
+
+          def safe(s):
+              return re.sub(r'[^A-Za-z0-9._-]+','_',s)[:180]
+
+          def extract_pdf(path:Path):
+              q=subprocess.run(['pdftotext','-layout',str(path),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+              text=q.stdout
+              if len(re.sub(r'\s+','',text))<150:
+                  tmp=Path('/tmp')/(path.stem+'-ocr'); tmp.mkdir(exist_ok=True)
+                  subprocess.run(['pdftoppm','-r','180','-png',str(path),str(tmp/'page')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                  parts=[]
+                  for img in sorted(tmp.glob('page-*.png')):
+                      z=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+                      parts.append(z.stdout)
+                  text='\n'.join(parts)
+              return text
+
+          def save_download(url,prefix='file'):
+              try:
+                  r=get(url,timeout=180)
+                  name=Path(urllib.parse.urlparse(r.url).path).name or prefix
+                  name=safe(urllib.parse.unquote(name))
+                  if not Path(name).suffix:
+                      ct=r.headers.get('content-type','').lower()
+                      if 'pdf' in ct: name+='.pdf'
+                      elif 'json' in ct: name+='.json'
+                      else: name+='.bin'
+                  path=OUT/'raw'/name
+                  if path.exists(): path=OUT/'raw'/(hashlib.sha1(r.url.encode()).hexdigest()[:10]+'-'+name)
+                  path.write_bytes(r.content)
+                  rec={'url':url,'final_url':r.url,'status':r.status_code,'content_type':r.headers.get('content-type',''),'bytes':len(r.content),'file':str(path),'sha256':hashlib.sha256(r.content).hexdigest()}
+                  text=''
+                  if r.content.startswith(b'%PDF') or path.suffix.lower()=='.pdf':
+                      text=extract_pdf(path)
+                  elif 'json' in rec['content_type'] or path.suffix.lower() in ('.json','.jsonld'):
+                      text=r.text
+                  elif 'text' in rec['content_type'] or 'html' in rec['content_type']:
+                      text=BeautifulSoup(r.text,'lxml').get_text('\n',strip=True)
+                  if text:
+                      tp=OUT/'text'/(path.name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace'); rec['text_file']=str(tp); rec['chars']=len(text)
+                      for label,rx in TARGETS.items():
+                          if rx.search(text): findings.append({'source':r.url,'target':label,'file':str(path),'snippet':rx.search(text).group(0)})
+                      low=text.lower()
+                      if any(k in low for k in KEYWORDS): findings.append({'source':r.url,'target':'keyword','file':str(path),'keywords':[k for k in KEYWORDS if k in low]})
+                  downloaded.append(rec); return rec
+              except Exception as e:
+                  errors.append({'url':url,'error':repr(e)}); return None
+
+          # 1) Otevřená data soudních rozhodnutí: kompletní průchod roky 2025 a 2026.
+          decision_hits=[]; stats={}
+          for year in (2025,2026):
+              try: months=get(f'https://rozhodnuti.justice.cz/api/opendata/{year}').json()
+              except Exception as e: errors.append({'stage':'opendata-year','year':year,'error':repr(e)}); continue
+              for month in months:
+                  try: days=get(month['odkaz']).json()
+                  except Exception as e: errors.append({'stage':'opendata-month','item':month,'error':repr(e)}); continue
+                  for day in days:
+                      base=day.get('odkaz'); page=0
+                      if not base: continue
+                      while True:
+                          sep='&' if '?' in base else '?'
+                          try: data=get(f'{base}{sep}page={page}',timeout=120).json()
+                          except Exception as e: errors.append({'stage':'opendata-day','url':base,'page':page,'error':repr(e)}); break
+                          items=data if isinstance(data,list) else data.get('polozky') or data.get('rozhodnuti') or data.get('items') or data.get('content') or []
+                          if isinstance(items,dict): items=list(items.values())
+                          if not isinstance(items,list): items=[]
+                          stats[str(year)]=stats.get(str(year),0)+len(items)
+                          for item in items:
+                              raw=json.dumps(item,ensure_ascii=False)
+                              labels=[label for label,rx in TARGETS.items() if rx.search(raw)]
+                              if labels:
+                                  rec={'published_day':base,'targets':labels,'item':item}; decision_hits.append(rec)
+                                  for v in item.values() if isinstance(item,dict) else []:
+                                      if isinstance(v,str) and v.startswith('http'): save_download(v,'decision')
+                          if len(items)<100: break
+                          page+=1
+                          if page>300: break
+          (OUT/'decisions/opendata-hits.json').write_text(json.dumps(decision_hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'decisions/opendata-stats.json').write_text(json.dumps(stats,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 2) Přímé vyhledávací URL veřejné databáze rozhodnutí.
+          searches=[]
+          for label,(sen,reg,num,yr) in {
+              '14 Co 104/2026':(14,'Co',104,2026),'93 Ncp 490/2026':(93,'Ncp',490,2026),
+              '30 C 211/2025':(30,'C',211,2025),'30 C 84/2025':(30,'C',84,2025)}.items():
+              u='https://rozhodnuti.justice.cz/?'+urllib.parse.urlencode({'senate':sen,'registry':reg,'number':num,'year':yr})
+              try:
+                  r=get(u); p=OUT/'decisions'/(safe(label)+'.html'); p.write_bytes(r.content)
+                  text=BeautifulSoup(r.text,'lxml').get_text(' ',strip=True)
+                  searches.append({'target':label,'url':r.url,'status':r.status_code,'bytes':len(r.content),'mentions_target':bool(TARGETS[label].search(text)),'text':text[:15000]})
+                  soup=BeautifulSoup(r.text,'lxml')
+                  for a in soup.find_all('a',href=True):
+                      full=urllib.parse.urljoin(r.url,a['href'])
+                      if '/rozhodnuti/' in full: save_download(full,'decision-page')
+              except Exception as e: searches.append({'target':label,'url':u,'error':repr(e)})
+          (OUT/'decisions/direct-search.json').write_text(json.dumps(searches,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 3) Otevřená data úředních desek. Identifikátory: KS Ústí 205000, OS Chomutov 205030, VS Praha 221000.
+          board_rows=[]
+          try:
+              root=get('https://kiosek.justice.cz/opendata/')
+              (OUT/'boards/index.html').write_bytes(root.content)
+              soup=BeautifulSoup(root.text,'lxml')
+              for tr in soup.find_all('tr'):
+                  txt=' '.join(tr.get_text(' ',strip=True).split())
+                  if any(x in txt for x in ('Krajský soud v Ústí nad Labem','Okresní soud v Chomutově','Vrchní soud v Praze')):
+                      links=[urllib.parse.urljoin(root.url,a['href']) for a in tr.find_all('a',href=True)]
+                      board_rows.append({'row':txt,'links':links})
+                      for u in links: save_download(u,'board-data')
+          except Exception as e: errors.append({'stage':'kiosek-index','error':repr(e)})
+          # Přímé varianty pro případ, že HTML odkazy nejsou kompletní.
+          for oid in ('205000','205030','221000'):
+              for u in (f'https://kiosek.justice.cz/opendata/{oid}.jsonld',f'https://kiosek.justice.cz/opendata/{oid}.json'):
+                  save_download(u,'board')
+              try:
+                  r=get(f'https://infodeska.gov.cz/eudpub/uredni-deska/organizace/{oid}')
+                  p=OUT/'boards'/f'{oid}.html'; p.write_bytes(r.content)
+                  soup=BeautifulSoup(r.text,'lxml')
+                  for a in soup.find_all('a',href=True):
+                      full=urllib.parse.urljoin(r.url,a['href'])
+                      text=(a.get_text(' ',strip=True)+' '+full)
+                      if any(rx.search(text) for rx in TARGETS.values()) or re.search(r'\.(pdf|docx?)(\?|$)',full,re.I): save_download(full,'board-attachment')
+              except Exception as e: errors.append({'stage':'infodeska','oid':oid,'error':repr(e)})
+          (OUT/'boards/rows.json').write_text(json.dumps(board_rows,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 4) WordPress média: stáhnout všechny dokumentové přílohy, včetně neodkazovaných.
+          media=[]
+          for page in range(1,30):
+              try: arr=get(f'https://petrhossnerkadan.cz/wp-json/wp/v2/media?per_page=100&page={page}').json()
+              except Exception as e:
+                  if page==1: errors.append({'stage':'wp-media','error':repr(e)})
+                  break
+              if not arr: break
+              for item in arr:
+                  u=item.get('source_url') or ''
+                  title=BeautifulSoup(item.get('title',{}).get('rendered',''),'lxml').get_text(' ')
+                  mime=item.get('mime_type','')
+                  if re.search(r'\.(pdf|docx?|pptx?|xlsx?)(\?|$)',u,re.I) or any(x in mime for x in ('pdf','word','presentation','sheet')):
+                      rec={'id':item.get('id'),'date':item.get('date'),'title':title,'url':u,'mime':mime}; media.append(rec)
+                      save_download(u,'wp-document')
+          (OUT/'media/all-document-media.json').write_text(json.dumps(media,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          # 5) Oficiální stav řízení přes API InfoSoud.
+          cases=[]
+          specs=[('30 C 84/2025','OSSCECV',30,'C',84,2025,'os'),('30 C 211/2025','OSSCECV',30,'C',211,2025,'os'),('14 Co 104/2026','KSSCEUL',14,'CO',104,2026,'ks'),('93 Ncp 490/2026','VSPHAAB',93,'NCP',490,2026,'ks')]
+          for label,org,sen,reg,num,yr,typ in specs:
+              payload={'cislo':sen,'druh':reg,'rocnik':yr,'bcVec':num,'organizace':org,'typOrganizace':typ}
+              try:
+                  r=S.post('https://infosoud.gov.cz/api/v1/rizeni/vyhledej',json=payload,timeout=90); r.raise_for_status()
+                  cases.append({'target':label,'payload':payload,'status':r.status_code,'response':r.json()})
+              except Exception as e: cases.append({'target':label,'payload':payload,'error':repr(e)})
+          (OUT/'decisions/infosoud-current.json').write_text(json.dumps(cases,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          (OUT/'downloads.json').write_text(json.dumps(downloaded,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          lines=['# Chybějící dokumenty – Hossner vs. Nemocnice Kadaň','',f'- Prohledáno záznamů rozhodnutí: {sum(stats.values())}',f'- Přímé shody v open datech: {len(decision_hits)}',f'- Stažené soubory/stránky: {len(downloaded)}',f'- Obsahové nálezy: {len(findings)}',f'- Chyby: {len(errors)}','']
+          lines+=['## Přímé shody rozhodnutí','']+[f"- {x['targets']}: {x['published_day']}" for x in decision_hits]
+          lines+=['','## Nálezy v dokumentech','']+[f"- {x.get('target')}: {x.get('source')}" for x in findings[:200]]
+          lines+=['','## Dokumentová média na Hossnerově webu','']+[f"- {x['date']} — {x['title']} — {x['url']}" for x in media]
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/hossner_missing.py
+
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-missing-documents-20260801
+          git commit -m 'Dohledat chybějící soudní dokumenty Hossner' || true
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin main || true
+            git push origin HEAD:main && exit 0
+            sleep $((i*5))
+          done
+          exit 1
