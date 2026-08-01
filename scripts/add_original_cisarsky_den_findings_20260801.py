@@ -32,58 +32,24 @@ original = '''  <section data-original-findings="contracts-v1">
   <h2>„34. ročník“ neznamená 34 skutečně uskutečněných slavností</h2>
   <p>Na první pohled se zdá, že Císařský den probíhá bez přerušení od roku 1993. Číslování ale vypráví přesnější příběh. Kadaňské noviny označily návrat v roce 2022 za <strong>30. ročník po tříleté pauze</strong>. Rok 2022 byl zároveň třicátým kalendářním rokem od roku 1993 včetně.</p>
   <p>Z toho vyplývá, že číslo ročníku zřejmě sleduje kalendářní řadu tradice, nikoli pouze počet skutečně uskutečněných slavností. Letošní označení <strong>34. ročník</strong> proto není samo o sobě důkazem, že se akce konala čtyřiatřicetkrát. Přesný seznam uskutečněných a vynechaných ročníků by musel potvrdit městský archiv.</p>
-
-  <div class="finding-grid">
-    <div class="finding-card"><small>Oficiální tradice</small><b>Od roku 1993</b><p>Oficiální historie datuje pravidelné pořádání právě od tohoto roku.</p></div>
-    <div class="finding-card"><small>Doložená mezera</small><b>Návrat v roce 2022</b><p>Místní noviny jej popsaly jako třicátý ročník po tříleté pauze.</p></div>
-  </div>
+  <div class="finding-grid"><div class="finding-card"><small>Oficiální tradice</small><b>Od roku 1993</b><p>Oficiální historie datuje pravidelné pořádání právě od tohoto roku.</p></div><div class="finding-card"><small>Doložená mezera</small><b>Návrat v roce 2022</b><p>Místní noviny jej popsaly jako třicátý ročník po tříleté pauze.</p></div></div>
 
   <h2>Úplný program ještě není venku. Smlouvy už ale odhalují část letošního scénáře</h2>
   <p>Oficiální web zatím zdůrazňuje průvod, ceremonii a rytířský turnaj. Uzavřené smlouvy pro rok 2026 ukazují další konkrétní části, které se do stručné pozvánky dosud nevešly.</p>
-
   <div class="money-lead"><small>Čtyři zveřejněné programové položky roku 2026</small><strong>Nejméně 614 956 Kč</strong><p>Součet lovecké družiny, tichého pyromuzikálního ohňostroje, LED obrazovky a dobových her s rekvizitami. Nejde o úplný rozpočet akce.</p></div>
-
-  <table class="money-table" aria-label="Vybrané smlouvy Císařského dne 2026">
-    <thead><tr><th>Co smlouva zajišťuje</th><th>Dodavatel</th><th>Částka s DPH</th></tr></thead>
-    <tbody>
-      <tr><td>Vystoupení lovecké družiny</td><td>Klub Falconia, z. s.</td><td>229 500 Kč</td></tr>
-      <tr><td>Tichý pyromuzikální ohňostroj u řeky Ohře</td><td>Petr Burian</td><td>229 900 Kč</td></tr>
-      <tr><td>LED obrazovka v rámci Císařského dne</td><td>WEETEK s. r. o.</td><td>98 836 Kč</td></tr>
-      <tr><td>Dobové hry, rekvizity, praporce a štíty</td><td>TERCIE-CV s. r. o.</td><td>56 720 Kč</td></tr>
-      <tr class="sum"><td colspan="2">Součet těchto čtyř položek</td><td>614 956 Kč</td></tr>
-    </tbody>
-  </table>
-
+  <table class="money-table" aria-label="Vybrané smlouvy Císařského dne 2026"><thead><tr><th>Co smlouva zajišťuje</th><th>Dodavatel</th><th>Částka s DPH</th></tr></thead><tbody><tr><td>Vystoupení lovecké družiny</td><td>Klub Falconia, z. s.</td><td>229 500 Kč</td></tr><tr><td>Tichý pyromuzikální ohňostroj u řeky Ohře</td><td>Petr Burian</td><td>229 900 Kč</td></tr><tr><td>LED obrazovka v rámci Císařského dne</td><td>WEETEK s. r. o.</td><td>98 836 Kč</td></tr><tr><td>Dobové hry, rekvizity, praporce a štíty</td><td>TERCIE-CV s. r. o.</td><td>56 720 Kč</td></tr><tr class="sum"><td colspan="2">Součet těchto čtyř položek</td><td>614 956 Kč</td></tr></tbody></table>
   <p>Smlouvy tak předem potvrzují sokolnickou či loveckou část programu, dětské dobové hry, velkoplošnou obrazovku a večerní finále v podobě <strong>tichého pyromuzikálního ohňostroje u Ohře</strong>. Ústecký kraj současně poskytl městu na Císařský den 2026 dotaci 250 tisíc korun.</p>
   <div class="finding-warning"><strong>614 956 korun není cena celé slavnosti</strong>V částce nejsou započítány další účinkující, technické služby, produkce, kostýmy, bezpečnost, úklid, doprava, hlavní pódium ani vlastní práce města a KZK. Jde pouze o bezpečně sečtené položky, které jsou ve veřejné evidenci popsány dostatečně konkrétně.</div>
 
   <h2>Kolik stojí Císařský den? Úplný účet veřejné záznamy samy nedají</h2>
   <p>Rozpočet slavnosti není zveřejněn jako jediná konečná částka. Platby jsou rozděleny mezi produkci, KZK, jednotlivé soubory, techniku, dopravu a další služby. Z roku 2025 lze přesto sestavit konzervativní minimum z šesti jednoznačně přiřaditelných smluv.</p>
-
-  <table class="money-table" aria-label="Vybrané smlouvy Císařského dne 2025">
-    <thead><tr><th>Vybraná položka roku 2025</th><th>Částka</th></tr></thead>
-    <tbody>
-      <tr><td>Zajištění akce prostřednictvím KZK</td><td>249 900 Kč</td></tr>
-      <tr><td>Produkční zajištění</td><td>166 500 Kč</td></tr>
-      <tr><td>Přípravné a realizační práce, kostýmy a rekvizity</td><td>165 000 Kč</td></tr>
-      <tr><td>Velkoplošná obrazovka</td><td>96 010 Kč</td></tr>
-      <tr><td>Celodenní historické vystoupení</td><td>50 100 Kč</td></tr>
-      <tr><td>Sedm párů posilových vlaků</td><td>137 085 Kč</td></tr>
-      <tr class="sum"><td>Součet šesti identifikovaných výdajů</td><td>864 595 Kč</td></tr>
-    </tbody>
-  </table>
-
+  <table class="money-table" aria-label="Vybrané smlouvy Císařského dne 2025"><thead><tr><th>Vybraná položka roku 2025</th><th>Částka</th></tr></thead><tbody><tr><td>Zajištění akce prostřednictvím KZK</td><td>249 900 Kč</td></tr><tr><td>Produkční zajištění</td><td>166 500 Kč</td></tr><tr><td>Přípravné a realizační práce, kostýmy a rekvizity</td><td>165 000 Kč</td></tr><tr><td>Velkoplošná obrazovka</td><td>96 010 Kč</td></tr><tr><td>Celodenní historické vystoupení</td><td>50 100 Kč</td></tr><tr><td>Sedm párů posilových vlaků</td><td>137 085 Kč</td></tr><tr class="sum"><td>Součet šesti identifikovaných výdajů</td><td>864 595 Kč</td></tr></tbody></table>
   <p>Město mělo pro ročník 2025 zároveň reklamní smlouvu, v níž bylo uvedeno jako příjemce částky 242 tisíc korun. Prosté odečtení by u uvedených položek dalo 622 595 korun, ani to však není konečný čistý náklad: chybějí další výdaje i případné další příjmy.</p>
 
   <h3>Jedna opakující se položka se za šest let téměř ztrojnásobila</h3>
   <p>U smluv uzavíraných s KZK na technické nebo celkové zajištění je vidět výrazný nominální růst. V roce 2018 registr uváděl 82 652 korun bez DPH, v roce 2019 už 118 421 korun bez DPH, roku 2022 částku 161 074 korun bez DPH, v roce 2023 190 tisíc korun bez DPH a v roce 2024 229 900 korun bez DPH.</p>
-  <div class="cost-trend">
-    <div><b>82 652 Kč</b><span>2018 · technické zajištění, bez DPH</span></div>
-    <div><b>161 074 Kč</b><span>2022 · technické zajištění, bez DPH</span></div>
-    <div><b>229 900 Kč</b><span>2024 · technické zajištění, bez DPH</span></div>
-  </div>
+  <div class="cost-trend"><div><b>82 652 Kč</b><span>2018 · technické zajištění, bez DPH</span></div><div><b>161 074 Kč</b><span>2022 · technické zajištění, bez DPH</span></div><div><b>229 900 Kč</b><span>2024 · technické zajištění, bez DPH</span></div></div>
   <p>Částka roku 2024 byla přibližně <strong>2,8krát vyšší</strong> než hodnota uvedená u smlouvy z roku 2018. Samotné porovnání ale neprokazuje zdražení stejné služby: mohl se měnit rozsah, počet scén, technické požadavky i rozdělení prací mezi město a KZK.</p>
-
   <h3>Slavnost není jen kulturní program, ale celodenní městská operace</h3>
   <p>Smlouva na sedm párů posilových vlaků za 137 085 korun v roce 2025 ukazuje rozsah, který z běžné pozvánky není vidět. K tomu přistupují uzavírky, zásobování stánků, příprava několika scén, úklid, elektřina, bezpečnost, zázemí účinkujících a přesuny koní i historických skupin.</p>
   <p>Právě tato provozní vrstva vysvětluje, proč nelze náklady na Císařský den poměřovat pouze počtem koncertů nebo délkou programu. Na jeden den se mění způsob fungování velké části historického centra.</p>
@@ -110,17 +76,8 @@ if aside_anchor in text:
 
 PATH.write_text(text, encoding='utf-8', newline='\n')
 
-checks = (
-    'data-original-findings="contracts-v1"',
-    'Nejméně 614 956 Kč',
-    'Součet šesti identifikovaných výdajů',
-    '864 595 Kč',
-    '2,8krát vyšší',
-    '30. ročník po tříleté pauze',
-    'sedm párů posilových vlaků',
-)
+checks = ('data-original-findings="contracts-v1"','Nejméně 614 956 Kč','864 595 Kč','2,8krát vyšší','30. ročník po tříleté pauze','sedm párů posilových vlaků')
 for marker in checks:
     if marker not in text:
         raise SystemExit(f'Chybí kontrolní značka: {marker}')
-
 print('Do návrhu byla doplněna vlastní rekonstrukce ročníků, programu a nákladů.')
