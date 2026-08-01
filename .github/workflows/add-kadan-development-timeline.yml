@@ -1,0 +1,76 @@
+name: Doplnit vývoj Kadaně od Karla IV. do současnosti
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[draft] Kadan development from 1367'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit a ověřit kapitolu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/add_kadan_development_timeline_20260801.py
+          python3 scripts/add_kadan_development_timeline_20260801.py
+          f=.github/drafts/cisarsky-den-kadan-historie-2026.html
+          grep -Fq 'data-kadan-development="1367-2026"' "$f"
+          grep -Fq 'Kadaň se nevyvíjela rovně. Opakovaně se znovu stavěla' "$f"
+          grep -Fq 'Husitská válka přinesla dvojí dobytí' "$f"
+          grep -Fq 'Kadaňský mír dostal město do evropské politiky' "$f"
+          grep -Fq 'Masakr na náměstí rozdělil paměť města' "$f"
+          grep -Fq 'Elektrárny a panelová výstavba vytvořily novou Kadaň' "$f"
+          grep -Fq 'Historické město hledá místo po uhlí' "$f"
+          grep -Fq 'Dvě identity dnešní Kadaně' "$f"
+
+      - name: Uložit neveřejný návrh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/drafts/cisarsky-den-kadan-historie-2026.html scripts/add_kadan_development_timeline_20260801.py
+          git commit -m 'Doplnit vývoj Kadaně od Karla IV. do současnosti [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 4 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+
+      - name: Uzavřít kontrolní úkol
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? '✅ Neveřejný článek nyní obsahuje souvislou kapitolu o vývoji Kadaně od návštěv Karla IV. přes husitské války, Kadaňský mír, třicetiletou válku, 19. století, rok 1919, nacistickou okupaci, odsun, energetickou industrializaci a obnovu historického centra až k roku 2026.'
+                : '❌ Kapitolu o vývoji Kadaně se nepodařilo dokončit.'
+            });
+            if (ok) {
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                state: 'closed',
+                state_reason: 'completed'
+              });
+            }
