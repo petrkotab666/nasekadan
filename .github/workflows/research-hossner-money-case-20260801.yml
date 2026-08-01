@@ -1,0 +1,130 @@
+name: Najít druhou žalobu nemocnice proti Hossnerovi
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-money-case-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nainstalovat klienta InfoSoudu
+        run: python3 -m pip install --disable-pip-version-check --quiet --index-url https://pypi.org/simple infosoud==0.1.0 requests
+      - name: Projít obecné civilní spisy a předběžná opatření
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/hossner-money-case && mkdir -p /tmp/hossner-money-case
+          cat > /tmp/scan_money.py <<'PY'
+          from __future__ import annotations
+          import concurrent.futures, dataclasses, json, re, threading, traceback
+          from datetime import date, datetime, timezone
+          from pathlib import Path
+          from typing import Any
+          try:
+              from infosoud import InfoSoudClient
+          except ImportError:
+              from infosoud.client import InfoSoudClient
+
+          OUT=Path('/tmp/hossner-money-case')
+          COURT='OSSCECV'
+          SENATES=[1,7,8,9,12,16,18,21,23,24,28,30,34,45,56,57]
+          LOCAL=threading.local()
+          def client():
+              if not hasattr(LOCAL,'c'):
+                  LOCAL.c=InfoSoudClient(delay=0.05,timeout=20)
+              return LOCAL.c
+          def plain(x:Any)->Any:
+              if dataclasses.is_dataclass(x):return plain(dataclasses.asdict(x))
+              if isinstance(x,dict):return {str(k):plain(v) for k,v in x.items()}
+              if isinstance(x,(list,tuple,set)):return [plain(v) for v in x]
+              if hasattr(x,'model_dump'):return plain(x.model_dump())
+              if hasattr(x,'dict'):
+                  try:return plain(x.dict())
+                  except Exception:pass
+              if hasattr(x,'__dict__') and not isinstance(x,(str,bytes,int,float,bool)):
+                  return {k:plain(v) for k,v in vars(x).items() if not k.startswith('_')}
+              if isinstance(x,datetime):return x.isoformat()
+              try:json.dumps(x);return x
+              except Exception:return str(x)
+          def useful(v):
+              if not v:return False
+              t=json.dumps(plain(v),ensure_ascii=False).lower()
+              return len(t)>30 and not any(s in t for s in ['nenalezen','not found','nebylo nalezeno','zadane rizeni nebylo'])
+          def query(spis):
+              try:
+                  v=client().search_case(spis,COURT)
+                  if not useful(v):return None
+                  return {'file_no':spis,'case':plain(v)}
+              except Exception as e:return {'file_no':spis,'error':repr(e)}
+
+          # V roce 2025 měl každý obecný civilní senát jen několik desítek až nižší stovky věcí.
+          queries=[f'{s} C {n}/2025' for s in SENATES for n in range(1,321)]
+          # Přidáme věci evidované pod rokem 2026, ale zahájené ještě v roce 2025.
+          queries += [f'{s} C {n}/2026' for s in SENATES for n in range(1,61)]
+          valid=[];errors=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+              fut={ex.submit(query,q):q for q in queries}
+              for i,f in enumerate(concurrent.futures.as_completed(fut),1):
+                  try:r=f.result()
+                  except Exception as e:r={'file_no':fut[f],'error':repr(e),'trace':traceback.format_exc()}
+                  if r and r.get('error'):errors.append(r)
+                  elif r:valid.append(r)
+                  if i%500==0:print(f'{i}/{len(queries)} valid={len(valid)} errors={len(errors)}')
+
+          def event_dates(case):
+              return [(u.get('udalost'),u.get('datum'),u.get('poradi'),u.get('zruseno')) for u in case.get('udalosti',[])]
+          candidates=[]
+          for item in valid:
+              c=item['case'];events=event_dates(c)
+              started=next((d for typ,d,_,z in events if typ=='ZAHAJ_RIZ' and not z),None)
+              state=(c.get('stav') or '').lower();state_date=c.get('stavDatum')
+              score=0;reasons=[]
+              if started and '2025-03-26' <= started <= '2025-09-30':score+=15;reasons.append('zahájeno mezi výzvou a zveřejněním žaloby')
+              if 'přeruš' in state or 'prerus' in state:score+=50;reasons.append('aktuálně přerušeno')
+              pre=[d for typ,d,_,z in events if typ=='ST_VEC_PRE' and not z]
+              if pre:score+=40;reasons.append('událost přerušení')
+              if any(d and d.startswith('2026-01') for _,d,_,z in events if not z):score+=10;reasons.append('událost v lednu 2026')
+              if any(d=='2026-01-15' for _,d,_,z in events if not z):score+=20;reasons.append('událost 15. ledna 2026')
+              if any(d=='2026-03-23' for _,d,_,z in events if not z):score+=5;reasons.append('událost 23. března 2026')
+              if started and started < '2025-03-26':score-=10
+              if item['file_no']=='30 C 84/2025':score=-999
+              if score>0:
+                  candidates.append({'score':score,'reasons':reasons,'started':started,'state':c.get('stav'),'state_date':state_date,'events':events,'navazneVeci':c.get('navazneVeci'),'file_no':item['file_no'],'case':c})
+          candidates.sort(key=lambda x:(-x['score'],x.get('started') or '',x['file_no']))
+
+          # Detail událostí a aktuální jednání pouze pro nejlepší kandidáty.
+          for cand in candidates[:60]:
+              spis=cand['file_no'];details=[]
+              for typ,d,por,z in cand['events']:
+                  if z or typ not in {'ST_VEC_PRE','NAR_JED','VYD_ROZH','ST_VEC_PUK','ST_VEC_ODS','ZRUS_JED'}:continue
+                  try:details.append({'event':typ,'date':d,'order':por,'detail':plain(client().get_event_detail(spis,COURT,typ,int(por)))})
+                  except Exception as e:details.append({'event':typ,'date':d,'order':por,'error':repr(e)})
+              try:cand['hearings']=plain(client().search_hearings(spis,COURT))
+              except Exception as e:cand['hearings']={'error':repr(e)}
+              cand['event_details']=details
+
+          OUT.joinpath('valid.json').write_text(json.dumps(valid,ensure_ascii=False,indent=2),encoding='utf-8')
+          OUT.joinpath('candidates.json').write_text(json.dumps(candidates,ensure_ascii=False,indent=2),encoding='utf-8')
+          OUT.joinpath('errors.json').write_text(json.dumps(errors[:200],ensure_ascii=False,indent=2),encoding='utf-8')
+          summary={'generated_at_utc':datetime.now(timezone.utc).isoformat(),'queried':len(queries),'valid_count':len(valid),'error_count':len(errors),'senates':SENATES,'top_candidates':[{k:v for k,v in c.items() if k!='case'} for c in candidates[:40]]}
+          OUT.joinpath('summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(summary,ensure_ascii=False,indent=2)[:100000])
+          PY
+          python3 /tmp/scan_money.py
+      - name: Nahrát výsledky
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hossner-money-case-20260801
+          path: /tmp/hossner-money-case
+          if-no-files-found: warn
+          retention-days: 7
