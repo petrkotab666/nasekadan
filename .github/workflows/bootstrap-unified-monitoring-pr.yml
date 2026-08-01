@@ -1,69 +1,46 @@
-name: Bootstrap jednotného monitoringu Kadaňska
+name: Oprava klasifikace škol v monitoringu
 
 on:
   pull_request:
     paths:
-      - '.github/bootstrap-chunks/**'
       - '.github/workflows/bootstrap-unified-monitoring-pr.yml'
 
 permissions:
   contents: write
 
 jobs:
-  generate:
+  patch:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
-      - name: Zapsat registr, skripty, testy a dokumentaci
+      - name: Doplnit zkratky ZŠ a MŠ do povinných oblastí
         run: |
           set -euo pipefail
-          cat \
-            .github/bootstrap-chunks/part00 \
-            .github/bootstrap-chunks/part01 \
-            .github/bootstrap-chunks/part02 \
-            .github/bootstrap-chunks/part03a \
-            .github/bootstrap-chunks/part03b \
-            .github/bootstrap-chunks/part04 \
-            .github/bootstrap-chunks/part05 \
-            .github/bootstrap-chunks/part06 \
-            > "$RUNNER_TEMP/bootstrap.b64"
-          base64 -d "$RUNNER_TEMP/bootstrap.b64" > "$RUNNER_TEMP/bootstrap.py"
-          export BOOTSTRAP_FILE="$RUNNER_TEMP/bootstrap.py"
           python3 - <<'PY'
-          import ast
-          import base64
-          import json
-          import os
-          import subprocess
-          import zlib
           from pathlib import Path
-
-          source = Path(os.environ['BOOTSTRAP_FILE']).read_text(encoding='utf-8')
-          tree = ast.parse(source)
-          payload = None
-          for node in tree.body:
-              if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'PAYLOAD' for t in node.targets):
-                  payload = ast.literal_eval(node.value)
-                  break
-          if not payload:
-              raise SystemExit('Bootstrap neobsahuje PAYLOAD.')
-          files = json.loads(zlib.decompress(base64.b85decode(payload)).decode('utf-8'))
-          files = {path: content for path, content in files.items() if not path.startswith('.github/workflows/')}
-          for relative, content in files.items():
-              path = Path(relative)
-              path.parent.mkdir(parents=True, exist_ok=True)
-              path.write_text(content, encoding='utf-8', newline='\n')
-          subprocess.run(['git', 'rm', '-r', '.github/bootstrap-chunks'], check=True)
-          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-          subprocess.run(['git', 'add', *files.keys()], check=True)
-          subprocess.run(['git', 'commit', '-m', 'Přidat jednotný engine a registr monitoringu Kadaňska'], check=True)
-          branch = os.environ.get('GITHUB_HEAD_REF') or os.environ.get('GITHUB_REF_NAME')
-          subprocess.run(['git', 'push', 'origin', f'HEAD:{branch}'], check=True)
-          print(json.dumps({'ok': True, 'files': len(files), 'branch': branch}, ensure_ascii=False))
+          path=Path('scripts/build_monitoring_registry.py')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+              '"základní školy": [r"zakladni skol"],',
+              '"základní školy": [r"zakladni skol", r"\\bzs\\b"],',
+          )
+          text=text.replace(
+              '"mateřské školy": [r"matersk[ae] skol"],',
+              '"mateřské školy": [r"matersk[ae] skol", r"\\bms\\b"],',
+          )
+          path.write_text(text,encoding='utf-8',newline='\n')
           PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/build_monitoring_registry.py
+          if git diff --cached --quiet; then
+            echo 'Klasifikace už je opravena.'
+            exit 0
+          fi
+          git commit -m 'Rozpoznat zkratky ZŠ a MŠ v registru monitoringu'
+          git push origin HEAD:${GITHUB_HEAD_REF}
