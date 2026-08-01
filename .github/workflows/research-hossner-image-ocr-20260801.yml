@@ -1,0 +1,64 @@
+name: OCR obrazových příloh Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-image-ocr-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-ces imagemagick
+      - name: OCR plných obrázků
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-court-2026/image-ocr
+          rm -rf "$OUT"; mkdir -p "$OUT/text"
+          python3 - <<'PY'
+          import json,re,subprocess
+          from pathlib import Path
+          src=Path('.github/research/hossner-court-2026/files'); out=Path('.github/research/hossner-court-2026/image-ocr/text')
+          rows=[]
+          for p in sorted(src.glob('*')):
+              if p.suffix.lower() not in ('.png','.jpg','.jpeg','.webp'): continue
+              n=p.name.lower()
+              if re.search(r'-\d+x\d+\.',n) or 'favicon' in n or 'logo' in n or 'sipka' in n or 'ikona' in n or 'pozadi' in n or 'footer' in n: continue
+              q=subprocess.run(['identify','-format','%w %h',str(p)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+              try: w,h=map(int,q.stdout.split())
+              except: w=h=0
+              if w<700 or h<400: continue
+              txtp=out/(p.name+'.txt')
+              q=subprocess.run(['tesseract',str(p),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+              txt=q.stdout; txtp.write_text(txt,encoding='utf-8')
+              rows.append({'file':str(p),'width':w,'height':h,'text_file':str(txtp),'chars':len(txt),'text':txt})
+          Path('.github/research/hossner-court-2026/image-ocr/results.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2),encoding='utf-8')
+          md=['# OCR obrazových příloh Petra Hossnera','']
+          keys=('hossner','nemocnic','smlouv','jednatel','ředitel','reditel','odměn','odmen','mzda','audit','deloitte','žalob','zalob','soud','30 c','mil.','kč','kc','rady města','dozorčí')
+          for r in rows:
+              low=r['text'].lower()
+              if any(k in low for k in keys):
+                  md += [f"## {r['file']} ({r['width']}×{r['height']})",'```',r['text'][:30000],'```','']
+          Path('.github/research/hossner-court-2026/image-ocr/README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+      - name: Uložit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-court-2026/image-ocr
+          git commit -m 'Vytěžit obrazové přílohy Hossner pomocí OCR' || true
+          for i in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && exit 0; sleep $((i*4)); done
+          exit 1
