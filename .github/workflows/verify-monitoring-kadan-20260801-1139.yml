@@ -1,0 +1,97 @@
+name: Jednorázově ověřit živý web pro monitoring Kadaně
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/verify-monitoring-kadan-20260801-1139.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Živá HTTPS kontrola s cache-bustingem
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          expected="$(git rev-parse origin/main)"
+          echo "expected_main=$expected"
+
+          code=1
+          for attempt in $(seq 1 12); do
+            key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${attempt}-$(date +%s)"
+            set +e
+            python3 scripts/verify_public_release.py \
+              --root . \
+              --base https://nasekadan.cz \
+              --expected-sha "$expected" \
+              --cache-key "$key" 2>&1 | tee /tmp/verify-public.log
+            code=${PIPESTATUS[0]}
+            set -e
+
+            rm -f /tmp/nk-news /tmp/nk-health
+            curl -4 -kfsS --max-time 30 -H 'Cache-Control: no-cache, no-store' \
+              "https://nasekadan.cz/news-sitemap.xml?verify=$key" -o /tmp/nk-news || true
+            curl -4 -kfsS --max-time 30 -H 'Cache-Control: no-cache, no-store' \
+              "https://nasekadan.cz/deployment-health.txt?verify=$key" -o /tmp/nk-health || true
+
+            python3 - "$key" <<'PY'
+          import html, re, sys
+          from pathlib import Path
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+
+          key=sys.argv[1]
+          root=Path('.')
+          local=(root/'index.html').read_text(encoding='utf-8',errors='replace')
+          paths=[]
+          for p in re.findall(r'href=["\'](/clanky/[^"\']+\.html)["\']',local,re.I):
+              if p not in paths: paths.append(p)
+              if len(paths)==3: break
+          assert len(paths)==3, f'Na titulce nebyly nalezeny tři články: {paths}'
+          for path in paths:
+              source=(root/path.lstrip('/')).read_text(encoding='utf-8',errors='replace')
+              m=re.search(r'<h1\b[^>]*>(.*?)</h1>',source,re.I|re.S)
+              assert m, f'Chybí lokální H1: {path}'
+              expected=html.unescape(re.sub(r'<[^>]+>',' ',m.group(1)))
+              expected=re.sub(r'\s+',' ',expected).strip()
+              url='https://nasekadan.cz'+path+'?'+urlencode({'verify':key})
+              req=Request(url,headers={'User-Agent':'NaseKadanMonitoring/1.0','Cache-Control':'no-cache, no-store'})
+              with urlopen(req,timeout=30) as r:
+                  assert r.status==200, (path,r.status)
+                  body=r.read().decode(r.headers.get_content_charset() or 'utf-8',errors='replace')
+              mm=re.search(r'<h1\b[^>]*>(.*?)</h1>',body,re.I|re.S)
+              actual=html.unescape(re.sub(r'<[^>]+>',' ',mm.group(1) if mm else ''))
+              actual=re.sub(r'\s+',' ',actual).strip()
+              assert actual==expected, f'H1 nesouhlasí {path}: {actual!r} != {expected!r}'
+              news=Path('/tmp/nk-news').read_text(encoding='utf-8',errors='replace') if Path('/tmp/nk-news').exists() else ''
+              assert path in news, f'News sitemap postrádá {path}'
+          print('LATEST_ARTICLES='+','.join(paths))
+          PY
+            extra=$?
+
+            public_source="$(sed -n 's/^source=//p' /tmp/nk-health 2>/dev/null | head -n1)"
+            generated="$(sed -n 's/^generated=//p' /tmp/nk-health 2>/dev/null | head -n1)"
+            echo "attempt=$attempt expected=$expected public_source=${public_source:-missing} generated=${generated:-missing} verifier_code=$code extra_code=$extra"
+
+            if [ "$code" -eq 0 ] && [ "$extra" -eq 0 ]; then
+              echo "LIVE_OK expected=$expected public_source=$public_source"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo 'LIVE_CHECK_FAILED'
+          cat /tmp/verify-public.log || true
+          cat /tmp/nk-health || true
+          exit 1
