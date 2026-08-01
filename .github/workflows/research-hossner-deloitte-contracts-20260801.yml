@@ -1,0 +1,122 @@
+name: Vytěžit smlouvy Deloitte pro Nemocnici Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-deloitte-contracts-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+      - name: Najít a vytěžit smlouvy
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/hossner-deloitte-contracts
+          mkdir -p .github/research/hossner-deloitte-contracts/{files,text}
+          cat > /tmp/extract.py <<'PY'
+          import hashlib,json,re,subprocess,time,urllib.parse,xml.etree.ElementTree as ET
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          OUT=Path('.github/research/hossner-deloitte-contracts'); S=requests.Session(); S.headers['User-Agent']='NaseKadan legal research/1.0'
+          def get(u):
+            last=None
+            for i in range(5):
+              try:
+                r=S.get(u,timeout=180,allow_redirects=True); r.raise_for_status(); return r
+              except Exception as e: last=e; time.sleep(2+i*2)
+            raise last
+          def local(t): return t.rsplit('}',1)[-1].lower()
+          def ext_text(p):
+            q=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            txt=q.stdout
+            if len(txt.strip())<250:
+              tmp=Path('/tmp')/(p.stem+'ocr'); tmp.mkdir(exist_ok=True); subprocess.run(['pdftoppm','-jpeg','-r','180',str(p),str(tmp/'p')])
+              parts=[]
+              for im in sorted(tmp.glob('*.jpg')):
+                x=subprocess.run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True); parts.append(x.stdout)
+              txt='\n'.join(parts)
+            return txt
+          matches=[]
+          for y,m in [(2024,11),(2024,12)]+[(2025,i) for i in range(1,13)]+[(2026,i) for i in range(1,9)]:
+            try:
+              p=Path('/tmp')/f'd{y}{m:02d}.xml'; p.write_bytes(get(f'https://data.smlouvy.gov.cz/dump_{y}_{m:02d}.xml').content)
+              for ev,el in ET.iterparse(p,events=('end',)):
+                if local(el.tag)!='zaznam': continue
+                txt=' '.join(el.itertext()); low=re.sub(r'\s+',' ',txt).lower()
+                if ('25479300' in low or 'nemocnice kadaň' in low or 'nemocnice kadan' in low) and ('deloitte' in low or 'právních služeb' in low or 'pravnich sluzeb' in low):
+                  urls=[]; fields={}
+                  for n in el.iter():
+                    k=local(n.tag); v=(n.text or '').strip()
+                    if v: fields.setdefault(k,[]).append(v)
+                    if v.startswith('http'): urls.append(v)
+                  matches.append({'year':y,'month':m,'text':re.sub(r'\s+',' ',txt).strip(),'fields':fields,'urls':list(dict.fromkeys(urls)),'xml':ET.tostring(el,encoding='unicode')})
+                el.clear()
+            except Exception as e: matches.append({'year':y,'month':m,'error':repr(e)})
+          OUT.joinpath('records.json').write_text(json.dumps(matches,ensure_ascii=False,indent=2),encoding='utf-8')
+          downloads=[]
+          all_urls=[]
+          for x in matches:
+            for u in x.get('urls',[]):
+              if u not in all_urls: all_urls.append(u)
+          # Also open contract detail URLs and follow all document links.
+          queue=list(all_urls); seen=set()
+          while queue:
+            u=queue.pop(0)
+            if u in seen: continue
+            seen.add(u)
+            try:
+              r=get(u); data=r.content; ct=r.headers.get('content-type','').lower()
+              if 'html' in ct:
+                s=BeautifulSoup(r.text,'lxml')
+                for a in s.find_all('a',href=True):
+                  v=urllib.parse.urljoin(r.url,a['href'])
+                  if ('smlouvy.gov.cz' in v and (v.lower().endswith('.pdf') or '/soubor/' in v or '/smlouva/' in v)) and v not in seen: queue.append(v)
+                downloads.append({'url':u,'final':r.url,'type':'html','title':s.title.get_text(' ',strip=True) if s.title else None,'text':s.get_text(' ',strip=True)[:20000]})
+              elif data.startswith(b'%PDF') or 'pdf' in ct:
+                name=f'{len(downloads):03d}.pdf'; p=OUT/'files'/name; p.write_bytes(data); txt=ext_text(p); tp=OUT/'text'/(name+'.txt'); tp.write_text(txt,encoding='utf-8')
+                downloads.append({'url':u,'final':r.url,'type':'pdf','file':str(p),'text_file':str(tp),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'chars':len(txt)})
+              else: downloads.append({'url':u,'final':r.url,'type':ct,'bytes':len(data)})
+            except Exception as e: downloads.append({'url':u,'error':repr(e)})
+          OUT.joinpath('downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+          texts=[]
+          for p in (OUT/'text').glob('*.txt'): texts.append((p.name,p.read_text(encoding='utf-8',errors='replace')))
+          md=['# Deloitte Legal × Nemocnice Kadaň – smlouvy a přílohy','']
+          for x in matches:
+            if 'error' not in x:
+              md += [f"## Dump {x['year']}-{x['month']:02d}",x['text'],'']
+          keys=('hodin','sazb','odměn','odmen','limit','strop','audit','prověrk','proverk','soud','hossner','pracovn','trestn','předběž','predbez','výpověď','vypoved','paušál','pausal')
+          for fn,txt in texts:
+            md.append('## '+fn)
+            low=txt.lower()
+            for k in keys:
+              for m in list(re.finditer(k,low))[:10]: md.append('- '+re.sub(r'\s+',' ',txt[max(0,m.start()-500):m.start()+1500]))
+            md.append('')
+          OUT.joinpath('README.md').write_text('\n'.join(md),encoding='utf-8')
+          PY
+          python3 /tmp/extract.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-deloitte-contracts
+          git commit -m 'Vytěžit smlouvy Deloitte pro Nemocnici Kadaň' || true
+          for i in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && exit 0; sleep $((i*5)); done
+          exit 1
