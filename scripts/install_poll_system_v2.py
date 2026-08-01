@@ -10,7 +10,7 @@ SITE = ROOT / "site.js"
 TUSIMICE_ARTICLE = ROOT / "clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html"
 TUSIMICE_DRAFT = ROOT / ".github/drafts/jaderne-tusimice-smr-voda-doprava-eia-2026.html"
 GREENERY_PREP = ROOT / "scripts/prepare_greenery_publication_20260801.py"
-VERSION = "20260801-poll-system-v2"
+VERSION = "20260801-poll-system-v3"
 START = "# BEGIN POLL_RESULTS_API"
 END = "# END POLL_RESULTS_API"
 
@@ -179,9 +179,19 @@ SITE_BLOCK = r'''  // Ankety Naše Kadaň: samostatné ukládání hlasů a veř
       });
       const status = results.querySelector('.poll-results-status');
       if (status) {status.classList.remove('poll-results-error');status.textContent = total > 0 ? 'Výsledky se aktualizují průběžně.' : 'Zatím nebyl odevzdán žádný hlas.';}
+      // POLL_SERVER_AUTHORITATIVE_V3: cookie a databáze jsou jediný zdroj pravdy.
       if (payload && payload.selected) {
         try { localStorage.setItem(storageKey, payload.selected); } catch (_) {}
         setLocked(payload.selected);
+        setMessage('Děkujeme, váš hlas už byl zaznamenán.');
+      } else {
+        // Starší nefunkční anketa mohla uložit pouze localStorage bez serverového hlasu.
+        // Takový záznam nesmí blokovat nové hlasování.
+        try { localStorage.removeItem(storageKey); } catch (_) {}
+        setUnlocked();
+        if (message && /Ověřujeme dřívější hlas|už byl zaznamenán/.test(message.textContent || '')) {
+          message.classList.remove('show');
+        }
       }
     };
 
@@ -200,15 +210,17 @@ SITE_BLOCK = r'''  // Ankety Naše Kadaň: samostatné ukládání hlasů a veř
       }
     };
 
-    try {const saved=localStorage.getItem(storageKey);if(saved){setLocked(saved);setMessage('Děkujeme, váš hlas už byl zaznamenán.');}} catch (_) {}
+    // Lokální záznam je pouze nápověda; tlačítka uzamkne až potvrzení serveru.
+    try {
+      if (localStorage.getItem(storageKey)) setMessage('Ověřujeme dřívější hlas…');
+    } catch (_) {}
     loadResults();
 
     buttons.forEach((button) => {
       button.addEventListener('click', async (event) => {
         event.preventDefault();event.stopImmediatePropagation();
         if (sending) return;
-        let saved='';try{saved=localStorage.getItem(storageKey)||'';}catch(_){}
-        if(saved){setLocked(saved);setMessage('Děkujeme, váš hlas už byl zaznamenán.');await loadResults();return;}
+        // Hlas vždy posíláme serveru. Duplicitní hlas bezpečně odmítne databáze podle cookie.
         const vote=button.getAttribute('data-poll-vote');if(!vote)return;
         sending=true;setLocked(vote);setMessage('Odesíláme váš hlas…');
         try{

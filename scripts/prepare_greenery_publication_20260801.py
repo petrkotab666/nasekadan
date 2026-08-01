@@ -29,7 +29,7 @@ PUBLIC_URL = f"https://nasekadan.cz/clanky/{SLUG}.html"
 PUBLISHED = "2026-08-01T11:00:00+02:00"
 PUBLISHED_DT = datetime.fromisoformat(PUBLISHED)
 EXPECTED = "Sedm centimetrů je smluvní minimum jedné konkrétní lokality"
-POLL_VERSION = "20260801-poll-system-v2"  # POLL_SYSTEM_V2
+POLL_VERSION = "20260801-poll-system-v3"  # POLL_SYSTEM_V2
 
 
 def run(*args: str) -> None:

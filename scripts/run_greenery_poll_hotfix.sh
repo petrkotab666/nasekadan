@@ -113,6 +113,7 @@ button.click();await new Promise(r=>setTimeout(r,1200));
 const text=w.document.querySelector('.poll-results')?.textContent||'';
 if(postCount!==1||!button.disabled||!text.includes('1 hlas')||!text.includes('100 %'))throw new Error('Živý DOM neukázal uložený hlas a procenta: '+text);
 console.log('Živý test prošel:',text.replace(/\s+/g,' ').trim());
+w.close();process.exit(0);
 NODE
     verified=true
     break
