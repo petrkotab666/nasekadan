@@ -1,0 +1,147 @@
+name: Doplnit ePetici do dnešního článku
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: update-petition-article-epetice
+  cancel-in-progress: true
+
+env:
+  ARTICLE: clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+  PUBLIC_URL: https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+  RELATED_URL: https://nasekadan.cz/clanky/epetice-nemocnice-kadan.html
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[update] add epetice to petition article')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit viditelnou informaci o elektronické petici
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/add_epetice_to_petition_article_20260801.py
+          python3 scripts/add_epetice_to_petition_article_20260801.py
+          grep -Fq 'data-online-petition-update="20260801"' "$ARTICLE"
+          grep -Fq 'Elektronická petice pokračuje souběžně' "$ARTICLE"
+          grep -Fq '/clanky/epetice-nemocnice-kadan.html' "$ARTICLE"
+          grep -Fq 'data-promos data-context="sidebar"' "$ARTICLE"
+          grep -Fq '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' "$ARTICLE"
+          python3 scripts/validate_publication_integrity.py
+
+      - name: Uložit změnu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – aktualizace článku'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE" scripts/add_epetice_to_petition_article_20260801.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit elektronickou petici do dnešního článku [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 4 ]] && exit 1
+              sleep $((attempt * 4))
+            done
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          grep -Fq 'Elektronická petice pokračuje souběžně' "$ARTICLE"
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+              break
+            fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit aktualizovaný článek
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/petition-epetice-update.tar.gz" "$ARTICLE"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/petition-epetice-update.tar.gz" ubuntu@57.129.43.215:/tmp/petition-epetice-update.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/petition-epetice-update.tar.gz -C /var/www/nasekadan
+          sudo chmod a+r /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/petition-epetice-update.tar.gz nasekadan-web:/tmp/petition-epetice-update.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/petition-epetice-update.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/petition-epetice-update.tar.gz
+          fi
+          grep -Fq 'Elektronická petice pokračuje souběžně' /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          rm -f /tmp/petition-epetice-update.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit doplnění a související článek
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=false
+          for attempt in $(seq 1 12); do
+            page="$(curl -4 -kfsS --max-time 25 "${PUBLIC_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            related="$(curl -4 -kfsS --max-time 25 "${RELATED_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'Elektronická petice pokračuje souběžně' <<<"$page" \
+              && grep -Fq 'e-petice.cz' <<<"$page" \
+              && grep -Fq '/clanky/epetice-nemocnice-kadan.html' <<<"$page" \
+              && grep -Fq 'data-promos data-context="sidebar"' <<<"$page" \
+              && grep -Fq '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' <<<"$page" \
+              && grep -Fq 'Petice za nemocnici je online na soukromém portálu' <<<"$related"; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          [[ "$ok" == true ]]
+
+      - name: Zapsat výsledek do issue
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
+            const body = ok
+              ? '✅ Dnešní článek nyní výrazně uvádí také elektronickou petici, vysvětluje způsob potvrzení a odkazuje na náš podrobný článek. Změna je veřejně ověřená a reklamní integrace zůstala zachována.\n\nhttps://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html'
+              : `❌ Aktualizace nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}, veřejná kontrola: ${process.env.VERIFIED || 'false'}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
