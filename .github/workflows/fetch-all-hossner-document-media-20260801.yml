@@ -1,0 +1,122 @@
+name: Stáhnout všechna dokumentová média Hossnerova webu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-all-hossner-document-media-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Stáhnout a vytěžit všechny PDF, DOCX a PPTX soubory
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces antiword
+          python3 -m pip install --quiet requests lxml python-pptx
+          OUT=.github/research/hossner-all-document-media-20260801
+          rm -rf "$OUT" && mkdir -p "$OUT"/{files,text,metadata}
+          cat > /tmp/media.py <<'PY'
+          import hashlib, json, re, subprocess, time, urllib.parse, zipfile
+          from pathlib import Path
+          import requests
+          from lxml import etree
+          from pptx import Presentation
+
+          OUT=Path('.github/research/hossner-all-document-media-20260801')
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan document archive)','Accept-Language':'cs,en;q=0.7'})
+          media=[]; downloads=[]; errors=[]
+          def get(url,tries=5):
+            last=None
+            for i in range(tries):
+              try:
+                r=S.get(url,timeout=120,allow_redirects=True)
+                if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                r.raise_for_status(); return r
+              except Exception as e:
+                last=e; time.sleep(1+i*2)
+            raise last
+          def safe(s): return re.sub(r'[^A-Za-z0-9._-]+','_',urllib.parse.unquote(s or ''))[:180] or 'file'
+          for page in range(1,20):
+            u=f'https://petrhossnerkadan.cz/wp-json/wp/v2/media?per_page=100&page={page}'
+            try:
+              r=get(u); arr=r.json()
+              if not arr: break
+              media.extend(arr)
+              if len(arr)<100: break
+            except Exception as e:
+              errors.append({'stage':'media-api','url':u,'error':repr(e)}); break
+          (OUT/'metadata/all-media.json').write_text(json.dumps(media,ensure_ascii=False,indent=2),encoding='utf-8')
+          docs=[]
+          for m in media:
+            src=m.get('source_url') or ''
+            mime=(m.get('mime_type') or '').lower()
+            filename=m.get('filename') or Path(urllib.parse.urlparse(src).path).name
+            if mime in ('application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.presentationml.presentation') or re.search(r'\.(pdf|docx?|pptx?)(?:\?|$)',src,re.I):
+              docs.append({'id':m.get('id'),'date':m.get('date'),'title':(m.get('title') or {}).get('rendered'),'slug':m.get('slug'),'post':m.get('post'),'mime_type':mime,'filename':filename,'source_url':src})
+          (OUT/'metadata/document-media.json').write_text(json.dumps(docs,ensure_ascii=False,indent=2),encoding='utf-8')
+          def extract(p):
+            ext=p.suffix.lower(); text=''; method=''
+            if ext=='.pdf':
+              q=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); text=q.stdout; method='pdftotext'
+              if len(re.sub(r'\s+','',text))<160:
+                d=Path('/tmp/ocr-'+hashlib.sha1(str(p).encode()).hexdigest()[:10]); d.mkdir(exist_ok=True)
+                subprocess.run(['pdftoppm','-f','1','-l','100','-r','180','-png',str(p),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                parts=[]
+                for im in sorted(d.glob('p-*.png')):
+                  z=subprocess.run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); parts.append(z.stdout)
+                ocr='\n'.join(parts)
+                if len(ocr)>len(text): text=ocr; method='ocr'
+            elif ext=='.docx':
+              with zipfile.ZipFile(p) as z: root=etree.fromstring(z.read('word/document.xml'))
+              text='\n'.join(root.itertext()); method='docx-xml'
+            elif ext=='.doc':
+              q=subprocess.run(['antiword',str(p)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); text=q.stdout; method='antiword'
+            elif ext=='.pptx':
+              parts=[]
+              prs=Presentation(str(p))
+              for i,sl in enumerate(prs.slides,1):
+                parts.append('\n'.join([getattr(sh,'text','') for sh in sl.shapes if getattr(sh,'text','')]))
+              text='\n\n'.join(parts); method='python-pptx'
+            return text,method
+          for d in docs:
+            u=d['source_url']
+            try:
+              r=get(u); data=r.content
+              name=safe(d.get('filename') or Path(urllib.parse.urlparse(r.url).path).name)
+              if not Path(name).suffix:
+                ext={'application/pdf':'.pdf','application/msword':'.doc','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'.docx','application/vnd.openxmlformats-officedocument.presentationml.presentation':'.pptx'}.get(d.get('mime_type'),'')
+                name+=ext
+              sha=hashlib.sha256(data).hexdigest(); p=OUT/'files'/name
+              if p.exists() and hashlib.sha256(p.read_bytes()).hexdigest()!=sha: p=OUT/'files'/(sha[:10]+'-'+name)
+              p.write_bytes(data)
+              text,method=extract(p)
+              tp=OUT/'text'/(p.name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace')
+              low=text.lower()
+              hits=[x for x in ['žaloba','zaloba','předžalobní','predzalobni','usnesení','usneseni','rozhodnutí','rozhodnuti','30 c 211/2025','30 c 84/2025','14 co 104/2026','93 ncp 490/2026','deloitte','pracovní smlouva','smlouva o pracovním','tőgl','tögl','souběh funkcí'] if x in low]
+              downloads.append({**d,'final_url':r.url,'file':str(p),'text_file':str(tp),'bytes':len(data),'sha256':sha,'chars':len(text),'method':method,'hits':hits})
+            except Exception as e: errors.append({'stage':'download','item':d,'error':repr(e)})
+          (OUT/'metadata/downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Všechna dokumentová média Hossnerova webu','',f'- Media z API: {len(media)}',f'- Dokumenty: {len(docs)}',f'- Staženo: {len(downloads)}',f'- Chyby: {len(errors)}','', '## Dokumenty','']
+          for x in downloads: lines.append(f"- **{x.get('date')} – {x.get('title') or x.get('filename')}** — `{x['file']}` — {x['bytes']} B — {', '.join(x['hits']) if x['hits'] else 'bez klíčové shody'}")
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/media.py
+      - name: Uložit dokumenty
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-all-document-media-20260801
+          git commit -m 'Přidat všechna dokumentová média Hossnerova webu' || exit 0
+          git push origin main
