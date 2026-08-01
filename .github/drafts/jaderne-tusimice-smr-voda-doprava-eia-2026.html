@@ -55,7 +55,7 @@
   <section class="poll" aria-labelledby="poll-title" data-poll-id="smr-tusimice-2026">
     <span class="poll-label">Anketa Naší Kadaně</span>
     <h2 id="poll-title">Chcete, aby v Tušimicích vznikla nová jaderná elektrárna?</h2>
-    <p class="poll-intro">Hlasujte podle informací, které jsou nyní veřejně dostupné. Výsledky čtenářské ankety později zveřejníme.</p>
+    <p class="poll-intro">Hlasujte podle informací, které jsou nyní veřejně dostupné. Průběžné počty hlasů a procenta se zobrazují hned pod možnostmi.</p>
     <div class="poll-options">
       <button class="poll-button" type="button" data-poll-vote="ano">Ano, vznik jaderného zdroje podporuji</button>
       <button class="poll-button" type="button" data-poll-vote="ne">Ne, jadernou elektrárnu v Tušimicích nechci</button>
@@ -207,44 +207,8 @@
   </div>
   <div class="footer-legal"><span>© 2026 Naše Kadaň</span><a href="/o-webu/">O webu</a><a href="/inzerce/">Inzerce</a><a href="/ochrana-osobnich-udaju/">Ochrana osobních údajů</a><a href="/o-webu/#provozovatel">Provozovatel</a><a href="mailto:info@nasekadan.cz">Kontakt</a></div>
 </footer>
-<script>
-(function(){
-  var section=document.querySelector('[data-poll-id="smr-tusimice-2026"]');
-  if(!section)return;
-  var key='nk-poll-smr-tusimice-2026';
-  var buttons=section.querySelectorAll('[data-poll-vote]');
-  var message=section.querySelector('.poll-message');
-  function lock(vote){
-    buttons.forEach(function(button){
-      button.disabled=true;
-      if(button.getAttribute('data-poll-vote')===vote){
-        button.style.borderColor='#9f2626';
-        button.style.background='#fff4f4';
-      }
-    });
-    message.classList.add('show');
-  }
-  try{var saved=localStorage.getItem(key);if(saved)lock(saved);}catch(e){}
-  buttons.forEach(function(button){
-    button.addEventListener('click',function(){
-      var vote=button.getAttribute('data-poll-vote');
-      if(!vote)return;
-      try{if(localStorage.getItem(key))return;}catch(e){}
-      var payload={path:'/anketa/jaderne-tusimice/'+vote,title:'Anketa SMR Tušimice: '+vote,referrer:location.pathname};
-      fetch('/api/analytics/pageview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),keepalive:true,credentials:'omit'}).then(function(response){
-        if(!response.ok)throw new Error('vote_failed');
-        try{localStorage.setItem(key,vote);}catch(e){}
-        lock(vote);
-      }).catch(function(){
-        message.textContent='Hlas se nyní nepodařilo odeslat. Zkuste to prosím znovu.';
-        message.style.background='#fff0f0';
-        message.style.color='#8e2525';
-        message.classList.add('show');
-      });
-    });
-  });
-})();
-</script>
+
 <script src="/analytics.js" defer></script>
+<script src="/site.js?v=20260801-poll-system-v2" defer></script>
 </body>
 </html>

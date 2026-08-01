@@ -58,8 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
     head.appendChild(button);
   });
 
-  // Ankety jsou obsluhované z externího skriptu, aby fungovaly i při blokování inline JavaScriptu.
-  // Hlas se ukládá samostatně a veřejné průběžné výsledky se načítají ze serveru.
+  // Ankety Naše Kadaň: samostatné ukládání hlasů a veřejné průběžné výsledky.
   const pollVoteEndpoint = '/api/newsletter/poll/vote';
   const pollResultsEndpoint = '/api/newsletter/poll/results';
 
@@ -67,60 +66,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const style = document.createElement('style');
     style.id = 'nk-poll-results-style';
     style.textContent = `
-      .poll-results{margin-top:20px;padding-top:18px;border-top:1px solid #d9e0e3}
-      .poll-results[hidden]{display:none}
+      .poll-results{display:block;margin-top:20px;padding-top:18px;border-top:1px solid #d9e0e3}
       .poll-results-head{display:flex;justify-content:space-between;gap:16px;align-items:baseline;margin-bottom:13px;color:#20313a}
       .poll-results-head strong{font:800 20px Georgia,serif}
-      .poll-results-total{font-size:13px;color:#667780;font-weight:700}
+      .poll-results-total{font-size:13px;color:#667780;font-weight:800}
       .poll-result-row{margin:0 0 13px}
       .poll-result-meta{display:flex;justify-content:space-between;gap:14px;margin-bottom:5px;font-size:14px;line-height:1.4}
       .poll-result-label{color:#20313a;font-weight:800}
-      .poll-result-value{color:#667780;white-space:nowrap}
-      .poll-result-track{height:10px;overflow:hidden;border-radius:999px;background:#e7ecee}
+      .poll-result-value{color:#667780;white-space:nowrap;font-weight:800}
+      .poll-result-track{height:11px;overflow:hidden;border-radius:999px;background:#e7ecee}
       .poll-result-fill{height:100%;width:0;border-radius:inherit;background:#9f2626;transition:width .35s ease}
       .poll-results-status{margin:8px 0 0!important;color:#73818a;font-size:12px!important}
+      .poll-results-error{color:#8e2525!important}
     `;
     document.head.appendChild(style);
   }
 
   document.querySelectorAll('[data-poll-id]').forEach((section) => {
-    if (section.dataset.pollBound === '1') return;
-    section.dataset.pollBound = '1';
-
+    if (section.dataset.pollBound === '2') return;
+    section.dataset.pollBound = '2';
     const pollId = section.getAttribute('data-poll-id') || 'poll';
     const storageKey = `nk-poll-${pollId}`;
     const buttons = Array.from(section.querySelectorAll('[data-poll-vote]'));
     const message = section.querySelector('.poll-message');
     const options = section.querySelector('.poll-options');
     let sending = false;
-
-    const choices = buttons.map((button) => ({
-      key: button.getAttribute('data-poll-vote') || '',
-      label: (button.textContent || '').trim(),
-    })).filter((item) => item.key);
+    const choices = buttons.map((button) => ({key: button.getAttribute('data-poll-vote') || '',label: (button.textContent || '').trim()})).filter((item) => item.key);
 
     const results = document.createElement('div');
     results.className = 'poll-results';
-    results.hidden = true;
     results.setAttribute('aria-live', 'polite');
-    results.innerHTML = `
-      <div class="poll-results-head">
-        <strong>Průběžné výsledky</strong>
-        <span class="poll-results-total" data-poll-total></span>
-      </div>
-      ${choices.map((item) => `
-        <div class="poll-result-row" data-poll-result="${item.key}">
-          <div class="poll-result-meta">
-            <span class="poll-result-label">${item.label}</span>
-            <span class="poll-result-value">0 hlasů · 0 %</span>
-          </div>
-          <div class="poll-result-track"><div class="poll-result-fill"></div></div>
-        </div>
-      `).join('')}
-      <p class="poll-results-status">Načítáme aktuální výsledky…</p>
-    `;
-    if (options) options.after(results);
-    else section.appendChild(results);
+    results.innerHTML = `<div class="poll-results-head"><strong>Průběžné výsledky</strong><span class="poll-results-total" data-poll-total>Načítáme…</span></div>${choices.map((item) => `<div class="poll-result-row" data-poll-result="${item.key}"><div class="poll-result-meta"><span class="poll-result-label">${item.label}</span><span class="poll-result-value">0 hlasů · 0 %</span></div><div class="poll-result-track"><div class="poll-result-fill"></div></div></div>`).join('')}<p class="poll-results-status">Načítáme aktuální počet hlasů…</p>`;
+    if (options) options.after(results); else section.appendChild(results);
 
     const setMessage = (value, type = 'success') => {
       if (!message) return;
@@ -129,118 +106,79 @@ document.addEventListener('DOMContentLoaded', () => {
       message.style.color = type === 'error' ? '#8e2525' : '#245d36';
       message.classList.add('show');
     };
-
     const setLocked = (vote) => {
       buttons.forEach((button) => {
         button.disabled = true;
-        if (button.getAttribute('data-poll-vote') === vote) {
-          button.style.borderColor = '#9f2626';
-          button.style.background = '#fff4f4';
-        }
+        const selected = button.getAttribute('data-poll-vote') === vote;
+        button.style.borderColor = selected ? '#9f2626' : '';
+        button.style.background = selected ? '#fff4f4' : '';
+        button.setAttribute('aria-pressed', selected ? 'true' : 'false');
       });
     };
-
-    const setUnlocked = () => {
-      buttons.forEach((button) => {
-        button.disabled = false;
-        button.style.borderColor = '';
-        button.style.background = '';
-      });
-    };
-
+    const setUnlocked = () => buttons.forEach((button) => {button.disabled=false;button.style.borderColor='';button.style.background='';button.setAttribute('aria-pressed','false');});
     const voteWord = (count) => count === 1 ? 'hlas' : (count >= 2 && count <= 4 ? 'hlasy' : 'hlasů');
 
     const renderResults = (payload) => {
       const counts = payload && payload.counts ? payload.counts : {};
+      const percentages = payload && payload.percentages ? payload.percentages : {};
       const total = Number(payload && payload.total) || 0;
       const totalEl = results.querySelector('[data-poll-total]');
       if (totalEl) totalEl.textContent = `${total} ${voteWord(total)} celkem`;
       choices.forEach((item) => {
         const count = Number(counts[item.key]) || 0;
-        const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+        const percent = Number.isFinite(Number(percentages[item.key])) ? Number(percentages[item.key]) : (total > 0 ? Math.round((count / total) * 1000) / 10 : 0);
         const row = results.querySelector(`[data-poll-result="${item.key}"]`);
         if (!row) return;
         const value = row.querySelector('.poll-result-value');
         const fill = row.querySelector('.poll-result-fill');
-        if (value) value.textContent = `${count} ${voteWord(count)} · ${percent} %`;
-        if (fill) fill.style.width = `${percent}%`;
+        if (value) value.textContent = `${count} ${voteWord(count)} · ${String(percent).replace('.', ',')} %`;
+        if (fill) fill.style.width = `${Math.max(0,Math.min(100,percent))}%`;
       });
       const status = results.querySelector('.poll-results-status');
-      if (status) status.textContent = total > 0 ? 'Výsledky se aktualizují průběžně.' : 'Zatím nebyl odevzdán žádný hlas.';
-      results.hidden = false;
+      if (status) {status.classList.remove('poll-results-error');status.textContent = total > 0 ? 'Výsledky se aktualizují průběžně.' : 'Zatím nebyl odevzdán žádný hlas.';}
+      if (payload && payload.selected) {
+        try { localStorage.setItem(storageKey, payload.selected); } catch (_) {}
+        setLocked(payload.selected);
+      }
     };
 
     const loadResults = async () => {
       try {
-        const response = await fetch(`${pollResultsEndpoint}?poll=${encodeURIComponent(pollId)}&t=${Date.now()}`, {
-          method: 'GET', cache: 'no-store', credentials: 'same-origin',
-        });
+        const response = await fetch(`${pollResultsEndpoint}?poll=${encodeURIComponent(pollId)}&t=${Date.now()}`, {method:'GET',cache:'no-store',credentials:'same-origin'});
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        renderResults(await response.json());
+        const payload = await response.json();
+        if (!payload || payload.ok !== true) throw new Error('invalid_payload');
+        renderResults(payload);
       } catch (_) {
         const status = results.querySelector('.poll-results-status');
-        if (status) status.textContent = 'Výsledky se nyní nepodařilo načíst.';
-        results.hidden = false;
+        if (status) {status.textContent='Výsledky se nyní nepodařilo načíst. Hlasování můžete zkusit znovu za chvíli.';status.classList.add('poll-results-error');}
+        const totalEl = results.querySelector('[data-poll-total]');
+        if (totalEl) totalEl.textContent='Dočasně nedostupné';
       }
     };
 
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        setLocked(saved);
-        setMessage('Děkujeme, váš hlas už byl zaznamenán.');
-      }
-    } catch (_) {}
-
+    try {const saved=localStorage.getItem(storageKey);if(saved){setLocked(saved);setMessage('Děkujeme, váš hlas už byl zaznamenán.');}} catch (_) {}
     loadResults();
 
     buttons.forEach((button) => {
       button.addEventListener('click', async (event) => {
-        event.preventDefault();
-        event.stopImmediatePropagation();
+        event.preventDefault();event.stopImmediatePropagation();
         if (sending) return;
-        let saved = '';
-        try { saved = localStorage.getItem(storageKey) || ''; } catch (_) {}
-        if (saved) {
-          setLocked(saved);
-          setMessage('Děkujeme, váš hlas už byl zaznamenán.');
-          await loadResults();
-          return;
-        }
-        const vote = button.getAttribute('data-poll-vote');
-        if (!vote) return;
-        sending = true;
-        setLocked(vote);
-        setMessage('Odesíláme váš hlas…');
-        try {
-          const response = await fetch(pollVoteEndpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pollId, choice: vote }),
-            keepalive: true,
-            credentials: 'same-origin',
-          });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const payload = await response.json();
-          const selected = payload.selected || vote;
-          try { localStorage.setItem(storageKey, selected); } catch (_) {}
-          setLocked(selected);
-          setMessage(payload.accepted === false
-            ? 'Z tohoto zařízení už byl hlas zaznamenán. Zobrazujeme aktuální výsledky.'
-            : 'Děkujeme, váš hlas byl zaznamenán.');
-          renderResults(payload);
-        } catch (_) {
-          setUnlocked();
-          setMessage('Hlas se nyní nepodařilo odeslat. Zkuste to prosím znovu.', 'error');
-          await loadResults();
-        }
-        sending = false;
+        let saved='';try{saved=localStorage.getItem(storageKey)||'';}catch(_){}
+        if(saved){setLocked(saved);setMessage('Děkujeme, váš hlas už byl zaznamenán.');await loadResults();return;}
+        const vote=button.getAttribute('data-poll-vote');if(!vote)return;
+        sending=true;setLocked(vote);setMessage('Odesíláme váš hlas…');
+        try{
+          const response=await fetch(pollVoteEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pollId,choice:vote}),keepalive:true,credentials:'same-origin'});
+          const payload=await response.json().catch(()=>null);
+          if(!response.ok||!payload||payload.ok!==true)throw new Error(`HTTP ${response.status}`);
+          const selected=payload.selected||vote;try{localStorage.setItem(storageKey,selected);}catch(_){}
+          setLocked(selected);setMessage(payload.accepted===false?'Z tohoto zařízení už byl hlas zaznamenán. Zobrazujeme aktuální výsledky.':'Děkujeme, váš hlas byl zaznamenán.');renderResults(payload);
+        }catch(_){setUnlocked();setMessage('Hlas se nyní nepodařilo odeslat. Zkuste to prosím znovu.','error');await loadResults();}
+        sending=false;
       }, true);
     });
-
-    window.setInterval(() => {
-      if (!document.hidden) loadResults();
-    }, 30000);
+    window.setInterval(() => {if(!document.hidden)loadResults();},20000);
   });
 
   // U článků se statickými reklamami se žádný starý dynamický reklamní skript nenačítá.

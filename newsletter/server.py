@@ -47,6 +47,18 @@ def valid_poll_token(value,max_length=80):
  return token if re.fullmatch(r'[a-z0-9][a-z0-9-]{0,%d}'%(max_length-1),token) else ''
 
 
+def poll_cookie(env):
+ raw=str(env.get('HTTP_COOKIE') or '')
+ for part in raw.split(';'):
+  name,sep,value=part.strip().partition('=')
+  if sep and name=='nk_poll_device' and re.fullmatch(r'[A-Za-z0-9_-]{20,120}',value):return value
+ return ''
+
+
+def poll_cookie_header(value):
+ return ('Set-Cookie',f'nk_poll_device={value}; Path=/; Max-Age=31536000; SameSite=Lax; Secure; HttpOnly')
+
+
 def migrate_legacy_poll_votes(c):
  try:
   rows=c.execute("SELECT path,day,visitor_hash,created_at FROM pageviews WHERE path LIKE '/anketa/%/%'").fetchall()
@@ -63,42 +75,57 @@ def migrate_legacy_poll_votes(c):
   log_error('POLL_MIGRATION',exc)
 
 
-def poll_visitor_hash(env,poll_id):
- raw=f'{ANALYTICS_SECRET}|poll|{poll_id}|{client_ip(env)}|{env.get("HTTP_USER_AGENT","")[:180]}'
+def poll_visitor_hash(env,poll_id,device):
+ if device:
+  raw=f'{ANALYTICS_SECRET}|poll-cookie|{poll_id}|{device}'
+ else:
+  raw=f'{ANALYTICS_SECRET}|poll-fallback|{poll_id}|{client_ip(env)}|{env.get("HTTP_USER_AGENT","")[:180]}'
  return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-def poll_results_payload(c,poll_id):
+def poll_results_payload(c,poll_id,selected=''):
  rows=c.execute('SELECT choice,COUNT(*) FROM poll_votes WHERE poll_id=? GROUP BY choice ORDER BY choice',(poll_id,)).fetchall()
  counts={str(choice):int(count) for choice,count in rows}
- return {'ok':True,'pollId':poll_id,'total':sum(counts.values()),'counts':counts}
+ total=sum(counts.values())
+ percentages={choice:(round(count*100/total,1) if total else 0) for choice,count in counts.items()}
+ payload={'ok':True,'pollId':poll_id,'total':total,'counts':counts,'percentages':percentages,'updatedAt':datetime.now(timezone.utc).isoformat()}
+ if selected:payload['selected']=selected
+ return payload
 
 
 def poll_results(env,start):
  try:
   poll_id=valid_poll_token(parse_qs(env.get('QUERY_STRING','')).get('poll',[''])[0])
   if not poll_id:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Chybí platné ID ankety.'},ensure_ascii=False))
-  c=db();payload=poll_results_payload(c,poll_id);c.close()
+  device=poll_cookie(env);c=db();selected=''
+  if device:
+   vhash=poll_visitor_hash(env,poll_id,device)
+   row=c.execute('SELECT choice FROM poll_votes WHERE poll_id=? AND visitor_hash=?',(poll_id,vhash)).fetchone()
+   if row:selected=str(row[0])
+  payload=poll_results_payload(c,poll_id,selected);c.close()
   return response(start,'200 OK',json.dumps(payload,ensure_ascii=False))
  except Exception as exc:
-  log_error('POLL_RESULTS',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False},ensure_ascii=False))
+  log_error('POLL_RESULTS',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Výsledky se nepodařilo načíst.'},ensure_ascii=False))
 
 
 def poll_vote(env,start):
  try:
-  data=read_json(env)
-  poll_id=valid_poll_token(data.get('pollId'));choice=valid_poll_token(data.get('choice'),40)
+  data=read_json(env);poll_id=valid_poll_token(data.get('pollId'));choice=valid_poll_token(data.get('choice'),40)
   if not poll_id or not choice:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Neplatný hlas.'},ensure_ascii=False))
-  now=datetime.now(timezone.utc).isoformat();vhash=poll_visitor_hash(env,poll_id);c=db()
+  device=poll_cookie(env);extra=[]
+  if not device:
+   device=secrets.token_urlsafe(32);extra=[poll_cookie_header(device)]
+  now=datetime.now(timezone.utc).isoformat();vhash=poll_visitor_hash(env,poll_id,device);c=db()
   existing=c.execute('SELECT choice FROM poll_votes WHERE poll_id=? AND visitor_hash=?',(poll_id,vhash)).fetchone()
-  accepted=existing is None
-  selected=choice if accepted else str(existing[0])
+  accepted=existing is None;selected=choice if accepted else str(existing[0])
   if accepted:
    c.execute('INSERT INTO poll_votes(poll_id,choice,visitor_hash,created_at) VALUES(?,?,?,?)',(poll_id,choice,vhash,now));c.commit()
-  payload=poll_results_payload(c,poll_id);payload.update({'accepted':accepted,'selected':selected});c.close()
-  return response(start,'200 OK',json.dumps(payload,ensure_ascii=False))
+  payload=poll_results_payload(c,poll_id,selected);payload['accepted']=accepted;c.close()
+  return response(start,'200 OK',json.dumps(payload,ensure_ascii=False),extra=extra)
+ except sqlite3.IntegrityError:
+  return response(start,'409 Conflict',json.dumps({'ok':False,'message':'Hlas už byl zaznamenán.'},ensure_ascii=False))
  except Exception as exc:
-  log_error('POLL_VOTE',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False},ensure_ascii=False))
+  log_error('POLL_VOTE',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False,'message':'Hlas se nepodařilo uložit.'},ensure_ascii=False))
 # END POLL_RESULTS_API
 
 def smtp_configured():

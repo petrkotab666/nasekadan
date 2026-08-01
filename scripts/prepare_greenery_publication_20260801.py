@@ -29,6 +29,7 @@ PUBLIC_URL = f"https://nasekadan.cz/clanky/{SLUG}.html"
 PUBLISHED = "2026-08-01T11:00:00+02:00"
 PUBLISHED_DT = datetime.fromisoformat(PUBLISHED)
 EXPECTED = "Sedm centimetrů je smluvní minimum jedné konkrétní lokality"
+POLL_VERSION = "20260801-poll-system-v2"  # POLL_SYSTEM_V2
 
 
 def run(*args: str) -> None:
@@ -62,6 +63,13 @@ def first_tag(text: str, tag: str) -> str:
 
 def publish_article() -> None:
     text = read_source()
+    legacy = re.compile(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', re.I | re.S)
+    text = legacy.sub(lambda m: '' if '/api/analytics/pageview' in m.group(1) and 'data-poll-vote' in m.group(1) else m.group(0), text)
+    text = text.replace('Funkční hlasování se připojí při zveřejnění článku.', 'Po hlasování se ihned zobrazí aktuální počty hlasů a procenta.')
+    site_tag = f'<script src="/site.js?v={POLL_VERSION}" defer></script>'
+    text, site_count = re.subn(r'<script src="/site\.js(?:\?v=[^"]+)?" defer></script>', site_tag, text, count=1)
+    if site_count == 0:
+        text = text.replace('</body>', site_tag + '\n</body>', 1)
     old = '<meta name="robots" content="noindex,nofollow">'
     new = '<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">'
     if old not in text:
@@ -175,7 +183,7 @@ def validate() -> dict[str, str]:
         raise RuntimeError("V článku chybí kontrolní věta.")
     required = (
         'data-poll-id="sekani-travniku-kadan-2026"',
-        "/api/analytics/pageview",
+        f"/site.js?v={POLL_VERSION}",
         "index,follow",
         "105,2 ha",
         "282",
@@ -186,6 +194,8 @@ def validate() -> dict[str, str]:
             raise RuntimeError(f"V článku chybí marker {marker!r}.")
     if "noindex,nofollow" in text:
         raise RuntimeError("Veřejný článek zůstal noindex.")
+    if "/api/analytics/pageview" in text:
+        raise RuntimeError("Ve článku zůstal starý nefunkční skript ankety.")
 
     image_path = ROOT / "social" / image_url.rsplit("/", 1)[-1]
     if not image_path.exists() or image_path.stat().st_size < 10_000:
