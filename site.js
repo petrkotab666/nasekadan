@@ -59,6 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Ankety jsou obsluhované z externího skriptu, aby fungovaly i při blokování inline JavaScriptu.
+  // Veřejná trasa /api/newsletter/* je v Caddy přesměrována na backend a prefix se odstraní.
+  const pollEndpoint = '/api/newsletter/analytics/pageview';
   document.querySelectorAll('[data-poll-id]').forEach((section) => {
     if (section.dataset.pollBound === '1') return;
     section.dataset.pollBound = '1';
@@ -135,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let recorded = false;
 
         try {
-          const response = await fetch('/api/analytics/pageview', {
+          const response = await fetch(pollEndpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body,
@@ -148,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!recorded && navigator.sendBeacon) {
           try {
             recorded = navigator.sendBeacon(
-              '/api/analytics/pageview',
+              pollEndpoint,
               new Blob([body], { type: 'application/json' }),
             );
           } catch (_) {}
