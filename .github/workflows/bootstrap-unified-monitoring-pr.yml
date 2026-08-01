@@ -22,7 +22,16 @@ jobs:
       - name: Sestavit a zapsat jednotný monitoring
         run: |
           set -euo pipefail
-          cat .github/bootstrap-chunks/part* > "$RUNNER_TEMP/bootstrap.b64"
+          cat \
+            .github/bootstrap-chunks/part00 \
+            .github/bootstrap-chunks/part01 \
+            .github/bootstrap-chunks/part02 \
+            .github/bootstrap-chunks/part03a \
+            .github/bootstrap-chunks/part03b \
+            .github/bootstrap-chunks/part04 \
+            .github/bootstrap-chunks/part05 \
+            .github/bootstrap-chunks/part06 \
+            > "$RUNNER_TEMP/bootstrap.b64"
           base64 -d "$RUNNER_TEMP/bootstrap.b64" > "$RUNNER_TEMP/bootstrap.py"
           git rm -r .github/bootstrap-chunks
           python3 "$RUNNER_TEMP/bootstrap.py"
