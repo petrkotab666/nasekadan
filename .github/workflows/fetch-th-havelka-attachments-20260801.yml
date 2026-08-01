@@ -1,0 +1,151 @@
+name: Stáhnout přílohy Havelka – Tepelné hospodářství
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-th-havelka-attachments-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Stáhnout všechny soubory z odpovědi a žádosti
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces antiword
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          OUT=.github/research/havelka-106-th-attachments-20260801
+          rm -rf "$OUT" && mkdir -p "$OUT"/{raw,text,metadata}
+          cat > /tmp/th.py <<'PY'
+          import hashlib, json, re, subprocess, time, urllib.parse, zipfile
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          from lxml import etree
+
+          OUT=Path('.github/research/havelka-106-th-attachments-20260801')
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan document research)','Accept-Language':'cs,en;q=0.7'})
+          pages=[
+            'https://www.thkadan.cz/inpage/odpoved-29-9-2025/',
+            'https://www.thkadan.cz/inpage/zadost-17-9-2025/',
+            'https://www.thkadan.cz/rubrika/odpovedi-na-zadost-o-informace-zakonem-c-106-1999-sb/',
+            'https://www.thkadan.cz/rubrika/odpovedi-na-zadost-o-informace-zakonem-c-106-1999-sb/page/2/',
+            'https://www.thkadan.cz/stahnout/?layout=table&p=1',
+          ]
+          direct=[
+            'https://www.thkadan.cz/soubor/odpoved-na-zadost-o-informace-podle-zakona-c-106-1999-sb-jud/',
+          ]
+          seen=set(); downloads=[]; errors=[]; page_records=[]
+          def get(url,tries=5):
+            last=None
+            for i in range(tries):
+              try:
+                r=S.get(url,timeout=90,allow_redirects=True)
+                if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                r.raise_for_status(); return r
+              except Exception as e:
+                last=e; time.sleep(1+i*2)
+            raise last
+          def safe(s): return re.sub(r'[^A-Za-z0-9._-]+','_',urllib.parse.unquote(s or ''))[:180] or 'file'
+          def extract(p):
+            text=''
+            try:
+              if p.suffix.lower()=='.pdf':
+                q=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); text=q.stdout
+                if len(re.sub(r'\s+','',text))<150:
+                  d=Path('/tmp/ocr-'+hashlib.sha1(str(p).encode()).hexdigest()[:10]); d.mkdir(exist_ok=True)
+                  subprocess.run(['pdftoppm','-f','1','-l','80','-r','180','-png',str(p),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                  parts=[]
+                  for im in sorted(d.glob('p-*.png')):
+                    z=subprocess.run(['tesseract',str(im),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); parts.append(z.stdout)
+                  text='\n'.join(parts)
+              elif p.suffix.lower()=='.docx':
+                with zipfile.ZipFile(p) as z: root=etree.fromstring(z.read('word/document.xml'))
+                text='\n'.join(root.itertext())
+              elif p.suffix.lower()=='.doc':
+                q=subprocess.run(['antiword',str(p)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False); text=q.stdout
+              elif p.suffix.lower() in ('.html','.htm','.txt'):
+                text=p.read_text(encoding='utf-8',errors='replace')
+            except Exception as e: errors.append({'stage':'extract','file':str(p),'error':repr(e)})
+            return text
+          def save_response(url,r):
+            data=r.content; sha=hashlib.sha256(data).hexdigest()
+            if sha in {x.get('sha256') for x in downloads}: return
+            name=Path(urllib.parse.urlparse(r.url).path).name
+            ct=r.headers.get('content-type','').lower()
+            if not name or '.' not in name:
+              cd=r.headers.get('content-disposition','')
+              m=re.search(r"filename\*?=(?:UTF-8''|\")?([^\";]+)",cd,re.I)
+              name=m.group(1) if m else safe(urllib.parse.urlparse(url).path.strip('/').replace('/','-'))
+            name=safe(name)
+            if not Path(name).suffix:
+              if data.startswith(b'%PDF') or 'pdf' in ct: name+='.pdf'
+              elif 'wordprocessingml' in ct: name+='.docx'
+              elif 'msword' in ct: name+='.doc'
+              elif 'html' in ct: name+='.html'
+              else: name+='.bin'
+            p=OUT/'raw'/name
+            if p.exists(): p=OUT/'raw'/(sha[:10]+'-'+name)
+            p.write_bytes(data); text=extract(p)
+            tp=None
+            if text:
+              tp=OUT/'text'/(p.name+'.txt'); tp.write_text(text,encoding='utf-8',errors='replace')
+            downloads.append({'source_url':url,'final_url':r.url,'file':str(p),'bytes':len(data),'sha256':sha,'content_type':ct,'content_disposition':r.headers.get('content-disposition',''),'text_file':str(tp) if tp else None,'chars':len(text)})
+          def fetch_file(url):
+            if url in seen: return
+            seen.add(url)
+            try:
+              r=get(url); save_response(url,r)
+            except Exception as e: errors.append({'stage':'file','url':url,'error':repr(e)})
+          for u in direct: fetch_file(u)
+          for pageno in range(1,20):
+            pages.append(f'https://www.thkadan.cz/stahnout/?layout=table&p={pageno}')
+          queue=list(pages); page_seen=set()
+          while queue and len(page_seen)<100:
+            url=queue.pop(0)
+            if url in page_seen: continue
+            page_seen.add(url)
+            try:
+              r=get(url); html=r.text
+              hp=OUT/'raw'/('page-'+hashlib.sha1(url.encode()).hexdigest()[:12]+'.html'); hp.write_text(html,encoding='utf-8',errors='replace')
+              soup=BeautifulSoup(html,'lxml')
+              page_records.append({'url':url,'final_url':r.url,'title':soup.title.get_text(' ',strip=True) if soup.title else '','file':str(hp)})
+              for tag in soup.find_all(True):
+                vals=[]
+                for attr in ('href','src','data','data-src','data-href'):
+                  v=tag.get(attr)
+                  if v: vals.append(v)
+                for v in vals:
+                  full=urllib.parse.urljoin(r.url,v)
+                  lab=(tag.get_text(' ',strip=True)+' '+full).lower()
+                  if '/soubor/' in full or re.search(r'\.(pdf|docx?|rtf)(\?|$)',full,re.I):
+                    if any(k in lab for k in ('havel','17.9.2025','17-9-2025','17_9_2025','odpoved-na-zadost-o-informace-podle-zakona-c-106-1999-sb-jud')) or '/soubor/' in full:
+                      fetch_file(full)
+                  elif 'thkadan.cz/inpage/' in full and any(k in lab for k in ('17.9.2025','17-9-2025','havel')) and full not in page_seen:
+                    queue.append(full)
+            except Exception as e: errors.append({'stage':'page','url':url,'error':repr(e)})
+          (OUT/'metadata/pages.json').write_text(json.dumps(page_records,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Primární dokumenty Havelka – Tepelné hospodářství Kadaň','',f'- Stažené unikátní soubory: {len(downloads)}',f'- Chyby: {len(errors)}','']
+          for x in downloads: lines.append(f"- {x['final_url']} — `{x['file']}` — {x['bytes']} B — text {x['chars']} znaků")
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/th.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/havelka-106-th-attachments-20260801
+          git commit -m 'Přidat přílohy Havelka z Tepelného hospodářství' || exit 0
+          git push origin main
