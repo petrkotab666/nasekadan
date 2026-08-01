@@ -80,6 +80,37 @@ def publish_article() -> None:
     ARTICLE.write_text(text, encoding="utf-8", newline="\n")
 
 
+
+def enforce_poll_markup_after_pipeline() -> None:
+    """Po společné normalizaci znovu vynutí aktuální externí obsluhu ankety."""
+    text = ARTICLE.read_text(encoding="utf-8")
+    legacy = re.compile(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', re.I | re.S)
+    text = legacy.sub(
+        lambda match: "" if "/api/analytics/pageview" in match.group(1) and "data-poll-vote" in match.group(1) else match.group(0),
+        text,
+    )
+    text = text.replace(
+        "Funkční hlasování se připojí při zveřejnění článku.",
+        "Po hlasování se ihned zobrazí aktuální počty hlasů a procenta.",
+    )
+    site_tag = f'<script src="/site.js?v={POLL_VERSION}" defer></script>'
+    pattern = re.compile(
+        r'<script\b(?=[^>]*\bsrc=["\']/site\.js(?:\?v=[^"\']+)?["\'])[^>]*></script>',
+        re.I,
+    )
+    matches = list(pattern.finditer(text))
+    if matches:
+        first = matches[0]
+        text = text[:first.start()] + site_tag + text[first.end():]
+        text = pattern.sub("", text, count=max(0, len(matches) - 1))
+    elif "</body>" in text:
+        text = text.replace("</body>", site_tag + "\n</body>", 1)
+    else:
+        raise RuntimeError("Po normalizaci nelze vložit site.js pro anketu.")
+    ARTICLE.write_text(text, encoding="utf-8", newline="\n")
+
+# POLL_POST_PIPELINE_V2
+
 def run_common_pipeline() -> None:
     run("scripts/normalize_articles.py", "--write", "--check")
     run("scripts/generate_social_cards.py", "--write", "--check")
@@ -233,6 +264,7 @@ def validate() -> dict[str, str]:
 def main() -> None:
     publish_article()
     run_common_pipeline()
+    enforce_poll_markup_after_pipeline()
     payload = validate()
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
