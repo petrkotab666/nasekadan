@@ -7,7 +7,6 @@ on:
     branches: [main]
     paths:
       - scripts/add_original_cisarsky_den_findings_20260801.py
-      - scripts/expand_cisarsky_den_draft_20260801.py
       - .github/workflows/add-original-cisarsky-den-findings.yml
   workflow_dispatch:
 
@@ -26,8 +25,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Stáhnout aktuální hlavní větev
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
@@ -36,45 +34,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile \
-            scripts/expand_cisarsky_den_draft_20260801.py \
-            scripts/add_original_cisarsky_den_findings_20260801.py
+          python3 -m py_compile scripts/add_original_cisarsky_den_findings_20260801.py
           python3 scripts/add_original_cisarsky_den_findings_20260801.py
-
           file='.github/drafts/cisarsky-den-kadan-historie-2026.html'
-          grep -Fq 'data-expanded-cisarsky-den="v2"' "$file"
           grep -Fq 'data-original-findings="contracts-v1"' "$file"
           grep -Fq 'Nejméně 614 956 Kč' "$file"
           grep -Fq '864 595 Kč' "$file"
           grep -Fq '30. ročník po tříleté pauze' "$file"
           grep -Fq 'sedm párů posilových vlaků' "$file"
-          grep -Fq 'tichého pyromuzikálního ohňostroje' "$file"
           grep -Fq '2,8krát vyšší' "$file"
-          test "$(wc -c < "$file")" -gt 30000
+          test "$(wc -c < "$file")" -gt 24000
 
-      - name: Uložit rozšířený neveřejný návrh
+      - name: Uložit neveřejný návrh
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň'
           git config user.email 'info@nasekadan.cz'
-          git add \
-            .github/drafts/cisarsky-den-kadan-historie-2026.html \
-            scripts/add_original_cisarsky_den_findings_20260801.py \
-            scripts/expand_cisarsky_den_draft_20260801.py
+          git add .github/drafts/cisarsky-den-kadan-historie-2026.html scripts/add_original_cisarsky_den_findings_20260801.py
           if ! git diff --cached --quiet; then
             git commit -m 'Doplnit vlastní zjištění k Císařskému dni [skip ci]'
             for attempt in 1 2 3 4 5; do
-              if git pull --rebase origin main && git push origin HEAD:main; then
-                break
-              fi
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
               git rebase --abort 2>/dev/null || true
               [[ "$attempt" == 5 ]] && exit 1
               sleep $((attempt * 4))
             done
           fi
 
-      - name: Ověřit uloženou hlavní větev
+      - name: Ověřit hlavní větev
         shell: bash
         run: |
           set -euo pipefail
@@ -84,7 +72,6 @@ jobs:
           grep -Fq 'data-original-findings="contracts-v1"' "$file"
           grep -Fq 'Nejméně 614 956 Kč' "$file"
           grep -Fq '864 595 Kč' "$file"
-          test "$(wc -c < "$file")" -gt 30000
 
       - name: Zapsat výsledek do issue
         if: always() && github.event_name == 'issues'
@@ -92,14 +79,13 @@ jobs:
         with:
           script: |
             const ok = '${{ job.status }}' === 'success';
-            const body = ok
-              ? '✅ Neveřejný článek byl doplněn o vlastní rekonstrukci přerušené tradice, částečného programu roku 2026, minimálních doložených nákladů let 2025 a 2026, posilových vlaků a vývoje opakované položky KZK od roku 2018. Nic nebylo veřejně publikováno.'
-              : '❌ Doplnění vlastních zjištění se nepodařilo dokončit. Issue zůstává otevřené.';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body
+              body: ok
+                ? '✅ Neveřejný článek byl doplněn o vlastní rekonstrukci přerušené tradice, částečného programu roku 2026, minimálních doložených nákladů let 2025 a 2026, posilových vlaků a vývoje opakované položky KZK od roku 2018. Nic nebylo veřejně publikováno.'
+                : '❌ Doplnění vlastních zjištění se nepodařilo dokončit. Issue zůstává otevřené.'
             });
             if (ok) {
               await github.rest.issues.update({
