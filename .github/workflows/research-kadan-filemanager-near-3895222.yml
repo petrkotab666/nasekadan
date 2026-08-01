@@ -1,0 +1,82 @@
+name: Rychlé okolí filemanageru 3895222
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-kadan-filemanager-near-3895222.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalovat PDF a OCR nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests
+      - name: Prověřit ID 3895070 až 3895370
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p result/{files,text,ocr}
+          cat > /tmp/near.py <<'PY'
+          import concurrent.futures,hashlib,json,re,subprocess,time
+          from pathlib import Path
+          import requests
+          OUT=Path('result'); S=requests.Session(); S.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadan public-document research; +https://nasekadan.cz/)'
+          terms=['hossner','nemocnice kadaň','nemocnice kadan','dodatek č. 1','dodatek c. 1','pracovní smlouv','pracovni smlouv','kritéria hodnocení','kriteria hodnoceni','270 000','140 000','pobídková','pobidkova','11.11.2016','11. 11. 2016']
+          def getid(fid):
+              u=f'https://www.mesto-kadan.cz/filemanager/files/{fid}.pdf'
+              try:
+                  r=S.get(u,timeout=25,allow_redirects=True)
+                  if r.status_code==200 and r.content.startswith(b'%PDF') and len(r.content)>500:
+                      return fid,u,r.url,r.content,r.headers.get('content-disposition','')
+              except Exception: pass
+              return None
+          rows=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
+              for z in ex.map(getid,range(3895070,3895371)):
+                  if z: rows.append(z)
+          print('PDF_COUNT',len(rows))
+          meta=[]; findings=[]
+          for fid,u,final,data,disp in rows:
+              p=OUT/'files'/f'{fid}.pdf'; p.write_bytes(data)
+              info=subprocess.run(['pdfinfo',str(p)],capture_output=True,text=True).stdout
+              m=re.search(r'Pages:\s+(\d+)',info); pages=int(m.group(1)) if m else 0
+              q=subprocess.run(['pdftotext','-layout',str(p),'-'],capture_output=True,text=True,timeout=120)
+              text=q.stdout or ''; method='pdftotext'
+              if len(re.sub(r'\s+','',text))<150:
+                  d=OUT/'ocr'/str(fid); d.mkdir(exist_ok=True)
+                  subprocess.run(['pdftoppm','-f','1','-l',str(min(pages or 1,60)),'-r','155','-jpeg',str(p),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=300)
+                  parts=[]
+                  for img in sorted(d.glob('p-*.jpg')):
+                      z=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],capture_output=True,text=True,timeout=90)
+                      parts.append(z.stdout)
+                  ocr='\n'.join(parts)
+                  if len(ocr)>len(text): text=ocr; method='ocr'
+              (OUT/'text'/f'{fid}.txt').write_text(text,encoding='utf-8',errors='replace')
+              low=text.lower(); found=[t for t in terms if t in low]
+              rec={'id':fid,'url':u,'final_url':final,'bytes':len(data),'pages':pages,'content_disposition':disp,'method':method,'chars':len(text),'terms':found,'sha256':hashlib.sha256(data).hexdigest()}
+              meta.append(rec)
+              print('FILE',json.dumps(rec,ensure_ascii=False))
+              if found:
+                  snippets=[]
+                  for t in found:
+                      i=low.find(t); snippets.append(re.sub(r'\s+',' ',text[max(0,i-600):i+1800]).strip())
+                  findings.append({**rec,'snippets':snippets})
+          (OUT/'meta.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('FINDINGS',json.dumps(findings,ensure_ascii=False,indent=2))
+          PY
+          python3 /tmp/near.py | tee result/output.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kadan-near-3895222
+          path: result
+          retention-days: 2
