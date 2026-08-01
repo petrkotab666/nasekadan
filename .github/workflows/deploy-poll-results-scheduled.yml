@@ -1,0 +1,26 @@
+name: Jednorázově nasadit výsledky ankety SMR
+
+on:
+  schedule:
+    - cron: '25,30,35,40 4 1 8 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy-poll-results-scheduled
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nasadit a veřejně ověřit živé výsledky ankety
+        shell: bash
+        run: bash scripts/deploy_poll_results.sh
