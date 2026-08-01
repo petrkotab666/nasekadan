@@ -1,0 +1,293 @@
+name: Hluboká rešerše soudních spisů Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/hossner-infosoud-trigger.txt'
+      - '.github/workflows/research-hossner-infosoud-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-hossner-infosoud-20260801
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat klienta InfoSoudu
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet infosoud requests
+
+      - name: Projít civilní spisy a události
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .github/research/hossner-infosoud-20260801
+          mkdir -p .github/research/hossner-infosoud-20260801
+          cat > /tmp/research_hossner.py <<'PY'
+          from __future__ import annotations
+
+          import concurrent.futures
+          import dataclasses
+          import inspect
+          import json
+          import re
+          import time
+          import traceback
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from typing import Any
+
+          OUT = Path('.github/research/hossner-infosoud-20260801')
+          OUT.mkdir(parents=True, exist_ok=True)
+
+          def plain(value: Any) -> Any:
+              if dataclasses.is_dataclass(value):
+                  return {k: plain(v) for k, v in dataclasses.asdict(value).items()}
+              if isinstance(value, dict):
+                  return {str(k): plain(v) for k, v in value.items()}
+              if isinstance(value, (list, tuple, set)):
+                  return [plain(v) for v in value]
+              if hasattr(value, 'model_dump'):
+                  return plain(value.model_dump())
+              if hasattr(value, 'dict'):
+                  try:
+                      return plain(value.dict())
+                  except Exception:
+                      pass
+              if hasattr(value, '__dict__') and not isinstance(value, (str, bytes, int, float, bool)):
+                  return {k: plain(v) for k, v in vars(value).items() if not k.startswith('_')}
+              if isinstance(value, (datetime,)):
+                  return value.isoformat()
+              try:
+                  json.dumps(value)
+                  return value
+              except Exception:
+                  return str(value)
+
+          def text_of(value: Any) -> str:
+              return json.dumps(plain(value), ensure_ascii=False, sort_keys=True, default=str)
+
+          import infosoud
+          from infosoud import InfoSoudClient
+
+          diagnostic = {
+              'module_file': getattr(infosoud, '__file__', None),
+              'module_version': getattr(infosoud, '__version__', None),
+              'client_signature': str(inspect.signature(InfoSoudClient)),
+              'methods': {},
+          }
+          for name in dir(InfoSoudClient):
+              if name.startswith('_'):
+                  continue
+              attr = getattr(InfoSoudClient, name)
+              if callable(attr):
+                  try:
+                      diagnostic['methods'][name] = {
+                          'signature': str(inspect.signature(attr)),
+                          'source': inspect.getsource(attr)[:12000],
+                      }
+                  except Exception as exc:
+                      diagnostic['methods'][name] = {'error': repr(exc)}
+          OUT.joinpath('client-diagnostic.json').write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding='utf-8')
+
+          client = InfoSoudClient()
+          court_resolution = None
+          court_candidates = ['Chomutov', 'Okresní soud v Chomutově', 'OS Chomutov']
+          for query in court_candidates:
+              try:
+                  result = client.resolve_court_name(query)
+                  if result:
+                      court_resolution = result
+                      break
+              except Exception:
+                  continue
+          OUT.joinpath('court-resolution.json').write_text(json.dumps(plain(court_resolution), ensure_ascii=False, indent=2), encoding='utf-8')
+
+          def extract_court_code(obj: Any) -> str | None:
+              p = plain(obj)
+              preferred = {'kod', 'code', 'organizaceKod', 'id', 'zkratka', 'court_code'}
+              if isinstance(p, str):
+                  if re.fullmatch(r'[A-Z0-9]{5,20}', p):
+                      return p
+                  return None
+              if isinstance(p, dict):
+                  for key in preferred:
+                      if key in p and isinstance(p[key], str) and p[key]:
+                          return p[key]
+                  for value in p.values():
+                      found = extract_court_code(value)
+                      if found:
+                          return found
+              if isinstance(p, list):
+                  for value in p:
+                      found = extract_court_code(value)
+                      if found:
+                          return found
+              return None
+
+          court_code = extract_court_code(court_resolution)
+          if not court_code:
+              # Kód okresního soudu v Chomutově používaný starší verzí InfoSoudu.
+              court_code = 'OSCHOM'
+
+          errors: list[dict[str, Any]] = []
+          valid: list[dict[str, Any]] = []
+
+          def has_case_content(result: Any) -> bool:
+              p = plain(result)
+              t = text_of(p).lower()
+              if not p:
+                  return False
+              negatives = ['nenalezen', 'nebylo nalezeno', 'not found', 'žádné řízení', 'zadane rizeni nebylo nalezeno']
+              if any(x in t for x in negatives):
+                  return False
+              if isinstance(p, dict):
+                  # Typické odpovědi mají stav, organizaci nebo události.
+                  return any(k.lower() in {'stav', 'organizace', 'udalosti', 'řízení', 'rizeni', 'spisovaznacka'} for k in p)
+              return len(t) > 20
+
+          def query_one(file_no: str) -> dict[str, Any] | None:
+              last_exc = None
+              for court in [court_code, court_resolution, 'OSCHOM', 'OSSCEDC']:
+                  if court is None:
+                      continue
+                  try:
+                      case = client.search_case(file_no, court)
+                      if not has_case_content(case):
+                          continue
+                      hearings = None
+                      try:
+                          hearings = client.search_hearings(file_no, court)
+                      except Exception as exc:
+                          hearings = {'error': repr(exc)}
+                      return {
+                          'file_no': file_no,
+                          'court_argument': plain(court),
+                          'case': plain(case),
+                          'hearings': plain(hearings),
+                      }
+                  except Exception as exc:
+                      last_exc = exc
+              if last_exc:
+                  return {'file_no': file_no, '_query_error': repr(last_exc)}
+              return None
+
+          # Hossnerova žaloba byla podána v březnu 2025 a podle rozvrhu práce ji řeší senát 30 C.
+          file_numbers = [f'30 C {n}/2025' for n in range(1, 401)]
+          # Pro jistotu prověříme i konec roku 2024 a začátek 2026.
+          file_numbers += [f'30 C {n}/2024' for n in range(250, 401)]
+          file_numbers += [f'30 C {n}/2026' for n in range(1, 151)]
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+              future_map = {pool.submit(query_one, spis): spis for spis in file_numbers}
+              for idx, future in enumerate(concurrent.futures.as_completed(future_map), 1):
+                  spis = future_map[future]
+                  try:
+                      result = future.result()
+                      if result and '_query_error' in result:
+                          errors.append(result)
+                      elif result:
+                          valid.append(result)
+                  except Exception as exc:
+                      errors.append({'file_no': spis, 'error': repr(exc), 'trace': traceback.format_exc()})
+                  if idx % 100 == 0:
+                      print(f'Prozkoumáno {idx}/{len(file_numbers)}, platných {len(valid)}')
+
+          # Seřadit numericky.
+          def sort_key(item: dict[str, Any]):
+              m = re.search(r'(\d+)\s*/\s*(\d{4})', item['file_no'])
+              return (int(m.group(2)), int(m.group(1))) if m else (0, 0)
+          valid.sort(key=sort_key)
+
+          # Skórování podle známých faktů: jednání 23. 3. 2026, první jednání v lednu 2026,
+          # soudkyně Hana Jakubcová a mediace/přerušení.
+          candidates = []
+          for item in valid:
+              t = text_of(item).lower()
+              score = 0
+              reasons = []
+              checks = [
+                  (['2026-03-23', '23.03.2026', '23. 3. 2026', '23.3.2026'], 12, 'jednání 23. 3. 2026'),
+                  (['jakubcov', 'hana jakubc'], 8, 'Hana Jakubcová'),
+                  (['medi', 'mediátor'], 7, 'mediace'),
+                  (['přerušen', 'prerus'], 5, 'přerušení'),
+                  (['2026-01-', 'leden 2026'], 4, 'událost v lednu 2026'),
+                  (['pracovní poměr', 'pracovni pomer', 'neplatnost rozvázání', 'neplatnost rozvazani'], 10, 'pracovněprávní předmět'),
+              ]
+              for needles, pts, reason in checks:
+                  if any(n in t for n in needles):
+                      score += pts
+                      reasons.append(reason)
+              if score:
+                  candidates.append({'score': score, 'reasons': reasons, **item})
+          candidates.sort(key=lambda x: (-x['score'], sort_key(x)))
+
+          OUT.joinpath('valid-30c-cases.json').write_text(json.dumps(valid, ensure_ascii=False, indent=2), encoding='utf-8')
+          OUT.joinpath('candidates.json').write_text(json.dumps(candidates, ensure_ascii=False, indent=2), encoding='utf-8')
+          OUT.joinpath('errors.json').write_text(json.dumps(errors[:200], ensure_ascii=False, indent=2), encoding='utf-8')
+
+          summary = {
+              'generated_at_utc': datetime.now(timezone.utc).isoformat(),
+              'court_resolution': plain(court_resolution),
+              'court_code_used': court_code,
+              'queried_count': len(file_numbers),
+              'valid_count': len(valid),
+              'error_count': len(errors),
+              'top_candidates': [
+                  {
+                      'file_no': c['file_no'],
+                      'score': c['score'],
+                      'reasons': c['reasons'],
+                      'case_text': text_of(c.get('case'))[:5000],
+                      'hearings_text': text_of(c.get('hearings'))[:5000],
+                  }
+                  for c in candidates[:25]
+              ],
+          }
+          OUT.joinpath('summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding='utf-8')
+
+          md = [
+              '# Hossner / Nemocnice Kadaň – průchod InfoSoudem',
+              '',
+              f"Vygenerováno: {summary['generated_at_utc']}",
+              f"Dotazů: {len(file_numbers)}, platných spisů: {len(valid)}, chyb: {len(errors)}",
+              f"Rozpoznaný soud: `{court_code}`",
+              '',
+              '## Kandidáti',
+          ]
+          for c in candidates[:40]:
+              md += [f"### {c['file_no']} — skóre {c['score']}", '- ' + ', '.join(c['reasons']), '', '```json', text_of(c)[:12000], '```', '']
+          OUT.joinpath('README.md').write_text('\n'.join(md), encoding='utf-8')
+
+          # Selhat pouze tehdy, pokud se nepodařilo získat vůbec žádný platný spis.
+          if not valid:
+              raise SystemExit('InfoSoud nevrátil žádný platný spis; viz diagnostika.')
+          PY
+          python3 /tmp/research_hossner.py
+
+      - name: Uložit výsledky
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/research/hossner-infosoud-20260801
+          git commit -m 'Vytěžit soudní spisy Hossner z InfoSoudu' || true
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            sleep $((attempt * 4))
+          done
+          exit 1
