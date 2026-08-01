@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-01T21:26:12.519108+00:00",
+  "checkedAt": "2026-08-01T22:27:47.542104+00:00",
   "bootstrap": false,
   "sourceCount": 106,
-  "checkedSources": 93,
-  "failedSources": 13,
-  "itemsParsed": 6620,
-  "uniqueItems": 3580,
+  "checkedSources": 88,
+  "failedSources": 18,
+  "itemsParsed": 6426,
+  "uniqueItems": 3460,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 708,
+    "genericTitle": 685,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 1,
-    "notEditoriallySignificant": 1,
+    "broadWithoutLocalMatch": 0,
+    "notEditoriallySignificant": 8,
     "notFreshOrUndated": 0,
-    "duplicate": 2332
+    "duplicate": 2281
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -163,8 +163,9 @@
       "url": "https://www.tskadan.cz/",
       "category": "Městské služby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 20
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Kabelová televize Kadaň",
@@ -253,8 +254,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 42
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -358,8 +360,9 @@
       "url": "https://www.zus-kadan.cz/",
       "category": "Umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 46
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Gymnázium Kadaň",
@@ -399,7 +402,7 @@
       "category": "Regionální kultura – Most",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 124
+      "itemsParsed": 125
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -538,7 +541,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 47
+      "itemsParsed": 46
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -579,15 +582,16 @@
       "category": "Železniční doprava",
       "tier": "transport",
       "status": "checked",
-      "itemsParsed": 85
+      "itemsParsed": 84
     },
     {
       "name": "Doprava Ústeckého kraje",
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -699,8 +703,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 85
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -822,7 +827,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Město Kadaň – úřední deska",
