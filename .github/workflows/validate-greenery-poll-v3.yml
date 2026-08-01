@@ -62,13 +62,14 @@ jobs:
           article='clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
           grep -Fq 'data-poll-id="sekani-travniku-kadan-2026"' "$article"
           grep -Fq '/site.js?v=20260801-poll-system-v2' "$article"
-          grep -Fq 'Po hlasování se ihned zobrazí aktuální počty hlasů a procenta.' "$article"
+          grep -Eiq 'počt(y|u) hlasů|průběžné výsledky|procenta' "$article"
           ! grep -Fq '/api/analytics/pageview' "$article"
           grep -Fq '/api/newsletter/poll/vote' site.js
           grep -Fq '/api/newsletter/poll/results' site.js
           grep -Fq 'Průběžné výsledky' site.js
           grep -Fq 'poll-result-value' site.js
           grep -Fq '# BEGIN POLL_RESULTS_API' newsletter/server.py
+          grep -Fq 'POLL_POST_PIPELINE_V2' scripts/prepare_greenery_publication_20260801.py
           test -s .github/greenery-publication-bundle.json
           python3 - <<'PY'
           import json
