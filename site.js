@@ -78,6 +78,16 @@ document.addEventListener('DOMContentLoaded', () => {
       .poll-result-fill{height:100%;width:0;border-radius:inherit;background:#9f2626;transition:width .35s ease}
       .poll-results-status{margin:8px 0 0!important;color:#73818a;font-size:12px!important}
       .poll-results-error{color:#8e2525!important}
+      /* POLL_GREENERY_HIGH_CONTRAST_V4: tmavá anketa potřebuje světlý text. */
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-results{background:rgba(3,18,27,.30);border:1px solid rgba(255,255,255,.30);border-radius:16px;padding:18px 18px 14px}
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-results-head,
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-results-head strong,
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-label{color:#ffffff!important;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-results-total,
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-value,
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-results-status{color:#eef8fb!important;font-weight:800}
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-track{background:#f5f8f9;box-shadow:0 0 0 1px rgba(255,255,255,.65)}
+      [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-fill{background:#d92f38}
     `;
     document.head.appendChild(style);
   }
