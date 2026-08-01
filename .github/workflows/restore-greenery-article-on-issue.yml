@@ -1,0 +1,142 @@
+name: Obnovit zmizelý článek o sečení
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: restore-greenery-article-production
+  cancel-in-progress: true
+
+env:
+  SLUG: sekani-travniku-kadan-spravci-vysky-2026
+  ARTICLE: clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+  PUBLIC_URL: https://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+  EXPECTED: Sedm centimetrů i dvě seče ročně
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  restore:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] restore greenery article')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit úplnou aktuální publikační sadu
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$ARTICLE"
+          grep -Fq "$EXPECTED" "$ARTICLE"
+          for file in index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml; do
+            test -s "$file"
+            grep -Fq "$SLUG" "$file"
+          done
+          social_file="$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text=Path('clanky/sekani-travniku-kadan-spravci-vysky-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'<meta property="og:image" content="https://nasekadan\.cz/([^"]+)"',text)
+          if not m: raise SystemExit('Chybí OG obrázek')
+          print(m.group(1))
+          PY
+          )"
+          test -s "$social_file"
+          echo "social_file=$social_file" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/greenery-restore"
+          cp --parents "$ARTICLE" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt site.js "$social_file" "$RUNNER_TEMP/greenery-restore/"
+          tar -C "$RUNNER_TEMP/greenery-restore" -czf "$RUNNER_TEMP/greenery-restore.tar.gz" .
+
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Obnovit aktuální soubory na produkci
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/greenery-restore.tar.gz" ubuntu@57.129.43.215:/tmp/greenery-restore.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/greenery-restore.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/greenery-restore.tar.gz nasekadan-web:/tmp/greenery-restore.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/greenery-restore.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/greenery-restore.tar.gz
+          fi
+          grep -Fq 'Sedm centimetrů i dvě seče ročně' /var/www/nasekadan/clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+          for f in index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml; do grep -Fq 'sekani-travniku-kadan-spravci-vysky-2026' "/var/www/nasekadan/$f"; done
+          rm -f /tmp/greenery-restore.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit článek a všechny odkazy
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          social='${{ steps.prepare.outputs.social_file }}'
+          ok=false
+          for attempt in $(seq 1 15); do
+            article="$(curl -4 -kfsS --max-time 25 "${PUBLIC_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            image_code="$(curl -4 -ksS -o /dev/null -w '%{http_code}' --max-time 25 "https://nasekadan.cz/${social}?v=${stamp}-${attempt}" || true)"
+            if grep -Fq "$EXPECTED" <<<"$article" \
+              && grep -Fq "$SLUG" <<<"$home" \
+              && grep -Fq "$SLUG" <<<"$archive" \
+              && grep -Fq "$SLUG" <<<"$rss" \
+              && grep -Fq "$SLUG" <<<"$sitemap" \
+              && grep -Fq "$SLUG" <<<"$news" \
+              && [[ "$image_code" == 200 ]]; then
+              ok=true
+              break
+            fi
+            sleep 6
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          [[ "$ok" == true ]]
+
+      - name: Zapsat výsledek do issue
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
+            const body = ok
+              ? '✅ Článek o sečení je znovu veřejný. Ověřen je samotný článek, titulní stránka, archiv, RSS, sitemap, news sitemap i sociální obrázek.\n\nhttps://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+              : `❌ Obnova nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}, veřejná kontrola: ${process.env.VERIFIED || 'false'}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
