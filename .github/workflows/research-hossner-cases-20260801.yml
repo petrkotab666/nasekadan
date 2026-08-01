@@ -6,6 +6,7 @@ on:
       - research/hossner-cases-20260801
     paths:
       - scripts/research_hossner_cases_20260801.py
+      - scripts/probe_infosoud_api_20260801.py
       - .github/workflows/research-hossner-cases-20260801.yml
   workflow_dispatch:
 
@@ -27,7 +28,7 @@ jobs:
           ref: research/hossner-cases-20260801
           fetch-depth: 0
 
-      - name: Připravit Python a nástroje pro dokumenty
+      - name: Připravit Python a nástroje
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -40,12 +41,12 @@ jobs:
           python -m pip install --disable-pip-version-check requests beautifulsoup4 lxml playwright
           python -m playwright install --with-deps chromium
 
-      - name: Projít InfoSoud, webové archivy a dokumenty
+      - name: Rekonstruovat API InfoSoudu
         run: |
           set -euo pipefail
-          python scripts/research_hossner_cases_20260801.py
+          python scripts/probe_infosoud_api_20260801.py
 
-      - name: Uložit získané podklady do výzkumné větve
+      - name: Uložit získané podklady
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň rešerše'
@@ -55,7 +56,7 @@ jobs:
             echo 'Rešerše nevytvořila žádná nová data.'
             exit 0
           fi
-          git commit -m 'Uložit výsledky hloubkové rešerše sporů Petra Hossnera'
+          git commit -m 'Uložit sondu nového API InfoSoudu'
           for attempt in 1 2 3 4 5; do
             if git push origin HEAD:research/hossner-cases-20260801; then
               exit 0
@@ -70,7 +71,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hossner-cases-research
+          name: hossner-cases-research-api
           path: .github/research/hossner-cases-2026
           if-no-files-found: warn
           retention-days: 30
