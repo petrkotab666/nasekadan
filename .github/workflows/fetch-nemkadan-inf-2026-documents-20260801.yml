@@ -1,0 +1,86 @@
+name: Stáhnout INF dokumenty Nemocnice Kadaň 2026
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-nemkadan-inf-2026-documents-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Stáhnout a OCR dokumenty 2026
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests
+          OUT=.github/research/nemkadan-inf-2026-20260801
+          rm -rf "$OUT" && mkdir -p "$OUT"/{pdf,text,pages,metadata}
+          cat > /tmp/nem2026.py <<'PY'
+          import hashlib,json,re,subprocess,time,urllib.parse
+          from pathlib import Path
+          import requests
+          OUT=Path('.github/research/nemkadan-inf-2026-20260801')
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan public document archive)','Accept-Language':'cs,en;q=0.7'})
+          docs=[
+            ('INF-2026-01','268cs_10.pdf','INF 2026-01.pdf'),
+            ('INF-2026-02','268cs_11.pdf','INF 2026-02.pdf'),
+            ('INF-2026-03','268cs_12.pdf','INF 2026-03.pdf'),
+            ('INF-2026-04','268cs_13.pdf','INF 2026-04.pdf'),
+            ('INF-2026-05','268cs_14.pdf','INF 2026-05.pdf'),
+          ]
+          rec=[]; err=[]
+          def get(u):
+            last=None
+            for i in range(5):
+              try:
+                r=S.get(u,timeout=120,allow_redirects=True)
+                if r.status_code in (429,500,502,503,504): raise RuntimeError(r.status_code)
+                r.raise_for_status(); return r
+              except Exception as e: last=e; time.sleep(1+i*2)
+            raise last
+          for label,sf,orig in docs:
+            u='https://www.nemkadan.cz/e_download.php?'+urllib.parse.urlencode({'file':'/data/editor/'+sf,'original':orig})
+            try:
+              r=get(u); data=r.content
+              if not data.startswith(b'%PDF'): raise RuntimeError(f'not pdf {r.status_code} {r.headers.get("content-type")} {data[:60]!r}')
+              p=OUT/'pdf'/(label+'.pdf'); p.write_bytes(data)
+              info=subprocess.run(['pdfinfo',str(p)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False).stdout
+              m=re.search(r'^Pages:\s+(\d+)',info,re.M); n=int(m.group(1)) if m else 0
+              emb=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False).stdout
+              (OUT/'text'/(label+'-embedded.txt')).write_text(emb,encoding='utf-8',errors='replace')
+              d=OUT/'pages'/label; d.mkdir(parents=True,exist_ok=True)
+              subprocess.run(['pdftoppm','-r','190','-png',str(p),str(d/'page')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+              parts=[]; pr=[]
+              for i,img in enumerate(sorted(d.glob('page-*.png')),1):
+                txt=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False).stdout
+                tp=OUT/'text'/(f'{label}-page-{i:02d}.txt'); tp.write_text(txt,encoding='utf-8',errors='replace')
+                parts.append(f'\n\n===== PAGE {i} =====\n\n{txt}')
+                pr.append({'page':i,'image':str(img),'text':str(tp),'chars':len(txt)})
+              ocr=''.join(parts); (OUT/'text'/(label+'-ocr.txt')).write_text(ocr,encoding='utf-8',errors='replace')
+              rec.append({'label':label,'url':u,'file':str(p),'pages':n,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'embedded_chars':len(emb),'ocr_chars':len(ocr),'page_records':pr})
+            except Exception as e: err.append({'label':label,'url':u,'error':repr(e)})
+          (OUT/'metadata/downloads.json').write_text(json.dumps(rec,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/errors.json').write_text(json.dumps(err,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# INF Nemocnice Kadaň 2026','',f'- Staženo: {len(rec)}',f'- Chyby: {len(err)}','']
+          for x in rec: lines.append(f"- **{x['label']}** — `{x['file']}` — {x['pages']} stran — {x['bytes']} B")
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+          python3 /tmp/nem2026.py
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/nemkadan-inf-2026-20260801
+          git commit -m 'Přidat INF dokumenty Nemocnice Kadaň 2026' || exit 0
+          git push origin main
