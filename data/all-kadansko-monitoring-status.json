@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-01T07:42:02.382285+00:00",
+  "checkedAt": "2026-08-01T10:16:58.549114+00:00",
   "bootstrap": false,
   "sourceCount": 102,
-  "checkedSources": 89,
-  "failedSources": 13,
-  "itemsParsed": 6545,
-  "uniqueItems": 3573,
+  "checkedSources": 86,
+  "failedSources": 16,
+  "itemsParsed": 6300,
+  "uniqueItems": 3381,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 669,
+    "genericTitle": 664,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 3,
-    "notEditoriallySignificant": 1,
+    "broadWithoutLocalMatch": 9,
+    "notEditoriallySignificant": 2,
     "notFreshOrUndated": 0,
-    "duplicate": 2303
+    "duplicate": 2255
   },
   "coverage": {
     "directoryOrganizations": 63,
@@ -67,7 +67,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -398,8 +398,9 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 124
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -456,8 +457,9 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 82
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -612,7 +614,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 266
+      "itemsParsed": 267
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -740,8 +742,9 @@
       "url": "https://karateklubkadan.cz/wp2",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 43
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 503: Service Unavailable"
     },
     {
       "name": "BK DDM Kadaň",
@@ -839,7 +842,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 14
+      "itemsParsed": 15
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -871,7 +874,7 @@
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 1
+      "itemsParsed": 2
     },
     {
       "name": "Google News – kadaňské organizace a služby",
@@ -879,7 +882,7 @@
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 4
+      "itemsParsed": 5
     }
   ]
 }
