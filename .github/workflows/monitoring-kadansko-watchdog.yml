@@ -1,0 +1,89 @@
+name: Jednotný monitoring Kadaňska – watchdog
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '7 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'data/monitoring-registry.json'
+      - 'scripts/check_monitoring_health.py'
+      - '.github/workflows/monitoring-kadansko-watchdog.yml'
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Načíst poslední skutečné běhy všech vrstev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+
+          workflows={
+            'urgent':['monitoring-kadansko-urgent.yml','monitoring-kadansko-urgent-cloud.yml'],
+            'hourly':['monitoring-kadansko-hourly.yml'],
+            'daily':['monitoring-kadansko-daily.yml'],
+          }
+          result={}
+          for mode, names in workflows.items():
+            runs=[]
+            for name in names:
+              try:
+                raw=subprocess.check_output([
+                  'gh','run','list','--repo',os.environ['GITHUB_REPOSITORY'],
+                  '--workflow',name,'--limit','5',
+                  '--json','createdAt,updatedAt,status,conclusion,url'
+                ],text=True)
+                runs.extend(json.loads(raw))
+              except subprocess.CalledProcessError:
+                pass
+            successful=[r for r in runs if r.get('conclusion')=='success']
+            pool=successful or runs
+            if pool:
+              result[mode]=max(pool,key=lambda r:r.get('updatedAt') or r.get('createdAt') or '')
+          Path(os.environ['RUNNER_TEMP'],'monitoring-workflow-runs.json').write_text(
+            json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Vytvořit jednotný zdravotní report
+        run: |
+          python3 scripts/check_monitoring_health.py \
+            --workflow-runs "$RUNNER_TEMP/monitoring-workflow-runs.json" \
+            --output "$RUNNER_TEMP/monitoring-health.md" \
+            --json-output "$RUNNER_TEMP/monitoring-health.json"
+
+      - name: Otevřít nebo uzavřít jediný zdravotní issue
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          HEALTHY=$(python3 -c "import json; print(str(json.load(open('$RUNNER_TEMP/monitoring-health.json'))['healthy']).lower())")
+          CMD=(python3 scripts/upsert_github_issue.py \
+            --fingerprint unified-kadansko-monitor-health \
+            --title '[MONITORING KADAŇSKO] Jednotný monitoring vyžaduje zásah [unified-kadansko-monitor-health]' \
+            --body-file "$RUNNER_TEMP/monitoring-health.md" \
+            --assignee petrkotab666)
+          if [ "$HEALTHY" = true ]; then
+            CMD+=(--close)
+          else
+            CMD+=(--comment-existing)
+          fi
+          "${CMD[@]}"
+          if [ "$HEALTHY" != true ]; then
+            exit 1
+          fi
