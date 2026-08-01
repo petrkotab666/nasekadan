@@ -2,23 +2,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-import runpy
 
 PATH = Path('.github/drafts/cisarsky-den-kadan-historie-2026.html')
-EXPANDER = Path('scripts/expand_cisarsky_den_draft_20260801.py')
 
 if not PATH.is_file():
     raise SystemExit('Chybí návrh článku o Císařském dni.')
 
 text = PATH.read_text(encoding='utf-8')
-
-# Nejdřív bezpečně dokončit předchozí obsahové rozšíření. Skript je idempotentní.
-if 'data-expanded-cisarsky-den="v2"' not in text:
-    if not EXPANDER.is_file():
-        raise SystemExit('Chybí předchozí rozšiřující skript.')
-    runpy.run_path(str(EXPANDER), run_name='__main__')
-    text = PATH.read_text(encoding='utf-8')
-
 if 'data-original-findings="contracts-v1"' in text:
     print('Vlastní zjištění už jsou v návrhu vložena.')
     raise SystemExit(0)
@@ -29,35 +19,26 @@ if css_anchor not in text:
     raise SystemExit('Chybí CSS kotva pro vlastní zjištění.')
 text = text.replace(css_anchor, css_extra + css_anchor, 1)
 
-# Mobilní rozložení nových tabulek a karet.
-mobile_old = '@media(max-width:700px){.facts,.fact-grid,.role-grid,.route-grid,.comparison{grid-template-columns:1fr}.program div{grid-template-columns:1fr}.toc ol,.practical ul{columns:1}'
-mobile_new = '@media(max-width:700px){.facts,.fact-grid,.role-grid,.route-grid,.comparison,.finding-grid,.cost-trend{grid-template-columns:1fr}.program div{grid-template-columns:1fr}.toc ol,.practical ul{columns:1}.money-table{display:block;overflow-x:auto}'
+mobile_old = '@media(max-width:700px){.facts{grid-template-columns:1fr}.program div{grid-template-columns:1fr}'
+mobile_new = '@media(max-width:700px){.facts,.finding-grid,.cost-trend{grid-template-columns:1fr}.money-table{display:block;overflow-x:auto}.program div{grid-template-columns:1fr}'
 if mobile_old in text:
     text = text.replace(mobile_old, mobile_new, 1)
-elif '.finding-grid' not in text.split('@media(max-width:700px)', 1)[-1]:
-    raise SystemExit('Nepodařilo se doplnit mobilní styly.')
-
-# Rozšířit obsahový přehled o originální zjištění.
-toc_anchor = '<li><a href="#poradatelstvi">Kdo akci pořádá</a></li>'
-toc_extra = '<li><a href="#prerusena-tradice">Přerušená tradice</a></li><li><a href="#smlouvy-2026">Co už prozradily smlouvy</a></li><li><a href="#kolik-stoji">Kolik stojí vybrané části</a></li>'
-if toc_anchor in text and '#kolik-stoji' not in text:
-    text = text.replace(toc_anchor, toc_anchor + toc_extra, 1)
 
 insert_anchor = '  <h2>Proč slavnost přežila více než tři desetiletí</h2>\n'
 if insert_anchor not in text:
     raise SystemExit('Chybí místo pro vložení vlastních zjištění.')
 
 original = '''  <section data-original-findings="contracts-v1">
-  <h2 id="prerusena-tradice">„34. ročník“ neznamená 34 skutečně uskutečněných slavností</h2>
+  <h2>„34. ročník“ neznamená 34 skutečně uskutečněných slavností</h2>
   <p>Na první pohled se zdá, že Císařský den probíhá bez přerušení od roku 1993. Číslování ale vypráví přesnější příběh. Kadaňské noviny označily návrat v roce 2022 za <strong>30. ročník po tříleté pauze</strong>. Rok 2022 byl zároveň třicátým kalendářním rokem od roku 1993 včetně.</p>
-  <p>Z toho vyplývá, že číslo ročníku zřejmě sleduje kalendářní řadu tradice, nikoli pouze počet skutečně uskutečněných slavností. Letošní označení <strong>34. ročník</strong> proto není samo o sobě důkazem, že se akce konala čtyřiatřicetkrát. Přesný seznam všech uskutečněných a vynechaných ročníků by musel potvrdit městský archiv.</p>
+  <p>Z toho vyplývá, že číslo ročníku zřejmě sleduje kalendářní řadu tradice, nikoli pouze počet skutečně uskutečněných slavností. Letošní označení <strong>34. ročník</strong> proto není samo o sobě důkazem, že se akce konala čtyřiatřicetkrát. Přesný seznam uskutečněných a vynechaných ročníků by musel potvrdit městský archiv.</p>
 
   <div class="finding-grid">
     <div class="finding-card"><small>Oficiální tradice</small><b>Od roku 1993</b><p>Oficiální historie datuje pravidelné pořádání právě od tohoto roku.</p></div>
     <div class="finding-card"><small>Doložená mezera</small><b>Návrat v roce 2022</b><p>Místní noviny jej popsaly jako třicátý ročník po tříleté pauze.</p></div>
   </div>
 
-  <h2 id="smlouvy-2026">Úplný program ještě není venku. Smlouvy už ale odhalují část letošního scénáře</h2>
+  <h2>Úplný program ještě není venku. Smlouvy už ale odhalují část letošního scénáře</h2>
   <p>Oficiální web zatím zdůrazňuje průvod, ceremonii a rytířský turnaj. Uzavřené smlouvy pro rok 2026 ukazují další konkrétní části, které se do stručné pozvánky dosud nevešly.</p>
 
   <div class="money-lead"><small>Čtyři zveřejněné programové položky roku 2026</small><strong>Nejméně 614 956 Kč</strong><p>Součet lovecké družiny, tichého pyromuzikálního ohňostroje, LED obrazovky a dobových her s rekvizitami. Nejde o úplný rozpočet akce.</p></div>
@@ -74,9 +55,9 @@ original = '''  <section data-original-findings="contracts-v1">
   </table>
 
   <p>Smlouvy tak předem potvrzují sokolnickou či loveckou část programu, dětské dobové hry, velkoplošnou obrazovku a večerní finále v podobě <strong>tichého pyromuzikálního ohňostroje u Ohře</strong>. Ústecký kraj současně poskytl městu na Císařský den 2026 dotaci 250 tisíc korun.</p>
-  <div class="finding-warning"><strong>614 956 korun není cena celé slavnosti</strong>V částce nejsou započítány další účinkující, technické služby, produkce, kostýmy, bezpečnost, úklid, doprava, hlavní pódium ani vlastní práce města a KZK. Jde pouze o bezpečně sečtené položky, které byly k 1. srpnu 2026 ve veřejné evidenci popsány dostatečně konkrétně.</div>
+  <div class="finding-warning"><strong>614 956 korun není cena celé slavnosti</strong>V částce nejsou započítány další účinkující, technické služby, produkce, kostýmy, bezpečnost, úklid, doprava, hlavní pódium ani vlastní práce města a KZK. Jde pouze o bezpečně sečtené položky, které jsou ve veřejné evidenci popsány dostatečně konkrétně.</div>
 
-  <h2 id="kolik-stoji">Kolik stojí Císařský den? Úplný účet veřejné záznamy samy nedají</h2>
+  <h2>Kolik stojí Císařský den? Úplný účet veřejné záznamy samy nedají</h2>
   <p>Rozpočet slavnosti není zveřejněn jako jediná konečná částka. Platby jsou rozděleny mezi produkci, KZK, jednotlivé soubory, techniku, dopravu a další služby. Z roku 2025 lze přesto sestavit konzervativní minimum z šesti jednoznačně přiřaditelných smluv.</p>
 
   <table class="money-table" aria-label="Vybrané smlouvy Císařského dne 2025">
@@ -109,23 +90,19 @@ original = '''  <section data-original-findings="contracts-v1">
   </section>
 
 '''
-
 text = text.replace(insert_anchor, original + insert_anchor, 1)
 
-# Doplnit odkazy na zdroje, z nichž lze kontrolovat uvedené částky.
 source_anchor = '      <li><a href="https://www.regionalni-znacky.cz/poohri/zazitky/cisarsky-den-v-kadani" target="_blank" rel="noopener">Poohří regionální produkt – certifikovaný zážitek Císařský den</a></li>\n'
 source_extra = '''      <li><a href="https://www.noviny-kadan.cz/l/cisarsky-den-potricate/" target="_blank" rel="noopener">Kadaňské noviny – návrat 30. ročníku po tříleté pauze</a></li>
       <li><a href="https://smlouvy.gov.cz/smlouva/34560125" target="_blank" rel="noopener">Registr smluv – zajištění Císařského dne prostřednictvím KZK v roce 2025</a></li>
       <li><a href="https://smlouvy.gov.cz/smlouva/34368853" target="_blank" rel="noopener">Registr smluv – produkční zajištění ročníku 2025</a></li>
       <li><a href="https://smlouvy.gov.cz/smlouva/34368377" target="_blank" rel="noopener">Registr smluv – přípravné práce, kostýmy a rekvizity v roce 2025</a></li>
       <li><a href="https://smlouvy.gov.cz/smlouva/32980704" target="_blank" rel="noopener">Registr smluv – sedm párů posilových vlaků pro ročník 2025</a></li>
-      <li><a href="https://smlouvy.gov.cz/vyhledavani?q=00261912" target="_blank" rel="noopener">Registr smluv – aktuální smlouvy města Kadaně včetně příprav ročníku 2026</a></li>
 '''
 if source_anchor not in text:
     raise SystemExit('Chybí kotva v seznamu zdrojů.')
 text = text.replace(source_anchor, source_anchor + source_extra, 1)
 
-# Postranní box s hlavním vlastním zjištěním.
 aside_anchor = '  <div class="sidebox"><h3>Hlavní historická osa</h3>'
 aside_box = '  <div class="sidebox"><h3>Co už víme o ceně</h3><p><strong>614 956 Kč</strong> dávají čtyři konkrétní smlouvy pro rok 2026. Úplný účet bude vyšší.</p><p><strong>250 000 Kč</strong> poskytl Ústecký kraj jako dotaci.</p></div>\n'
 if aside_anchor in text:
@@ -134,7 +111,6 @@ if aside_anchor in text:
 PATH.write_text(text, encoding='utf-8', newline='\n')
 
 checks = (
-    'data-expanded-cisarsky-den="v2"',
     'data-original-findings="contracts-v1"',
     'Nejméně 614 956 Kč',
     'Součet šesti identifikovaných výdajů',
