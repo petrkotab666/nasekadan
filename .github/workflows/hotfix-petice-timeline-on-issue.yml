@@ -1,0 +1,110 @@
+name: Opravit rozpad časové osy v článku o petici
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: hotfix-petice-timeline-layout
+  cancel-in-progress: true
+
+env:
+  ARTICLE: clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+  PUBLIC_URL: https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  hotfix:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[hotfix] petice timeline layout')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit opravený zdroj
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$ARTICLE"
+          grep -Fq '.article .timeline>.event{display:block' "$ARTICLE"
+          grep -Fq 'grid-template-columns:none' "$ARTICLE"
+          grep -Fq 'min-height:0' "$ARTICLE"
+          grep -Fq 'petice-nemocnice-kadan-podpisova-mista-2026-5c2f1ded40.png' "$ARTICLE"
+
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit opravený článek
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$ARTICLE" ubuntu@57.129.43.215:/tmp/petice-timeline-fixed.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -m 0644 /tmp/petice-timeline-fixed.html /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/petice-timeline-fixed.html nasekadan-web:/usr/share/nginx/html/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          fi
+          grep -Fq '.article .timeline>.event{display:block' /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          rm -f /tmp/petice-timeline-fixed.html
+          REMOTE
+
+      - name: Veřejně ověřit CSS opravu a obrázek
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=false
+          for attempt in $(seq 1 15); do
+            page="$(curl -4 -kfsS --max-time 25 "${PUBLIC_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            image_code="$(curl -4 -ksS -o /dev/null -w '%{http_code}' --max-time 25 'https://nasekadan.cz/social/petice-nemocnice-kadan-podpisova-mista-2026-5c2f1ded40.png' || true)"
+            if grep -Fq '.article .timeline>.event{display:block' <<<"$page" \
+              && grep -Fq 'grid-template-columns:none' <<<"$page" \
+              && grep -Fq '<div class="event"><time>24. září 2024</time><strong>Končí Petr Hossner</strong>' <<<"$page" \
+              && [[ "$image_code" == 200 ]]; then
+              ok=true
+              break
+            fi
+            sleep 5
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          [[ "$ok" == true ]]
+
+      - name: Zapsat výsledek do issue
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
+            const body = ok
+              ? '✅ Časová osa je opravena. Konfliktní globální styl `.event` už článek neovlivňuje a nový sociální obrázek je veřejně dostupný.\n\nhttps://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html'
+              : `❌ Oprava nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}, veřejná kontrola: ${process.env.VERIFIED || 'false'}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
