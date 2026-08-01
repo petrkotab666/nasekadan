@@ -1,0 +1,64 @@
+name: Rozšířit návrh článku o Císařském dni
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: expand-cisarsky-den-draft
+  cancel-in-progress: false
+
+jobs:
+  expand:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] expand Cisarsky den')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Rozšířit a ověřit návrh
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/expand_cisarsky_den_draft_20260801.py
+          python3 scripts/expand_cisarsky_den_draft_20260801.py
+          file='.github/drafts/cisarsky-den-kadan-historie-2026.html'
+          grep -Fq 'data-expanded-cisarsky-den="v2"' "$file"
+          grep -Fq 'Proč byla Kadaň pro Karla IV. důležitá' "$file"
+          grep -Fq 'Co je historický fakt a co divadelní stylizace' "$file"
+          grep -Fq 'Město se na jeden den mění v jeviště' "$file"
+          grep -Fq 'Kdo Císařský den pořádá' "$file"
+          grep -Fq 'POOHŘÍ regionální produkt' "$file"
+          grep -Fq 'osm programových zón' "$file" || grep -Fq 'Mírové náměstí' "$file"
+          test "$(wc -c < "$file")" -gt 22000
+
+      - name: Uložit návrh
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/drafts/cisarsky-den-kadan-historie-2026.html scripts/expand_cisarsky_den_draft_20260801.py
+          git commit -m 'Výrazně rozšířit návrh článku o Císařském dni [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 4 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+
+      - name: Uzavřít issue
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:'✅ Návrh článku o Císařském dni byl výrazně rozšířen o politický a hospodářský význam Kadaně, praktický dopad privilegií, rozlišení historie a divadelní stylizace, osm programových míst, pořadatelství, ochrannou známku, regionální certifikaci a praktický servis pro ročník 2026.'});
+            await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
