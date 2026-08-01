@@ -1,34 +1,34 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-01T10:16:58.549114+00:00",
+  "checkedAt": "2026-08-01T11:43:16.774190+00:00",
   "bootstrap": false,
-  "sourceCount": 102,
-  "checkedSources": 86,
+  "sourceCount": 106,
+  "checkedSources": 90,
   "failedSources": 16,
-  "itemsParsed": 6300,
-  "uniqueItems": 3381,
+  "itemsParsed": 6519,
+  "uniqueItems": 3520,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 664,
+    "genericTitle": 686,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 9,
-    "notEditoriallySignificant": 2,
-    "notFreshOrUndated": 0,
-    "duplicate": 2255
+    "broadWithoutLocalMatch": 5,
+    "notEditoriallySignificant": 33,
+    "notFreshOrUndated": 1,
+    "duplicate": 2313
   },
   "coverage": {
-    "directoryOrganizations": 63,
-    "directoryOrganizationsWithUrl": 63,
-    "monitoredDirectoryOrganizations": 63,
+    "directoryOrganizations": 64,
+    "directoryOrganizationsWithUrl": 64,
+    "monitoredDirectoryOrganizations": 64,
     "missingDirectoryOrganizations": [],
     "coveragePercent": 100.0,
-    "manualUniqueSources": 69,
-    "directoryUniqueSourcesAdded": 22,
-    "totalUniqueSources": 91,
+    "manualUniqueSources": 70,
+    "directoryUniqueSourcesAdded": 25,
+    "totalUniqueSources": 95,
     "directoryIsCanonicalRegistry": true,
     "extraSources": 11,
-    "completeSourceCount": 102,
+    "completeSourceCount": 106,
     "scopeMunicipalities": [
       "Domašín",
       "Chbany",
@@ -67,7 +67,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -253,8 +253,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 42
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -310,7 +311,7 @@
       "category": "Základní školy",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 245
+      "itemsParsed": 244
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -398,9 +399,8 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 124
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -457,9 +457,8 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 82
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -532,7 +531,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 30
     },
     {
       "name": "Povodí Ohře",
@@ -588,8 +587,9 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -615,6 +615,14 @@
       "tier": "regional_media",
       "status": "checked",
       "itemsParsed": 267
+    },
+    {
+      "name": "Autokemp Prunéřov – aktuality",
+      "url": "https://www.autokemp-prunerov.cz/aktuality",
+      "category": "Volný čas, ubytování a provozní informace",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 26
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -665,12 +673,37 @@
       "itemsParsed": 18
     },
     {
+      "name": "Autokemp Prunéřov",
+      "url": "https://www.autokemp-prunerov.cz/",
+      "category": "Kultura, památky a volný čas",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 24
+    },
+    {
+      "name": "Autokemp Prunéřov – zdroj 3",
+      "url": "https://www.autokemp-prunerov.cz/restaurace",
+      "category": "Kultura, památky a volný čas",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 23
+    },
+    {
+      "name": "Autokemp Prunéřov – zdroj 4",
+      "url": "https://www.facebook.com/prunerov",
+      "category": "Kultura, památky a volný čas",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 23
+    },
+    {
       "name": "Vzdělávání na Kadaňsku",
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 85
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -742,9 +775,8 @@
       "url": "https://karateklubkadan.cz/wp2",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 43
     },
     {
       "name": "BK DDM Kadaň",
@@ -793,7 +825,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -842,7 +874,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 15
+      "itemsParsed": 17
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -874,7 +906,7 @@
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 2
+      "itemsParsed": 1
     },
     {
       "name": "Google News – kadaňské organizace a služby",
