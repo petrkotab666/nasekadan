@@ -1,0 +1,229 @@
+name: Finálně ověřit článek o sečení a Facebook
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-greenery-publication-success.yml'
+      - '.github/finalize-greenery-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: finalize-greenery-publication-success
+  cancel-in-progress: false
+
+jobs:
+  verify-and-finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SLUG: sekani-travniku-kadan-spravci-vysky-2026
+      ARTICLE: clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+      PUBLIC_URL: https://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html
+      POLL_ID: sekani-travniku-kadan-2026
+      EXPECTED_TEXT: Sedm centimetrů je smluvní minimum jedné konkrétní lokality
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Veřejně ověřit článek, přehledy, obrázek a databázovou anketu
+        id: web
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          [[ -n "$browser" ]] || { echo 'Na runneru chybí Chrome/Chromium.' >&2; exit 1; }
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          test_poll="healthcheck-greenery-final-${GITHUB_RUN_ID}-$(date +%s)"
+          verified=false
+          actual=''
+          first=''
+          second=''
+          reload=''
+          social_url=''
+
+          for attempt in $(seq 1 24); do
+            article="$(curl -4 -kfsS --max-time 25 "${PUBLIC_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/site.js?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            actual="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/api/newsletter/poll/results?poll=${POLL_ID}&t=${stamp}-${attempt}" 2>/dev/null || true)"
+            jar="$RUNNER_TEMP/greenery-final-cookie-${attempt}.txt"
+            rm -f "$jar"
+            first="$(curl -4 -kfsS --max-time 25 -c "$jar" -A 'GreeneryFinal-A' -X POST 'https://nasekadan.cz/api/newsletter/poll/vote' -H 'Content-Type: application/json' --data "{\"pollId\":\"${test_poll}\",\"choice\":\"vyssi\"}" 2>/dev/null || true)"
+            second="$(curl -4 -kfsS --max-time 25 -b "$jar" -c "$jar" -A 'GreeneryFinal-B' -X POST 'https://nasekadan.cz/api/newsletter/poll/vote' -H 'Content-Type: application/json' --data "{\"pollId\":\"${test_poll}\",\"choice\":\"jiny\"}" 2>/dev/null || true)"
+            reload="$(curl -4 -kfsS --max-time 25 -b "$jar" "https://nasekadan.cz/api/newsletter/poll/results?poll=${test_poll}&t=${stamp}-${attempt}" 2>/dev/null || true)"
+            social_url="$(ARTICLE_HTML="$article" python3 - <<'PY'
+          import html,os,re
+          text=os.environ.get('ARTICLE_HTML','')
+          m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)',text,re.I)
+          print(html.unescape(m.group(1)) if m else '')
+          PY
+            )"
+            image="$RUNNER_TEMP/greenery-final-social-${attempt}.png"
+            [[ -n "$social_url" ]] && curl -4 -kfsS --max-time 25 "${social_url}?v=${stamp}-${attempt}" -o "$image" 2>/dev/null || true
+            dom="$RUNNER_TEMP/greenery-final-dom-${attempt}.html"
+            "$browser" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage --ignore-certificate-errors --virtual-time-budget=12000 --dump-dom "${PUBLIC_URL}?browser=${stamp}-${attempt}" > "$dom" 2>/dev/null || true
+
+            if ARTICLE_HTML="$article" HOME_HTML="$home" ARCHIVE_HTML="$archive" RSS_XML="$rss" SITEMAP_XML="$sitemap" NEWS_XML="$news" JS_TEXT="$js" ACTUAL="$actual" FIRST="$first" SECOND="$second" RELOAD="$reload" DOM_FILE="$dom" IMAGE_FILE="$image" PUBLIC_URL="$PUBLIC_URL" python3 - <<'PY'
+          import json,os,struct,sys
+          from pathlib import Path
+          try:
+              actual=json.loads(os.environ['ACTUAL'])
+              first=json.loads(os.environ['FIRST'])
+              second=json.loads(os.environ['SECOND'])
+              reload=json.loads(os.environ['RELOAD'])
+              dom=Path(os.environ['DOM_FILE']).read_text(encoding='utf-8',errors='replace')
+              data=Path(os.environ['IMAGE_FILE']).read_bytes()
+              image_ok=(len(data)>=24 and data.startswith(b'\x89PNG\r\n\x1a\n') and struct.unpack('>II',data[16:24])==(1200,630) and len(data)>10000)
+          except Exception:
+              raise SystemExit(1)
+          article=os.environ['ARTICLE_HTML'];url=os.environ['PUBLIC_URL']
+          checks=[
+              'Sedm centimetrů je smluvní minimum jedné konkrétní lokality' in article,
+              'index,follow' in article and 'noindex,nofollow' not in article,
+              'data-poll-id="sekani-travniku-kadan-2026"' in article,
+              '/site.js?v=20260801-poll-system-v2' in article,
+              '/clanky/sekani-travniku-kadan-spravci-vysky-2026.html' in os.environ['HOME_HTML'],
+              '/clanky/sekani-travniku-kadan-spravci-vysky-2026.html' in os.environ['ARCHIVE_HTML'],
+              url in os.environ['RSS_XML'],url in os.environ['SITEMAP_XML'],url in os.environ['NEWS_XML'],
+              'Průběžné výsledky' in os.environ['JS_TEXT'] and 'poll-result-value' in os.environ['JS_TEXT'],
+              actual.get('ok') is True and isinstance(actual.get('total'),int) and isinstance(actual.get('counts'),dict) and isinstance(actual.get('percentages'),dict),
+              first.get('ok') is True and first.get('accepted') is True and first.get('selected')=='vyssi',
+              second.get('ok') is True and second.get('accepted') is False and second.get('selected')=='vyssi',
+              reload.get('total')==1 and reload.get('counts',{}).get('vyssi')==1 and reload.get('selected')=='vyssi',
+              'Průběžné výsledky' in dom and 'poll-results-total' in dom and 'poll-result-value' in dom and '%' in dom and 'hlas' in dom,
+              image_ok,
+          ]
+          if not all(checks):
+              print(json.dumps({'checks':checks,'actual':actual,'first':first,'second':second,'reload':reload},ensure_ascii=False),file=sys.stderr)
+              raise SystemExit(1)
+          PY
+            then
+              verified=true
+              break
+            fi
+            sleep 7
+          done
+          [[ "$verified" == true ]] || exit 1
+          {
+            echo "social_url=$social_url"
+            echo 'actual<<EOF'
+            printf '%s\n' "$actual"
+            echo 'EOF'
+            echo 'first<<EOF'
+            printf '%s\n' "$first"
+            echo 'EOF'
+            echo 'second<<EOF'
+            printf '%s\n' "$second"
+            echo 'EOF'
+            echo 'reload<<EOF'
+            printf '%s\n' "$reload"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Vyčistit chybnou položku fronty a potvrdit cílový příspěvek na Facebooku
+        id: facebook
+        env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+          FACEBOOK_WAIT_TIMEOUT: '300'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/facebook-published
+          : > .github/facebook-publish-pending.txt
+          python3 scripts/process_facebook_queue_live.py "$ARTICLE"
+          marker="$(python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          article='clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+          print(f'.github/facebook-published/{Path(article).stem}-{hashlib.sha256(article.encode()).hexdigest()[:10]}.json')
+          PY
+          )"
+          test -s "$marker"
+          python3 - "$marker" <<'PY' > "$RUNNER_TEMP/greenery-facebook.json"
+          import json,sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p['article_path']=='clanky/sekani-travniku-kadan-spravci-vysky-2026.html'
+          assert p.get('facebook_post_id')
+          print(json.dumps(p,ensure_ascii=False))
+          PY
+          echo "marker=$marker" >> "$GITHUB_OUTPUT"
+          echo 'payload<<EOF' >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/greenery-facebook.json" >> "$GITHUB_OUTPUT"
+          echo 'EOF' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit definitivní stav úspěšné publikace
+        env:
+          POLL_RESULTS: ${{ steps.web.outputs.actual }}
+          FIRST_VOTE: ${{ steps.web.outputs.first }}
+          DUPLICATE_VOTE: ${{ steps.web.outputs.second }}
+          RELOAD_RESULTS: ${{ steps.web.outputs.reload }}
+          FACEBOOK_PAYLOAD: ${{ steps.facebook.outputs.payload }}
+          SOCIAL_URL: ${{ steps.web.outputs.social_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          payload={
+            'status':'passed',
+            'checkedAtUtc':datetime.now(timezone.utc).isoformat(),
+            'article':'https://nasekadan.cz/clanky/sekani-travniku-kadan-spravci-vysky-2026.html',
+            'indexable':True,
+            'homepage':True,
+            'archive':True,
+            'rss':True,
+            'sitemap':True,
+            'newsSitemap':True,
+            'socialImage':{'url':os.environ['SOCIAL_URL'],'width':1200,'height':630},
+            'poll':{
+              'api':json.loads(os.environ['POLL_RESULTS']),
+              'firstVote':json.loads(os.environ['FIRST_VOTE']),
+              'duplicateVote':json.loads(os.environ['DUPLICATE_VOTE']),
+              'reload':json.loads(os.environ['RELOAD_RESULTS']),
+              'browserVisibleCounts':True,
+            },
+            'facebook':json.loads(os.environ['FACEBOOK_PAYLOAD']),
+          }
+          Path('.github/greenery-final-status.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň finální ověření'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- .github/facebook-publish-pending.txt .github/facebook-last-status.json .github/facebook-published .github/greenery-final-status.json
+          git commit -m 'Potvrdit úplnou publikaci článku o sečení [skip ci]'
+          git reset --hard HEAD
+          git clean -fd
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 5 ]] && exit 1
+            sleep $((attempt*5))
+          done
+
+      - name: Uzavřít výstrahu po ověřené opravě
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const titles=['Publikace článku o sečení trávníků vyžaduje zásah'];
+            const issues=await github.paginate(github.rest.issues.listForRepo,{owner:context.repo.owner,repo:context.repo.repo,state:'open',per_page:100});
+            for(const issue of issues){if(!issue.pull_request&&titles.includes(issue.title)){await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.number,state:'closed',state_reason:'completed'});}}
