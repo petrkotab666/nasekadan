@@ -18,6 +18,8 @@ env:
   KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
   KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
   MARKER: 'Ankety jsou obsluhované z externího skriptu'
+  ARTICLE: clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+  SCRIPT_VERSION: '20260801-poll-fix-2'
 
 jobs:
   deploy-and-verify:
@@ -29,6 +31,41 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Přidat článku verzovaný odkaz na opravený skript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re
+          from pathlib import Path
+          p=Path(os.environ['ARTICLE'])
+          text=p.read_text(encoding='utf-8')
+          version=os.environ['SCRIPT_VERSION']
+          new_tag=f'<script src="/site.js?v={version}" defer></script>'
+          updated,count=re.subn(r'<script src="/site\.js(?:\?v=[^"]+)?" defer></script>',new_tag,text,count=1)
+          if count!=1:
+              raise SystemExit('V článku nebyl nalezen právě jeden odkaz na site.js')
+          p.write_text(updated,encoding='utf-8')
+          PY
+          grep -Fq "/site.js?v=${SCRIPT_VERSION}" "$ARTICLE"
+
+      - name: Uložit cache-bust opravu do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň deploy bot'
+          git config user.email 'info@nasekadan.cz'
+          git add "$ARTICLE"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Vynutit načtení opravené ankety SMR Tušimice [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 4 ]] && exit 1
+              sleep $((attempt * 4))
+            done
+          fi
+
       - name: Ověřit opravený skript
         shell: bash
         run: |
@@ -37,6 +74,7 @@ jobs:
           grep -Fq "$MARKER" site.js
           grep -Fq "data-poll-id" site.js
           grep -Fq "/api/analytics/pageview" site.js
+          grep -Fq "/site.js?v=${SCRIPT_VERSION}" "$ARTICLE"
 
       - name: Připravit SSH klíč
         shell: bash
@@ -47,23 +85,24 @@ jobs:
           else echo 'Chybí SSH klíč pro OVH' >&2; exit 1; fi
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit site.js přímo na OVH a do aktivního kontejneru
+      - name: Nasadit opravený skript i článek na OVH a do kontejneru
         shell: bash
         run: |
           set -euo pipefail
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 site.js ubuntu@57.129.43.215:/tmp/nasekadan-site-poll-fix.js
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            site.js "$ARTICLE" ubuntu@57.129.43.215:/tmp/
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
-          sudo install -m 0644 /tmp/nasekadan-site-poll-fix.js /var/www/nasekadan/site.js
+          sudo install -m 0644 /tmp/site.js /var/www/nasekadan/site.js
+          sudo install -m 0644 /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp /tmp/nasekadan-site-poll-fix.js nasekadan-web:/usr/share/nginx/html/site.js
+            sudo docker cp /tmp/site.js nasekadan-web:/usr/share/nginx/html/site.js
+            sudo docker cp /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html nasekadan-web:/usr/share/nginx/html/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           fi
           grep -Fq 'Ankety jsou obsluhované z externího skriptu' /var/www/nasekadan/site.js
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web grep -Fq 'Ankety jsou obsluhované z externího skriptu' /usr/share/nginx/html/site.js
-          fi
-          rm -f /tmp/nasekadan-site-poll-fix.js
+          grep -Fq '/site.js?v=20260801-poll-fix-2' /var/www/nasekadan/clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html
+          rm -f /tmp/site.js /tmp/jaderne-tusimice-smr-voda-doprava-eia-2026.html
           REMOTE
 
       - name: Veřejně ověřit skript, článek a přijímání hlasů
@@ -81,11 +120,11 @@ jobs:
               --data "{\"path\":\"/healthchecks/anketa-smr-tusimice/${GITHUB_RUN_ID}\",\"title\":\"Kontrola ankety SMR Tušimice\",\"referrer\":\"github-actions\"}" || true)"
             if grep -Fq "$MARKER" <<< "$js" \
               && grep -Fq 'data-poll-id="smr-tusimice-2026"' <<< "$article" \
-              && grep -Fq '<script src="/site.js" defer></script>' <<< "$article" \
+              && grep -Fq "/site.js?v=${SCRIPT_VERSION}" <<< "$article" \
               && [[ "$code" == '204' ]]; then
               echo "Oprava ankety je veřejně nasazená; endpoint vrátil HTTP 204."
-              printf '{"ok":true,"workflow_run_id":"%s","verified_at":"%s","site_js_marker":true,"article_poll":true,"analytics_http":204}\n' \
-                "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/poll-fix-last-status.json
+              printf '{"ok":true,"workflow_run_id":"%s","verified_at":"%s","site_js_marker":true,"article_poll":true,"cache_bust":"%s","analytics_http":204}\n' \
+                "$GITHUB_RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SCRIPT_VERSION" > .github/poll-fix-last-status.json
               exit 0
             fi
             sleep 10
