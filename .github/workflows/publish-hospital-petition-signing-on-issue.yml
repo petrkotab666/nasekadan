@@ -1,0 +1,148 @@
+name: Okamžitě publikovat podpisová místa petice za nemocnici
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-hospital-petition-signing
+  cancel-in-progress: true
+
+env:
+  ARTICLE: clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[publish] petice podpisova mista nemocnice')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Stáhnout hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zařadit článek na web
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$ARTICLE"
+          python3 scripts/publish_hospital_petition_signing_20260801.py
+          grep -Fq 'Kde můžete petici podepsat osobně' "$ARTICLE"
+          grep -Fq '/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' index.html
+          grep -Fq '/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' clanky/index.html
+          grep -Fq 'https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' rss.xml
+          grep -Fq 'https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' sitemap.xml
+          ! grep -Eqi 'neindexovan|obcházen|jak jsme (to )?dohled|podařilo se (nám )?dohled|přes zahraniční|fulltext' "$ARTICLE"
+
+      - name: Uložit publikaci do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Publisher'
+          git config user.email 'info@nasekadan.cz'
+          git add index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml "$ARTICLE" scripts/publish_hospital_petition_signing_20260801.py 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publikovat podpisová místa petice za nemocnici [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              [ "$attempt" = 4 ] && exit 1
+              sleep $((attempt * 4))
+            done
+          fi
+
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Připravit a nasadit statický balíček
+        id: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(index.html clanky/index.html rss.xml sitemap.xml "$ARTICLE")
+          [ -s news-sitemap.xml ] && files+=(news-sitemap.xml)
+          tar -czf "$RUNNER_TEMP/petice-publish.tar.gz" "${files[@]}"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/petice-publish.tar.gz" ubuntu@57.129.43.215:/tmp/petice-publish.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/petice-publish.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/petice-publish.tar.gz nasekadan-web:/tmp/petice-publish.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/petice-publish.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/petice-publish.tar.gz
+          fi
+          test -s /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          grep -Fq 'Kde můžete petici podepsat osobně' /var/www/nasekadan/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html
+          rm -f /tmp/petice-publish.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit publikaci
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          article='https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html'
+          for attempt in $(seq 1 15); do
+            page="$(curl -4 -kfsS --max-time 25 "${article}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'Petice za nemocnici míří do ulic' <<<"$page" \
+              && grep -Fq 'Kde můžete petici podepsat osobně' <<<"$page" \
+              && grep -Fq 'Lékárna U Černého orla' <<<"$page" \
+              && grep -Fq 'Lékárna U Pelikána' <<<"$page" \
+              && grep -Fq 'Fibichova 840' <<<"$page" \
+              && ! grep -Eqi 'neindexovan|obcházen|jak jsme (to )?dohled|fulltext' <<<"$page" \
+              && grep -Fq '/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' <<<"$home" \
+              && grep -Fq '/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' <<<"$archive" \
+              && grep -Fq 'https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' <<<"$rss" \
+              && grep -Fq 'https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' <<<"$sitemap"; then
+              echo 'ok=true' >> "$GITHUB_OUTPUT"
+              echo 'url=https://nasekadan.cz/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo 'ok=false' >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Zapsat výsledek do spouštěcího issue
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          PROD: ${{ steps.production.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.ok }}
+          URL: ${{ steps.verify.outputs.url }}
+        with:
+          script: |
+            const ok = process.env.PROD === 'success' && process.env.VERIFIED === 'true';
+            const body = ok
+              ? `✅ Článek je nasazený a veřejně ověřený na webu, titulní straně, v archivu, RSS i sitemap.\n\n${process.env.URL}`
+              : `❌ Publikace nebyla potvrzena. Produkce: ${process.env.PROD || 'unknown'}, veřejné ověření: ${process.env.VERIFIED || 'false'}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed'});
