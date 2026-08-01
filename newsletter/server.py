@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib,json,os,secrets,smtplib,sqlite3,sys,traceback
+import hashlib,json,os,re,secrets,smtplib,sqlite3,sys,traceback
 from datetime import datetime,timezone,timedelta
 from email.message import EmailMessage
 from urllib.parse import parse_qs
@@ -34,8 +34,72 @@ def db():
  c.execute('''CREATE TABLE IF NOT EXISTS pageviews(id INTEGER PRIMARY KEY,path TEXT NOT NULL,title TEXT,referrer TEXT,day TEXT NOT NULL,visitor_hash TEXT NOT NULL,created_at TEXT NOT NULL)''')
  c.execute('CREATE INDEX IF NOT EXISTS idx_pageviews_day ON pageviews(day)')
  c.execute('CREATE INDEX IF NOT EXISTS idx_pageviews_path ON pageviews(path)')
+ c.execute('''CREATE TABLE IF NOT EXISTS poll_votes(id INTEGER PRIMARY KEY,poll_id TEXT NOT NULL,choice TEXT NOT NULL,visitor_hash TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(poll_id,visitor_hash))''')
+ c.execute('CREATE INDEX IF NOT EXISTS idx_poll_votes_poll ON poll_votes(poll_id)')
+ migrate_legacy_poll_votes(c)
  return c
 
+
+
+# BEGIN POLL_RESULTS_API
+def valid_poll_token(value,max_length=80):
+ token=str(value or '').strip().lower()
+ return token if re.fullmatch(r'[a-z0-9][a-z0-9-]{0,%d}'%(max_length-1),token) else ''
+
+
+def migrate_legacy_poll_votes(c):
+ try:
+  rows=c.execute("SELECT path,day,visitor_hash,created_at FROM pageviews WHERE path LIKE '/anketa/%/%'").fetchall()
+  for path,day,old_hash,created_at in rows:
+   parts=str(path or '').strip('/').split('/')
+   if len(parts)!=3 or parts[0]!='anketa':continue
+   poll_id=valid_poll_token(parts[1]);choice=valid_poll_token(parts[2],40)
+   if not poll_id or not choice:continue
+   legacy_raw=f'legacy|{day}|{old_hash}'
+   legacy_hash=hashlib.sha256(legacy_raw.encode()).hexdigest()[:32]
+   c.execute('INSERT OR IGNORE INTO poll_votes(poll_id,choice,visitor_hash,created_at) VALUES(?,?,?,?)',(poll_id,choice,legacy_hash,created_at or datetime.now(timezone.utc).isoformat()))
+  c.commit()
+ except Exception as exc:
+  log_error('POLL_MIGRATION',exc)
+
+
+def poll_visitor_hash(env,poll_id):
+ raw=f'{ANALYTICS_SECRET}|poll|{poll_id}|{client_ip(env)}|{env.get("HTTP_USER_AGENT","")[:180]}'
+ return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def poll_results_payload(c,poll_id):
+ rows=c.execute('SELECT choice,COUNT(*) FROM poll_votes WHERE poll_id=? GROUP BY choice ORDER BY choice',(poll_id,)).fetchall()
+ counts={str(choice):int(count) for choice,count in rows}
+ return {'ok':True,'pollId':poll_id,'total':sum(counts.values()),'counts':counts}
+
+
+def poll_results(env,start):
+ try:
+  poll_id=valid_poll_token(parse_qs(env.get('QUERY_STRING','')).get('poll',[''])[0])
+  if not poll_id:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Chybí platné ID ankety.'},ensure_ascii=False))
+  c=db();payload=poll_results_payload(c,poll_id);c.close()
+  return response(start,'200 OK',json.dumps(payload,ensure_ascii=False))
+ except Exception as exc:
+  log_error('POLL_RESULTS',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False},ensure_ascii=False))
+
+
+def poll_vote(env,start):
+ try:
+  data=read_json(env)
+  poll_id=valid_poll_token(data.get('pollId'));choice=valid_poll_token(data.get('choice'),40)
+  if not poll_id or not choice:return response(start,'400 Bad Request',json.dumps({'ok':False,'message':'Neplatný hlas.'},ensure_ascii=False))
+  now=datetime.now(timezone.utc).isoformat();vhash=poll_visitor_hash(env,poll_id);c=db()
+  existing=c.execute('SELECT choice FROM poll_votes WHERE poll_id=? AND visitor_hash=?',(poll_id,vhash)).fetchone()
+  accepted=existing is None
+  selected=choice if accepted else str(existing[0])
+  if accepted:
+   c.execute('INSERT INTO poll_votes(poll_id,choice,visitor_hash,created_at) VALUES(?,?,?,?)',(poll_id,choice,vhash,now));c.commit()
+  payload=poll_results_payload(c,poll_id);payload.update({'accepted':accepted,'selected':selected});c.close()
+  return response(start,'200 OK',json.dumps(payload,ensure_ascii=False))
+ except Exception as exc:
+  log_error('POLL_VOTE',exc);return response(start,'500 Internal Server Error',json.dumps({'ok':False},ensure_ascii=False))
+# END POLL_RESULTS_API
 
 def smtp_configured():
  return bool(SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
@@ -125,6 +189,8 @@ def app(env,start):
   }))
  if path=='/analytics/pageview' and method=='POST':return analytics_pageview(env,start)
  if path=='/analytics/summary' and method=='GET':return analytics_summary(start)
+ if path=='/poll/results' and method=='GET':return poll_results(env,start)
+ if path=='/poll/vote' and method=='POST':return poll_vote(env,start)
 
  if path=='/subscribe' and method=='POST':
   try:
