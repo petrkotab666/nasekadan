@@ -1,0 +1,54 @@
+name: Předběžně ověřit publikaci KZK
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    if: github.actor == 'petrkotab666' && github.event.issue.title == '[validate] KZK scheduled publication'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Spustit publikační sestavení bez nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet pillow
+          python3 -m py_compile scripts/publish_kzk_20260802.py scripts/ensure_recent_home_articles_20260801.py
+          python3 scripts/publish_kzk_20260802.py
+          grep -Fq 'Od Střelnice po klášter' clanky/kulturni-zarizeni-kadan.html
+          grep -Fq 'id="konirna"' clanky/kulturni-zarizeni-kadan.html
+          grep -Fq 'Kadaňský pohádkový festival není akcí KZK' clanky/kulturni-zarizeni-kadan.html
+          grep -Fq 'Císařský den je největší kadaňská kulturní akce' clanky/kulturni-zarizeni-kadan.html
+          grep -Fq 'data-promos data-context="sidebar"' clanky/kulturni-zarizeni-kadan.html
+          grep -Fq 'data-latest-article-href="/clanky/kulturni-zarizeni-kadan.html"' index.html
+          grep -Fq '/clanky/kulturni-zarizeni-kadan.html' clanky/index.html
+          grep -Fq 'https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html' rss.xml
+          grep -Fq 'https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html' sitemap.xml
+          grep -Fq 'https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html' news-sitemap.xml
+          test "$(stat -c %s social/kulturni-zarizeni-kadan-20260802.png)" -gt 10000
+
+      - name: Oznámit úspěch
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: '✅ Předběžné sestavení plánované publikace KZK prošlo. Vznikl článek, sociální PNG, titulní hero, archiv, RSS a obě sitemapy; ověřena byla Konírna, Císařský den, oprava Pohádkového festivalu i reklamní integrace.'});
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+
+      - name: Oznámit chybu
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: '❌ Předběžné sestavení plánované publikace KZK selhalo. Publikační plán je nutné opravit před 4:00.'});
