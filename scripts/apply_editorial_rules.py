@@ -6,7 +6,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = (
     ROOT / "clanky/jaderne-tusimice-smr-voda-doprava-eia-2026.html",
-    ROOT / ".github/drafts/jaderne-tusimice-smr-voda-doprava-eia-2026.html",
 )
 
 REPLACEMENTS = (
@@ -34,10 +33,9 @@ def clean(path: Path) -> bool:
     text = original
     for old, new in REPLACEMENTS:
         text = text.replace(old, new)
-    if path.parts[-2:] and "clanky" in path.parts:
-        found = [phrase for phrase in FORBIDDEN_PUBLIC_PHRASES if phrase in text]
-        if found:
-            raise SystemExit(f"V článku zůstal popis rešeršní metody: {', '.join(found)}")
+    found = [phrase for phrase in FORBIDDEN_PUBLIC_PHRASES if phrase in text]
+    if found:
+        raise SystemExit(f"V článku zůstal popis rešeršní metody: {', '.join(found)}")
     if text != original:
         path.write_text(text, encoding="utf-8")
         return True
