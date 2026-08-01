@@ -1,4 +1,4 @@
-name: Přímý hotfix aktualizace Autokempu
+name: Aktualizovat provoz Autokempu Prunéřov
 
 on:
   push:
@@ -17,14 +17,48 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 1
+          fetch-depth: 0
+
+      - name: Zapracovat elektrocentrálu a doplnit registry
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/update_autokemp_generator_notice_20260801.py
+          python3 scripts/update_autokemp_generator_notice_20260801.py
+          article='clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html'
+          grep -Fq 'elektrocentrála udrží v provozu výčep' "$article"
+          grep -Fq '3. srpna otevřená v běžné pracovní době' "$article"
+          grep -Fq 'Autokemp Prunéřov' data/organizations.json
+          grep -Fq 'Autokemp Prunéřov – aktuality' data/city-sources.json
+
+      - name: Uložit aktualizovaný článek a zdroje
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html \
+            data/organizations.json \
+            data/city-sources.json
+          if git diff --cached --quiet; then
+            echo 'Obsah je již aktuální.'
+          else
+            git commit -m 'Aktualizovat provoz Autokempu při odstávce 3. srpna'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt * 3))
+              if [ "$attempt" -eq 4 ]; then exit 1; fi
+            done
+          fi
 
       - name: Připravit SSH klíč
         run: |
@@ -33,12 +67,13 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nahrát aktualizovaný článek přímo na živý web
+      - name: Nahrát aktualizovaný článek na živý web
         id: deploy
         run: |
           set -euo pipefail
+          git pull --rebase origin main
           article='clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html'
-          grep -Fq 'Na 14. srpna jsou zveřejněna dvě samostatná oznámení' "$article"
+          grep -Fq 'elektrocentrála udrží v provozu výčep' "$article"
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
             "$article" ubuntu@57.129.43.215:/tmp/nk-autokemp-update.html
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
@@ -51,29 +86,29 @@ jobs:
             sudo docker cp /tmp/nk-autokemp-update.html nasekadan-web:/usr/share/nginx/html/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html
           fi
           rm -f /tmp/nk-autokemp-update.html
-          grep -Fq 'Na 14. srpna jsou zveřejněna dvě samostatná oznámení' /var/www/nasekadan/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html
+          grep -Fq 'elektrocentrála udrží v provozu výčep' /var/www/nasekadan/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web grep -Fq 'Na 14. srpna jsou zveřejněna dvě samostatná oznámení' /usr/share/nginx/html/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html
+            sudo docker exec nasekadan-web grep -Fq 'elektrocentrála udrží v provozu výčep' /usr/share/nginx/html/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html
           fi
           REMOTE
 
-      - name: Veřejně ověřit nový odstavec
+      - name: Veřejně ověřit aktualizaci
         id: verify
         run: |
           set -euo pipefail
           url='https://nasekadan.cz/clanky/odstavky-elektriny-autokemp-prunerov-srpen-2026.html'
           for attempt in $(seq 1 24); do
-            body="$(curl -4 -kfsS --max-time 20 "$url?hotfix=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq 'Na 14. srpna jsou zveřejněna dvě samostatná oznámení' <<<"$body" \
-              && grep -Fq 'Prunéřov, Nová Víska a Místo' <<<"$body" \
-              && grep -Fq '2026-07-30T01:45:00+02:00' <<<"$body"; then
+            body="$(curl -4 -kfsS --max-time 20 "$url?generator=${GITHUB_SHA}-${attempt}" || true)"
+            if grep -Fq 'elektrocentrála udrží v provozu výčep' <<<"$body" \
+              && grep -Fq '3. srpna otevřená v běžné pracovní době' <<<"$body" \
+              && grep -Fq '2026-08-01T12:25:00+02:00' <<<"$body"; then
               exit 0
             fi
             sleep 5
           done
           exit 1
 
-      - name: Zapsat stav hotfixu
+      - name: Zapsat stav aktualizace
         if: always()
         uses: actions/github-script@v7
         env:
@@ -103,7 +138,7 @@ jobs:
               repo: context.repo.repo,
               path,
               branch: 'main',
-              message: `Zapsat stav přímé aktualizace Autokempu: ${status.status}`,
+              message: `Zapsat stav aktualizace Autokempu: ${status.status}`,
               content,
               ...(sha ? {sha} : {})
             });
