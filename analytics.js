@@ -7,15 +7,16 @@
         referrer:document.referrer?new URL(document.referrer).hostname:'',
       };
       const body=JSON.stringify(payload);
+      const endpoint='/api/newsletter/analytics/pageview';
       if(navigator.sendBeacon){
-        navigator.sendBeacon('/api/analytics/pageview',new Blob([body],{type:'application/json'}));
+        navigator.sendBeacon(endpoint,new Blob([body],{type:'application/json'}));
       }else{
-        fetch('/api/analytics/pageview',{
+        fetch(endpoint,{
           method:'POST',
           headers:{'Content-Type':'application/json'},
           body,
           keepalive:true,
-          credentials:'omit',
+          credentials:'same-origin',
         }).catch(()=>{});
       }
     }
