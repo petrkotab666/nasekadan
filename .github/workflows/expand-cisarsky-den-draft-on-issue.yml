@@ -3,6 +3,11 @@ name: Rozšířit návrh článku o Císařském dni
 on:
   issues:
     types: [opened, reopened]
+  push:
+    branches: [main]
+    paths:
+      - scripts/expand_cisarsky_den_draft_20260801.py
+      - .github/workflows/expand-cisarsky-den-draft-on-issue.yml
   workflow_dispatch:
 
 permissions:
@@ -15,7 +20,7 @@ concurrency:
 
 jobs:
   expand:
-    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] expand Cisarsky den')
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[draft] expand Cisarsky den')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -37,7 +42,7 @@ jobs:
           grep -Fq 'Město se na jeden den mění v jeviště' "$file"
           grep -Fq 'Kdo Císařský den pořádá' "$file"
           grep -Fq 'POOHŘÍ regionální produkt' "$file"
-          grep -Fq 'osm programových zón' "$file" || grep -Fq 'Mírové náměstí' "$file"
+          grep -Fq 'Žebrácká ulice' "$file"
           test "$(wc -c < "$file")" -gt 22000
 
       - name: Uložit návrh
@@ -56,9 +61,14 @@ jobs:
           done
 
       - name: Uzavřít issue
-        if: success() && github.event_name == 'issues'
+        if: success()
         uses: actions/github-script@v7
         with:
           script: |
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:'✅ Návrh článku o Císařském dni byl výrazně rozšířen o politický a hospodářský význam Kadaně, praktický dopad privilegií, rozlišení historie a divadelní stylizace, osm programových míst, pořadatelství, ochrannou známku, regionální certifikaci a praktický servis pro ročník 2026.'});
-            await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
+            const title = '[draft] expand Cisarsky den';
+            const {data} = await github.rest.issues.listForRepo({owner:context.repo.owner,repo:context.repo.repo,state:'open',per_page:100});
+            const issue = data.find(item => item.title === title && !item.pull_request);
+            if (issue) {
+              await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.number,body:'✅ Návrh článku o Císařském dni byl výrazně rozšířen o politický a hospodářský význam Kadaně, praktický dopad privilegií, rozlišení historie a divadelní stylizace, osm programových míst, pořadatelství, ochrannou známku, regionální certifikaci a praktický servis pro ročník 2026.'});
+              await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:issue.number,state:'closed',state_reason:'completed'});
+            }
