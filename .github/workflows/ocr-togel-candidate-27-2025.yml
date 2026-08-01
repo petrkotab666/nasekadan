@@ -1,0 +1,95 @@
+name: OCR kandidáta 27/2025 – stanovisko Tőgl
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ocr-togel-candidate-27-2025.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ocr-togel-candidate-27-2025
+  cancel-in-progress: false
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/research/hossner-fast-missing-docs-20260801/files/27_2025_106_s.pdf
+            .github/workflows/ocr-togel-candidate-27-2025.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Instalovat OCR nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+
+      - name: OCR všech stran a vyhledání stop
+        shell: bash
+        run: |
+          set -euo pipefail
+          PDF=.github/research/hossner-fast-missing-docs-20260801/files/27_2025_106_s.pdf
+          OUT=.github/research/ocr-togel-candidate-27-2025
+          rm -rf "$OUT" /tmp/ocr27
+          mkdir -p "$OUT/pages" /tmp/ocr27/img
+          pdfinfo "$PDF" > "$OUT/pdfinfo.txt"
+          pdftoppm -r 120 -jpeg -jpegopt quality=72 "$PDF" /tmp/ocr27/img/page >/dev/null 2>&1
+          find /tmp/ocr27/img -type f -name 'page-*.jpg' -print0 | sort -z | xargs -0 -n1 -P2 bash -c '
+            f="$1"; b=$(basename "$f" .jpg); tesseract "$f" ".github/research/ocr-togel-candidate-27-2025/pages/$b" -l ces+eng --psm 6 >/dev/null 2>&1 || true
+          ' _
+          : > "$OUT/all-pages.txt"
+          for f in $(find "$OUT/pages" -type f -name 'page-*.txt' | sort -V); do
+            printf '\n\n===== %s =====\n' "$(basename "$f" .txt)" >> "$OUT/all-pages.txt"
+            cat "$f" >> "$OUT/all-pages.txt"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, json, unicodedata
+          out=Path('.github/research/ocr-togel-candidate-27-2025')
+          terms=[
+            r't[őöoó]gl', r't[őöoó]gel', r'vladim[ií]r', r'hossner', r'nemocnice',
+            r'soub[eě]h', r'pr[aá]vn[ií]\s+stanovisko', r'dodate[čc]n', r'n[aá]sledn',
+            r'schv[aá]len', r'pracovn[ií]\s+smlouv', r'v[yý]konu\s+funkce',
+            r'technick[eé]\s+slu[zž]by', r'tepeln[eé]\s+hospod[aá][řr]stv[ií]',
+            r'kabelov[aá]\s+televize', r'24\s*[.\/]\s*7\s*[.\/]\s*2024',
+            r'24\s*[.\/]\s*07\s*[.\/]\s*2024', r'24\.\s*července\s*2024'
+          ]
+          rx=[re.compile(t,re.I) for t in terms]
+          hits=[]
+          for f in sorted((out/'pages').glob('page-*.txt')):
+              text=f.read_text('utf-8',errors='replace')
+              found=[]
+              for pat in rx:
+                  for m in pat.finditer(text):
+                      s=re.sub(r'\s+',' ',text[max(0,m.start()-450):m.end()+850]).strip()
+                      found.append({'term':pat.pattern,'snippet':s})
+              if found: hits.append({'page':f.stem,'hits':found})
+          (out/'hits.json').write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# OCR dokumentu 27/2025 podle zákona 106','',f'- Stran s nalezenou stopou: {len(hits)}','']
+          for p in hits:
+              lines += [f"## {p['page']}",'']
+              seen=set()
+              for h in p['hits']:
+                  key=h['snippet']
+                  if key in seen: continue
+                  seen.add(key)
+                  lines += [f"**Shoda:** `{h['term']}`",'',h['snippet'],'']
+          (out/'HITS.md').write_text('\n'.join(lines),encoding='utf-8')
+          PY
+
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/ocr-togel-candidate-27-2025
+          git commit -m 'OCR městské odpovědi 27/2025 k hledání Tőgla [skip ci]' || exit 0
+          git push origin HEAD:main
