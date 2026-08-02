@@ -1,0 +1,40 @@
+name: Předpublikační kontrola článku o alžbětinském klášteře
+
+on:
+  push:
+    paths:
+      - '.github/drafts/alzbetinsky-klaster-kadan-20260803.html'
+      - 'scripts/publish_alzbetinsky_klaster_20260803.py'
+      - '.github/workflows/publish-alzbetinsky-klaster-20260803.yml'
+      - '.github/workflows/watchdog-alzbetinsky-klaster-20260803.yml'
+      - '.github/workflows/rescue-alzbetinsky-klaster-20260803.yml'
+      - '.github/workflows/validate-alzbetinsky-klaster-publication.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Ověřit zdroj, skript a úplné sestavení nanečisto
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet pillow
+          python3 -m py_compile scripts/publish_alzbetinsky_klaster_20260803.py
+          python3 scripts/publish_alzbetinsky_klaster_20260803.py --validate-source-only
+          python3 scripts/publish_alzbetinsky_klaster_20260803.py
+          grep -Fq 'Kam odešli poslední pacienti?' clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html
+          grep -Fq 'data-poll-id="alzbetinsky-klaster-kadan-2026"' clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html
+          grep -Fq 'data-latest-article-href="/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html"' index.html
+          grep -Fq '/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html' clanky/index.html
+          grep -Fq 'https://nasekadan.cz/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html' rss.xml sitemap.xml news-sitemap.xml
+          test -s social/alzbetinsky-klaster-kadan-pacienti-20260803.png
+          git diff --check
