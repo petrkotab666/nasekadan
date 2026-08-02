@@ -1,0 +1,67 @@
+name: Sestavit neveřejnou hru Příjezd císaře v2
+
+on:
+  push:
+    branches:
+      - work/prijezd-cisare-v2
+    paths:
+      - '.game-payload/prijezd-v2.part*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: assemble-private-game-v2
+  cancel-in-progress: true
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/prijezd-cisare-v2
+          fetch-depth: 0
+
+      - name: Ověřit úplnost přenosu
+        shell: bash
+        run: |
+          set -euo pipefail
+          for part in {00..06}; do
+            test -s ".game-payload/prijezd-v2.part${part}"
+          done
+
+      - name: Sestavit pracovní verzi
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .game-payload/prijezd-v2.part* | base64 --decode > /tmp/prijezd-v2.tar.gz
+          echo '8394748952ee780726ac6a67cc388e45f430555f99df809044148480dff2d747  /tmp/prijezd-v2.tar.gz' | sha256sum --check --strict
+          tar -xzf /tmp/prijezd-v2.tar.gz -C "$GITHUB_WORKSPACE"
+
+      - name: Otestovat engine a rozhraní
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check hry/prijezd-karla-iv/game.js
+          node --test tests/prijezd-cisare-engine.test.mjs tests/prijezd-cisare-static.test.mjs
+
+      - name: Uložit pracovní verzi do větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            hry/prijezd-karla-iv \
+            tests/prijezd-cisare-engine.test.mjs \
+            tests/prijezd-cisare-static.test.mjs \
+            .github/workflows/test-prijezd-cisare-v2.yml
+          if git diff --cached --quiet; then
+            echo 'Pracovní verze už odpovídá přenesenému balíčku.'
+            exit 0
+          fi
+          git commit -m 'Přidat neveřejnou pracovní verzi hry Příjezd císaře v2 [skip ci]'
+          git push origin HEAD:work/prijezd-cisare-v2
