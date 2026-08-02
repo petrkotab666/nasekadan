@@ -84,7 +84,6 @@ jobs:
                   text='\n'.join(parts)
               return text
 
-          # Veřejná ID v blízkosti dokumentů rady 2024/2026, které odkazují na neveřejné přílohy.
           centers=[3895222,4957305,3805054,3750240,4871082]
           ranges=[]
           for c in centers:
@@ -103,7 +102,6 @@ jobs:
                   if status!=200 or (size and size<500):
                       if n%120==0: time.sleep(.15)
                       continue
-                  # Některé servery mají nepřesný HEAD; ověříme GET.
                   g=get(url,'GET',45)
                   if g is None or g.status_code!=200 or not g.content.startswith(b'%PDF') or len(g.content)>20_000_000:
                       continue
@@ -130,7 +128,6 @@ jobs:
                   errors.append({'file_id':fid,'error':repr(e)})
               if n%80==0: time.sleep(.2)
 
-          # Přesné známé veřejné dokumenty – uchovat jejich text pro porovnání.
           known={
             3895222:'rada-2024-09-26',
             4957305:'rada-2026-02-12',
@@ -170,3 +167,5 @@ jobs:
             git commit -m 'Výsledky cíleného hledání příloh Hossner a audit'
             git push origin main
           fi
+
+# automation rerun 2026-08-02T11:20Z
