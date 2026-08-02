@@ -4,6 +4,7 @@ Tato verze je vyvíjena odděleně od veřejného webu. Stránka má `noindex,no
 
 ## Co hra obsahuje
 
+- historický prolog vysvětlující požár roku 1362, pětiletou obnovu a důvod příprav;
 - osm kapitol, šestnáct scén a čtyřicet osm rozhodnutí;
 - tři obtížnosti a pět vzájemně provázaných ukazatelů;
 - volnou kroniku s proměnlivými scénami a stabilní denní výzvu;

@@ -14,6 +14,8 @@
   .game-toolbar { justify-content: stretch; overflow-x: auto; padding-bottom: 4px; }
   .tool-button { flex: 1 0 auto; }
   .difficulty { grid-template-columns: 1fr; }
+  .prologue-timeline { grid-template-columns: 1fr; }
+  .prologue-timeline::before { left: 49px; right: auto; top: 40px; bottom: 40px; width: 2px; height: auto; }
   .difficulty-option { min-height: 90px; }
   .scene { grid-template-columns: 1fr; }
   .scene__illustration { min-height: 170px; }
@@ -32,7 +34,13 @@
   .game-hero__lead { font-size: 17px; }
   .hero-features { gap: 6px; }
   .game-card { border-radius: 20px; }
-  .start-screen { padding: 25px 18px; }
+  .start-screen, .prologue-screen { padding: 25px 18px; }
+  .prologue-timeline article { grid-template-columns: 54px minmax(0,1fr); padding: 15px; }
+  .prologue-timeline time { width: 52px; height: 52px; font-size: 14px; }
+  .prologue-timeline::before { left: 41px; }
+  .prologue-mission { padding: 20px 18px; }
+  .prologue-actions { align-items: stretch; flex-direction: column-reverse; }
+  .prologue-actions .game-button { width: 100%; }
   .mode-picker { grid-template-columns: 1fr; }
   .resume-card { align-items: stretch; flex-direction: column; }
   .progress-copy { display: grid; gap: 5px; }

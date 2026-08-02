@@ -8,10 +8,10 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="theme-color" content="#36151a">
   <link rel="stylesheet" href="/style.css">
-  <link rel="stylesheet" href="./game.css?v=20260802-v2">
+  <link rel="stylesheet" href="./game.css?v=20260802-v3">
   <link rel="stylesheet" href="/footer.css?v=20260726-event-hotfix-2">
 </head>
-<body class="game-page" data-game-version="2">
+<body class="game-page" data-game-version="3">
   <a class="skip-link" href="#gameApp">Přeskočit na hru</a>
   <div class="preview-ribbon" role="status">PRACOVNÍ VERZE · HRA NENÍ VEŘEJNĚ PUBLIKOVANÁ</div>
 
@@ -56,7 +56,7 @@
             <div class="start-heading">
               <span class="chapter-label">TVÁ ROLE</span>
               <h2>Jsi správce královského města</h2>
-              <p>Neexistuje jediná správná cesta. Každé rozhodnutí něco zachrání a něco ohrozí. Nejvyšší skóre získáš rovnováhou, ne bezhlavým maximalizováním jednoho ukazatele.</p>
+              <p>Pět let po ničivém požáru se obnovená Kadaň chystá na návštěvu Karla IV. Jako správce města budeš rozhodovat, co dokončit, co zaplatit a koho požádat o pomoc. Neexistuje jediná správná cesta – nejvyšší skóre získáš rovnováhou.</p>
             </div>
 
             <div class="resume-card" id="resumeCard" hidden>
@@ -97,6 +97,33 @@
             <div class="start-actions">
               <button type="button" class="game-button game-button--primary game-button--large" id="startButton">Zahájit přípravy</button>
               <div class="start-progress"><p id="bestScore">Nejlepší výsledek: zatím žádný</p><p id="dailyStatus" class="daily-status">Denní výzva čeká.</p></div>
+            </div>
+          </section>
+
+          <section class="prologue-screen" id="prologueScreen" hidden aria-labelledby="prologueTitle">
+            <div class="prologue-heading">
+              <p class="chapter-label">PROLOG · KADAŇ, JARO 1367</p>
+              <h2 id="prologueTitle">Město povstává z popela</h2>
+              <p class="prologue-lead">Roku 1362 zachvátil Kadaň rozsáhlý požár. Vyhořelo město, hrad i předměstí. Během následujících pěti let vyrostla velká část centra znovu z kamene a zesílilo opevnění. Obnova však spotřebovala peníze, materiál i síly obyvatel.</p>
+            </div>
+
+            <div class="prologue-timeline" aria-label="Události před příjezdem císaře">
+              <article><time datetime="1362">1362</time><div><h3>Velký požár</h3><p>Oheň ničí město i hrad. Začíná rozsáhlá obnova.</p></div></article>
+              <article><time datetime="1366">1366</time><div><h3>Větší samostatnost</h3><p>Kadaň získává právo úplné samosprávy a o svých záležitostech rozhoduje svobodněji.</p></div></article>
+              <article class="is-current"><time datetime="1367">1367</time><div><h3>Císař je na cestě</h3><p>Posel oznamuje návštěvu Karla IV. Do příjezdu zbývá šest týdnů.</p></div></article>
+            </div>
+
+            <div class="prologue-mission">
+              <span>TVŮJ ÚKOL</span>
+              <h3>Dokončit obnovu a připravit město</h3>
+              <p><strong>Nezačínáš na spáleništi.</strong> Hlavní část města už znovu stojí, ale zbývají poškozené cesty, střechy, brány a veřejná místa. Musíš určit, co dostane přednost, jak zaplatit řemeslníky a kolik dalšího břemene unesou obyvatelé.</p>
+            </div>
+
+            <p class="prologue-disclaimer"><strong>Historický základ:</strong> Požár roku 1362 a Karlova návštěva roku 1367 jsou doložené. Tvá funkce, šestitýdenní odpočet a konkrétní rozhodnutí jsou přiznanou herní rekonstrukcí.</p>
+
+            <div class="prologue-actions">
+              <button type="button" class="game-button game-button--secondary" id="prologueBackButton">Změnit režim</button>
+              <button type="button" class="game-button game-button--primary game-button--large" id="prologueContinueButton">Převzít správu města</button>
             </div>
           </section>
 
@@ -201,6 +228,7 @@
     </div>
   </footer>
 
+  <script type="module" src="./prologue.js?v=20260802-v3"></script>
   <script type="module" src="./game.js?v=20260802-v2"></script>
 </body>
 </html>
