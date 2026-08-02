@@ -1,0 +1,114 @@
+name: Vytěžit dokument DESÚ 294869 v2
+run-name: Jednorázová rešerše dokumentu DESÚ 294869 – správný detail
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-desu-294869-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  research:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Stáhnout detail a přílohy úřední desky
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT='.github/research/desu-294869-v2'
+          rm -rf "$OUT"
+          mkdir -p "$OUT/files"
+          URL='https://www.mesto-kadan.cz/redakce/index.php?as4uOriginalDomain=www.mesto-kadan.cz&as4u_protocol=https&clanek=245914&detail_claim=294869&lanG=cs&slozka=237763'
+          curl -kLfsS --max-time 90 -A 'Mozilla/5.0 (compatible; NaseKadanResearch/1.0)' "$URL" -o "$OUT/detail.html"
+
+          python3 - <<'PY'
+          from __future__ import annotations
+          import html, json, re
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+
+          out = Path('.github/research/desu-294869-v2')
+          raw = out.joinpath('detail.html').read_text(encoding='utf-8', errors='replace')
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.links=[]; self.text=[]; self.href=None; self.label=[]
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() == 'a': self.href=dict(attrs).get('href'); self.label=[]
+              def handle_data(self, data):
+                  s=' '.join(data.split())
+                  if s:
+                      self.text.append(s)
+                      if self.href is not None: self.label.append(s)
+              def handle_endtag(self, tag):
+                  if tag.lower() == 'a' and self.href is not None:
+                      self.links.append({'label':' '.join(self.label).strip(),'url':urljoin('https://www.mesto-kadan.cz/',html.unescape(self.href))})
+                      self.href=None; self.label=[]
+          p=Parser(); p.feed(raw)
+          links=[]; seen=set()
+          for item in p.links:
+              key=(item['label'],item['url'])
+              if key not in seen: seen.add(key); links.append(item)
+          text=re.sub(r'\s+',' ',' '.join(p.text)).strip()
+          files=[x for x in links if '/filemanager/files/file.php?' in x['url']]
+          payload={'source_url':'https://www.mesto-kadan.cz/redakce/index.php?as4uOriginalDomain=www.mesto-kadan.cz&as4u_protocol=https&clanek=245914&detail_claim=294869&lanG=cs&slozka=237763','text':text,'links':links,'file_links':files}
+          out.joinpath('detail.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2),encoding='utf-8')
+          out.joinpath('detail.txt').write_text(text+'\n',encoding='utf-8')
+          with out.joinpath('file-urls.txt').open('w',encoding='utf-8') as f:
+              for item in files: f.write(item['url']+'\t'+item['label']+'\n')
+          PY
+
+          i=0
+          while IFS=$'\t' read -r file_url label; do
+            [ -n "$file_url" ] || continue
+            i=$((i+1))
+            tmp="$OUT/files/attachment-$i.bin"
+            curl -kLfsS --max-time 120 -A 'Mozilla/5.0 (compatible; NaseKadanResearch/1.0)' "$file_url" -o "$tmp"
+            kind="$(file -b --mime-type "$tmp" || true)"
+            printf '%s\t%s\t%s\t%s\n' "$i" "$kind" "$label" "$file_url" >> "$OUT/files/index.tsv"
+            if [ "$kind" = 'application/pdf' ]; then
+              mv "$tmp" "$OUT/files/attachment-$i.pdf"
+              pdftotext -layout "$OUT/files/attachment-$i.pdf" "$OUT/files/attachment-$i.txt" || true
+              pdfinfo "$OUT/files/attachment-$i.pdf" > "$OUT/files/attachment-$i.info.txt" || true
+            else
+              mv "$tmp" "$OUT/files/attachment-$i.dat"
+            fi
+          done < "$OUT/file-urls.txt"
+
+          {
+            echo '# DESÚ – detail_claim 294869'
+            echo
+            echo "Zdroj: $URL"
+            echo
+            echo '## Text detailu'
+            cat "$OUT/detail.txt"
+            echo
+            echo '## Přílohy'
+            cat "$OUT/files/index.tsv" 2>/dev/null || echo 'Bez dohledané přílohy.'
+            for txt in "$OUT"/files/attachment-*.txt; do
+              case "$txt" in *.info.txt) continue;; esac
+              [ -f "$txt" ] || continue
+              echo; echo "### $(basename "$txt")"; cat "$txt"
+            done
+          } > "$OUT/report.md"
+
+      - name: Uložit rešeršní výstup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-research-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/research/desu-294869-v2
+          git diff --cached --quiet && exit 0
+          git commit -m 'Rešerše: vytěžit dokument DESÚ 294869 v2'
+          git push origin HEAD:main
