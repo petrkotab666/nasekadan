@@ -1,0 +1,212 @@
+name: Úplná inventura médií webu Petra Hossnera
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-wp-media-20260802.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-hossner-wp-media-20260802
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces antiword unzip
+          python3 -m pip install --quiet requests beautifulsoup4 python-docx openpyxl python-pptx
+
+      - name: Enumerovat všechna média a vytěžit dokumenty
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT=.github/research/hossner-wp-media-20260802
+          rm -rf "$OUT"
+          mkdir -p "$OUT"/{files,text,metadata}
+          cat > /tmp/wp_media.py <<'PY'
+          from __future__ import annotations
+          import hashlib, html, json, re, subprocess, time, urllib.parse
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+
+          OUT=Path('.github/research/hossner-wp-media-20260802')
+          for d in ('files','text','metadata'): (OUT/d).mkdir(parents=True,exist_ok=True)
+          S=requests.Session(); S.headers.update({'User-Agent':'Mozilla/5.0 (compatible; NaseKadan public-document-research/1.0)','Accept-Language':'cs,en;q=0.7'})
+          terms=[
+            'hossner','nemocnice kadaň','nemocnice kadan','deloitte','tögel','togel','tőgl','tögl',
+            '30 c 84/2025','30 c 211/2025','93 ncp 490/2026','14 co 104/2026',
+            '25 979 821','25979821','52 882 922','52882922','53 726 579','53726579','843 657','843657',
+            'předžalobní','predzalobni','žaloba','zaloba','žalobce','zalobce','žalovaná','zalovana',
+            'pracovní smlouva','pracovni smlouva','dodatek č. 1','dodatek c. 1','mzdový výměr','mzdovy vymer',
+            'kritéria hodnocení','kriteria hodnoceni','výbor pro audit','vybor pro audit','zpráva jednání výboru',
+            'shrnutí','shrnuti','odměna v místě a čase obvyklá','odmena v miste a case obvykla','skartační','skartacni','důvěrné','duverne'
+          ]
+          regex=[(t,re.compile(re.escape(t),re.I)) for t in terms]
+          media=[]; docs=[]; errors=[]; seen_hash={}
+
+          def get(url,timeout=60):
+            last=None
+            for i in range(4):
+              try:
+                r=S.get(url,timeout=timeout,allow_redirects=True)
+                if r.status_code in (429,500,502,503,504): raise RuntimeError(f'HTTP {r.status_code}')
+                r.raise_for_status(); return r
+              except Exception as e:
+                last=e; time.sleep(1.5*(i+1))
+            raise last
+
+          # REST API pagination, with headers if available and graceful stop on invalid page.
+          page=1
+          while page<=100:
+            url=f'https://petrhossnerkadan.cz/wp-json/wp/v2/media?per_page=100&page={page}&orderby=id&order=asc'
+            try:
+              r=get(url)
+              arr=r.json()
+              if not isinstance(arr,list) or not arr: break
+              media.extend(arr)
+              print(f'media page {page}: {len(arr)}; total {len(media)}')
+              if len(arr)<100: break
+              page+=1
+            except Exception as e:
+              if '400' in repr(e) and page>1: break
+              errors.append({'stage':'media-api','page':page,'url':url,'error':repr(e)}); break
+
+          # Fallback: parse wp-sitemap-posts-attachment-*.xml, which may expose unlinked attachments.
+          sitemap_urls=[]
+          try:
+            r=get('https://petrhossnerkadan.cz/wp-sitemap.xml')
+            for loc in re.findall(r'<loc>(.*?)</loc>',r.text,re.I|re.S):
+              loc=html.unescape(loc.strip())
+              if 'attachment' in loc or 'media' in loc: sitemap_urls.append(loc)
+          except Exception as e: errors.append({'stage':'sitemap-index','error':repr(e)})
+          attachment_pages=[]
+          for sm in sitemap_urls:
+            try:
+              r=get(sm)
+              attachment_pages += [html.unescape(x.strip()) for x in re.findall(r'<loc>(.*?)</loc>',r.text,re.I|re.S)]
+            except Exception as e: errors.append({'stage':'attachment-sitemap','url':sm,'error':repr(e)})
+
+          def safe_name(url,mid,mime):
+            name=Path(urllib.parse.urlparse(url).path).name or f'media-{mid}'
+            name=re.sub(r'[^A-Za-z0-9._-]+','_',urllib.parse.unquote(name))[:190]
+            if not Path(name).suffix:
+              ext={'application/pdf':'.pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document':'.docx','application/vnd.openxmlformats-officedocument.presentationml.presentation':'.pptx','application/msword':'.doc'}.get(mime,'')
+              name+=ext
+            return f'{mid}-{name}'
+
+          def extract(p:Path,mime:str):
+            text=''
+            if p.suffix.lower()=='.pdf' or mime=='application/pdf':
+              text=subprocess.run(['pdftotext','-layout',str(p),'-'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False).stdout
+              if len(re.sub(r'\s+','',text))<100 and p.stat().st_size<25_000_000:
+                tmp=Path('/tmp/ocr-'+p.stem); tmp.mkdir(exist_ok=True)
+                subprocess.run(['pdftoppm','-f','1','-l','20','-r','150','-png',str(p),str(tmp/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                parts=[]
+                for img in sorted(tmp.glob('p-*.png')):
+                  q=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False)
+                  parts.append(q.stdout)
+                text='\n'.join(parts)
+            elif p.suffix.lower()=='.docx':
+              try:
+                import docx
+                d=docx.Document(str(p)); text='\n'.join(x.text for x in d.paragraphs)
+                for table in d.tables:
+                  for row in table.rows: text+='\n'+' | '.join(cell.text for cell in row.cells)
+              except Exception: pass
+            elif p.suffix.lower()=='.doc':
+              text=subprocess.run(['antiword',str(p)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,check=False).stdout
+            elif p.suffix.lower()=='.pptx':
+              try:
+                from pptx import Presentation
+                prs=Presentation(str(p)); parts=[]
+                for slide in prs.slides:
+                  for sh in slide.shapes:
+                    if hasattr(sh,'text'): parts.append(sh.text)
+                text='\n'.join(parts)
+              except Exception: pass
+            elif mime.startswith('text/') or p.suffix.lower() in ('.txt','.csv','.html','.htm','.json'):
+              text=p.read_text(encoding='utf-8',errors='replace')
+              if p.suffix.lower() in ('.html','.htm'): text=BeautifulSoup(text,'lxml').get_text('\n',strip=True)
+            return text
+
+          for idx,item in enumerate(media,1):
+            mid=item.get('id'); mime=(item.get('mime_type') or '').lower(); url=item.get('source_url') or ''
+            title=html.unescape((item.get('title') or {}).get('rendered',''))
+            desc=BeautifulSoup(html.unescape((item.get('description') or {}).get('rendered','')),'lxml').get_text(' ',strip=True)
+            caption=BeautifulSoup(html.unescape((item.get('caption') or {}).get('rendered','')),'lxml').get_text(' ',strip=True)
+            meta_text=' '.join([str(mid),title,desc,caption,url,mime])
+            is_document=(mime.startswith('application/') or re.search(r'\.(pdf|docx?|xlsx?|pptx?|rtf|txt|csv)(?:\?|$)',url,re.I))
+            rec={'id':mid,'date':item.get('date'),'modified':item.get('modified'),'slug':item.get('slug'),'title':title,'caption':caption,'description':desc,'mime_type':mime,'source_url':url,'parent':item.get('post'),'link':item.get('link')}
+            if not is_document:
+              rec['metadata_hits']=[t for t,rx in regex if rx.search(meta_text)]
+              docs.append(rec); continue
+            try:
+              r=get(url,120); data=r.content
+              if len(data)>50_000_000:
+                rec['error']='file too large'; docs.append(rec); continue
+              sha=hashlib.sha256(data).hexdigest(); rec['bytes']=len(data); rec['sha256']=sha; rec['final_url']=r.url
+              if sha in seen_hash:
+                rec['duplicate_of']=seen_hash[sha]; docs.append(rec); continue
+              seen_hash[sha]=mid
+              name=safe_name(r.url,mid,mime); p=OUT/'files'/name; p.write_bytes(data); rec['file']=str(p)
+              text=extract(p,mime)
+              tp=OUT/'text'/(name+'.txt')
+              if text: tp.write_text(text,encoding='utf-8',errors='replace'); rec['text']=str(tp); rec['chars']=len(text)
+              combined=meta_text+'\n'+text
+              found=[t for t,rx in regex if rx.search(combined)]
+              rec['hits']=found
+              if found:
+                snippets=[]; low=combined.lower()
+                for term in found[:30]:
+                  pos=low.find(term.lower()); snippets.append(re.sub(r'\s+',' ',combined[max(0,pos-400):pos+1600]).strip())
+                rec['snippets']=snippets
+              else:
+                # Retain metadata but remove irrelevant binary/text to avoid bloating repository.
+                p.unlink(missing_ok=True); tp.unlink(missing_ok=True); rec.pop('file',None); rec.pop('text',None)
+              docs.append(rec)
+            except Exception as e:
+              rec['error']=repr(e); docs.append(rec); errors.append({'stage':'download','id':mid,'url':url,'error':repr(e)})
+            if idx%25==0: print(f'processed {idx}/{len(media)}')
+
+          (OUT/'metadata/media.json').write_text(json.dumps(media,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/documents.json').write_text(json.dumps(docs,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'metadata/errors.json').write_text(json.dumps(errors,ensure_ascii=False,indent=2),encoding='utf-8')
+          relevant=[d for d in docs if d.get('hits') or d.get('metadata_hits')]
+          lines=['# Úplná inventura médií webu Petra Hossnera','',f'- Položek REST API: **{len(media)}**',f'- Dokumentových/metadata záznamů: **{len(docs)}**',f'- Relevantních nálezů: **{len(relevant)}**',f'- Chyb: **{len(errors)}**',f'- Attachment sitemap URL: **{len(attachment_pages)}**','']
+          for d in relevant:
+            lines += [f"## Media ID {d.get('id')} — {d.get('title') or d.get('slug')}",f"- Datum: {d.get('date')}",f"- Typ: `{d.get('mime_type')}`",f"- URL: `{d.get('source_url')}`",f"- SHA-256: `{d.get('sha256','—')}`",f"- Výrazy: {', '.join(d.get('hits') or d.get('metadata_hits') or [])}",f"- Soubor: `{d.get('file','metadata only')}`",'']
+            for s in d.get('snippets',[])[:10]: lines += ['> '+s[:1800],'']
+          if not relevant: lines += ['Nebylo nalezeno žádné nové relevantní médium.']
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          print('\n'.join(lines[:40]))
+          PY
+          python3 /tmp/wp_media.py
+
+      - name: Uložit výsledky
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-wp-media-20260802
+          if ! git diff --cached --quiet; then
+            git commit -m 'Inventarizovat všechna média webu Petra Hossnera'
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main && git push origin HEAD:main && exit 0
+              sleep $((attempt*4))
+            done
+            exit 1
+          fi
