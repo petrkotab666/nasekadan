@@ -1,0 +1,53 @@
+@media (max-width: 1020px) {
+  .game-layout { grid-template-columns: 1fr; }
+  .game-sidebar { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .game-hero__content { grid-template-columns: 1fr 230px; }
+  .hero-seal { width: 220px; height: 220px; }
+}
+
+@media (max-width: 800px) {
+  .game-hero { min-height: 540px; }
+  .game-hero__content { padding-top: 54px; grid-template-columns: 1fr; }
+  .hero-seal { display: none; }
+  .game-hero h1 { font-size: clamp(55px,17vw,92px); }
+  .game-shell { margin-top: -28px; }
+  .game-toolbar { justify-content: stretch; overflow-x: auto; padding-bottom: 4px; }
+  .tool-button { flex: 1 0 auto; }
+  .difficulty { grid-template-columns: 1fr; }
+  .difficulty-option { min-height: 90px; }
+  .scene { grid-template-columns: 1fr; }
+  .scene__illustration { min-height: 170px; }
+  .stats { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .stat { border-bottom: 1px solid #f1e9dc; }
+  .stat:nth-child(3n) { border-right: 0; }
+  .stat:nth-last-child(-n+2) { border-bottom: 0; }
+  .game-sidebar { grid-template-columns: 1fr; }
+  .result-stats { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+
+@media (max-width: 560px) {
+  .preview-ribbon { font-size: 10px; }
+  .game-hero { min-height: 500px; }
+  .game-hero__content { min-height: 390px; padding-bottom: 100px; }
+  .game-hero__lead { font-size: 17px; }
+  .hero-features { gap: 6px; }
+  .game-card { border-radius: 20px; }
+  .start-screen { padding: 25px 18px; }
+  .mode-picker { grid-template-columns: 1fr; }
+  .resume-card { align-items: stretch; flex-direction: column; }
+  .progress-copy { display: grid; gap: 5px; }
+  .game-topbar { padding-inline: 18px; }
+  .scene__body { padding: 25px 18px; }
+  .stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .stat:nth-child(3n) { border-right: 1px solid #f1e9dc; }
+  .stat:nth-child(2n) { border-right: 0; }
+  .stat:nth-last-child(-n+2) { border-bottom: 1px solid #f1e9dc; }
+  .stat:last-child { grid-column: 1 / -1; border-right: 0; border-bottom: 0; }
+  .choice-button { grid-template-columns: 38px minmax(0,1fr); }
+  .choice-arrow { display: none; }
+  .consequence { padding: 17px; }
+  .result-screen { padding: 34px 18px; }
+  .result-score strong { font-size: 68px; }
+  .result-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .game-after { border-radius: 20px; }
+}
