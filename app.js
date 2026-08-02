@@ -36,3 +36,11 @@ function render(events,generatedAt){
 }
 
 fetch('/data/events.json?ts='+Date.now(),{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error();return r.json()}).then(data=>render(Array.isArray(data.events)?data.events:[],data.generatedAt)).catch(()=>{if(grid)grid.innerHTML='<p>Kalendář se právě nepodařilo načíst. Napište na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>.</p>';});
+
+(function linkTrainOutageTicker(){
+ const ticker=document.querySelector('.ticker .wrap');
+ const href='/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html';
+ if(!ticker||ticker.querySelector(`a[href="${href}"]`))return;
+ const original=ticker.innerHTML.trim();
+ ticker.innerHTML=`<a href="${href}" style="display:block;color:inherit;text-decoration:none">${original} <strong style="text-decoration:underline">Podrobnosti →</strong></a>`;
+})();
