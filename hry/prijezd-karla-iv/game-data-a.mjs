@@ -367,7 +367,7 @@ export const CHAPTERS_A = [
         ]
       },
       {
-        "eyebrow": "TŘI TÝDÍNY DO PŘÍJEZDU",
+        "eyebrow": "TŘI TÝDNY DO PŘÍJEZDU",
         "title": "Ve skladech chybí oves pro koně",
         "text": "Bez krmiva se císařská družina neobejde. Okolní vesnice však samy nemají přebytek.",
         "illustration": "stable",
