@@ -1,0 +1,81 @@
+name: Jednorázově ověřit veřejný web pro monitoring
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/verify-monitoring-public-20260802-0539.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ověřit živý web přes HTTPS bez cache
+        shell: bash
+        run: |
+          set -u
+          slugs=(
+            'petice-nemocnice-kadan-podpisova-mista-2026'
+            'jaderne-tusimice-smr-voda-doprava-eia-2026'
+            'kadansti-plavacci-zapis-podzim-2026'
+          )
+          titles=(
+            'Petice za nemocnici míří do ulic. Podepisovat se bude na třech místech'
+            'Jaderné Tušimice se připravují naplno. O vodě, dopravě i připojení ale stále není rozhodnuto'
+            'Kadaňští Plaváčci otevřeli zápis do podzimních kurzů. Nabídka je pro děti i dospělé'
+          )
+
+          for attempt in $(seq 1 18); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+            rm -f /tmp/nk-{home,archive,rss,sitemap,news,health,article0,article1,article2}
+
+            home_http=no; archive_http=no; rss_http=no; sitemap_http=no; news_http=no; health_http=no
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?monitor=${stamp}" -o /tmp/nk-home && home_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?monitor=${stamp}" -o /tmp/nk-archive && archive_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?monitor=${stamp}" -o /tmp/nk-rss && rss_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?monitor=${stamp}" -o /tmp/nk-sitemap && sitemap_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?monitor=${stamp}" -o /tmp/nk-news && news_http=yes || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?monitor=${stamp}" -o /tmp/nk-health && health_http=yes || true
+
+            article_ok=yes; surfaces_ok=yes
+            for i in 0 1 2; do
+              slug="${slugs[$i]}"; title="${titles[$i]}"; path="/clanky/${slug}.html"
+              if ! curl -4 -kfsS --max-time 25 "https://nasekadan.cz${path}?monitor=${stamp}" -o "/tmp/nk-article${i}"; then
+                article_ok=no
+              elif ! grep -Fq "<h1>${title}</h1>" "/tmp/nk-article${i}"; then
+                article_ok=no
+              fi
+              for file in /tmp/nk-home /tmp/nk-archive /tmp/nk-rss /tmp/nk-sitemap; do
+                if [[ ! -s "$file" ]] || ! grep -Fq "$path" "$file"; then surfaces_ok=no; fi
+              done
+            done
+
+            health_source="$(sed -n 's/^source=//p' /tmp/nk-health 2>/dev/null | head -n1)"
+            health_generated="$(sed -n 's/^generated=//p' /tmp/nk-health 2>/dev/null | head -n1)"
+            health_mode="$(sed -n 's/^mode=//p' /tmp/nk-health 2>/dev/null | head -n1)"
+            health_matches=no
+            [[ -n "$main_sha" && "$health_source" == "$main_sha" ]] && health_matches=yes
+
+            echo "attempt=$attempt main=$main_sha source=$health_source generated=$health_generated mode=$health_mode home=$home_http archive=$archive_http rss=$rss_http sitemap=$sitemap_http news=$news_http health=$health_http articles=$article_ok surfaces=$surfaces_ok source_match=$health_matches"
+
+            if [[ "$home_http" == yes && "$archive_http" == yes && "$rss_http" == yes && "$sitemap_http" == yes && "$news_http" == yes && "$health_http" == yes && "$article_ok" == yes && "$surfaces_ok" == yes && "$health_matches" == yes ]]; then
+              echo "HOTOVO: veřejný web kompletně odpovídá main=$main_sha."
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo 'Veřejná kontrola neprošla v úplném rozsahu.' >&2
+          echo 'Poslední deployment-health:' >&2
+          cat /tmp/nk-health >&2 2>/dev/null || true
+          exit 1
