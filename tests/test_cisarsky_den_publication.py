@@ -18,7 +18,7 @@ assert 'Císařský den v Kadani' in source
 assert 'noindex,nofollow,noarchive' in source
 assert 'Kadaň znovu vítá císaře' in effective
 assert '10:00–22:00 · vstup zdarma' in effective
-assert 'Vstup je zdarma.' in effective
+assert 'Vstup na Císařský den 2026 je zdarma.' in effective
 assert all(t in effective for t in ('14:00', '14:30', '18:00'))
 assert 'Hru spustíme 12. srpna v 18:00' in effective
 
