@@ -1,0 +1,86 @@
+name: Serverově ověřit kulturní přehled 3.–9. srpna
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/verify-weekly-live-v2-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit produkční soubory přímo na OVH
+        id: verify
+        continue-on-error: true
+        env:
+          OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root='/var/www/nasekadan'
+          slug='kam-v-kadani-a-okoli-3-9-srpna-2026'
+          rel="/clanky/${slug}.html"
+          article="$root$rel"
+          test -s "$article"
+          grep -Fq '<h1>Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání</h1>' "$article"
+          grep -Fq '<link rel="canonical" href="https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html">' "$article"
+          grep -Fq 'property="og:image:width" content="1200"' "$article"
+          grep -Fq 'property="og:image:height" content="630"' "$article"
+          grep -Fq 'NewsArticle' "$article"
+          for file in "$root/index.html" "$root/clanky/index.html" "$root/rss.xml" "$root/sitemap.xml" "$root/news-sitemap.xml"; do
+            test -s "$file"
+            grep -Fq "$rel" "$file"
+          done
+          og_url="$(sed -n 's/.*property="og:image" content="\([^"]*\)".*/\1/p' "$article" | head -n1)"
+          test -n "$og_url"
+          og_rel="${og_url#https://nasekadan.cz/}"
+          og_file="$root/$og_rel"
+          test -s "$og_file"
+          python3 - "$og_file" <<'PY'
+import struct, sys
+with open(sys.argv[1], 'rb') as f:
+    data=f.read(24)
+assert data[:8] == b'\x89PNG\r\n\x1a\n'
+assert struct.unpack('>II', data[16:24]) == (1200, 630)
+PY
+          for endpoint in "$rel" '/' '/clanky/' '/rss.xml' '/sitemap.xml' '/news-sitemap.xml'; do
+            curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${endpoint}?verify=weekly-v2" >/dev/null
+          done
+          printf 'LIVE_OK\narticle=https://nasekadan.cz%s\nog=%s\n' "$rel" "$og_url"
+          REMOTE
+
+      - name: Zapsat výsledek ověření
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const ok = process.env.VERIFY_OUTCOME === 'success';
+            const body = ok
+              ? '✅ **LIVE OVĚŘENÍ ÚSPĚŠNÉ**\n\nNa OVH jsou potvrzeny: článek, titulka, archiv, RSS, sitemap.xml, news-sitemap.xml, canonical, NewsArticle JSON-LD a skutečný PNG OG obrázek 1200 × 630.'
+              : '❌ **LIVE OVĚŘENÍ NEÚSPĚŠNÉ**\n\nNěkterá z povinných produkčních kontrol neprošla. Podrobnost je v logu běhu.';
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 535, body});
+            if (ok) {
+              await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: 535, state: 'closed', state_reason: 'completed'});
+            }
+            if (!ok) core.setFailed('Živé ověření kulturního přehledu neprošlo.');
