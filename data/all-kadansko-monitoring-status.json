@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-02T10:15:28.496814+00:00",
+  "checkedAt": "2026-08-02T11:43:01.581279+00:00",
   "bootstrap": false,
   "sourceCount": 106,
-  "checkedSources": 92,
-  "failedSources": 14,
-  "itemsParsed": 6595,
-  "uniqueItems": 3559,
+  "checkedSources": 83,
+  "failedSources": 23,
+  "itemsParsed": 6036,
+  "uniqueItems": 3212,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 706,
+    "genericTitle": 638,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 4,
+    "broadWithoutLocalMatch": 1,
     "notEditoriallySignificant": 1,
     "notFreshOrUndated": 0,
-    "duplicate": 2330
+    "duplicate": 2186
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -67,16 +67,15 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
       "url": "https://smlouvy.gov.cz/vyhledavani?subject_box=uaybdrx",
       "category": "Smlouvy a hospodaření",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "TimeoutError: The read operation timed out"
+      "status": "checked",
+      "itemsParsed": 19
     },
     {
       "name": "Kadaňské noviny",
@@ -164,8 +163,9 @@
       "url": "https://www.tskadan.cz/",
       "category": "Městské služby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 20
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Kabelová televize Kadaň",
@@ -254,8 +254,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 42
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -359,8 +360,9 @@
       "url": "https://www.zus-kadan.cz/",
       "category": "Umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 46
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Gymnázium Kadaň",
@@ -399,8 +401,9 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 125
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -457,8 +460,9 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 82
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -506,8 +510,9 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 81
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -539,7 +544,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 47
+      "itemsParsed": 46
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -587,8 +592,9 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -613,7 +619,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 265
+      "itemsParsed": 266
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -700,8 +706,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 85
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -757,8 +764,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 24
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -813,8 +821,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 72
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -823,7 +832,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -912,7 +921,7 @@
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 3
+      "itemsParsed": 2
     }
   ]
 }
