@@ -33,11 +33,37 @@ jobs:
           python3 scripts/protect_custom_social_cards_20260802.py
           grep -Fq 'meta_content(original, name="nasekadan:social-card")' scripts/generate_social_cards.py
           grep -Fq '<meta name="nasekadan:social-card" content="custom">' clanky/kulturni-zarizeni-kadan.html
-          before="$(grep -o 'https://nasekadan.cz/social/[^" ]*' clanky/kulturni-zarizeni-kadan.html | head -n1)"
-          python3 scripts/generate_social_cards.py --write --check
-          after="$(grep -o 'https://nasekadan.cz/social/[^" ]*' clanky/kulturni-zarizeni-kadan.html | head -n1)"
-          test "$before" = "$after"
-          test "$after" = 'https://nasekadan.cz/social/kzk-kultura-strelnice-klaster-20260802-v2.png'
+
+      - name: Ověřit pouze ruční kartu KZK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+          import re
+
+          module_path = Path('scripts/generate_social_cards.py')
+          spec = importlib.util.spec_from_file_location('social_cards', module_path)
+          module = importlib.util.module_from_spec(spec)
+          assert spec.loader is not None
+          spec.loader.exec_module(module)
+
+          article = Path('clanky/kulturni-zarizeni-kadan.html')
+          before_text = article.read_text(encoding='utf-8')
+          before_image = re.search(r'<meta property="og:image" content="([^"]+)">', before_text).group(1)
+          changed, errors = module.process_article(article, write=True)
+          after_text = article.read_text(encoding='utf-8')
+          after_image = re.search(r'<meta property="og:image" content="([^"]+)">', after_text).group(1)
+
+          expected = 'https://nasekadan.cz/social/kzk-kultura-strelnice-klaster-20260802-v2.png'
+          assert before_image == expected, before_image
+          assert after_image == expected, after_image
+          assert changed is False, changed
+          assert errors == [], errors
+          assert before_text == after_text, 'Generátor změnil článek označený jako custom.'
+          print('custom_social_card_protection=ok')
+          PY
 
       - name: Uložit systémovou opravu
         shell: bash
@@ -65,7 +91,7 @@ jobs:
           script: |
             const ok = '${{ job.status }}' === 'success';
             const body = ok
-              ? '✅ Opraveno systémově. Automatický generátor nyní ruční sociální karty pouze ověří a už je nepřepíše. Článek KZK je označen jako custom a po kontrolním spuštění zůstal nový obrázek beze změny.'
-              : '🚨 Systémovou ochranu ručních sociálních karet se nepodařilo dokončit.';
+              ? '✅ Opraveno systémově. Automatický generátor nyní ruční sociální karty pouze ověří a už je nepřepíše. Článek KZK je označen jako custom a cílený kontrolní běh potvrdil, že nový og:image zůstal beze změny.'
+              : '🚨 Systémovou ochranu ručních sociálních karet se nepodařilo dokončit ani při cílené kontrole.';
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
             if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
