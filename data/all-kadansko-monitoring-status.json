@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-02T21:25:52.710382+00:00",
+  "checkedAt": "2026-08-02T22:28:28.918537+00:00",
   "bootstrap": false,
   "sourceCount": 106,
   "checkedSources": 90,
   "failedSources": 16,
-  "itemsParsed": 6486,
-  "uniqueItems": 3486,
+  "itemsParsed": 6438,
+  "uniqueItems": 3506,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 689,
+    "genericTitle": 663,
     "missingUrl": 0,
     "broadWithoutLocalMatch": 0,
-    "notEditoriallySignificant": 0,
+    "notEditoriallySignificant": 6,
     "notFreshOrUndated": 0,
-    "duplicate": 2311
+    "duplicate": 2269
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -253,9 +253,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -506,8 +505,9 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 81
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -587,9 +587,8 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -638,7 +637,7 @@
       "category": "Kultura, památky a volný čas",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 68
+      "itemsParsed": 69
     },
     {
       "name": "Turistické informační centrum Kadaň",
@@ -701,9 +700,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 85
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -759,8 +757,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 24
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -815,8 +814,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 72
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -825,7 +825,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -874,7 +874,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 9
+      "itemsParsed": 10
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
