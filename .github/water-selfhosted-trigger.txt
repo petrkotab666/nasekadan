@@ -1,5 +1,6 @@
-Spuštěno 2026-08-02 01:44 Europe/Prague
-Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH po živém HTTPS ověření.
-Požadavek: nasadit aktuální main 1d1bf0e462f7b1696b5261cbed46661fc96ffec7.
-Veřejně ověřit: source v deployment-health.txt, správný H1 tří nejnovějších článků, titulku, archiv, RSS a sitemap.xml.
-Důvod: veřejný obsah je funkční, ale deployment-health stále uvádí source 186727ba4f76940ee4b772a9436bf8102dd95a3a z 2026-08-01T15:05:28Z. Od posledního opravného pokusu se stav main skutečně změnil. Při nezměněném výsledku se další deploy nespouští.
+Spuštěno 2026-08-02 09:08 Europe/Prague
+Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH.
+Požadavek: nasadit aktuální main s opravou odkazu z horní dopravní lišty na článek o nočních výlukách vlaků.
+Cílová adresa: /clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html
+Veřejně ověřit: klikací horní lištu, text „Podrobnosti →“, funkční cílový článek a shodu source v deployment-health.txt s nasazeným commitem.
+Důvod: uživatel požaduje zachovat upozornění v horní liště a vést z něj přímo na existující podrobný článek. Při nezměněném výsledku se další deploy nespouští.
