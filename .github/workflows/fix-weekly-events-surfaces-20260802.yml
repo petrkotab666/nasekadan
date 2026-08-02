@@ -1,0 +1,147 @@
+name: Doplnit publikační plochy kulturního týdne 3.–9. srpna
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-weekly-events-surfaces-20260802-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-weekly-events-surfaces-20260802
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit článek na všechny publikační plochy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+          import json
+          import re
+          from pathlib import Path
+
+          ROOT = Path('.')
+          SLUG = 'kam-v-kadani-a-okoli-3-9-srpna-2026'
+          URL = f'https://nasekadan.cz/clanky/{SLUG}.html'
+          HREF = f'/clanky/{SLUG}.html'
+          TITLE = 'Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání'
+          DESC = 'Ověřený přehled veřejných akcí a volnočasových možností na týden 3.–9. srpna 2026: módní show, pouliční dixieland, Medové odpoledne, kino, výstavy, koupání a Night Run v Mostě.'
+          IMAGE = 'https://nasekadan.cz/social/kam-v-kadani-a-okoli-3-9-srpna-2026-bff154b86a.png'
+          PUBLISHED = '2026-08-02T12:00:00+02:00'
+
+          article = ROOT / 'clanky' / f'{SLUG}.html'
+          if not article.exists():
+              raise SystemExit(f'Chybí článek {article}')
+
+          archive_card = f'''    <article class="archive-item service" data-weekly-cultural-20260802-card>
+            <div class="archive-visual" style="background:linear-gradient(90deg,rgba(3,28,49,.28),rgba(3,28,49,.08)),url('/social/kam-v-kadani-a-okoli-3-9-srpna-2026-bff154b86a.png') center/cover no-repeat"><strong>Kam vyrazit 3.–9. srpna</strong></div>
+            <div class="archive-body"><span class="archive-meta">2. srpna 2026 ve 12:00 · Kultura · Volný čas</span><h2>{TITLE}</h2><p>{DESC}</p><a href="{HREF}">Otevřít týdenní přehled →</a></div>
+          </article>'''
+
+          archive = ROOT / 'clanky' / 'index.html'
+          text = archive.read_text(encoding='utf-8')
+          text = re.sub(r'\s*<article\b[^>]*data-weekly-cultural-20260802-card[^>]*>.*?</article>\s*', '\n', text, flags=re.S)
+          marker = '<section class="archive-list" aria-label="Chronologický přehled článků">'
+          if marker not in text:
+              raise SystemExit('Nenalezen seznam archivu')
+          text = text.replace(marker, marker + '\n' + archive_card, 1)
+          for match in list(re.finditer(r'<script type="application/ld\+json">\s*(\{.*?\})\s*</script>', text, re.S)):
+              try:
+                  data = json.loads(match.group(1))
+              except Exception:
+                  continue
+              itemlist = next((x for x in data.get('@graph', []) if x.get('@type') == 'ItemList'), None) if isinstance(data, dict) else None
+              if not itemlist:
+                  continue
+              items = [x for x in itemlist.get('itemListElement', []) if x.get('url') != URL]
+              items.insert(0, {'@type':'ListItem','url':URL,'name':TITLE})
+              for pos, item in enumerate(items, 1):
+                  item['position'] = pos
+              itemlist['itemListElement'] = items
+              itemlist['numberOfItems'] = len(items)
+              replacement = '<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False, indent=2) + '</script>'
+              text = text[:match.start()] + replacement + text[match.end():]
+              break
+          archive.write_text(text, encoding='utf-8', newline='\n')
+
+          rss_item = f'''    <item><title>{TITLE}</title><description><![CDATA[{DESC}]]></description><link>{URL}</link><guid isPermaLink="true">{URL}</guid><pubDate>Sun, 02 Aug 2026 12:00:00 +0200</pubDate><category>Kultura</category><category>Volný čas</category><category>Kadaň a region</category><szn:image><szn:url>{IMAGE}</szn:url></szn:image><geo:lat>50.375984</geo:lat><geo:long>13.271307</geo:long></item>'''
+          rss = ROOT / 'rss.xml'
+          text = rss.read_text(encoding='utf-8')
+          text = re.sub(r'\s*<item>.*?<link>' + re.escape(URL) + r'</link>.*?</item>\s*', '\n', text, flags=re.S)
+          text = re.sub(r'<lastBuildDate>.*?</lastBuildDate>', '<lastBuildDate>Sun, 02 Aug 2026 12:00:00 +0200</lastBuildDate>', text, count=1)
+          rss_marker = '<atom:link href="https://nasekadan.cz/rss.xml" rel="self" type="application/rss+xml" />'
+          if rss_marker not in text:
+              raise SystemExit('Nenalezen RSS marker')
+          text = text.replace(rss_marker, rss_marker + '\n' + rss_item, 1)
+          rss.write_text(text, encoding='utf-8', newline='\n')
+
+          sitemap = ROOT / 'sitemap.xml'
+          text = sitemap.read_text(encoding='utf-8')
+          text = re.sub(r'\s*<url>\s*<loc>' + re.escape(URL) + r'</loc>.*?</url>\s*', '\n', text, flags=re.S)
+          text = re.sub(r'(<loc>https://nasekadan\.cz/</loc><lastmod>)[^<]+', r'\g<1>2026-08-02', text, count=1)
+          text = re.sub(r'(<loc>https://nasekadan\.cz/clanky/</loc><lastmod>)[^<]+', r'\g<1>2026-08-02', text, count=1)
+          text = text.replace('</urlset>', f'  <url><loc>{URL}</loc><lastmod>2026-08-02</lastmod><changefreq>weekly</changefreq><priority>0.9</priority></url>\n</urlset>')
+          sitemap.write_text(text, encoding='utf-8', newline='\n')
+
+          news_entry = f'''  <url><loc>{URL}</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>{PUBLISHED}</news:publication_date><news:title>{TITLE}</news:title></news:news></url>'''
+          news = ROOT / 'news-sitemap.xml'
+          text = news.read_text(encoding='utf-8')
+          text = re.sub(r'\s*<url>\s*<loc>' + re.escape(URL) + r'</loc>.*?</url>\s*', '\n', text, flags=re.S)
+          text = re.sub(r'(<urlset\b[^>]*>)', lambda m: m.group(1) + '\n' + news_entry, text, count=1)
+          news.write_text(text, encoding='utf-8', newline='\n')
+
+          llms = ROOT / 'llms.txt'
+          if llms.exists():
+              text = llms.read_text(encoding='utf-8')
+              line = f'- [{TITLE}]({URL}) — {DESC}\n'
+              text = re.sub(r'^- \[Kam v Kadani a okolí od 3\. do 9\. srpna.*?\n', '', text, flags=re.M)
+              marker = '## Nejnovější články\n'
+              text = text.replace(marker, marker + line, 1) if marker in text else text + '\n' + line
+              llms.write_text(text, encoding='utf-8', newline='\n')
+
+          manifest = ROOT / 'production-content-manifest.json'
+          if manifest.exists():
+              data = json.loads(manifest.read_text(encoding='utf-8'))
+              items = [x for x in data.get('required_articles', []) if x.get('path') != f'clanky/{SLUG}.html']
+              items.insert(0, {'path':f'clanky/{SLUG}.html','needle':'Kam v Kadani a okolí od 3. do 9. srpna','must_be_on_home':True,'must_be_in_archive':True})
+              data['required_articles'] = items
+              manifest.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          python3 scripts/enforce_latest_homepage_hero.py
+
+          slug='kam-v-kadani-a-okoli-3-9-srpna-2026'
+          path="/clanky/${slug}.html"
+          grep -Fq "$path" index.html
+          grep -Fq "$path" clanky/index.html
+          grep -Fq "https://nasekadan.cz${path}" rss.xml
+          grep -Fq "https://nasekadan.cz${path}" sitemap.xml
+          grep -Fq "https://nasekadan.cz${path}" news-sitemap.xml
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň publikační oprava'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt production-content-manifest.json
+          git commit -m 'Doplnit kulturní týden na všechny publikační plochy' || exit 0
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
