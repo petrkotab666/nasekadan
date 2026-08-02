@@ -1,0 +1,179 @@
+name: Opravit facebookový náhled článku KZK
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: fix-kzk-facebook-preview
+  cancel-in-progress: false
+
+env:
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  fix:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[fix] KZK Facebook preview'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit nový obrázek a přepsat Open Graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow
+          python3 -m py_compile scripts/fix_kzk_facebook_preview_20260802.py
+          python3 scripts/fix_kzk_facebook_preview_20260802.py
+          f=clanky/kulturni-zarizeni-kadan.html
+          image=social/kzk-kultura-strelnice-klaster-20260802-v2.png
+          test -s "$f"
+          test -s "$image"
+          grep -Fq 'https://nasekadan.cz/social/kzk-kultura-strelnice-klaster-20260802-v2.png' "$f"
+          grep -Fq 'og:image:secure_url' "$f"
+          grep -Fq 'og:image:alt' "$f"
+          ! grep -Fq 'https://nasekadan.cz/social/kulturni-zarizeni-kadan-20260802.png' "$f"
+          python3 - <<'PY'
+          from PIL import Image
+          p='social/kzk-kultura-strelnice-klaster-20260802-v2.png'
+          with Image.open(p) as im:
+              assert im.size == (1200, 630), im.size
+              assert im.mode == 'RGB', im.mode
+          print('social_card=ok')
+          PY
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň'
+          git config user.email 'info@nasekadan.cz'
+          git add \
+            clanky/kulturni-zarizeni-kadan.html \
+            social/kzk-kultura-strelnice-klaster-20260802-v2.png \
+            rss.xml scripts/publish_kzk_20260802.py \
+            scripts/fix_kzk_facebook_preview_20260802.py
+          git commit -m 'Opravit sociální náhled článku KZK [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 4 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+              break
+            fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit článek a nový obrázek přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/kzk-facebook-preview-v2.tar.gz" \
+            clanky/kulturni-zarizeni-kadan.html \
+            social/kzk-kultura-strelnice-klaster-20260802-v2.png \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/kzk-facebook-preview-v2.tar.gz" ubuntu@57.129.43.215:/tmp/kzk-facebook-preview-v2.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo tar -xzf /tmp/kzk-facebook-preview-v2.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/kzk-facebook-preview-v2.tar.gz nasekadan-web:/tmp/kzk-facebook-preview-v2.tar.gz
+            sudo docker exec nasekadan-web tar -xzf /tmp/kzk-facebook-preview-v2.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/kzk-facebook-preview-v2.tar.gz
+          fi
+          grep -Fq 'kzk-kultura-strelnice-klaster-20260802-v2.png' /var/www/nasekadan/clanky/kulturni-zarizeni-kadan.html
+          test -s /var/www/nasekadan/social/kzk-kultura-strelnice-klaster-20260802-v2.png
+          rm -f /tmp/kzk-facebook-preview-v2.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit metadata, obrázek a titulní stranu
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          import io, time, urllib.request
+          from PIL import Image
+
+          stamp=str(int(time.time()*1000))
+          base='https://nasekadan.cz'
+          article_url=base+'/clanky/kulturni-zarizeni-kadan.html?fbfix='+stamp
+          image_url=base+'/social/kzk-kultura-strelnice-klaster-20260802-v2.png?fbfix='+stamp
+
+          def get(url, ua):
+              req=urllib.request.Request(url, headers={
+                  'User-Agent':ua,
+                  'Cache-Control':'no-cache',
+                  'Pragma':'no-cache',
+              })
+              with urllib.request.urlopen(req, timeout=35) as r:
+                  assert r.status == 200, (url, r.status)
+                  return r.headers, r.read()
+
+          headers, article_bytes=get(article_url, 'facebookexternalhit/1.1 (+https://www.facebook.com/externalhit_uatext.php)')
+          article=article_bytes.decode('utf-8','replace')
+          new_image='https://nasekadan.cz/social/kzk-kultura-strelnice-klaster-20260802-v2.png'
+          assert f'<meta property="og:image" content="{new_image}">' in article
+          assert f'<meta property="og:image:secure_url" content="{new_image}">' in article
+          assert '<meta property="og:image:width" content="1200">' in article
+          assert '<meta property="og:image:height" content="630">' in article
+          assert 'kulturni-zarizeni-kadan-20260802.png' not in article
+
+          image_headers, image_bytes=get(image_url, 'facebookexternalhit/1.1 (+https://www.facebook.com/externalhit_uatext.php)')
+          assert 'image/png' in image_headers.get_content_type(), image_headers.get_content_type()
+          with Image.open(io.BytesIO(image_bytes)) as image:
+              assert image.size == (1200, 630), image.size
+              assert image.format == 'PNG', image.format
+
+          _, home_bytes=get(base+'/?fbfix='+stamp, 'NaseKadan-Facebook-Fix/1.0')
+          home=home_bytes.decode('utf-8','replace')
+          assert 'data-latest-article-href="/clanky/kulturni-zarizeni-kadan.html"' in home
+          assert 'Od Střelnice po klášter' in home
+          print('facebook_og=ok')
+          print('new_image=ok')
+          print('home_first=ok')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          VERIFY_OK: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.VERIFY_OK === 'true';
+            const body = ok
+              ? '✅ Opraveno a veřejně ověřeno. Článek používá nový sociální obrázek 1200 × 630 pod novou adresou, metadata byla ověřena i s Facebook crawlerem a článek zůstává první na titulní straně. Starý již zveřejněný facebookový příspěvek je nutné odstranit a vložit znovu. Pro nové načtení lze sdílet: https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html?fb=20260802v2'
+              : '🚨 Oprava byla spuštěna, ale veřejné ověření nového facebookového náhledu neprošlo.';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
