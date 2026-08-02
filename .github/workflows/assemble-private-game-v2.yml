@@ -54,7 +54,11 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
+          rm -rf .game-payload
+          rm -f .github/workflows/assemble-private-game-v2.yml
+          git add -A \
+            .game-payload \
+            .github/workflows/assemble-private-game-v2.yml \
             hry/prijezd-karla-iv \
             tests/prijezd-cisare-engine.test.mjs \
             tests/prijezd-cisare-static.test.mjs \
