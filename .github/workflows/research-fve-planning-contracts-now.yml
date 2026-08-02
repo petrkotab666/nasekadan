@@ -1,0 +1,133 @@
+name: Rešerše plánovacích smluv FVE Kadaň
+on:
+  push:
+    branches: [main]
+    paths: ['.github/fve-planning-trigger.txt']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Stáhnout smlouvy z Registru smluv
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT='.github/research/fve-planning-contracts-20260311'
+          rm -rf "$OUT" && mkdir -p "$OUT/details" "$OUT/files"
+          python3 -m pip install -q requests beautifulsoup4
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils >/dev/null
+          python3 - <<'PY'
+          from __future__ import annotations
+          import json, re, time
+          from pathlib import Path
+          from urllib.parse import urljoin
+          import requests
+          from bs4 import BeautifulSoup
+
+          out=Path('.github/research/fve-planning-contracts-20260311')
+          s=requests.Session(); s.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadanResearch/1.0)'
+          urls=[
+            'https://smlouvy.gov.cz/vyhledavani?party_box=uaybdrx&publication_date%5Bfrom%5D=11.03.2026&publication_date%5Bto%5D=11.03.2026&searchResultList-limit=100',
+            'https://smlouvy.gov.cz/vyhledavani?party_box=uaybdrx&searchResultList-limit=500',
+          ]
+          html=''
+          source=''
+          for u in urls:
+            r=s.get(u,timeout=60); r.raise_for_status()
+            if 'Plánovací smlouva' in r.text and '11.03.2026' in r.text:
+              html=r.text; source=u; break
+          if not html: raise SystemExit('Nenalezena stránka s plánovacími smlouvami')
+          out.joinpath('search.html').write_text(html,encoding='utf-8')
+          soup=BeautifulSoup(html,'html.parser')
+          found=[]
+          for row in soup.find_all('tr'):
+            text=' '.join(row.get_text(' ',strip=True).split())
+            if 'Plánovací smlouva' not in text or '11.03.2026' not in text: continue
+            href=None
+            for a in row.find_all('a',href=True):
+              if '/smlouva/' in a['href']:
+                href=urljoin('https://smlouvy.gov.cz',a['href']); break
+            if href: found.append({'row':text,'url':href})
+          if not found:
+            for a in soup.find_all('a',href=True):
+              parent=' '.join(a.parent.get_text(' ',strip=True).split()) if a.parent else ''
+              if 'Plánovací smlouva' in parent and '/smlouva/' in a['href']:
+                found.append({'row':parent,'url':urljoin('https://smlouvy.gov.cz',a['href'])})
+          uniq=[]; seen=set()
+          for x in found:
+            if x['url'] not in seen: seen.add(x['url']); uniq.append(x)
+          found=uniq
+          records=[]
+          for idx,item in enumerate(found,1):
+            r=s.get(item['url'],timeout=60); r.raise_for_status(); detail=r.text
+            out.joinpath('details',f'{idx}.html').write_text(detail,encoding='utf-8')
+            ds=BeautifulSoup(detail,'html.parser')
+            dtext='\n'.join(x.strip() for x in ds.get_text('\n').splitlines() if x.strip())
+            out.joinpath('details',f'{idx}.txt').write_text(dtext+'\n',encoding='utf-8')
+            attachments=[]
+            for a in ds.find_all('a',href=True):
+              href=urljoin(item['url'],a['href'])
+              label=' '.join(a.get_text(' ',strip=True).split())
+              if any(k in href.lower() for k in ['/smlouva/soubor/','/smlouva/soubor?','/smlouva/priloha/']) or label.lower().endswith('.pdf'):
+                if href not in [z['url'] for z in attachments]: attachments.append({'label':label,'url':href})
+            rec={'index':idx,'search_row':item['row'],'detail_url':item['url'],'detail_text':dtext,'attachments':attachments}
+            records.append(rec)
+            for j,a in enumerate(attachments,1):
+              rr=s.get(a['url'],timeout=120,allow_redirects=True); rr.raise_for_status()
+              ext='.pdf' if rr.content[:4]==b'%PDF' else '.bin'
+              p=out/'files'/f'{idx}-{j}{ext}'; p.write_bytes(rr.content)
+              (out/'files'/f'{idx}-{j}.url.txt').write_text(a['url']+'\n'+a['label']+'\n',encoding='utf-8')
+            time.sleep(.2)
+          out.joinpath('index.json').write_text(json.dumps({'source':source,'contracts':records},ensure_ascii=False,indent=2),encoding='utf-8')
+          print('contracts',len(records))
+          PY
+          for p in "$OUT"/files/*.pdf; do
+            [ -f "$p" ] || continue
+            pdftotext -layout "$p" "${p%.pdf}.txt" || true
+            pdfinfo "$p" > "${p%.pdf}.info.txt" || true
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,re
+          out=Path('.github/research/fve-planning-contracts-20260311')
+          data=json.loads(out.joinpath('index.json').read_text())
+          terms=['EPR Letiště','Letiště','Tušimice','Prunéřov','peněž','příspěvek','Kč','MW','30 let','25 let','bateri','akumul']
+          parts=['# Plánovací smlouvy ČEZ × město Kadaň – 11. 3. 2026','',f"Zdroj vyhledávání: {data['source']}",'']
+          for rec in data['contracts']:
+            parts += [f"## Smlouva {rec['index']}",f"Detail: {rec['detail_url']}",f"Řádek: {rec['search_row']}",'']
+            txts=[]
+            for p in sorted((out/'files').glob(f"{rec['index']}-*.txt")):
+              if p.name.endswith('.info.txt') or p.name.endswith('.url.txt'): continue
+              txt=p.read_text(encoding='utf-8',errors='replace'); txts.append((p.name,txt))
+            if not txts:
+              parts += ['Bez vytěžené PDF přílohy.','']
+            for name,txt in txts:
+              parts += [f"### {name}"]
+              lines=txt.splitlines()
+              hits=[]
+              for i,line in enumerate(lines):
+                if any(t.lower() in line.lower() for t in terms):
+                  a=max(0,i-2); b=min(len(lines),i+4); block='\n'.join(lines[a:b]).strip()
+                  if block and block not in hits: hits.append(block)
+              parts += hits[:60] or ['Relevantní výrazy nenalezeny.']
+              parts += ['']
+          out.joinpath('report.md').write_text('\n\n'.join(parts)+'\n',encoding='utf-8')
+          PY
+      - name: Uložit výsledek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name nasekadan-research-bot
+          git config user.email actions@users.noreply.github.com
+          git add .github/research/fve-planning-contracts-20260311
+          git diff --cached --quiet && exit 0
+          git commit -m 'Rešerše: plánovací smlouvy ČEZ a Kadaně k FVE'
+          git pull --rebase origin main
+          git push origin HEAD:main
