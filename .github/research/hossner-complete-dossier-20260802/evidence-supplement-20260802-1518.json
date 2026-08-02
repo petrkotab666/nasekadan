@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-08-02T15:22:00+02:00",
+  "completion_status": "incomplete",
+  "documents": [
+    {
+      "id": "hospital-inf-2026-04-deloitte-costs-and-refusal",
+      "title": "INF-2026-04 – náklady Deloitte, rozsah právních služeb a částečné odmítnutí",
+      "document_date": "2026-03-09",
+      "source_type": "hospital_information_response_archived_in_repository",
+      "source_url": "https://www.nemkadan.cz/e_download.php?file=%2Fdata%2Feditor%2F268cs_13.pdf&original=INF+2026-04.pdf",
+      "repository_file": ".github/research/nemkadan-inf-2026-20260801/pdf/INF-2026-04.pdf",
+      "pages": 4,
+      "bytes": 385671,
+      "binary_sha256": "47d8cf3bb9dd3e9bc6d34b6ec7e784163a6174d85df582a6308551ff102ef277",
+      "completeness": "complete public request-and-decision bundle; underlying opinions, invoices, detailed time sheets and source-document inventory absent",
+      "facts": {
+        "employment_opinion_hours": 40,
+        "employment_opinion_fee_without_vat_czk": 160000,
+        "remuneration_opinion_hours": 35,
+        "remuneration_opinion_fee_without_vat_czk": 140000,
+        "implied_hourly_rate_czk": 4000,
+        "additional_cost_percent": 5,
+        "total_hossner_dispute_services_sep_2024_feb_2026_without_vat_czk": 1244000,
+        "included_services": [
+          "two legal opinions",
+          "pre-litigation notice including indicative claim calculation",
+          "legal support in communications",
+          "litigation cost overview",
+          "preparation of hospital lawsuit for unjust enrichment and damages",
+          "defence to Hossner employment-termination lawsuit",
+          "communications between counsel and related advice"
+        ]
+      },
+      "evidence_value": "primary hospital decision proving the existence, time and fees of the two opinions and that Deloitte prepared the notice and lawsuit; does not reveal their content",
+      "dossier_items": [5, 6, 8, 13]
+    },
+    {
+      "id": "hospital-inf-2026-01-deloitte-review-refusal",
+      "title": "INF-2026-01 – odmítnutí vydat komplexní právní prověrku Deloitte",
+      "document_date": "2026-02-10",
+      "source_type": "hospital_information_response_archived_in_repository",
+      "source_url": "https://www.nemkadan.cz/e_download.php?file=%2Fdata%2Feditor%2F268cs_10.pdf&original=INF+2026-01.pdf",
+      "repository_file": ".github/research/nemkadan-inf-2026-20260801/pdf/INF-2026-01.pdf",
+      "pages": 5,
+      "bytes": 264035,
+      "binary_sha256": "9e74540e490251093490daeede9d86087d6fe86cd2228a38368ec24ce6436c3c",
+      "completeness": "complete public request-and-refusal bundle; review and opinions absent",
+      "facts": {
+        "review_included_employment_opinion": true,
+        "review_included_remuneration_opinion": true,
+        "hospital_refusal_basis": "InfZ § 11 odst. 1 písm. f)",
+        "november_2025_request_appeal_pending_at_uoou_as_of_decision": true,
+        "january_2026_request_appealed": false
+      },
+      "evidence_value": "primary hospital decision confirming the two opinions and refusal history; not a final appellate decision and not proof that the documents are permanently unavailable",
+      "dossier_items": [5, 9, 13]
+    },
+    {
+      "id": "hossner-court-filing-2026-01-12-settlement-result",
+      "title": "Informování o výsledku mimosoudního jednání mezi stranami",
+      "document_date": "2026-01-12",
+      "source_type": "party_published_court_filing_archived_in_repository",
+      "source_url": "https://petrhossnerkadan.cz/wp-content/uploads/2026/01/Hossner-x-Nemocnice-Kadan_informace-o-vysledku_260112_exp.pdf",
+      "repository_text": ".github/research/hossner-court-2026/text/Hossner-x-Nemocnice-Kadan_informace-o-vysledku_260112_exp.txt",
+      "text_git_blob_sha": "535be522abe6780f81ddc8e1aa608ecb1b34f6e3",
+      "binary_sha256": null,
+      "hash_status": "binary hash still to be imported from the download metadata",
+      "completeness": "complete text of a two-page filing appears present; official court-file copy and delivery metadata absent",
+      "facts": {
+        "filed_in_case": "30 C 84/2025",
+        "related_case": "30 C 211/2025",
+        "settlement_meeting_date": "2025-12-16",
+        "hospital_rejection_communicated_date": "2026-01-07"
+      },
+      "evidence_value": "primary pleading by Hossner's counsel describing negotiations; proves the party's filed assertions, not the court's findings or the hospital's agreement with them",
+      "dossier_items": [5, 8, 9, 13]
+    }
+  ],
+  "open_questions": [
+    "final UOOU decision on the November 2025 appeal",
+    "binary SHA-256 of the 12 January 2026 court filing",
+    "actual Deloitte opinions and complete review",
+    "full hospital lawsuit and itemised claim calculation"
+  ]
+}
