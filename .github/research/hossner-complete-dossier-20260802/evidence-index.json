@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-08-02T14:26:00+02:00",
+  "updated_at": "2026-08-02T14:41:00+02:00",
   "case": "Petr Hossner vs. Nemocnice Kadaň / postup města Kadaň",
   "completion_status": "incomplete",
   "closure_rule": "Každá z 13 oblastí musí být doložena primárním dokumentem nebo konečným autoritativním rozhodnutím o nedostupnosti.",
@@ -34,6 +34,51 @@
       "dossier_items": [4, 10]
     },
     {
+      "id": "hospital-inf-2025-04-employment-contract",
+      "title": "Smlouva o pracovním poměru ředitele nemocnice – Petr Hossner",
+      "document_date": "2016-11-11",
+      "source_type": "hospital_information_response_archived_in_repository",
+      "source_url": "https://www.nemkadan.cz/e_download.php?file=%2Fdata%2Feditor%2F268cs_5.pdf&original=INF+2025-04+-11.8.2025.pdf",
+      "repository_file": ".github/research/nemkadan-inf-2025-20260801/pdf/INF-2025-04.pdf",
+      "repository_pages": [4, 5],
+      "repository_text": [
+        ".github/research/nemkadan-inf-2025-20260801/text/INF-2025-04-page-04.txt",
+        ".github/research/nemkadan-inf-2025-20260801/text/INF-2025-04-page-05.txt"
+      ],
+      "container_bytes": 4738754,
+      "container_sha256": "7bcea1137fcfba21328f8b3cc2fd2be5cd0f0eedf4fa6e402665c98db627ff2e",
+      "completeness": "complete two-page employment contract; personal identifiers partially anonymized; no later addenda or wage orders attached",
+      "key_terms": {
+        "position": "ředitel nemocnice",
+        "start_date": "2016-11-11",
+        "duration": "indefinite",
+        "monthly_salary_czk": 140000,
+        "bonus_clause": "semiannual bonuses decided by supervisory board"
+      },
+      "evidence_value": "primary employment contract text; proves contractual salary and bonus clause, not validity of corporate approval or later salary changes",
+      "dossier_items": [3, 13]
+    },
+    {
+      "id": "hospital-inf-2025-04-bonus-table",
+      "title": "Nemocnice Kadaň – vyčíslení mimořádných odměn Petra Hossnera 2018–2023",
+      "document_date": "2025-08-11",
+      "source_type": "hospital_information_response_archived_in_repository",
+      "repository_file": ".github/research/nemkadan-inf-2025-20260801/pdf/INF-2025-04.pdf",
+      "repository_page": 3,
+      "container_sha256": "7bcea1137fcfba21328f8b3cc2fd2be5cd0f0eedf4fa6e402665c98db627ff2e",
+      "amounts_czk": {
+        "2018": 2077090,
+        "2019": 2070000,
+        "2020": 2070000,
+        "2021": 2668598,
+        "2022": 5280000,
+        "2023": 5880000
+      },
+      "completeness": "hospital summary only; underlying payroll sheets, bank records and individual approval records absent",
+      "evidence_value": "primary statement by the hospital of amounts paid and its claim that supervisory board approved ratios rather than exact amounts",
+      "dossier_items": [1, 3, 6, 13]
+    },
+    {
       "id": "city-mukk-16324-2025-hossner-service-contract",
       "title": "MUKK/16324/2025 a smlouva o výkonu funkce jednatele Petra Hossnera",
       "document_date": "2025-04-15",
@@ -43,8 +88,8 @@
       "repository_text": ".github/research/hossner-fast-missing-docs-20260801/text/15_2025_106_taj.pdf.txt",
       "bytes": 834800,
       "binary_sha256": "131ca5b717353fccd9bdc7ca2a26d243b01c729ee87608fe1db47683b427c9f1",
-      "completeness": "contains city response and executive service contract based on resolution 895/2016; personal data and remuneration amount redacted; employment contract and addenda absent",
-      "evidence_value": "primary copy of the executive service contract; must not be confused with the director employment contract",
+      "completeness": "contains city response and executive service contract based on resolution 895/2016; personal data and remuneration amount redacted",
+      "evidence_value": "primary copy of the executive service contract; distinct from the director employment contract",
       "dossier_items": [3, 13]
     },
     {
@@ -58,7 +103,7 @@
       "bytes": 4703447,
       "binary_sha256": "9d03a9adab9637e47d96b20f0054403d10fbea47a62afd8fa2210399238c428b",
       "completeness": "complete published information-response package with comparative contracts and supervisory-board reports, but no skartation protocol",
-      "evidence_value": "primary city statement that extraordinary rewards and the 140,000-to-270,000 increase were not approved by the sole shareholder; also states that submitted contracts were later shredded under GDPR/file-plan rules; this statement is not itself proof of lawful shredding",
+      "evidence_value": "primary city statement that extraordinary rewards and the 140,000-to-270,000 increase were not approved by the sole shareholder; also states that submitted contracts were later shredded under GDPR/file-plan rules; not itself proof of lawful shredding",
       "dossier_items": [1, 3, 10, 11, 12, 13]
     },
     {
@@ -72,7 +117,7 @@
       "bytes": 2815691,
       "binary_sha256": "dbb3af6b6d9399887b965a7495260fd70554a179ca5361902441f2276e28a53b",
       "completeness": "complete published information-response package; underlying audit workpapers and requested criteria remain absent",
-      "evidence_value": "primary city statement that external audit covered accounting correctness including wage expenditures, while no separate review exclusively focused on the director salary was performed",
+      "evidence_value": "primary city statement that external audit covered accounting correctness including wage expenditures, while no separate review exclusively focused on director salary was performed",
       "dossier_items": [1, 2, 11, 13]
     },
     {
@@ -85,6 +130,25 @@
       "completeness": "single page of a larger information-response file",
       "evidence_value": "primary statement by the hospital that 53,726,579 CZK consisted of 46,124,046 CZK gross wages/rewards and 7,602,533 CZK employer contributions",
       "dossier_items": [5, 6, 13]
+    },
+    {
+      "id": "hospital-inf-2025-07-legal-review-scope",
+      "title": "Nemocnice Kadaň – rozsah a cena komplexní právní prověrky",
+      "document_date": "2025",
+      "source_type": "hospital_information_response_archived_in_repository",
+      "repository_file": ".github/research/nemkadan-inf-2025-20260801/pdf/INF-2025-07.pdf",
+      "repository_pages": [4, 5],
+      "container_bytes": 1815603,
+      "fee_without_vat_czk": 1780000,
+      "scope": [
+        "possible breach of due managerial care in strategic investment",
+        "remuneration of the Nemocnice Kadaň executive",
+        "review of procurement and compliance with public procurement and contract-register rules",
+        "supplier relationships, especially public procurement"
+      ],
+      "completeness": "information-response description only; legal opinions, review report, summary, time sheets and invoices absent",
+      "evidence_value": "primary hospital description of legal-review scope and total fee; does not disclose conclusions or work product",
+      "dossier_items": [5, 13]
     },
     {
       "id": "deloitte-contract-public",
@@ -126,6 +190,7 @@
     "gmail": "no relevant result",
     "google_drive": "no relevant result",
     "file_library": "Tögel opinion, incomplete city attachment package and THK comparative package found",
-    "public_city_filemanager": "Hossner executive service contract plus MUKK/33508/2025 and MUKK/33884/2025 indexed; expanded neighboring-ID OCR scan pending"
+    "public_city_filemanager": "Hossner executive service contract plus MUKK/33508/2025 and MUKK/33884/2025 indexed; expanded neighboring-ID OCR scan pending",
+    "hospital_inf_repository": "complete 2016 director employment contract and hospital bonus summary indexed"
   }
 }
