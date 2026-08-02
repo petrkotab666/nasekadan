@@ -27,7 +27,8 @@ teaser = re.search(r'<section class="game-cta">.*?</section>', effective, re.S)
 assert teaser, 'Publikační skript neobsahuje očekávaný teaser hry.'
 assert 'href="/hry/prijezd-karla-iv/"' not in teaser.group(0)
 
-# Vstup zdarma je povinný údaj, zatímco předčasný odkaz hry zůstává zakázaný.
+# Bezplatný vstup je potvrzený údaj a musí zůstat ve výsledku.
+# Předčasný odkaz na neveřejnou hru naopak zůstává zakázaný.
 required = re.search(r'required=\[(.*?)\]', effective, re.S)
 forbidden = re.search(r'forbidden=\[(.*?)\]', effective, re.S)
 assert required and "'vstup zdarma'" in required.group(1)
