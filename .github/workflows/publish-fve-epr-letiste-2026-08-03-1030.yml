@@ -1,0 +1,224 @@
+name: Zveřejnit FVE EPR Letiště 3. 8. 2026 v 10:30
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Zveřejnit nebo opravit ihned
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/publish_fve_epr_20260803.py'
+      - '.github/workflows/publish-fve-epr-letiste-2026-08-03-1030.yml'
+      - '.github/fve-epr-publication-trigger.txt'
+  schedule:
+    - cron: '30 8 3 8 *'
+    - cron: '38 8 3 8 *'
+    - cron: '48 8 3 8 *'
+    - cron: '0 9 3 8 *'
+    - cron: '15 9 3 8 *'
+    - cron: '30 9 3 8 *'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-fve-epr-letiste-20260803
+  cancel-in-progress: false
+
+env:
+  SLUG: fve-epr-letiste-bess-kadan-2026
+  ARTICLE: clanky/fve-epr-letiste-bess-kadan-2026.html
+  PUBLIC_URL: https://nasekadan.cz/clanky/fve-epr-letiste-bess-kadan-2026.html
+  SOCIAL: social/fve-epr-letiste-baterie-kadan-20260803.png
+  TARGET_UTC: '2026-08-03T08:30:00Z'
+  EXPECTED_H1: 'ČEZ chce u Kadaně postavit solární park s bateriemi. Jejich velikost, cena i platby městu zůstávají neznámé'
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Předletová kontrola a časový zámek
+        id: timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/publish_fve_epr_20260803.py scripts/enforce_article_visibility.py scripts/prepare_discovery.py
+          grep -Fq "$EXPECTED_H1" scripts/publish_fve_epr_20260803.py
+          grep -Fq '„Letiště“ je starý název lokality' scripts/publish_fve_epr_20260803.py
+          grep -Fq 'Solární park zatím není v provozu' scripts/publish_fve_epr_20260803.py
+          force='${{ inputs.force || false }}'
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [[ "${{ github.event_name }}" == schedule && "$(date -u +%F)" != 2026-08-03 ]]; then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$force" != true && "$now" < "$TARGET_UTC" ]]; then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'Předletová kontrola prošla; článek zůstává neveřejný do 10:30.'
+            exit 0
+          fi
+          echo 'active=true' >> "$GITHUB_OUTPUT"
+
+      - name: Sestavit článek, obrázek a přehledy
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow markdown
+          python3 scripts/publish_fve_epr_20260803.py
+          test -s "$ARTICLE"
+          test -s "$SOCIAL"
+          grep -Fq "$EXPECTED_H1" "$ARTICLE"
+          grep -Fq "$PUBLIC_URL" rss.xml
+          grep -Fq "$PUBLIC_URL" sitemap.xml
+          grep -Fq "$PUBLIC_URL" news-sitemap.xml
+          grep -Fq "$PUBLIC_URL" llms.txt
+          ! grep -Fq 'noindex' "$ARTICLE"
+
+      - name: Uložit veřejnou verzi do main
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň publikační automat'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- "$ARTICLE" "$SOCIAL" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publikovat: solární park EPR Letiště a baterie'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              [[ "$attempt" == 5 ]] && exit 1
+              sleep $((attempt * 7))
+            done
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          echo "PUB_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Vytvořit veřejnou kontrolní známku
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/deployment-health.txt" <<EOF
+          status=ok
+          source=${PUB_SHA}
+          article=${PUBLIC_URL}
+          published_at=2026-08-03T10:30:00+02:00
+          workflow_run=${GITHUB_RUN_ID}
+          EOF
+
+      - name: Připravit SSH klíč
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [[ -n "${KEY2:-}" ]]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč pro OVH.' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Kanonicky nasadit balíček na OVH
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/nk-fve-epr"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social"
+          cp "$ARTICLE" "$bundle/clanky/"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          cp "$SOCIAL" "$bundle/social/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$bundle/"
+          cp "$RUNNER_TEMP/deployment-health.txt" "$bundle/deployment-health.txt"
+          for attempt in 1 2 3; do
+            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/nk-fve-epr; then
+              break
+            fi
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep $((attempt * 8))
+          done
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -m 0644 /tmp/nk-fve-epr/clanky/fve-epr-letiste-bess-kadan-2026.html /var/www/nasekadan/clanky/
+          sudo install -m 0644 /tmp/nk-fve-epr/clanky/index.html /var/www/nasekadan/clanky/index.html
+          find /tmp/nk-fve-epr/social -maxdepth 1 -type f -exec sudo install -m 0644 {} /var/www/nasekadan/social/ \;
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt deployment-health.txt; do
+            sudo install -m 0644 "/tmp/nk-fve-epr/$f" "/var/www/nasekadan/$f"
+          done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nk-fve-epr/clanky/fve-epr-letiste-bess-kadan-2026.html nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp /tmp/nk-fve-epr/clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in /tmp/nk-fve-epr/social/*; do sudo docker cp "$f" nasekadan-web:/usr/share/nginx/html/social/; done
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt deployment-health.txt; do
+              sudo docker cp "/tmp/nk-fve-epr/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+          fi
+          rm -rf /tmp/nk-fve-epr
+          REMOTE
+
+      - name: Veřejně ověřit článek a všechny vstupy
+        if: steps.timing.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          for attempt in $(seq 1 36); do
+            article="$(curl -4 -kfsS --max-time 25 "${PUBLIC_URL}?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            archive="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article" \
+              && ! grep -Fq 'noindex' <<<"$article" \
+              && grep -Fq "$PUBLIC_URL" <<<"$home" \
+              && grep -Fq "$PUBLIC_URL" <<<"$archive" \
+              && grep -Fq "$PUBLIC_URL" <<<"$rss" \
+              && grep -Fq "$PUBLIC_URL" <<<"$sitemap" \
+              && grep -Fq "$PUBLIC_URL" <<<"$news" \
+              && grep -Fq "source=${PUB_SHA}" <<<"$health"; then
+              curl -4 -kfIsS --max-time 20 "https://nasekadan.cz/${SOCIAL}?v=${stamp}-${attempt}" | grep -Eq '^HTTP/.* 200'
+              echo 'Veřejné ověření prošlo.'
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Založit incident při neúspěchu
+        if: steps.timing.outputs.active == 'true' && failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[PUBLIKACE SELHALA] FVE EPR Letiště 3. 8. 2026 10:30'
+          if ! gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json title --jq '.[].title' | grep -Fxq "$title"; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --assignee petrkotab666 --body "Automatické zveřejnění nebo veřejné ověření článku selhalo. Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Další naplánované běhy jsou připravené v 10:38, 10:48, 11:00, 11:15 a 11:30 SELČ."
+          fi
