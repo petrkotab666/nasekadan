@@ -1,0 +1,180 @@
+name: Obnovit hru Příjezd Karla IV. přímo na serveru
+
+on:
+  issues:
+    types: [reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: recover-karel-iv-game
+  cancel-in-progress: false
+
+env:
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  recover:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 527
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit zdrojové soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s hry/index.html
+          test -s hry/prijezd-karla-iv/index.html
+          test -s hry/prijezd-karla-iv/game.js
+          test -s hry/prijezd-karla-iv/game.css
+          test -s social/hra-prijezd-karla-iv-1367.png
+          node --check hry/prijezd-karla-iv/game.js
+          grep -Fq 'data-karel-game-promo' index.html
+          grep -Fq 'data-karel-game-link' clanky/kulturni-zarizeni-kadan.html
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+              break
+            fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nahrát pouze soubory hry a odkazy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/karel-game-recovery.tar.gz" \
+            hry/index.html hry/prijezd-karla-iv/index.html \
+            hry/prijezd-karla-iv/game.js hry/prijezd-karla-iv/game.css \
+            social/hra-prijezd-karla-iv-1367.png \
+            index.html sitemap.xml clanky/kulturni-zarizeni-kadan.html
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/karel-game-recovery.tar.gz" ubuntu@57.129.43.215:/tmp/karel-game-recovery.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo mkdir -p /var/www/nasekadan/hry/prijezd-karla-iv /var/www/nasekadan/social /var/www/nasekadan/clanky
+          sudo tar -xzf /tmp/karel-game-recovery.tar.gz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan/hry /var/www/nasekadan/social /var/www/nasekadan/clanky /var/www/nasekadan/index.html /var/www/nasekadan/sitemap.xml
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/karel-game-recovery.tar.gz nasekadan-web:/tmp/karel-game-recovery.tar.gz
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/hry/prijezd-karla-iv /usr/share/nginx/html/social /usr/share/nginx/html/clanky
+            sudo docker exec nasekadan-web tar -xzf /tmp/karel-game-recovery.tar.gz -C /usr/share/nginx/html
+            sudo docker exec nasekadan-web rm -f /tmp/karel-game-recovery.tar.gz
+          fi
+          grep -Fq 'Příjezd císaře' /var/www/nasekadan/hry/prijezd-karla-iv/index.html
+          grep -Fq 'const SCENES = [' /var/www/nasekadan/hry/prijezd-karla-iv/game.js
+          rm -f /tmp/karel-game-recovery.tar.gz
+          REMOTE
+
+      - name: Ověřit živé soubory bez cache
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import time, urllib.request
+          base='https://nasekadan.cz'
+          checks={
+            '/hry/':['Příběhy města, ve kterých rozhodujete vy','/hry/prijezd-karla-iv/'],
+            '/hry/prijezd-karla-iv/':['Příjezd císaře','id="startButton"','id="gameApp"'],
+            '/hry/prijezd-karla-iv/game.js':['const SCENES = [','function renderResult()'],
+            '/hry/prijezd-karla-iv/game.css':['.game-layout','.result-screen'],
+            '/':['data-karel-game-promo','/hry/prijezd-karla-iv/'],
+            '/clanky/kulturni-zarizeni-kadan.html':['data-karel-game-link'],
+          }
+          for path,markers in checks.items():
+            last=''
+            for attempt in range(12):
+              try:
+                url=base+path+('?' if '?' not in path else '&')+f'recover_game={int(time.time()*1000)}_{attempt}'
+                req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-Game-Recovery/1.0','Cache-Control':'no-cache','Pragma':'no-cache'})
+                with urllib.request.urlopen(req,timeout=30) as response:
+                  last=response.read().decode('utf-8','replace')
+                  if response.status==200 and all(marker in last for marker in markers):
+                    break
+              except Exception as exc:
+                last=str(exc)
+              time.sleep(5+attempt)
+            else:
+              raise SystemExit(f'{path}: {last[:400]}')
+          req=urllib.request.Request(base+'/social/hra-prijezd-karla-iv-1367.png?recover='+str(int(time.time())),headers={'User-Agent':'facebookexternalhit/1.1'})
+          with urllib.request.urlopen(req,timeout=30) as response:
+            image=response.read()
+            ctype=response.headers.get('Content-Type','')
+          if len(image)<10000 or 'image/png' not in ctype:
+            raise SystemExit(f'Obrázek není v pořádku: bytes={len(image)}, type={ctype}')
+          print('live_files=ok')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Nainstalovat prohlížeč
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Kliknout ve skutečné živé hře
+        id: browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:1280,height:900}});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            await page.goto('https://nasekadan.cz/hry/prijezd-karla-iv/?recovery='+Date.now(),{waitUntil:'domcontentloaded',timeout:90000});
+            await page.locator('#startButton').click();
+            if(await page.locator('#choices .choice-button').count()!==3) throw new Error('První kapitola nemá tři volby.');
+            const before=await page.locator('.stat output').allInnerTexts();
+            await page.locator('#choices .choice-button').nth(1).click();
+            await page.locator('#consequence:not([hidden])').waitFor({state:'visible'});
+            const after=await page.locator('.stat output').allInnerTexts();
+            if(JSON.stringify(before)===JSON.stringify(after)) throw new Error('Volba nezměnila ukazatele.');
+            if(errors.length) throw new Error(errors.join(' | '));
+            await browser.close();
+            console.log('live_game_click=ok');
+          })().catch(error=>{console.error(error);process.exit(1)});
+          JS
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uzavřít úkol po skutečném ověření
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          LIVE_OK: ${{ steps.live.outputs.ok }}
+          BROWSER_OK: ${{ steps.browser.outputs.ok }}
+        with:
+          script: |
+            const ok=process.env.LIVE_OK==='true' && process.env.BROWSER_OK==='true';
+            const body=ok
+              ? '✅ Záchranné nasazení dokončeno. Hra je veřejná, soubory i sociální obrázek vracejí HTTP 200 a v živém prohlížeči bylo provedeno rozhodnutí, které změnilo herní ukazatele. https://nasekadan.cz/hry/prijezd-karla-iv/'
+              : `🚨 Přímá obnova hry selhala. Soubory: ${process.env.LIVE_OK || 'false'}, prohlížeč: ${process.env.BROWSER_OK || 'false'}.`;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
