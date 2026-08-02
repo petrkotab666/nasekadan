@@ -38,7 +38,7 @@ def patch_source(source: str) -> str:
         ),
         (
             '<article><h3>Vstupné</h3><p>Pro rok 2026 zatím nemáme potvrzené podmínky.</p></article>',
-            '<article><h3>Vstupné</h3><p><strong>Vstup je zdarma.</strong></p></article>',
+            '<article><h3>Vstupné</h3><p><strong>Vstup na Císařský den 2026 je zdarma.</strong></p></article>',
         ),
         (
             "required=[TITLE,'10:00–22:00','14:00','14:30','18:00',URL,IMAGE_URL,'NewsArticle','index,follow,max-image-preview:large','Hru spustíme 12. srpna v 18:00']",
