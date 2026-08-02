@@ -1,0 +1,103 @@
+name: Propojit dopravni listu s clankem o vylukach
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: link-train-outage-ticker-20260802
+  cancel-in-progress: false
+
+jobs:
+  patch-and-deploy:
+    if: github.event.issue.title == '[fix] Link train outage ticker'
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Propojit horní lištu s článkem
+        id: patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          article = '/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html'
+          old = '''<div class="ticker">
+  <div class="wrap"><b>DOPRAVNÍ UPOZORNĚNÍ:</b> Od pondělí 27. července se vracejí noční výluky vlaků mezi Kadaní, Kláštercem a Chomutovem. Většinu spojů nahradí autobusy.</div>
+</div>'''
+          new = f'''<div class="ticker">
+  <div class="wrap"><a href="{article}" style="display:block;color:inherit;text-decoration:none"><b>DOPRAVNÍ UPOZORNĚNÍ:</b> Od pondělí 27. července se vracejí noční výluky vlaků mezi Kadaní, Kláštercem a Chomutovem. Většinu spojů nahradí autobusy. <strong style="text-decoration:underline">Podrobnosti →</strong></a></div>
+</div>'''
+
+          if new in text:
+              print('Lišta už je správně propojená.')
+          elif old in text:
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+              print('Lišta byla propojena s článkem.')
+          else:
+              raise SystemExit('Očekávaný blok horní lišty nebyl nalezen; odmítám nebezpečný obecný zásah.')
+          PY
+
+          if git diff --quiet -- index.html; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commitnout přesnou změnu
+        if: steps.patch.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Propojit horní dopravní lištu s článkem o výlukách'
+          git push origin HEAD:main
+
+      - name: Nasadit kanonicky na OVH
+        shell: bash
+        run: |
+          chmod +x deploy/sync-production.sh
+          bash deploy/sync-production.sh
+
+      - name: Veřejně ověřit odkaz i cílový článek
+        shell: bash
+        run: |
+          sha="$(git rev-parse HEAD)"
+          base='https://nasekadan.cz'
+          home="$(mktemp)"
+          article="$(mktemp)"
+          health="$(mktemp)"
+          curl -kfsS --max-time 30 "${base}/?verify=${sha}" -o "$home"
+          curl -kfsS --max-time 30 "${base}/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html?verify=${sha}" -o "$article"
+          curl -kfsS --max-time 30 "${base}/deployment-health.txt?verify=${sha}" -o "$health"
+          grep -Fq 'href="/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html"' "$home"
+          grep -Fq 'Podrobnosti →' "$home"
+          grep -Fq '<h1>Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov</h1>' "$article"
+          grep -Fq "source=${sha}" "$health"
+          rm -f "$home" "$article" "$health"
+
+      - name: Zapsat výsledek do issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            gh issue comment "${{ github.event.issue.number }}" --body '✅ Horní dopravní lišta je celá klikací, vede na článek s konkrétními podrobnostmi a veřejná kontrola prošla.'
+            gh issue close "${{ github.event.issue.number }}" --reason completed
+          else
+            gh issue comment "${{ github.event.issue.number }}" --body '❌ Úprava nebo veřejná kontrola odkazu z horní lišty neprošla. Zkontrolujte kroky tohoto workflow.'
+          fi
