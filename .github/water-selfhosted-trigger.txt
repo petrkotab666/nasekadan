@@ -1,7 +1,7 @@
-Spuštěno 2026-08-02 12:08 Europe/Prague
+Spuštěno 2026-08-02 13:38 Europe/Prague
 Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH.
-Požadavek: nasadit aktuální main s novým týdenním kulturním přehledem pro 3.–9. srpna 2026.
-Cílová adresa: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
-Veřejně ověřit: článek, titulku, archiv, RSS, sitemap.xml, news-sitemap.xml, vlastní OG obrázek 1200 × 630, SEO metadata, canonical, NewsArticle JSON-LD a shodu source v deployment-health.txt s aktuálním main.
-Důvod: pravidelná nedělní publikace ověřeného přehledu veřejných akcí a volnočasových možností na následující kalendářní týden.
+Požadavek: nasadit aktuální main po dokončení neveřejných rešeršních commitů; veřejný obsah se tímto požadavkem nemění.
+Veřejně ověřit s cache-bustingem: titulní stránku, /clanky/, sitemap.xml, news-sitemap.xml, rss.xml, deployment-health.txt a tři nejnovější schválené články včetně správného H1 a přítomnosti jejich URL na publikačních plochách.
+Navíc ověřit, že horní dopravní lišta po načtení stránky vede na /clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html a zobrazuje „Podrobnosti →“.
+Důvod: poslední veřejně potvrzený deploy proběhl před následnými neveřejnými rešeršními commity; podle monitorovacího pravidla musí source v deployment-health.txt odpovídat aktuálnímu main.
 Při nezměněném výsledku se další deploy nespouští.
