@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-02T07:49:54.507184+00:00",
+  "checkedAt": "2026-08-02T10:15:28.496814+00:00",
   "bootstrap": false,
   "sourceCount": 106,
   "checkedSources": 92,
   "failedSources": 14,
-  "itemsParsed": 6506,
-  "uniqueItems": 3519,
-  "newAlerts": 1,
+  "itemsParsed": 6595,
+  "uniqueItems": 3559,
+  "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 700,
+    "genericTitle": 706,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 3,
-    "notEditoriallySignificant": 3,
+    "broadWithoutLocalMatch": 4,
+    "notEditoriallySignificant": 1,
     "notFreshOrUndated": 0,
-    "duplicate": 2287
+    "duplicate": 2330
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -74,8 +74,9 @@
       "url": "https://smlouvy.gov.cz/vyhledavani?subject_box=uaybdrx",
       "category": "Smlouvy a hospodaření",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 19
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "TimeoutError: The read operation timed out"
     },
     {
       "name": "Kadaňské noviny",
@@ -90,9 +91,8 @@
       "url": "https://www.kultura-kadan.cz/redakce/index.php?etc=4339&search=yes&subakce=events&xuser=",
       "category": "Kultura",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 106
     },
     {
       "name": "Liďák Kadaň – kulturní program",
@@ -531,7 +531,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 30
     },
     {
       "name": "Povodí Ohře",
@@ -539,7 +539,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 46
+      "itemsParsed": 47
     },
     {
       "name": "ČHMÚ – výstrahy",
