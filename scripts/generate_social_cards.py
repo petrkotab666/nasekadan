@@ -198,10 +198,34 @@ def replace_meta(text: str, key: str, value: str, *, property_meta: bool = True)
     return text[: head_end.start()] + "  " + tag + "\n" + text[head_end.start() :]
 
 
+def custom_social_card_errors(text: str) -> list[str]:
+    """Ověří ručně připravenou kartu, ale nikdy ji nepřegeneruje."""
+    errors: list[str] = []
+    image = meta_content(text, property_name="og:image")
+    if not image:
+        return ["ruční sociální karta nemá og:image"]
+    if not image.startswith(f"{SITE}/social/"):
+        errors.append("ruční sociální karta neleží v lokální složce social")
+        return errors
+    relative = image.removeprefix(SITE).split("?", 1)[0].lstrip("/")
+    if not Path(relative).is_file():
+        errors.append(f"soubor ruční sociální karty neexistuje: {relative}")
+    if meta_content(text, property_name="og:image:width") != str(WIDTH):
+        errors.append("ruční sociální karta nemá šířku 1200")
+    if meta_content(text, property_name="og:image:height") != str(HEIGHT):
+        errors.append("ruční sociální karta nemá výšku 630")
+    return errors
+
 def process_article(path: Path, write: bool) -> tuple[bool, list[str]]:
     original = path.read_text(encoding="utf-8")
     if "article-shell" not in original or "NewsArticle" not in original:
         return False, []
+
+    # Redakčně připravené karty mají přednost před automatickou šablonou.
+    # Workflow je pouze ověří; nikdy nepřepíše jejich og:image ani twitter:image.
+    if meta_content(original, name="nasekadan:social-card").lower() == "custom":
+        errors = custom_social_card_errors(original)
+        return False, errors
 
     title = title_from_html(original)
     description = description_from_html(original)

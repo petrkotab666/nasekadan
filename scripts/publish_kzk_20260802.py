@@ -38,6 +38,7 @@ def add_head_meta(text: str) -> str:
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="Naše Kadaň">
   <meta property="og:url" content="{URL}">
+  <meta name="nasekadan:social-card" content="custom">
   <meta property="og:image" content="{IMAGE_URL}">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">

@@ -132,6 +132,9 @@ def replace_meta(html: str) -> str:
         html,
         count=1,
     )
+    if 'name="nasekadan:social-card"' not in html:
+        marker = f'<meta property="og:image" content="{NEW_IMAGE}">'
+        html = html.replace(marker, '<meta name="nasekadan:social-card" content="custom">\n  ' + marker, 1)
     if 'property="og:image:secure_url"' not in html:
         marker = f'<meta property="og:image" content="{NEW_IMAGE}">'
         extras = (
