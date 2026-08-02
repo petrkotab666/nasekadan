@@ -1,0 +1,95 @@
+name: Diagnostikovat živý kulturní týden 3.–9. srpna
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/diagnose-weekly-events-live-20260802-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Získat jednotlivé výsledky z OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          EXPECTED="$(git rev-parse HEAD)"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "EXPECTED='$EXPECTED' bash -s" > /tmp/weekly-diagnose.txt <<'REMOTE'
+          set +e
+          cd /opt/nasekadan || exit 2
+          git fetch --prune origin main >/tmp/fetch.log 2>&1
+          FETCH_RC=$?
+          git reset --hard origin/main >/tmp/reset.log 2>&1
+          RESET_RC=$?
+          SOURCE="$(git rev-parse HEAD 2>/dev/null)"
+          chmod +x deploy/sync-production.sh 2>/dev/null
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh >/tmp/deploy.log 2>&1
+          DEPLOY_RC=$?
+          root='/var/www/nasekadan'
+          rel='/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html'
+          article="$root$rel"
+          check(){ if "$@" >/dev/null 2>&1; then echo true; else echo false; fi; }
+          ARTICLE=$(check test -s "$article")
+          H1=$(check grep -Fq '<h1>Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání</h1>' "$article")
+          CANONICAL=$(check grep -Fq '<link rel="canonical" href="https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html">' "$article")
+          SEO=$(check grep -Fq 'name="description"' "$article")
+          JSONLD=$(check grep -Fq 'NewsArticle' "$article")
+          OG_META=$(check grep -Fq 'property="og:image:width" content="1200"' "$article")
+          HOME=$(check grep -Fq "$rel" "$root/index.html")
+          ARCHIVE=$(check grep -Fq "$rel" "$root/clanky/index.html")
+          RSS=$(check grep -Fq "$rel" "$root/rss.xml")
+          SITEMAP=$(check grep -Fq "$rel" "$root/sitemap.xml")
+          NEWS=$(check grep -Fq "$rel" "$root/news-sitemap.xml")
+          AUTOKEMP=$(check grep -Fq 'elektrocentrále' "$article")
+          og_url="$(sed -n 's/.*property="og:image" content="\([^"]*\)".*/\1/p' "$article" 2>/dev/null | head -n1)"
+          og_rel="${og_url#https://nasekadan.cz/}"
+          og_file="$root/$og_rel"
+          OG_FILE=$(check test -s "$og_file")
+          OG_DIM=false
+          if test -s "$og_file"; then
+            python3 - "$og_file" >/dev/null 2>&1 <<'PY'
+          import struct,sys
+          b=open(sys.argv[1],'rb').read(24)
+          assert b[:8]==b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II',b[16:24])==(1200,630)
+          PY
+            test $? -eq 0 && OG_DIM=true
+          fi
+          HEALTH_SOURCE="$(sed -n 's/^source=//p' "$root/deployment-health.txt" 2>/dev/null | head -n1)"
+          HEALTH=$(test "$HEALTH_SOURCE" = "$SOURCE" && echo true || echo false)
+          printf 'fetchRc=%s\nresetRc=%s\ndeployRc=%s\nexpected=%s\nsource=%s\nhealthSource=%s\narticle=%s\nh1=%s\ncanonical=%s\nseo=%s\njsonLd=%s\nogMeta=%s\nhomepage=%s\narchive=%s\nrss=%s\nsitemap=%s\nnewsSitemap=%s\nautokemp=%s\nogFile=%s\nogDimensions=%s\nogUrl=%s\ndeploymentHealth=%s\n' \
+            "$FETCH_RC" "$RESET_RC" "$DEPLOY_RC" "$EXPECTED" "$SOURCE" "$HEALTH_SOURCE" "$ARTICLE" "$H1" "$CANONICAL" "$SEO" "$JSONLD" "$OG_META" "$HOME" "$ARCHIVE" "$RSS" "$SITEMAP" "$NEWS" "$AUTOKEMP" "$OG_FILE" "$OG_DIM" "$og_url" "$HEALTH"
+          printf '%s\n' '--- deploy log tail ---'
+          tail -n 20 /tmp/deploy.log 2>/dev/null
+          REMOTE
+          cat /tmp/weekly-diagnose.txt
+      - name: Uložit diagnostiku
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime,timezone
+          src=Path('/tmp/weekly-diagnose.txt')
+          body=src.read_text(encoding='utf-8',errors='replace') if src.exists() else 'SSH krok nevytvořil výstup.'
+          Path('.github/weekly-events-live-diagnostic.txt').write_text('generatedAt='+datetime.now(timezone.utc).isoformat()+'\n'+body,encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň diagnostika'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/weekly-events-live-diagnostic.txt
+          git commit -m 'Zapsat diagnostiku živého kulturního týdne [skip ci]' || true
+          git pull --rebase origin main || true
+          git push origin HEAD:main
