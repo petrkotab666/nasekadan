@@ -1,0 +1,143 @@
+name: Zneveřejnit hru Příjezd Karla IV.
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: unpublish-karel-iv-game
+  cancel-in-progress: false
+
+env:
+  SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  unpublish:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[unpublish] Karel IV game private'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Odstranit hru z veřejné větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/unpublish_karel_iv_game_20260802.py
+          python3 scripts/unpublish_karel_iv_game_20260802.py
+          test ! -e hry/prijezd-karla-iv/index.html
+          test ! -e hry/index.html
+          test ! -e social/hra-prijezd-karla-iv-1367.png
+          ! grep -Fq '/hry/prijezd-karla-iv/' index.html
+          ! grep -Fq '/hry/prijezd-karla-iv/' clanky/kulturni-zarizeni-kadan.html
+          ! grep -Fq 'https://nasekadan.cz/hry/' sitemap.xml
+
+      - name: Uložit zneveřejnění do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – neveřejná hra'
+          git config user.email 'info@nasekadan.cz'
+          git add -A
+          git commit -m 'Zneveřejnit hru Příjezd Karla IV. [skip ci]'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 5 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Atomicky nasadit veřejný web bez hry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          tar --exclude='.git' --exclude='.github' --exclude='Dockerfile' --exclude='docker-compose.yml' \
+              --exclude='nginx' --exclude='scripts' --exclude='deploy' --exclude='tools' \
+              --exclude='docker-entrypoint.d' -czf "$RUNNER_TEMP/site-without-game.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+              "$RUNNER_TEMP/site-without-game.tgz" ubuntu@57.129.43.215:/tmp/site-without-game.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+              ubuntu@57.129.43.215 "SOURCE_SHA='$SOURCE_SHA' bash -s" <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          STAGE="/var/www/nasekadan.unpublish-$SOURCE_SHA"
+          PREV="/var/www/nasekadan.previous-unpublish-$SOURCE_SHA"
+          sudo rm -rf "$STAGE" "$PREV"
+          sudo mkdir -p "$STAGE"
+          sudo tar -xzf /tmp/site-without-game.tgz -C "$STAGE"
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=unpublish-karel-game\n' \
+              "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
+          sudo chmod -R a+rX "$STAGE"
+          test ! -e "$STAGE/hry/prijezd-karla-iv/index.html"
+          ! grep -Fq '/hry/prijezd-karla-iv/' "$STAGE/index.html"
+          ! grep -Fq '/hry/prijezd-karla-iv/' "$STAGE/clanky/kulturni-zarizeni-kadan.html"
+          if [ -d /var/www/nasekadan ]; then sudo mv /var/www/nasekadan "$PREV"; fi
+          sudo mv "$STAGE" /var/www/nasekadan
+          sudo rm -rf "$PREV" /tmp/site-without-game.tgz
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web rm -rf \
+              /usr/share/nginx/html/hry \
+              /usr/share/nginx/html/social/hra-prijezd-karla-iv-1367.png
+            sudo docker cp /var/www/nasekadan/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          REMOTE
+
+      - name: Veřejně ověřit zneveřejnění
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=0
+          for attempt in $(seq 1 20); do
+            status_game="$(curl -4 -kLsS -o /tmp/game.html -w '%{http_code}' --max-time 25 \
+              "https://nasekadan.cz/hry/prijezd-karla-iv/?unpublish=$stamp-$attempt" || true)"
+            status_hub="$(curl -4 -kLsS -o /tmp/hub.html -w '%{http_code}' --max-time 25 \
+              "https://nasekadan.cz/hry/?unpublish=$stamp-$attempt" || true)"
+            status_image="$(curl -4 -kLsS -o /tmp/game-image.bin -w '%{http_code}' --max-time 25 \
+              "https://nasekadan.cz/social/hra-prijezd-karla-iv-1367.png?unpublish=$stamp-$attempt" || true)"
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?unpublish=$stamp-$attempt" -o /tmp/home.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html?unpublish=$stamp-$attempt" -o /tmp/article.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?unpublish=$stamp-$attempt" -o /tmp/sitemap.xml || true
+            if [[ "$status_game" =~ ^(404|410)$ ]] \
+              && [[ "$status_hub" =~ ^(404|410)$ ]] \
+              && [[ "$status_image" =~ ^(404|410)$ ]] \
+              && ! grep -Fq '/hry/prijezd-karla-iv/' /tmp/home.html \
+              && ! grep -Fq '/hry/prijezd-karla-iv/' /tmp/article.html \
+              && ! grep -Fq 'https://nasekadan.cz/hry/' /tmp/sitemap.xml; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          VERIFY_OK: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.VERIFY_OK === 'true';
+            const body = ok
+              ? '✅ Hra byla z veřejného webu odstraněna. Adresa hry, rozcestník i sociální obrázek vracejí 404/410 a odkazy zmizely z titulní strany, článku KZK i sitemapy. Další vývoj bude probíhat mimo veřejný web.'
+              : '🚨 Zneveřejnění hry se nepodařilo úplně veřejně ověřit.';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
