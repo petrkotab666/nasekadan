@@ -36,6 +36,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/package.tar.gz" -C "$RUNNER_TEMP/package"
           install -m 0644 "$RUNNER_TEMP/package/draft.html" .github/drafts/alzbetinsky-klaster-kadan-20260803.html
           install -m 0755 "$RUNNER_TEMP/package/publish_script.py" scripts/publish_alzbetinsky_klaster_20260803.py
+          python3 -m pip install --disable-pip-version-check --quiet pillow
           python3 -m py_compile scripts/publish_alzbetinsky_klaster_20260803.py
           python3 scripts/publish_alzbetinsky_klaster_20260803.py --validate-source-only
           grep -Fq 'Kam odešli poslední pacienti?' .github/drafts/alzbetinsky-klaster-kadan-20260803.html
