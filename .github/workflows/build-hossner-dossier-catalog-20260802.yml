@@ -1,0 +1,128 @@
+name: Sestavit katalog kompletního spisu Hossner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-hossner-dossier-catalog-20260802.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-hossner-dossier-catalog-20260802
+  cancel-in-progress: false
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit deduplikovaný katalog důkazů a mezer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+          import hashlib, json, re, unicodedata
+          from pathlib import Path
+
+          ROOT=Path('.')
+          OUT=Path('.github/research/hossner-complete-dossier-20260802/catalog')
+          OUT.mkdir(parents=True,exist_ok=True)
+
+          categories={
+            '1-kriteria-hodnoceni':[r'krit[eé]ri',r'hodnocen[ií].{0,40}(?:ředitele|jednatele)',r'100\s*%'],
+            '2-vybor-a-auditor':[r'v[yý]bor.{0,20}audit',r'zpr[aá]va.{0,30}audit',r'dopis.{0,30}auditor',r'mzdov.{0,30}audit',r'22hlav',r'agis audit'],
+            '3-smlouvy-mzdy-odmeny':[r'pracovn[ií] smlouv',r'smlouva o pracov',r'smlouva o v[yý]konu funkce',r'mzdov[yý] v[yý]m[eě]r',r'pr[eé]mi',r'mimoř[aá]dn.{0,20}odm[eě]n',r'140\s*000',r'270\s*000'],
+            '4-togel':[r't[oőöó]gel',r't[oőöó]gl',r'24\.\s*7\.\s*2024'],
+            '5-deloitte':[r'deloitte',r'pr[aá]vn[ií] prov[eě]rk',r'dokument.{0,20}shrnut',r'3\.\s*2\.\s*2026',r'1\s*780\s*000'],
+            '6-predzalobni-vypocet':[r'předžalobn',r'53\s*726\s*579',r'52\s*882\s*922',r'25\s*979\s*821',r'843\s*657',r'46\s*124\s*046',r'7\s*602\s*533'],
+            '7-obvykla-odmena':[r'v m[ií]st[eě] a čase obvykl',r'obvykl[aá] odm[eě]n',r'znaleck',r'odborn[eé] vyj[aá]dřen'],
+            '8-zaloba':[r'žalob',r'zalob',r'petit',r'žalobn[ií] návrh'],
+            '9-soudni-spisy':[r'30\s*C\s*84/2025',r'30\s*C\s*211/2025',r'14\s*Co\s*104/2026',r'93\s*Ncp\s*490/2026'],
+            '10-rada-prilohy-email':[r'614/2024',r'615/2024',r'619/2024',r'620/2024',r'621/2024',r'283/2025',r'447/2025',r'3\.\s*10\.\s*2024',r'e-?mail'],
+            '11-dozorci-rada':[r'dozorč[ií] rad',r'\b(?:3[8-9]|4\d|5\d|6[0-8])\.?\s*(?:jedn[aá]n[ií]|z[aá]pis)',r'př[ií]loha z[aá]pisu'],
+            '12-duverne-skartace':[r'dův[eě]rn',r'duvern',r'skart',r'spisov.{0,15}ř[aá]d'],
+            '13-chronologie-odpovednost':[r'p[eé]č[eé] ř[aá]dn[eé]ho hospod[aá]ře',r'schv[aá]l',r'neschv[aá]l',r'odpov[eě]dnost',r'škod',r'bezdůvodn[eé] obohacen']
+          }
+          compiled={k:[re.compile(x,re.I|re.S) for x in pats] for k,pats in categories.items()}
+
+          roots=[Path('.github/research'),Path('research')]
+          allowed={'.txt','.md','.json','.html','.csv'}
+          records=[]
+          seen_content={}
+          scanned=0
+          for base in roots:
+            if not base.exists(): continue
+            for p in base.rglob('*'):
+              if not p.is_file() or p.suffix.lower() not in allowed: continue
+              if OUT in p.parents: continue
+              try: text=p.read_text(encoding='utf-8',errors='replace')
+              except Exception: continue
+              if not text.strip(): continue
+              scanned+=1
+              digest=hashlib.sha256(text.encode('utf-8',errors='replace')).hexdigest()
+              duplicate_of=seen_content.get(digest)
+              if not duplicate_of: seen_content[digest]=str(p)
+              hits={}
+              for cat,rxs in compiled.items():
+                snippets=[]
+                for rx in rxs:
+                  for m in list(rx.finditer(text))[:12]:
+                    s=max(0,m.start()-320); e=min(len(text),m.end()+720)
+                    snippets.append(re.sub(r'\s+',' ',text[s:e]).strip())
+                if snippets: hits[cat]=list(dict.fromkeys(snippets))[:20]
+              if hits:
+                records.append({'path':str(p),'chars':len(text),'text_sha256':digest,'duplicate_of':duplicate_of,'categories':hits})
+
+          records.sort(key=lambda r:(-len(r['categories']),r['path']))
+          (OUT/'catalog.json').write_text(json.dumps({'scanned_files':scanned,'relevant_files':len(records),'unique_texts':len(seen_content),'records':records},ensure_ascii=False,indent=2),encoding='utf-8')
+
+          md=['# Deduplikovaný katalog podkladů spisu Hossner','',f'- Prohledáno souborů: **{scanned}**',f'- Relevantních souborů: **{len(records)}**',f'- Unikátních textových otisků: **{len(seen_content)}**','']
+          for cat in categories:
+            rr=[r for r in records if cat in r['categories'] and not r['duplicate_of']]
+            md += [f'## {cat}',f'Unikátních zdrojů: **{len(rr)}**','']
+            for r in rr[:80]:
+              md += [f"### `{r['path']}`",f"- SHA-256 textu: `{r['text_sha256']}`",f"- Kategorie v souboru: {', '.join(r['categories'])}",'']
+              for s in r['categories'][cat][:4]: md += ['> '+s[:1600],'']
+          (OUT/'catalog.md').write_text('\n'.join(md),encoding='utf-8')
+
+          # Speciální inventura zápisů/příloh dozorčí rady.
+          dr=[]
+          for r in records:
+            p=Path(r['path'])
+            if 'nemkadan-inf-2025-20260801/text' not in r['path']: continue
+            text=p.read_text(encoding='utf-8',errors='replace')
+            nums=sorted({int(x) for x in re.findall(r'\b(?:z[aá]pis|jedn[aá]n[ií])\D{0,25}(3[8-9]|4\d|5\d|6[0-8])\b',text,re.I)})
+            attachments=[]
+            for m in re.finditer(r'[^\n]{0,180}př[ií]loh[^\n]{0,260}',text,re.I): attachments.append(re.sub(r'\s+',' ',m.group(0)).strip())
+            if nums or attachments:
+              dr.append({'path':r['path'],'meeting_numbers':nums,'attachment_mentions':list(dict.fromkeys(attachments))[:30]})
+          (OUT/'supervisory-board-inventory.json').write_text(json.dumps(dr,ensure_ascii=False,indent=2),encoding='utf-8')
+
+          found_nums=sorted({n for d in dr for n in d['meeting_numbers']})
+          missing_nums=[n for n in range(38,69) if n not in found_nums]
+          gap=['# Inventura dozorčí rady č. 38–68','',f'- Zachycená čísla: {", ".join(map(str,found_nums)) or "žádná"}',f'- Nezachycená čísla: {", ".join(map(str,missing_nums)) or "žádná"}','','## Zmínky o přílohách']
+          for d in dr:
+            if d['attachment_mentions']:
+              gap += [f"### `{d['path']}`"] + [f'- {x}' for x in d['attachment_mentions']] + ['']
+          (OUT/'supervisory-board-inventory.md').write_text('\n'.join(gap),encoding='utf-8')
+          print(f'scanned={scanned} relevant={len(records)} meetings={found_nums} missing={missing_nums}')
+          PY
+
+      - name: Uložit katalog
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/research/hossner-complete-dossier-20260802/catalog
+          if ! git diff --cached --quiet; then
+            git commit -m 'Sestavit deduplikovaný katalog podkladů spisu Hossner'
+            git push origin main
+          fi
