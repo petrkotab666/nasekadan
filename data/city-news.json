@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-01T19:35:01.536438+00:00",
+  "generatedAt": "2026-08-02T03:55:31.591995+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
@@ -8,9 +8,9 @@
     "Kultura Kadaň (15)",
     "Liďák Kadaň – kulturní program (0)",
     "Kino Hvězda (0)",
-    "Městská knihovna (15)",
-    "Turistický portál Kadaň (15)",
-    "Městské muzeum v Kadani (15)",
+    "Městská knihovna (0)",
+    "Turistický portál Kadaň (0)",
+    "Městské muzeum v Kadani (0)",
     "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
@@ -56,7 +56,7 @@
     "Docela velké divadlo Litvínov (0)",
     "Policie ČR – Ústecký kraj (15)",
     "HZS Ústeckého kraje (15)",
-    "ZZS Ústeckého kraje (15)",
+    "ZZS Ústeckého kraje (0)",
     "Portál krizového řízení Ústeckého kraje (15)",
     "ČEZ – tiskové zprávy (0)",
     "ČEZ Distribuce – plánované odstávky (15)",
@@ -73,10 +73,10 @@
     "Autokemp Prunéřov – aktuality (7)",
     "Úřad práce ČR – kontaktní pracoviště Kadaň (9)",
     "Kultura Kadaň (15)",
-    "Turistické informační centrum Kadaň (15)",
-    "Galerie Josefa Lieslera (15)",
-    "Františkánský klášter Kadaň (15)",
-    "Kadaňský hrad (14)",
+    "Turistické informační centrum Kadaň (0)",
+    "Galerie Josefa Lieslera (0)",
+    "Františkánský klášter Kadaň (0)",
+    "Kadaňský hrad (0)",
     "Autokemp Prunéřov (6)",
     "Autokemp Prunéřov – zdroj 3 (3)",
     "Autokemp Prunéřov – zdroj 4 (0)",
@@ -87,28 +87,38 @@
     "Nemocnice Kadaň (15)",
     "Fotbalový klub Tatran Kadaň (0)",
     "Tenisový klub Kadaň (15)",
-    "TJ Vodní sporty Kadaň (13)",
+    "TJ Vodní sporty Kadaň (0)",
     "Gymnastika Kadaň – SK Kosagym (15)",
     "Karate klub Kadaň a Klášterec (0)",
     "BK DDM Kadaň (15)",
     "Sportovní klub policie Kadaň (6)",
     "Policie ČR – Obvodní oddělení Kadaň (15)",
     "Hasičský záchranný sbor Ústeckého kraje (15)",
-    "Zdravotnická záchranná služba Ústeckého kraje (15)",
+    "Zdravotnická záchranná služba Ústeckého kraje (0)",
     "Římskokatolická farnost Kadaň (0)"
   ],
   "errors": [
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
+    "Městská knihovna: URLError: <urlopen error timed out>",
+    "Turistický portál Kadaň: URLError: <urlopen error timed out>",
+    "Městské muzeum v Kadani: URLError: <urlopen error timed out>",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Let It Roll – akce: HTTPError: HTTP Error 404: Not Found",
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
+    "ZZS Ústeckého kraje: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Povodí Ohře: HTTPError: HTTP Error 403: Forbidden",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
+    "Turistické informační centrum Kadaň: URLError: <urlopen error timed out>",
+    "Galerie Josefa Lieslera: URLError: <urlopen error timed out>",
+    "Františkánský klášter Kadaň: URLError: <urlopen error timed out>",
+    "Kadaňský hrad: URLError: <urlopen error timed out>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "TJ Vodní sporty Kadaň: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
+    "Zdravotnická záchranná služba Ústeckého kraje: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Římskokatolická farnost Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
   ],
   "sourceStatus": [
@@ -174,24 +184,27 @@
       "url": "https://www.knihovnakadan.cz/",
       "category": "Knihovna",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Turistický portál Kadaň",
       "url": "https://kadan.eu/",
       "category": "Turistika",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Městské muzeum v Kadani",
       "url": "https://kadan.eu/informace/mestske-muzeum/",
       "category": "Muzeum a památky",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Městské muzeum v Kadani – veřejný Facebook",
@@ -563,8 +576,9 @@
       "url": "https://www.zzsuk.cz/aktuality/",
       "category": "Záchranná služba",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -702,32 +716,36 @@
       "url": "https://kadan.eu/informace/tic/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Galerie Josefa Lieslera",
       "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Františkánský klášter Kadaň",
       "url": "https://kadan.eu/pamatky/frantiskansky-klaster/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Kadaňský hrad",
       "url": "https://kadan.eu/pamatky/kadansky-hrad/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 14
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Autokemp Prunéřov",
@@ -815,8 +833,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 13
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -872,8 +891,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -957,8 +977,17 @@
       "title": "Pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více  Box LOGIKA I. .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s-durazem",
+      "description": "ř akcí Materiály Facebook zobrazit více  Hra-Cesta chmele .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
+      "sourceName": "Vzdělávání na Kadaňsku"
+    },
+    {
+      "id": "bd8db4e75249",
+      "title": "Hra-Cesta chmele",
+      "date": "2026-08-26",
+      "category": "Školství",
+      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář",
+      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=16",
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
@@ -971,31 +1000,13 @@
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
-      "id": "88a1a97ae08f",
-      "title": "Box LOGIKA I.",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář od PhDr",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=2",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
       "id": "156f0e19ced0",
       "title": ".. další pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Box LOGIKA I.  Kalendář 26.8.202610:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s-durazem",
+      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Hra-Cesta chmele  Kalendář 26.8.202610:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
       "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "c936067fa323",
-      "title": "31 počet akcí 14",
-      "date": "2026-08-04",
-      "category": "Regionální kultura – Most",
-      "description": ".7.2026\" title=\"Pouze proběhlé akce, klikněte pro detail\">29 počet akcí 11 30 počet akcí 13  1 počet akcí 13 2 počet akcí 11 31. týden 3 počet akcí 9 <a id=\"date_20260804\" href=\"/vismo/kalendar-akci.asp?hledani=1&id_org=9959&kdy=-1&datum_od=04.08.2026&datum_do",
-      "source": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?hledani=1&amp%3Bid_org=9959&amp%3Bkdy=-1&amp%3Bdatum_od=31.7.2026&amp%3Bdatum_do=31.7.2026",
-      "sourceName": "Město Most – kalendář akcí"
     },
     {
       "id": "65942bada3aa",
@@ -1005,6 +1016,15 @@
       "description": "pan> 30.07.2026 Nemocnice Kadaň mění model řízení.",
       "source": "https://www.noviny-kadan.cz/l/pitka-a-vodni-prvky-ve-meste",
       "sourceName": "Kadaňské noviny"
+    },
+    {
+      "id": "d7b6bc1770bb",
+      "title": "1 počet akcí 13",
+      "date": "2026-07-30",
+      "category": "Regionální kultura – Most",
+      "description": "30.7.2026\" title=\"Pouze proběhlé akce, klikněte pro detail\">30 počet akcí 13 31 počet akcí 14  2 počet akcí 11 31. týden 3 počet akcí 9 4 počet akcí 9 <a id=\"date_20260805\" href=\"/vismo/kalendar-akci.asp?hledani=1&id_org=9959&kdy=-1&datum_od=05.08.2026&datum_do",
+      "source": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?hledani=1&amp%3Bid_org=9959&amp%3Bkdy=-1&amp%3Bdatum_od=01.08.2026&amp%3Bdatum_do=01.08.2026",
+      "sourceName": "Město Most – kalendář akcí"
     },
     {
       "id": "35773887de99",
@@ -1124,12 +1144,12 @@
       "sourceName": "Kadaňské noviny"
     },
     {
-      "id": "c30e00f91cff",
+      "id": "5b1c1717f5c8",
       "title": "Září 2026 >>",
-      "date": "2026-07-01",
+      "date": "2026-07-02",
       "category": "Regionální kultura – Most",
-      "description": "ref=\"/vismo/kalendar-akci.asp?kdy=-1&kaNM=1&id_org=9959&kaDateO=1.7.2026&datum_od=01.07.2026&datum_do=31.07.2026#kaListing\" title=\"Předchozí měsíc\" class=\"c-before-month\"> << Červenec 2026 Srpen 2026  týden Po Út St Čt Pá So Ne 30. týden 27 počet akcí 11 28 počet akcí <",
-      "source": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?kdy=-1&amp%3BkaNM=1&amp%3Bid_org=9959&amp%3BkaDateO=1.9.2026&amp%3Bdatum_od=01.09.2026&amp%3Bdatum_do=30.09.2026",
+      "description": "ref=\"/vismo/kalendar-akci.asp?kdy=-1&kaNM=1&id_org=9959&kaDateO=2.7.2026&datum_od=01.07.2026&datum_do=31.07.2026#kaListing\" title=\"Předchozí měsíc\" class=\"c-before-month\"> << Červenec 2026 Srpen 2026  týden Po Út St Čt Pá So Ne 30. týden 27 počet akcí 11 28 počet akcí <",
+      "source": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?kdy=-1&amp%3BkaNM=1&amp%3Bid_org=9959&amp%3BkaDateO=2.9.2026&amp%3Bdatum_od=01.09.2026&amp%3Bdatum_do=30.09.2026",
       "sourceName": "Město Most – kalendář akcí"
     },
     {
@@ -1185,24 +1205,6 @@
       "description": "dan.cz/wp-content/uploads/2026/06/IMG_9201-1536x1152.jpg 1536w, https://tiliakadan.cz/wp-content/uploads/2026/06/IMG_9201-2048x1536.jpg 2048w\" sizes=\"(max-width: 627px) 100vw, 627px\" /> 4 června, 2026 od  0 Aktuality Dětský den v Tušimicích Ve středu 3. 6. 2026 uspořádala naše organizace TILIA Kadaň, z. s. oslavu dne dětí v Tušimicích u Kadaně. Na děti čekaly zábavné soutěže, drobné odměny a nechybělo ani opé",
       "source": "https://tiliakadan.cz/author/supova",
       "sourceName": "TILIA Kadaň, z. s."
-    },
-    {
-      "id": "2461ea183266",
-      "title": "Kadaňský Drak 29-30.5.2026",
-      "date": "2026-05-30",
-      "category": "Sportovní organizace a kluby",
-      "description": "class=\"et_pb_text_inner\"> AKTUALITY:  od Honza Zubko | 1. března 2026 <div class",
-      "source": "https://www.tjvskadan.cz/kadansky-drak-29-30-5-2026",
-      "sourceName": "TJ Vodní sporty Kadaň"
-    },
-    {
-      "id": "8adee92d94d2",
-      "title": "Honza Zubko",
-      "date": "2026-05-30",
-      "category": "Sportovní organizace a kluby",
-      "description": "//www.tjvskadan.cz/wp-content/uploads/2026/02/IMG_8250-480x670.jpg 480w\" sizes=\"(min-width: 0px) and (max-width: 480px) 480px, (min-width: 481px) and (max-width: 980px) 980px, (min-width: 981px) 1080px, 100vw\" /> Kadaňský Drak 29-30.5.2026 od  | 1. března 2026 14. Ročník závodů mladých dračích lodí Těšíme se na vás, níže potřebné dokumenty k závodům. Kadaňský Drak Školní Pohár Informace o obdržení dotace od Honza Zub",
-      "source": "https://www.tjvskadan.cz/author/honzaz",
-      "sourceName": "TJ Vodní sporty Kadaň"
     },
     {
       "id": "2dcaee38c432",
@@ -1313,24 +1315,6 @@
       "sourceName": "Sportovní areály Most – akce"
     },
     {
-      "id": "993068e5752f",
-      "title": "Výroční schůze TJVS z.s.",
-      "date": "2025-11-25",
-      "category": "Sportovní organizace a kluby",
-      "description": "estování do Sportovního Centra Mládeže. Kritéria pro výběr závodníků jsou závody českého poháru mládeže, Mistrovství České republiky na krátké a dlouhé tratě. A právě...  od Honza Zubko | 21. října 2025 Zveme platné členy TJ na valnou hromadu pořádanou dne 25.11.2025 v 17:00 hod v sídle TJ VS Kadaň Výroční schůze TJ VS Kadaň Z.s. Dne 25.11.2025 v 17:00 hod se na Loděnici TJ uskuteční Výroční schůze TJ Vodní sporty Ka",
-      "source": "https://www.tjvskadan.cz/vyrocni-schuze-tjvs-z-s",
-      "sourceName": "TJ Vodní sporty Kadaň"
-    },
-    {
-      "id": "0d220e54439b",
-      "title": "Slavnostní charitativní Galavečer při příležitosti 70let výročí vzniku oddílu kanoistiky v Kadani",
-      "date": "2025-11-25",
-      "category": "Sportovní organizace a kluby",
-      "description": "25.11.2025 v 17:00 hod v sídle TJ VS Kadaň Výroční schůze TJ VS Kadaň Z.s. Dne 25.11.2025 v 17:00 hod se na Loděnici TJ uskuteční Výroční schůze TJ Vodní sporty Kadaň z.s. Program: zahájení volba...  od <span class=\"au",
-      "source": "https://www.tjvskadan.cz/slavnostni-charitativni-galavecer-pri-prilezitosti-70let-vyroci-vzniku-oddilu-kanoistiky-v-kadani",
-      "sourceName": "TJ Vodní sporty Kadaň"
-    },
-    {
       "id": "90a38df6e970",
       "title": "https://www.facebook.com/prunerov/",
       "date": "2025-07-19",
@@ -1374,33 +1358,6 @@
       "description": "ymkadan.cz/wp-content/uploads/2024/06/Obrazek-WhatsApp-2024-06-15-v-13.37.05_e08bdd23-150x150.jpg\" class=\"attachment-75x75 size-75x75 wp-post-image\" alt=\"\" /> Závod Kadaňské Jedničky 15.6.2024 V sobotu 15. června jsme pro děti z přípravky a […]  Zde najdete informace k příměstskému soustředění, […] Školní rok 2022/2023 s Gymnastikou Kadaň Školní rok 2022/2023 s Gymnastikou Kadaň Školní rok […] <!-- .entry-cont",
       "source": "https://www.gymkadan.cz/primestske-soustredeni-gymnastiky-19-23-8-2024",
       "sourceName": "Gymnastika Kadaň – SK Kosagym"
-    },
-    {
-      "id": "cc3ca9f6ca1c",
-      "title": "« Starší příspěvky",
-      "date": "2024-05-31",
-      "category": "Sportovní organizace a kluby",
-      "description": "024 31.05.2024 – 01.06.2024 od Jarda Voltr | 17. dubna 2024  Kontakty Jarda Voltr Předseda představenstva +420 605 154 263",
-      "source": "https://www.tjvskadan.cz/page/2?et_blog=",
-      "sourceName": "TJ Vodní sporty Kadaň"
-    },
-    {
-      "id": "df5cd0af02f0",
-      "title": "Kadaňský Drak 2024 31.05.2024 – 01.06.2024",
-      "date": "2024-05-31",
-      "category": "Sportovní organizace a kluby",
-      "description": "Vás pozvat na slavnostní galavečer ku příležitosti 70 let od založení oddílu kanoistiky a vodních sportů v Kadani. Slavnostní večer proběhne v kulturním zařízení města Kadaně - na Střelnici. Tento večer bude zároveň...  od Jarda Voltr | <s",
-      "source": "https://www.tjvskadan.cz/kadansky-drak-2024-31-05-2024-01-06-2024",
-      "sourceName": "TJ Vodní sporty Kadaň"
-    },
-    {
-      "id": "1d3ebcbe0bc8",
-      "title": "Jarda Voltr",
-      "date": "2024-05-31",
-      "category": "Sportovní organizace a kluby",
-      "description": "px) and (max-width: 980px) 980px, (min-width: 981px) 1080px, 100vw\" /> Slavnostní charitativní Galavečer při příležitosti 70let výročí vzniku oddílu kanoistiky v Kadani od  | 14. října 2024 Vážení přátelé, kamarádi, dovolujeme si Vás pozvat na slavnostní galavečer ku příležitosti 70 let od založení oddílu kanoistiky a vodních sportů v Kadani. Slavnostní večer proběhne v kulturním zařízení města Kadaně - na Střelnici.",
-      "source": "https://www.tjvskadan.cz/author/jardav",
-      "sourceName": "TJ Vodní sporty Kadaň"
     },
     {
       "id": "3129095603ca",
@@ -1781,15 +1738,6 @@
       "sourceName": "ČEZ Distribuce – plánované odstávky"
     },
     {
-      "id": "75abe8547439",
-      "title": "ČESKÝ POHÁR BENJAMÍNKŮ 2026",
-      "date": "",
-      "category": "Sportovní organizace a kluby",
-      "description": "y Kadaň získali dotaci ve výši 113 600 Kč na podporu oddílu rychlostních kanoistů a dračích lodí. Na sportovní aktivity dětí a mládeže.  od Honza Zubko | 5. května 2026 NÁŠ ODDÍL I LETOS OPĚT DOSTAL DŮVĚRU K POŘÁDÁNÍ ČESKÉHO POHÁRU BENJAMÍNKŮ O VÍKENDU 6 A 7.ČERVNA SE NA OHŘI BUDOU PROHÁNĚT ZÁVODNÍCI Z TÉMĚŘ CELÉ REPUBLIKY, PŘIJĎTE JE PODPOŘIT. Jarní Brigáda na loděnici TJVS od <a href=\"https://www.tjvskadan.c",
-      "source": "https://www.tjvskadan.cz/cesky-pohar-benjaminku-2025",
-      "sourceName": "TJ Vodní sporty Kadaň"
-    },
-    {
       "id": "ff004a52a3ac",
       "title": "Úřední deska",
       "date": "",
@@ -1797,6 +1745,78 @@
       "description": "i> Mapa webu Aktuality Webkamery Kalendář akcí  Město Město Zastupitelstvo města Rada města Komise rady <a href=\"https://www.mes",
       "source": "https://www.mesto-kadan.cz/cs/mestsky-urad/uredni-deska-6.html",
       "sourceName": "Město Kadaň"
+    },
+    {
+      "id": "5c29a689497f",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Mateřské školy",
+      "description": "(()=>{let e=setInterval((function(){document.body&&(document.body.classList.add(\"cq-polyfill-loaded\"),clearInterval(e))}),100)}))}))}))})() <link rel=\"alterna",
+      "source": "https://www.msctyrlistekkadan.cz/uredni-deska",
+      "sourceName": "MŠ Čtyřlístek Kadaň"
+    },
+    {
+      "id": "5345108fd9d2",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Mateřské školy",
+      "description": "i\">Dokumenty ke stažení Důležité informace Informace Informace o zpracování GDPR  Prohlášení o přístupnosti Školní řád Rozpočet a rozpočtový výhled Stravování Jídelníček Informace o stravování Alergeny <div class=\"ba-row row-fluid\" id=\"item-1650890",
+      "source": "https://www.ms-pisnicka.cz/informace/uredni-deska",
+      "sourceName": "MŠ Písnička Kadaň"
+    },
+    {
+      "id": "f4a5e19ce2f2",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Mateřské školy",
+      "description": "Důležité informace Informace o zpracovávání osobních údajů Sponzoři  Prohlášení o přístupnosti Školní vzdělávací program Školní řád Rozpočet a rozpočtový výhled Stravování Jídelníček Alergeny Termín plateb Vnitřní předpis pro školní stravování <i class=\"ba-icons ba-icon-men",
+      "source": "https://www.mshvezdicka.eu/dulezite-informace/uredni-deska",
+      "sourceName": "MŠ Hvězdička Kadaň"
+    },
+    {
+      "id": "2308ee32e625",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Základní školy",
+      "description": "Dokumenty  E-podatelna Povinné informace",
+      "source": "https://www.5zskadan.cz/o-skole/uredni-deska",
+      "sourceName": "ZŠ Na Podlesí Kadaň"
+    },
+    {
+      "id": "4f97e46b6b19",
+      "title": "Úřad práce České republiky",
+      "date": "",
+      "category": "Město, úřady a městské služby",
+      "description": "Content\" aria-expanded=\"false\" aria-label=\"Toggle navigation\"> Pro občany Práce a zaměstnání Jazyk Česky Česky <img src=\"/Images/Flag1x1.gb.svg\" class=\"up-img-flag-menu\" /",
+      "source": "https://www.uradprace.cz/",
+      "sourceName": "Úřad práce ČR – kontaktní pracoviště Kadaň"
+    },
+    {
+      "id": "770b3a3819c6",
+      "title": "Úřad online a rezervace",
+      "date": "",
+      "category": "Město",
+      "description": "Městský úřad Portál občana Platební portál Ústeckého kraje  Telefonní seznam Dokumenty a formuláře Úřední deska Ztráty a nálezy Odbory městského úřadu Městské organizace Organizace a služby <a href",
+      "source": "https://www.mesto-kadan.cz/cs/mestsky-urad/urad-online-a-rezervace.html",
+      "sourceName": "Město Kadaň"
+    },
+    {
+      "id": "62837f5bf0bd",
+      "title": "Územně analytické podklady",
+      "date": "",
+      "category": "Město a územní plánování",
+      "description": "li class=\"dropdown\"> Územní plánování Aktuálně projednávané... Územní plánování - město Kadaň Územní plánování - obce v ORP  Územní studie krajiny ORP Kadaň Plánovací smlouvy Analýza bydlení Kontakty Formuláře Studie",
+      "source": "https://gis.mesto-kadan.cz/portal/uap/uap",
+      "sourceName": "Městský GIS Kadaň"
+    },
+    {
+      "id": "26ebe9f2df8f",
+      "title": "Územní studie krajiny ORP Kadaň",
+      "date": "",
+      "category": "Město a územní plánování",
+      "description": ";nování Aktuálně projednávané... Územní plánování - město Kadaň Územní plánování - obce v ORP Územně analytické podklady  Plánovací smlouvy Analýza bydlení Kontakty Formuláře Studie",
+      "source": "https://gis.mesto-kadan.cz/portal/usk",
+      "sourceName": "Městský GIS Kadaň"
     }
   ]
 }
