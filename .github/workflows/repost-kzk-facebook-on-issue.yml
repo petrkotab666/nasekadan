@@ -1,0 +1,94 @@
+name: Nahradit chybný facebookový příspěvek KZK
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repost-kzk-facebook-20260802
+  cancel-in-progress: false
+
+jobs:
+  repost:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[fix] Repost KZK Facebook'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit nový Open Graph obrázek
+        shell: bash
+        run: |
+          set -euo pipefail
+          f=clanky/kulturni-zarizeni-kadan.html
+          test -s "$f"
+          grep -Fq 'https://nasekadan.cz/social/kzk-kultura-strelnice-klaster-20260802-v2.png' "$f"
+          grep -Fq 'og:image:secure_url' "$f"
+          test -s social/kzk-kultura-strelnice-klaster-20260802-v2.png
+
+      - name: Vytvořit opravený příspěvek a odstranit chybný
+        id: facebook
+        env:
+          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/publish_facebook.py scripts/repost_kzk_facebook_20260802.py
+          output="$(python3 scripts/repost_kzk_facebook_20260802.py)"
+          printf '%s\n' "$output"
+          python3 - "$output" <<'PY'
+          import json, sys
+          data=json.loads(sys.argv[1].splitlines()[-1])
+          assert data['old_post_id'] != data['new_post_id']
+          assert data['full_picture'] is True
+          assert data['share_url'].endswith('?fb=20260802v2')
+          print('facebook_repost=ok')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit nový facebookový záznam
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Facebook oprava'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/facebook-published/kulturni-zarizeni-kadan-d406d029f9.json \
+                  scripts/repost_kzk_facebook_20260802.py
+          git commit -m 'Nahradit vadný facebookový příspěvek KZK [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 4 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          FACEBOOK_OK: ${{ steps.facebook.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.FACEBOOK_OK === 'true';
+            const markerPath = '.github/facebook-published/kulturni-zarizeni-kadan-d406d029f9.json';
+            let marker = {};
+            try { marker = JSON.parse(require('fs').readFileSync(markerPath, 'utf8')); } catch {}
+            const body = ok
+              ? `✅ Vadný příspěvek byl nahrazen. Nejprve vznikl a byl ověřen nový příspěvek s obrazovým náhledem, potom byl původní příspěvek ${marker.replaced_facebook_post_id || ''} odstraněn. Nový příspěvek: ${marker.facebook_permalink_url || marker.facebook_post_id || 'vytvořen'}`
+              : '🚨 Automatické nahrazení facebookového příspěvku nebylo dokončeno. Opravený Open Graph obrázek na webu zůstává nasazený.';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
