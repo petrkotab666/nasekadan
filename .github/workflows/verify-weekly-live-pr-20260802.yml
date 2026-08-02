@@ -1,0 +1,59 @@
+name: Ověřit živý kulturní přehled 3.–9. srpna
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/verify-weekly-live-pr-trigger.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Ověřit článek, publikační plochy a OG obrázek
+        shell: bash
+        run: |
+          set -euo pipefail
+          slug='kam-v-kadani-a-okoli-3-9-srpna-2026'
+          path="/clanky/${slug}.html"
+          expected='Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání'
+          for attempt in $(seq 1 30); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            rm -f /tmp/nk-{article,home,archive,rss,sitemap,news,og}
+            curl -4 -kfsS --max-time 30 "https://nasekadan.cz${path}?verify=${stamp}" -o /tmp/nk-article || true
+            curl -4 -kfsS --max-time 30 "https://nasekadan.cz/?verify=${stamp}" -o /tmp/nk-home || true
+            curl -4 -kfsS --max-time 30 "https://nasekadan.cz/clanky/?verify=${stamp}" -o /tmp/nk-archive || true
+            curl -4 -kfsS --max-time 30 "https://nasekadan.cz/rss.xml?verify=${stamp}" -o /tmp/nk-rss || true
+            curl -4 -kfsS --max-time 30 "https://nasekadan.cz/sitemap.xml?verify=${stamp}" -o /tmp/nk-sitemap || true
+            curl -4 -kfsS --max-time 30 "https://nasekadan.cz/news-sitemap.xml?verify=${stamp}" -o /tmp/nk-news || true
+            ok=true
+            grep -Fq "<h1>${expected}</h1>" /tmp/nk-article 2>/dev/null || ok=false
+            grep -Fq '<link rel="canonical" href="https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html">' /tmp/nk-article 2>/dev/null || ok=false
+            grep -Fq 'property="og:image:width" content="1200"' /tmp/nk-article 2>/dev/null || ok=false
+            grep -Fq 'property="og:image:height" content="630"' /tmp/nk-article 2>/dev/null || ok=false
+            grep -Fq 'NewsArticle' /tmp/nk-article 2>/dev/null || ok=false
+            for f in /tmp/nk-home /tmp/nk-archive /tmp/nk-rss /tmp/nk-sitemap /tmp/nk-news; do
+              grep -Fq "$path" "$f" 2>/dev/null || ok=false
+            done
+            og_url="$(sed -n 's/.*property="og:image" content="\([^"]*\)".*/\1/p' /tmp/nk-article 2>/dev/null | head -n1)"
+            if [[ -z "$og_url" ]] || ! curl -4 -kfsS --max-time 30 "${og_url}?verify=${stamp}" -o /tmp/nk-og; then ok=false; fi
+            if $ok; then
+              python3 - <<'PY'
+import struct
+with open('/tmp/nk-og','rb') as f: b=f.read(24)
+assert b[:8] == b'\x89PNG\r\n\x1a\n'
+assert struct.unpack('>II', b[16:24]) == (1200,630)
+PY
+              echo "LIVE_OK article=https://nasekadan.cz${path} og=${og_url}"
+              exit 0
+            fi
+            echo "Pokus ${attempt}: článek nebo některá publikační plocha ještě není připravena."
+            sleep 10
+          done
+          echo 'LIVE_FAILED' >&2
+          exit 1
