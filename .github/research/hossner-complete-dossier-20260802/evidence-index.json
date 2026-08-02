@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-08-02T13:57:00+02:00",
+  "case": "Petr Hossner vs. Nemocnice Kadaň / postup města Kadaň",
+  "completion_status": "incomplete",
+  "closure_rule": "Každá z 13 oblastí musí být doložena primárním dokumentem nebo konečným autoritativním rozhodnutím o nedostupnosti.",
+  "documents": [
+    {
+      "id": "togel-opinion-2024-07-24",
+      "title": "Právní stanovisko JUDr. Vladimíra Tögela",
+      "document_date": "2024-07-24",
+      "source_type": "user_file_library",
+      "source_name": "pravni_stanovisko_JUDr_Vladimir_Togel_24_07_2024_OCR.pdf",
+      "binary_sha256": null,
+      "hash_status": "binary bytes not exposed by File Library; export required",
+      "pages_present": 5,
+      "pages_expected": 5,
+      "completeness": "complete opinion text; assignment and possible separate attachments absent",
+      "evidence_value": "primary legal opinion commissioned by the city; not a court judgment or damages valuation",
+      "dossier_items": [4, 7, 13]
+    },
+    {
+      "id": "city-decision-mukk-59902-2025",
+      "title": "Rozhodnutí Města Kadaň MUKK/59902/2025 a seznam deklarovaných příloh",
+      "document_date": "2025-09-02",
+      "source_type": "user_file_library",
+      "source_name": "dokladovy_balicek_Togel_stanovisko_mesto_Kadan_2025_OCR.pdf",
+      "binary_sha256": null,
+      "hash_status": "binary bytes not exposed by File Library; export required",
+      "pages_present": 7,
+      "pages_expected": null,
+      "completeness": "incomplete attachment package; pages 1-2 contain decision/list, pages 3-7 repeat Tögel opinion; listed contracts, resolutions, council minutes and email attachments are absent",
+      "evidence_value": "primary proof that the city identified and declared the listed attachments in an information proceeding",
+      "dossier_items": [4, 10]
+    },
+    {
+      "id": "hospital-inf-2025-02-page-03",
+      "title": "Odpověď Nemocnice Kadaň – rozklad předžalobního nároku",
+      "document_date": "2025",
+      "source_type": "github_repository_extracted_text",
+      "repository_path": ".github/research/nemkadan-inf-2025-20260801/text/INF-2025-02-page-03.txt",
+      "git_blob_sha": "92661a88bb4d204be3140be60d18da2e58e61ee8",
+      "completeness": "single page of a larger information-response file",
+      "evidence_value": "primary statement by the hospital that 53,726,579 CZK consisted of 46,124,046 CZK gross wages/rewards and 7,602,533 CZK employer contributions",
+      "dossier_items": [5, 6, 13]
+    },
+    {
+      "id": "deloitte-contract-public",
+      "title": "Deloitte Legal – smluvní podmínky poskytování právních služeb",
+      "source_type": "register_of_contracts_copy_in_github_research",
+      "source_url": "https://smlouvy.gov.cz/smlouva/soubor/38140380/Deloitte%20Legal%20s.r.o.%20-%20Smluvn%C3%AD%20podm%C3%ADnky%20poskytov%C3%A1n%C3%AD%20pr%C3%A1vn%C3%ADch%20slu%C5%BEeb.pdf",
+      "binary_sha256": "75207dfeb020da181829a6345587638a279aaf38da4f5f93dc8e6ee6bce7f36a",
+      "completeness": "public contractual terms only; substantive legal outputs absent",
+      "evidence_value": "proves contractual framework, not conclusions of the legal review",
+      "dossier_items": [5]
+    },
+    {
+      "id": "22hlav-audit-contract-2024",
+      "title": "Smlouva o provedení auditu účetní závěrky k 31. 12. 2024",
+      "source_type": "register_of_contracts_copy_in_github_research",
+      "source_url": "https://smlouvy.gov.cz/smlouva/soubor/38568444/Smlouva%20o%20proveden%C3%AD%20auditu.pdf",
+      "binary_sha256": "7e0d8f37ee704c038d3b2f0e4bfb5c2f3ab259dd390aa85fae41a0c5238fbf4a",
+      "completeness": "complete public contract; audit report and management letter absent",
+      "evidence_value": "defines statutory financial-statement audit scope; does not prove a dedicated legal review of Hossner remuneration",
+      "dossier_items": [2, 13]
+    }
+  ],
+  "items": {
+    "1": "partial",
+    "2": "partial",
+    "3": "partial",
+    "4": "near_complete",
+    "5": "partial",
+    "6": "partial",
+    "7": "missing",
+    "8": "missing",
+    "9": "partial",
+    "10": "partial",
+    "11": "partial",
+    "12": "missing",
+    "13": "partial"
+  },
+  "external_searches": {
+    "gmail": "no relevant result",
+    "google_drive": "no relevant result",
+    "file_library": "Tögel opinion and incomplete city attachment package found",
+    "public_city_filemanager": "expanded OCR scan triggered; result pending"
+  }
+}
