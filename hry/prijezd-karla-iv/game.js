@@ -437,6 +437,7 @@
     elements.consequenceResult.textContent = choice.result;
     elements.historyNote.textContent = choice.history;
     elements.effectList.innerHTML = '';
+    elements.consequence.querySelectorAll('.consequence__event').forEach((node) => node.remove());
 
     Object.entries(applied).forEach(([key, value]) => {
       const pill = document.createElement('span');
