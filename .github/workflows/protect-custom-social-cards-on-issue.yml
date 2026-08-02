@@ -1,0 +1,71 @@
+name: Chránit ručně připravené sociální karty
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: protect-custom-social-cards
+  cancel-in-progress: false
+
+jobs:
+  protect:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[fix] Protect custom social cards'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Upravit generátor a označit kartu KZK jako ruční
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow
+          python3 -m py_compile scripts/protect_custom_social_cards_20260802.py
+          python3 scripts/protect_custom_social_cards_20260802.py
+          grep -Fq 'meta_content(original, name="nasekadan:social-card")' scripts/generate_social_cards.py
+          grep -Fq '<meta name="nasekadan:social-card" content="custom">' clanky/kulturni-zarizeni-kadan.html
+          before="$(grep -o 'https://nasekadan.cz/social/[^" ]*' clanky/kulturni-zarizeni-kadan.html | head -n1)"
+          python3 scripts/generate_social_cards.py --write --check
+          after="$(grep -o 'https://nasekadan.cz/social/[^" ]*' clanky/kulturni-zarizeni-kadan.html | head -n1)"
+          test "$before" = "$after"
+          test "$after" = 'https://nasekadan.cz/social/kzk-kultura-strelnice-klaster-20260802-v2.png'
+
+      - name: Uložit systémovou opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň sociální karty'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/generate_social_cards.py \
+                  scripts/protect_custom_social_cards_20260802.py \
+                  scripts/fix_kzk_facebook_preview_20260802.py \
+                  scripts/publish_kzk_20260802.py \
+                  clanky/kulturni-zarizeni-kadan.html
+          git commit -m 'Chránit ruční sociální karty před automatickým přepsáním [skip ci]' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            [[ "$attempt" == 4 ]] && exit 1
+            sleep $((attempt * 4))
+          done
+
+      - name: Zapsat výsledek
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            const body = ok
+              ? '✅ Opraveno systémově. Automatický generátor nyní ruční sociální karty pouze ověří a už je nepřepíše. Článek KZK je označen jako custom a po kontrolním spuštění zůstal nový obrázek beze změny.'
+              : '🚨 Systémovou ochranu ručních sociálních karet se nepodařilo dokončit.';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
