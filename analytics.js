@@ -60,4 +60,12 @@
     script.setAttribute('data-facebook-follow-loader','1');
     document.head.appendChild(script);
   }
+
+  if(!document.querySelector('script[data-privacy-controls-loader]')){
+    const privacy=document.createElement('script');
+    privacy.src='/privacy-controls.js?v=20260802-seznam-partner-1';
+    privacy.defer=true;
+    privacy.setAttribute('data-privacy-controls-loader','1');
+    document.head.appendChild(privacy);
+  }
 })();
