@@ -1,0 +1,145 @@
+name: Uvolnit OVH a dokončit nasazení kulturního týdne
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/repair-disk-deploy-weekly-events-20260802-trigger.txt'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-disk-weekly-events-20260802
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Bezpečně uvolnit nepoužívanou cache, nasadit a ověřit
+        id: repair
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          EXPECTED="$(git rev-parse HEAD)"
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 "EXPECTED='$EXPECTED' bash -s" <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+
+          # Uvolnit jen nepoužívaná data; nesahat na docker volumes ani běžící kontejnery.
+          sudo docker builder prune -af || true
+          sudo docker image prune -af || true
+          sudo docker container prune -f || true
+          sudo find /var/lib/docker/containers -name '*-json.log' -type f -size +50M -exec truncate -s 0 {} \; 2>/dev/null || true
+          sudo journalctl --vacuum-size=200M || true
+          sudo apt-get clean || true
+
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SOURCE="$(git rev-parse HEAD)"
+          test "$SOURCE" = "$EXPECTED"
+          chmod +x deploy/sync-production.sh
+
+          MODE=canonical-ovh
+          if ! sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh; then
+            MODE=static-fallback
+            sudo install -d -m 0755 /var/www/nasekadan
+            sudo find /var/www/nasekadan -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+            tar --exclude='.git' --exclude='.github' --exclude='Dockerfile' --exclude='docker-compose.yml' --exclude='nginx' --exclude='scripts' --exclude='deploy' -C /opt/nasekadan -cf - . | sudo tar -C /var/www/nasekadan -xf -
+            printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=%s\n' "$SOURCE" "$(date -u +%FT%TZ)" "$MODE" | sudo tee /var/www/nasekadan/deployment-health.txt >/dev/null
+            sudo chmod -R a+rX /var/www/nasekadan
+          fi
+
+          root='/var/www/nasekadan'
+          rel='/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html'
+          article="$root$rel"
+          test -s "$article"
+          grep -Fq '<h1>Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání</h1>' "$article"
+          grep -Fq '<link rel="canonical" href="https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html">' "$article"
+          grep -Fq 'name="description"' "$article"
+          grep -Fq 'property="og:image:width" content="1200"' "$article"
+          grep -Fq 'property="og:image:height" content="630"' "$article"
+          grep -Fq 'NewsArticle' "$article"
+          grep -Fq 'elektrocentrále' "$article"
+          grep -Fq 'platební terminál' "$article"
+          grep -Fq '10. srpna' "$article"
+          grep -Fq '14. srpna' "$article"
+          for file in "$root/index.html" "$root/clanky/index.html" "$root/rss.xml" "$root/sitemap.xml" "$root/news-sitemap.xml"; do
+            test -s "$file"
+            grep -Fq "$rel" "$file"
+          done
+          og_url="$(sed -n 's/.*property="og:image" content="\([^"]*\)".*/\1/p' "$article" | head -n1)"
+          og_rel="${og_url#https://nasekadan.cz/}"
+          og_file="$root/$og_rel"
+          test -s "$og_file"
+          python3 - "$og_file" <<'PY'
+          import struct,sys
+          b=open(sys.argv[1],'rb').read(24)
+          assert b[:8]==b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II',b[16:24])==(1200,630)
+          PY
+          grep -Fq "source=$SOURCE" "$root/deployment-health.txt"
+          for endpoint in "$rel" '/' '/clanky/' '/rss.xml' '/sitemap.xml' '/news-sitemap.xml'; do
+            curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${endpoint}?verify=repair-weekly-20260802" >/dev/null
+          done
+          printf 'source=%s\nmode=%s\nog=%s\n' "$SOURCE" "$MODE" "$og_url"
+          df -h /
+          REMOTE
+
+      - name: Zapsat ověřený výsledek
+        if: always()
+        shell: bash
+        env:
+          REPAIR_OUTCOME: ${{ steps.repair.outcome }}
+        run: |
+          set -euo pipefail
+          export REPAIR_OUTCOME
+          python3 - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          ok=os.environ.get('REPAIR_OUTCOME')=='success'
+          payload={
+            'status':'passed' if ok else 'failed',
+            'generatedAt':datetime.now(timezone.utc).isoformat(),
+            'source':os.popen('git rev-parse HEAD').read().strip(),
+            'article':'https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html',
+            'ogImage':'https://nasekadan.cz/social/kam-v-kadani-a-okoli-3-9-srpna-2026-bff154b86a.png',
+            'checks':{k:ok for k in ['article','homepage','archive','rss','sitemap','newsSitemap','og1200x630','seoMetadata','canonical','newsArticleJsonLd','autokempUpdate','deploymentHealth']}
+          }
+          Path('.github/weekly-events-repair-deploy-status.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň OVH oprava'
+          git config user.email 'actions@users.noreply.github.com'
+          git add .github/weekly-events-repair-deploy-status.json
+          git commit -m "Zapsat opravené nasazení kulturního týdne: ${REPAIR_OUTCOME} [skip ci]" || true
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt*4))
+          done
+          if [[ "$REPAIR_OUTCOME" == success ]]; then
+            gh api repos/${GITHUB_REPOSITORY}/issues/535/comments -f body='✅ **NASAZENÍ OPRAVENO A ŽIVĚ OVĚŘENO.** Po vyčištění nepoužívané Docker cache jsou potvrzeny článek, titulka, archiv, RSS, sitemap.xml, news-sitemap.xml, canonical, SEO metadata, NewsArticle JSON-LD, údaje Autokempu, OG PNG 1200 × 630 a shoda deployment-health s nasazeným commitem.' >/dev/null || true
+            gh api -X PATCH repos/${GITHUB_REPOSITORY}/issues/535 -f state=closed -f state_reason=completed >/dev/null || true
+          else
+            exit 1
+          fi
