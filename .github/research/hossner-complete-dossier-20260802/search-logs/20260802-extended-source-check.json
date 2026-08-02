@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "checked_date": "2026-08-02",
+  "completion_status": "incomplete",
+  "searches": [
+    {
+      "source": "gmail",
+      "queries": [
+        "(\"53 726 579\" OR \"52 882 922\" OR \"25 979 821\" OR \"843 657\") -in:spam -in:trash",
+        "(53726579 OR 52882922 OR 25979821 OR 843657 OR MUKK/33508/2025 OR MUKK/33884/2025 OR MUKK/59902/2025) -in:spam -in:trash",
+        "has:attachment (Hossner OR Deloitte OR Tögel OR \"Nemocnice Kadaň\") -in:spam -in:trash"
+      ],
+      "result": "no matching messages",
+      "evidentiary_limit": "A negative Gmail search is not an authoritative finding that the documents do not exist."
+    },
+    {
+      "source": "google_drive",
+      "queries": [
+        "Hossner",
+        "Petr Hossner Nemocnice Kadaň Deloitte Tögel žaloba předžalobní výzva pracovní smlouva kritéria hodnocení"
+      ],
+      "result": "metadata search returned no relevant file; semantic index request returned an authorization error",
+      "evidentiary_limit": "The authorization error is transient and the absence of metadata hits does not prove permanent unavailability."
+    },
+    {
+      "source": "file_library",
+      "queries": [
+        "Petr Hossner Nemocnice Kadaň 25 979 821 žaloba předžalobní výzva přílohy",
+        "Deloitte Legal Nemocnice Kadaň právní prověrka stanovisko Shrnutí 3. 2. 2026 výkazy času faktury",
+        "Kritéria hodnocení ředitele za rok 2017 Zpráva jednání Výboru pro audit přílohy dozorčí rady",
+        "Dodatek č. 1 pracovní smlouva Petr Hossner 26. 9. 2024 mzdový výměr"
+      ],
+      "result": "no relevant primary Hossner dossier document; returned items were unrelated files or already known editorial material",
+      "evidentiary_limit": "Search misses and false positives do not establish nonexistence."
+    },
+    {
+      "source": "public_web",
+      "queries": [
+        "site:mesto-kadan.cz/filemanager Hossner Dodatek č. 1",
+        "site:mesto-kadan.cz/filemanager Zpráva jednání Výboru pro audit",
+        "site:nemkadan.cz Hossner žaloba 25 979 821 PDF",
+        "93 Ncp 490/2026 Hossner",
+        "site:uooou.gov.cz Nemocnice Kadaň Deloitte Hossner informace rozhodnutí",
+        "site:nemkadan.cz 3. 2. 2026 Deloitte"
+      ],
+      "result": "no missing primary document or final UOOU appellate decision found",
+      "evidentiary_limit": "Ordinary web indexing does not cover non-indexed attachments, court files, internal records or unpublished decisions."
+    },
+    {
+      "source": "github_repository",
+      "result": "current dossier status remains incomplete; the repository now contains INF-2026-01 and INF-2026-04, exact Deloitte time and fee data, and the complete party filing of 12 January 2026 with binary SHA-256",
+      "remaining_priority_gaps": [
+        "full hospital lawsuit and itemized claim calculation",
+        "complete pre-litigation notice and mathematical reconciliation of the three amounts",
+        "actual Deloitte opinions, review, Shrnutí, letter of 3 February 2026, invoices and time sheets",
+        "director evaluation criteria and all supervisory-board appendices",
+        "Audit Committee report and auditor management/work papers",
+        "employment addenda, wage orders and payroll records",
+        "complete council supporting materials and email of 3 October 2024",
+        "shredding inventory, decision and protocol",
+        "expert or professional calculation of usual remuneration",
+        "Tögel assignment and transmittal",
+        "complete accessible court-file documents"
+      ]
+    }
+  ],
+  "notification_condition_met": false
+}
