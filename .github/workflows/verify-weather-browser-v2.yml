@@ -1,0 +1,74 @@
+name: Ověřit počasí v prohlížeči
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-browser-v2-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Nainstalovat Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Ověřit titulku, podrobnou stránku a mobil
+        id: browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const fs=require('fs');
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const nonce=Date.now();
+            const desktop=await browser.newPage({viewport:{width:1440,height:1000}});
+            await desktop.goto(`https://nasekadan.cz/?weather=${nonce}`,{waitUntil:'domcontentloaded',timeout:90000});
+            await desktop.waitForSelector('#weather-strip .nk-weather-strip__now strong',{timeout:45000});
+            const strip=(await desktop.locator('#weather-strip').innerText()).replace(/\s+/g,' ').trim();
+            if(!strip.includes('Kadaň právě teď')||!strip.includes('°C'))throw new Error(`Pás: ${strip}`);
+
+            await desktop.goto(`https://nasekadan.cz/pocasi/?weather=${nonce}`,{waitUntil:'domcontentloaded',timeout:90000});
+            await desktop.waitForSelector('.nk-weather-hero .nk-weather-current strong',{timeout:45000});
+            const detail=(await desktop.locator('#weather-app').innerText()).replace(/\s+/g,' ').trim();
+            for(const needle of ['°C','Předpověď na sedm dní','Nejbližších 24 hodin'])if(!detail.includes(needle))throw new Error(`Chybí ${needle}: ${detail.slice(0,600)}`);
+
+            const mobile=await browser.newPage({viewport:{width:390,height:844},isMobile:true});
+            await mobile.goto(`https://nasekadan.cz/?weather-mobile=${nonce}`,{waitUntil:'domcontentloaded',timeout:90000});
+            await mobile.waitForSelector('#weather-strip .nk-weather-strip__now strong',{timeout:45000});
+            const box=await mobile.locator('#weather-strip').boundingBox();
+            if(!box||box.width>391||box.height>260)throw new Error(`Mobilní blok má nečekanou velikost ${JSON.stringify(box)}`);
+
+            fs.writeFileSync('/tmp/weather-browser-result.json',JSON.stringify({strip,detail_preview:detail.slice(0,700),mobile_box:box},null,2));
+            console.log(strip);
+            await browser.close();
+          })().catch(error=>{console.error(error);process.exit(1)});
+          JS
+
+      - name: Zapsat výsledek kontroly
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+        with:
+          script: |
+            const fs=require('fs');
+            const owner=context.repo.owner,repo=context.repo.repo;
+            let details={};
+            try{details=JSON.parse(fs.readFileSync('/tmp/weather-browser-result.json','utf8'));}catch(e){}
+            const payload={status:process.env.BROWSER_OUTCOME==='success'?'success':'failure',checked_at:new Date().toISOString(),run_id:String(context.runId),browser_verify:process.env.BROWSER_OUTCOME||'',page:'https://nasekadan.cz/pocasi/',...details};
+            let sha;
+            try{const old=await github.rest.repos.getContent({owner,repo,path:'.github/weather-browser-status.json',ref:'main'});sha=old.data.sha;}catch(e){if(e.status!==404)throw e;}
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:'.github/weather-browser-status.json',message:`Zapsat kontrolu vykreslení počasí: ${payload.status} [skip ci]`,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64'),sha,branch:'main'});
