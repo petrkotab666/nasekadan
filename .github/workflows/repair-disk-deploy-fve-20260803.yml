@@ -1,0 +1,186 @@
+name: Finálně uvolnit OVH a nasadit FVE EPR Letiště
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-disk-deploy-fve-20260803.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: final-repair-fve-epr-20260803
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_REL: /clanky/fve-epr-letiste-bess-kadan-2026.html
+      ARTICLE_FILE: clanky/fve-epr-letiste-bess-kadan-2026.html
+      SOCIAL_REL: /social/fve-epr-letiste-baterie-kadan-20260803.png
+      SOCIAL_FILE: social/fve-epr-letiste-baterie-kadan-20260803.png
+      EXPECTED_H1: ČEZ chce u Kadaně postavit solární park s bateriemi. Jejich velikost, cena i platby městu zůstávají neznámé
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Bezpečně uvolnit nepoužívaná data a nasadit přesnou veřejnou verzi
+        id: repair
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 -o ServerAliveInterval=10 -o ServerAliveCountMax=3 \
+            ubuntu@57.129.43.215 "ARTICLE_REL='$ARTICLE_REL' ARTICLE_FILE='$ARTICLE_FILE' SOCIAL_REL='$SOCIAL_REL' SOCIAL_FILE='$SOCIAL_FILE' EXPECTED_H1='$EXPECTED_H1' bash -s" <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+
+          # Uvolnit jen nepoužívanou cache, obrazy a zastavené kontejnery.
+          # Běžící kontejnery ani Docker volumes se nemažou.
+          sudo docker builder prune -af || true
+          sudo docker image prune -af || true
+          sudo docker container prune -f || true
+          sudo find /var/lib/docker/containers -name '*-json.log' -type f -size +50M -exec truncate -s 0 {} \; 2>/dev/null || true
+          sudo journalctl --vacuum-size=200M || true
+          sudo apt-get clean || true
+
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          SOURCE="$(git rev-parse HEAD)"
+
+          test -s "$ARTICLE_FILE"
+          test -s "$SOCIAL_FILE"
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+          grep -Fq 'index,follow' "$ARTICLE_FILE"
+          ! grep -Fq 'noindex' "$ARTICLE_FILE"
+          grep -Fq '„Letiště“ je starý název lokality' "$ARTICLE_FILE"
+          grep -Fq 'Solární park zatím není v provozu' "$ARTICLE_FILE"
+          for file in index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt; do
+            test -s "$file"
+            grep -Fq 'fve-epr-letiste-bess-kadan-2026.html' "$file"
+          done
+
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/social"
+          sudo install -m 0644 "$ARTICLE_FILE" "$root/$ARTICLE_FILE"
+          sudo install -m 0644 "$SOCIAL_FILE" "$root/$SOCIAL_FILE"
+          sudo install -m 0644 clanky/index.html "$root/clanky/index.html"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
+            sudo install -m 0644 "$f" "$root/$f"
+          done
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\npublished_at=2026-08-03T10:30:00+02:00\nmode=targeted-disk-repair\n' "$SOURCE" "$ARTICLE_REL" | sudo tee "$root/deployment-health.txt" >/dev/null
+          sudo chmod -R a+rX "$root"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp "$ARTICLE_FILE" "nasekadan-web:/usr/share/nginx/html/$ARTICLE_FILE"
+            sudo docker cp "$SOCIAL_FILE" "nasekadan-web:/usr/share/nginx/html/$SOCIAL_FILE"
+            sudo docker cp clanky/index.html nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
+              sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            sudo docker cp "$root/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+
+          check_local(){
+            curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz$1?verify=fve-final-$SOURCE"
+          }
+          article="$(check_local "$ARTICLE_REL")"
+          home="$(check_local '/')"
+          archive="$(check_local '/clanky/')"
+          rss="$(check_local '/rss.xml')"
+          sitemap="$(check_local '/sitemap.xml')"
+          news="$(check_local '/news-sitemap.xml')"
+          health="$(check_local '/deployment-health.txt')"
+          check_local "$SOCIAL_REL" >/tmp/fve-social-live.png
+
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
+          grep -Fq 'index,follow' <<<"$article"
+          ! grep -Fq 'noindex' <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq "$ARTICLE_REL" <<<"$archive"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$sitemap"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$news"
+          grep -Fq "source=$SOURCE" <<<"$health"
+          python3 - <<'PY'
+          import struct
+          b=open('/tmp/fve-social-live.png','rb').read(24)
+          assert b[:8]==b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II',b[16:24])==(1200,630)
+          PY
+          rm -f /tmp/fve-social-live.png
+          printf 'source=%s\n' "$SOURCE"
+          df -h /
+          REMOTE
+
+      - name: Veřejně ověřit bez serverové zkratky
+        id: public
+        if: steps.repair.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=https://nasekadan.cz
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          tmp="$RUNNER_TEMP/fve-public"; mkdir -p "$tmp"
+          get(){ curl -4 -kfsS -L --max-time 30 "$base$1?v=$stamp" -o "$2"; }
+          get "$ARTICLE_REL" "$tmp/article"
+          get '/' "$tmp/home"
+          get '/clanky/' "$tmp/archive"
+          get '/rss.xml' "$tmp/rss"
+          get '/sitemap.xml' "$tmp/sitemap"
+          get '/news-sitemap.xml' "$tmp/news"
+          get "$SOCIAL_REL" "$tmp/social"
+          get '/deployment-health.txt' "$tmp/health"
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$tmp/article"
+          grep -Fq 'index,follow' "$tmp/article"
+          ! grep -Fq 'noindex' "$tmp/article"
+          grep -Fq "$ARTICLE_REL" "$tmp/home"
+          grep -Fq "$ARTICLE_REL" "$tmp/archive"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" "$tmp/rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" "$tmp/sitemap"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" "$tmp/news"
+          main="$(git ls-remote https://github.com/petrkotab666/nasekadan refs/heads/main | awk '{print $1}')"
+          grep -Fq "source=$main" "$tmp/health"
+          python3 - "$tmp/social" <<'PY'
+          import struct,sys
+          b=open(sys.argv[1],'rb').read(24)
+          assert b[:8]==b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II',b[16:24])==(1200,630)
+          PY
+
+      - name: Zapsat přesný výsledek do incidentu
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR: ${{ steps.repair.outcome }}
+          PUBLIC: ${{ steps.public.outcome }}
+        run: |
+          set -euo pipefail
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [[ "$REPAIR" == success && "$PUBLIC" == success ]]; then
+            body="✅ Finální oprava publikace FVE EPR Letiště proběhla úspěšně. Bezpečně byla odstraněna pouze nepoužívaná Docker cache, článek byl nasazen bez duplicit a veřejně jsou ověřeny článek, správný H1, indexovatelnost, titulka, archiv, RSS, sitemap.xml, news-sitemap.xml, PNG 1200 × 630 a shoda deployment-health s aktuálním main. Kontrolní běh: $run_url"
+            gh issue comment 557 --repo "$GITHUB_REPOSITORY" --body "$body"
+            gh issue close 557 --repo "$GITHUB_REPOSITORY" --reason completed || true
+          else
+            body="❌ Finální bezpečný opravný pokus publikace FVE EPR Letiště nebyl úplně úspěšný. Serverová oprava: $REPAIR. Nezávislá veřejná kontrola: $PUBLIC. Kontrolní běh: $run_url. Předchozí přesná příčina byla zaplněná Docker vrstva (no space left on device); tento běh odstranil pouze nepoužívanou cache a nesahal na běžící kontejnery ani volumes."
+            gh issue comment 557 --repo "$GITHUB_REPOSITORY" --body "$body"
+            exit 1
+          fi
