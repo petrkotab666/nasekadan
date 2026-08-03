@@ -1,0 +1,270 @@
+name: Refresh published content index once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/refresh-published-content-index-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit live web and refresh canonical registry
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import datetime as dt
+          import hashlib
+          import html
+          import json
+          import re
+          import subprocess
+          import time
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          BASE = "https://nasekadan.cz"
+          REGISTRY_PATH = Path("data/published-content-index.json")
+          WORKFLOW_PATH = Path(".github/workflows/refresh-published-content-index-once.yml")
+          USER_AGENT = "Mozilla/5.0 (compatible; NaseKadanCanonicalAudit/1.0)"
+
+          def fetch(path: str) -> bytes:
+              url = BASE + path
+              last_error = None
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(
+                          url,
+                          headers={
+                              "User-Agent": USER_AGENT,
+                              "Cache-Control": "no-cache",
+                              "Pragma": "no-cache",
+                              "Accept": "*/*",
+                          },
+                      )
+                      with urllib.request.urlopen(req, timeout=35) as response:
+                          body = response.read()
+                          if response.status != 200:
+                              raise RuntimeError(f"{url}: HTTP {response.status}")
+                          if not body:
+                              raise RuntimeError(f"{url}: empty response")
+                          return body
+                  except Exception as exc:
+                      last_error = exc
+                      time.sleep(2 ** attempt)
+              raise RuntimeError(f"Failed to fetch {url}: {last_error}")
+
+          def normalize_url(value: str) -> str | None:
+              value = html.unescape(value.strip())
+              if value.startswith("/"):
+                  value = BASE + value
+              if not value.startswith(BASE + "/clanky/") or not value.endswith(".html"):
+                  return None
+              return value.split("#", 1)[0].split("?", 1)[0]
+
+          def unique_in_order(values):
+              out, seen = [], set()
+              for value in values:
+                  if value and value not in seen:
+                      seen.add(value)
+                      out.append(value)
+              return out
+
+          def article_urls_from_html(raw: bytes):
+              text = raw.decode("utf-8", errors="replace")
+              matches = re.findall(r'href=["\']([^"\']+/clanky/[^"\'?#]+\.html|/clanky/[^"\'?#]+\.html)["\']', text, flags=re.I)
+              return unique_in_order(normalize_url(item) for item in matches)
+
+          def article_urls_from_xml(raw: bytes):
+              root = ET.fromstring(raw)
+              values = []
+              for node in root.iter():
+                  if node.tag.rsplit("}", 1)[-1] in {"loc", "link"} and node.text:
+                      normalized = normalize_url(node.text)
+                      if normalized:
+                          values.append(normalized)
+              return unique_in_order(values)
+
+          def clean_text(fragment: str) -> str:
+              fragment = re.sub(r"<[^>]+>", " ", fragment)
+              return " ".join(html.unescape(fragment).split())
+
+          def extract_h1(raw: bytes) -> str:
+              text = raw.decode("utf-8", errors="replace")
+              match = re.search(r"<h1(?:\s[^>]*)?>(.*?)</h1>", text, flags=re.I | re.S)
+              if not match:
+                  raise RuntimeError("Public article has no H1")
+              return clean_text(match.group(1))
+
+          def extract_meta(raw: bytes, prop: str) -> str | None:
+              text = raw.decode("utf-8", errors="replace")
+              patterns = [
+                  rf'<meta[^>]+property=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)["\']',
+                  rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']{re.escape(prop)}["\']',
+              ]
+              for pattern in patterns:
+                  match = re.search(pattern, text, flags=re.I)
+                  if match:
+                      return html.unescape(match.group(1).strip())
+              return None
+
+          registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+          now = dt.datetime.now(dt.timezone.utc).isoformat()
+          trigger_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+
+          public = {
+              "homepage": fetch("/"),
+              "archive": fetch("/clanky/"),
+              "rss": fetch("/rss.xml"),
+              "sitemap": fetch("/sitemap.xml"),
+              "news_sitemap": fetch("/news-sitemap.xml"),
+              "deployment_health": fetch("/deployment-health.txt"),
+          }
+
+          homepage_urls = article_urls_from_html(public["homepage"])
+          archive_urls = article_urls_from_html(public["archive"])
+          rss_urls = article_urls_from_xml(public["rss"])
+          sitemap_urls = article_urls_from_xml(public["sitemap"])
+          news_urls = article_urls_from_xml(public["news_sitemap"])
+
+          registry_urls = [article["url"] for article in registry["articles"]]
+          registry_set = set(registry_urls)
+          archive_set = set(archive_urls)
+
+          unknown_public = sorted(archive_set - registry_set)
+          missing_public = sorted(registry_set - archive_set)
+          if unknown_public or missing_public:
+              raise RuntimeError(
+                  "Registry/public archive mismatch; refusing automatic metadata-only repair. "
+                  f"unknown_public={unknown_public}, missing_public={missing_public}"
+              )
+
+          live_h1 = {}
+          live_modified = {}
+          for article in registry["articles"]:
+              path = article["url"].removeprefix(BASE)
+              raw = fetch(path)
+              live_h1[article["url"]] = extract_h1(raw)
+              live_modified[article["url"]] = extract_meta(raw, "article:modified_time")
+
+          for article in registry["articles"]:
+              url = article["url"]
+              h1 = live_h1[url]
+              if h1 != article["h1"]:
+                  article["h1"] = h1
+                  article["title"] = h1
+              if live_modified[url]:
+                  article["modified_at"] = live_modified[url]
+              article["status"] = {
+                  "homepage": url in set(homepage_urls),
+                  "archive": url in archive_set,
+                  "rss": url in set(rss_urls),
+                  "sitemap": url in set(sitemap_urls),
+                  "news_sitemap": url in set(news_urls),
+              }
+              source_path = article.get("source_path")
+              if source_path and Path(source_path).is_file():
+                  article["source_commit"] = subprocess.check_output(
+                      ["git", "log", "-1", "--format=%H", "--", source_path], text=True
+                  ).strip()
+
+          duplicate_urls = sorted({url for url in registry_urls if registry_urls.count(url) > 1})
+          fingerprints = [article.get("fingerprint") for article in registry["articles"] if article.get("fingerprint")]
+          duplicate_fingerprints = sorted({fp for fp in fingerprints if fingerprints.count(fp) > 1})
+
+          deployment_text = public["deployment_health"].decode("utf-8", errors="replace").strip()
+          deployment_sha_match = re.search(r"\b[0-9a-f]{40}\b", deployment_text, flags=re.I)
+
+          validation = registry.setdefault("validation", {})
+          validation.update({
+              "homepage_count": len(homepage_urls),
+              "archive_count": len(archive_urls),
+              "rss_count": len(rss_urls),
+              "sitemap_all_articles_present": registry_set.issubset(set(sitemap_urls)),
+              "news_sitemap_recent_count": len(news_urls),
+              "deployment_health": "verified" if deployment_text else "unverified",
+              "required_fields_complete": all(
+                  all(key in article for key in (
+                      "title", "h1", "url", "published_at", "modified_at", "persons",
+                      "organizations", "places", "cases", "topics", "fingerprint",
+                      "status", "source_path", "publication_status", "source_commit"
+                  )) for article in registry["articles"]
+              ),
+              "duplicate_urls": duplicate_urls,
+              "duplicate_fingerprints": duplicate_fingerprints,
+              "per_article_source_commits": all(bool(article.get("source_commit")) for article in registry["articles"]),
+              "deployment_health_source": deployment_sha_match.group(0) if deployment_sha_match else validation.get("deployment_health_source"),
+              "public_audit_at": now,
+              "public_audit_sha256": hashlib.sha256(b"\n".join(public.values())).hexdigest(),
+              "repair_pending_public_verification": False,
+              "rss_order_matches_archive": rss_urls == archive_urls,
+              "public_repair_verification": {
+                  "method": "github-actions-direct-live-audit",
+                  "archive_articles": len(archive_urls),
+                  "rss_articles": len(rss_urls),
+                  "sitemap_articles": len(sitemap_urls),
+                  "news_sitemap_articles": len(news_urls),
+                  "all_public_h1_checked": True,
+                  "deployment_health_nonempty": bool(deployment_text),
+                  "completed_at": now,
+              },
+              "last_registry_refresh": {
+                  "reason": "synchronize modified timestamps, public channel status and latest source commits after article edits",
+                  "trigger_commit": trigger_sha,
+                  "homepage_articles": len(homepage_urls),
+                  "archive_articles": len(archive_urls),
+                  "rss_articles": len(rss_urls),
+                  "sitemap_articles": len(sitemap_urls),
+                  "news_sitemap_articles": len(news_urls),
+                  "completed_at": now,
+              },
+          })
+
+          registry["generated_at"] = now
+          registry["source_commit"] = trigger_sha
+          registry["article_count"] = len(registry["articles"])
+
+          hard_failures = []
+          if len(archive_urls) != len(registry["articles"]): hard_failures.append("archive count")
+          if len(rss_urls) != len(registry["articles"]): hard_failures.append("RSS count")
+          if not registry_set.issubset(set(sitemap_urls)): hard_failures.append("main sitemap coverage")
+          if duplicate_urls: hard_failures.append("duplicate URLs")
+          if duplicate_fingerprints: hard_failures.append("duplicate fingerprints")
+          if not validation["required_fields_complete"]: hard_failures.append("required fields")
+          if not validation["per_article_source_commits"]: hard_failures.append("source commits")
+          if not deployment_text: hard_failures.append("deployment health")
+          if hard_failures:
+              raise RuntimeError("Public audit failed: " + ", ".join(hard_failures))
+
+          REGISTRY_PATH.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print(json.dumps({
+              "article_count": len(registry["articles"]),
+              "homepage": len(homepage_urls),
+              "archive": len(archive_urls),
+              "rss": len(rss_urls),
+              "sitemap": len(sitemap_urls),
+              "news_sitemap": len(news_urls),
+              "rss_order_matches_archive": validation["rss_order_matches_archive"],
+              "duplicate_urls": duplicate_urls,
+              "duplicate_fingerprints": duplicate_fingerprints,
+          }, ensure_ascii=False, indent=2))
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/published-content-index.json
+          git rm .github/workflows/refresh-published-content-index-once.yml
+          git commit -m "Aktualizovat kanonický registr po veřejných změnách [skip ci]"
+          git push
