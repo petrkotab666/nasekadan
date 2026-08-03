@@ -1,16 +1,17 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T09:02:00+00:00",
-  "lastQuickCheckAt": "2026-08-03T09:02:00+00:00",
-  "lastDeepCheckAt": "2026-08-03T03:55:53+00:00",
-  "repositoryMainShaObserved": "6ba04d7a3ab103c91e4d6c3b3744816ad09a312b",
+  "updatedAt": "2026-08-03T10:08:00+00:00",
+  "lastQuickCheckAt": "2026-08-03T10:08:00+00:00",
+  "lastDeepCheckAt": "2026-08-03T10:07:36+00:00",
+  "repositoryMainShaObserved": "d6940a8842b17b6e496a0147e7da8e56216d45c8",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 64,
     "monitoredDirectoryOrganizations": 64,
     "coveragePercent": 100.0,
     "directoryIsCanonicalRegistry": true,
-    "cityNewsGeneratedAt": "2026-08-03T03:55:53.251367+00:00"
+    "totalUniqueSources": 95,
+    "cityNewsGeneratedAt": "2026-08-03T10:07:36.625772+00:00"
   },
   "quickCheck": {
     "newSignificantFindings": 0,
@@ -21,7 +22,8 @@
       "sports-gallery-kadan-duplicate-20260802",
       "urgent-7726f6ffd33513770fd4",
       "all-kadansko-7a1879082c37ae4ac568",
-      "all-kadansko-93e3dde7e913ad0a27b2"
+      "all-kadansko-93e3dde7e913ad0a27b2",
+      "nemocnice-kadan-krvetvorne-bunky-andrea-reifova-20260731"
     ],
     "unverifiedLeads": [
       {
@@ -39,40 +41,51 @@
         "relatedClosedIssues": [554, 555, 556]
       }
     ],
+    "editorialLeadsRecordedWithoutAlert": [
+      {
+        "stableFingerprint": "nemocnice-kadan-krvetvorne-bunky-andrea-reifova-20260731",
+        "title": "Kadaňská nemocnice popsala příběh skutečné dárkyně krvetvorných buněk a připomněla registraci",
+        "publishedAt": "2026-07-31T08:09:00+02:00",
+        "status": "already_known_and_recorded",
+        "reasonNotAlerted": "Praktický pozitivní námět byl již zaznamenán v repozitáři z uživatelem doloženého veřejného příspěvku; nejde o nově zavedenou službu ani o mimořádný veřejný posun.",
+        "officialSource": "https://www.nemkadan.cz/pro-verejnost/verejnost/aktuality/rozhovor-s-osobnosti-950cs.html"
+      }
+    ],
     "scopesChecked": [
       "mimořádné události a regionální zpravodajství",
-      "Policie ČR, HZS a krizové zdroje Ústeckého kraje",
-      "město Kadaň, úřední deska, územní plánování a Registr smluv",
+      "Policie ČR, HZS, ZZS a krizové zdroje Ústeckého kraje",
+      "město Kadaň, úřední deska, územní plánování, veřejné zakázky a Registr smluv",
       "dopravní omezení, železnice, II/225 a známá neověřená stopa",
       "Nemocnice Kadaň, petice a známé soudní spisové značky",
       "Prunéřov, Tušimice, ČEZ a energetické projekty",
-      "živá titulní stránka, archiv a připravované zveřejnění článku FVE EPR Letiště",
-      "kanonický registr organizací, sourceStatus a monitoringCoverage",
-      "nové GitHub monitoringové issue a kontrola duplicit"
+      "kanonický registr organizací, všech 95 zdrojů, sourceStatus a monitoringCoverage",
+      "titulní stránka, archiv, RSS, sitemapy a zveřejnění článku FVE EPR Letiště v repozitáři",
+      "nové monitoringové issue, pending alerty a kontrola duplicit"
     ],
     "observations": {
-      "cityNewsGeneratedAt": "2026-08-03T03:55:53.251367+00:00",
+      "cityNewsGeneratedAt": "2026-08-03T10:07:36.625772+00:00",
+      "cityNewsCoverage": "64/64",
+      "cityNewsUniqueSources": 95,
       "hospitalPetitionConfirmedSupports": 17,
       "hospitalPetitionUnconfirmedSupports": 2,
       "hospitalPetitionPublicMessages": 2,
       "hospitalPetitionStateChanged": false,
       "stateEPetitionFound": false,
-      "repositoryMainSha": "6ba04d7a3ab103c91e4d6c3b3744816ad09a312b",
-      "publicHomepageLatestArticleObserved": "Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera",
-      "publicHomepageLatestPublishedAtObserved": "2026-08-03T04:00:00+02:00",
+      "repositoryMainSha": "d6940a8842b17b6e496a0147e7da8e56216d45c8",
       "fveArticleMainCommitObserved": true,
-      "fveArticlePublicVerification": "temporarily_inconclusive_during_active_publication_workflows",
-      "publicSourceCommitVerification": "fetch_unavailable",
-      "checkedAt": "2026-08-03T09:02:00+00:00"
+      "fveArticleRepositoryIntegration": "article_home_archive_rss_sitemap_news_sitemap_llms_present",
+      "publicSourceCommitVerification": "direct_fetch_unavailable_in_this_run",
+      "checkedAt": "2026-08-03T10:08:00+00:00"
     },
     "notes": [
-      "Od předchozí kontroly nebyla v primárních oficiálních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani nový dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
-      "Kanonický registr zůstává pokryt v rozsahu 64 z 64 organizací; data/city-news.json potvrzuje coveragePercent 100 a directoryIsCanonicalRegistry=true.",
-      "U známých nemocničních soudních spisů nebyl ve veřejně indexovaných zdrojích zjištěn nový procesní pohyb.",
-      "Petice nevykazuje ověřený významný posun oproti uloženému stavu; veřejně indexované kopie byly starší než vlastní uložené měření, proto nebyl počet snížen.",
+      "Od předchozí kontroly nebyla v ověřených primárních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
+      "Šestihodinový sběr byl dokončen v 10:07 UTC. Data/city-news.json potvrzují 64 z 64 organizací, coveragePercent 100, directoryIsCanonicalRegistry=true a stav všech 95 unikátních zdrojů.",
+      "U známých nemocničních soudních spisů nebyl ve veřejně dostupných zdrojích zjištěn nový procesní pohyb.",
+      "Petice nevykazuje ověřený významný posun oproti uloženému stavu.",
       "Neověřená stopa o uzavírce II/225 zůstává bez autoritativního rozhodnutí, přesného termínu a objízdné trasy; doručení je nadále potlačeno.",
-      "Článek o FVE EPR Letiště byl v době kontroly vložen do main dvěma navazujícími publikačními commity. Veřejná kontrola probíhala souběžně s aktivními pojistnými workflow a externí fetch článku, sitemap a deployment-health byl dočasně neprůkazný; další deploy nebyl spuštěn, aby se nekřížil s již běžící kanonickou opravou.",
-      "Žádný nový alert ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný nález a technický stav ještě nebyl vyhodnocen jako trvalé selhání."
+      "Příběh dárkyně krvetvorných buněk byl evidován jako praktický pozitivní redakční námět, ale nebyl doručen jako nový monitoringový alert, protože už byl zaznamenán z uživatelského podnětu a nejde o novou službu.",
+      "Článek FVE EPR Letiště je v hlavní větvi indexovatelný a je provázán s titulní stránkou, archivem, RSS, sitemap.xml, news-sitemap.xml a llms.txt. Přímé porovnání veřejného deployment-health se v tomto běhu nepodařilo technicky načíst; nevznikl však podklad pro další konkurenční deploy.",
+      "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
     ]
   }
 }
