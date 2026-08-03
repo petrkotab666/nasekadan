@@ -1,28 +1,31 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T19:05:00+00:00",
-  "lastQuickCheckAt": "2026-08-03T19:05:00+00:00",
+  "updatedAt": "2026-08-03T22:04:53+00:00",
+  "lastQuickCheckAt": "2026-08-03T22:04:53+00:00",
   "lastDeepCheckAt": "2026-08-03T16:00:50+00:00",
-  "repositoryMainShaObserved": "7bed2146127134b2def397c55e3ff67c21aada34",
+  "repositoryMainShaObserved": "284ea79c0c92bedacd546060a75cafdadb4e4bfa",
   "canonicalRegistry": "data/organizations.json",
+  "registrySnapshots": {
+    "organizationsSha": "131a573482229f11b57224e56623c1e26fd1dcb2",
+    "citySourcesSha": "e76ed5c513effbf7ef79b0d844da461d71b65f87",
+    "regionalSourcesSha": "c2baf56b8a4fa63fd8064ab6649c0c039fc4d7a3"
+  },
   "coverageSnapshot": {
     "directoryOrganizations": 65,
     "monitoredDirectoryOrganizations": 65,
     "coveragePercent": 100.0,
     "directoryIsCanonicalRegistry": true,
     "totalUniqueSources": 98,
-    "cityNewsGeneratedAt": "2026-08-03T15:17:42.025474+00:00"
+    "cityNewsGeneratedAt": "2026-08-03T19:58:39.010442+00:00",
+    "knownFailedSources": 13
   },
   "quickCheck": {
     "newSignificantFindings": 0,
+    "newSignificantFingerprints": [],
     "duplicateFindingsSuppressed": [
-      "uohs-nemocnice-kadan-luzka-s0098-2026",
-      "fve-epr-letiste-bess-planovaci-smlouvy-20260802",
+      "surface-water-ban-kadan-chomutov-update-20260803",
       "ii225-zeleznicni-prejezd-smer-kadan-20260803",
-      "prakticti-lekari-nemocnice-kadan-srpen-2026",
-      "sports-gallery-kadan-duplicate-20260802",
-      "nemocnice-kadan-krvetvorne-bunky-andrea-reifova-20260731",
-      "fve-publication-incident-issue-557"
+      "zimni-stadion-ochlazeni-klasterec-kadan-20260803"
     ],
     "unverifiedLeads": [],
     "scopesChecked": [
@@ -32,44 +35,35 @@
       "Nemocnice Kadaň, online petice a známé soudní spisové značky",
       "Prunéřov, Tušimice, ČEZ, elektrárny, doly a energetické projekty",
       "Slovan, lávka u Shellu, Alžbětinský klášter, Spolkový dům, koupaliště a optická trasa KTK",
-      "city-news coverage, sourceStatus, nové GitHub Issues a kontrola duplicit",
-      "veřejný web, titulní stránka, archiv a nejnovější schválené články v rozsahu dostupném z tohoto běhu"
+      "city-news coverage, sourceStatus, změny v repozitáři a kontrola duplicit",
+      "veřejný web, titulní stránka a archiv nejnovějších schválených článků"
     ],
     "observations": {
-      "cityNewsGeneratedAt": "2026-08-03T15:17:42.025474+00:00",
-      "cityNewsCoverage": "65/65",
-      "cityNewsUniqueSources": 98,
-      "knownFailedSources": 12,
-      "hospitalPetitionConfirmedSupportsLastReliablyVerified": 17,
-      "hospitalPetitionUnconfirmedSupportsLastReliablyVerified": 2,
-      "hospitalPetitionPublicMessagesLastReliablyVerified": 2,
+      "policeLatestOfficialItemDate": "2026-07-28",
+      "newEmergencyFound": false,
+      "newCourtMovementFound": false,
+      "newInstitutionalDocumentFound": false,
       "hospitalPetitionSignificantChangeFound": false,
       "stateEPetitionFound": false,
-      "knownCourtCasesNewMovementFound": false,
-      "newEmergencyFound": false,
-      "newSignificantInstitutionalDocumentFound": false,
-      "repositoryMainSha": "7bed2146127134b2def397c55e3ff67c21aada34",
-      "ii225LeadStatus": "resolved_verified_published_duplicate_suppressed",
-      "technicalPublicationIncidentOpen": false,
       "homepageDirectFetchAvailable": true,
       "archiveDirectFetchAvailable": true,
+      "homepageArchiveConsistent": true,
+      "latestPublicArticleTitle": "Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna",
+      "latestPublicArticlePublishedAt": "2026-08-03T18:35:00+02:00",
+      "latestPublicArticleUrl": "https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html",
       "sitemapDirectFetchAvailable": false,
       "rssDirectFetchAvailable": false,
       "deploymentHealthDirectFetchAvailable": false,
-      "homepageLatestArticleVisible": true,
-      "homepageCardRepairPresentInMain": true,
-      "homepageCardRepairPubliclyConfirmed": false,
-      "technicalRepairAttemptThisRun": "none; existing canonical repair and deploy at 7bed2146127134b2def397c55e3ff67c21aada34 was still propagating, so no duplicate deploy was attempted",
-      "checkedAt": "2026-08-03T19:05:00+00:00"
+      "technicalRepairAttemptThisRun": "none; public homepage and archive are current, so no deploy was attempted",
+      "checkedAt": "2026-08-03T22:04:53+00:00"
     },
     "notes": [
-      "Hodinová kontrola neodhalila novou ověřenou mimořádnou událost, soudní pohyb ani dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
-      "Kanonický registr a poslední úplný city-news výstup nadále potvrzují sledování 65 z 65 organizací, coveragePercent 100 a 98 unikátních zdrojů.",
-      "Dvanáct přímých zdrojů zůstává blokovaných nebo technicky nefunkčních; organizace zůstávají sledované přes náhradní kanály a nejsou vyřazeny.",
-      "U známých spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 nebyl nalezen nový veřejně ověřitelný procesní pohyb.",
-      "Online petice za zachování Nemocnice Kadaň nevykazuje spolehlivě ověřený významný posun oproti poslednímu doloženému stavu.",
-      "Titulní stránka i archiv byly dostupné a nejnovější článek byl veřejně viditelný. Oprava náhledů, metadat a pořadí je v main; její veřejné potvrzení přes deployment-health, RSS a sitemapu nebylo v tomto běhu technicky dostupné. Proto nebyl opakován již provedený bezpečný deploy.",
-      "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
+      "Hodinová kontrola neodhalila novou ověřenou mimořádnou událost, soudní pohyb, významný dokument ani zásadní změnu petice.",
+      "Kanonické registry byly načteny; poslední city-news výstup potvrzuje 65/65 organizací, 100% pokrytí a 98 unikátních zdrojů.",
+      "Třináct přímých zdrojů je blokovaných nebo technicky nefunkčních; zůstávají ve sledování a vyžadují náhradní kanály při příštím hlubokém průchodu.",
+      "Veřejná titulní stránka a archiv jsou aktuální a shodně zobrazují nejnovější článek o uzavírce silnice II/225 od 4. srpna.",
+      "RSS, sitemap a deployment-health nebyly dostupným webovým nástrojem přímo načitatelné; nebyl zjištěn důvod k opakovanému deployi.",
+      "Nevznikl nový alert, pending JSON ani GitHub Issue, protože nebyl potvrzen nový významný a neduplicitní nález."
     ]
   }
 }
