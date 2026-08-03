@@ -1,0 +1,45 @@
+name: Trvale doplnit objížďky II/225
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/apply_zatec_detours_update.py'
+      - '.github/zatec-detours-source-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Upravit publikační zdroj
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_zatec_detours_update.py
+          python3 -m py_compile scripts/publish_zatec_kadan_prejezd_20260803.py
+          grep -Fq 'Osobní auta přes Žabokliky' scripts/publish_zatec_kadan_prejezd_20260803.py
+          grep -Fq 'Vysoké Třebčice' scripts/publish_zatec_kadan_prejezd_20260803.py
+      - name: Uložit zdroj do main
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň redakční automat'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/publish_zatec_kadan_prejezd_20260803.py
+          if git diff --cached --quiet; then
+            echo 'Zdroj už je opravený.'
+            exit 0
+          fi
+          git commit -m 'Trvale doplnit oficiální objížďky II/225'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep $((attempt * 5))
+          done
+          exit 1
