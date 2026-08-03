@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-08-03T06:13:38.639Z",
+  "inspected_by_run": 30789470991,
+  "workflow": "deploy-weather-via-ssh.yml",
+  "runs": [
+    {
+      "id": 30789009630,
+      "name": "Přímé nasazení počasí a veřejná kontrola",
+      "display_title": "Přímé nasazení počasí a veřejná kontrola",
+      "status": "completed",
+      "conclusion": "failure",
+      "event": "push",
+      "head_sha": "d8cc6f3276509d8ba05dd00ae58c84b9ef4b233f",
+      "created_at": "2026-08-03T06:05:00Z",
+      "updated_at": "2026-08-03T06:08:18Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30789009630",
+      "jobs": [
+        {
+          "id": 91608465868,
+          "name": "deploy",
+          "status": "completed",
+          "conclusion": "failure",
+          "runner_name": "GitHub Actions 1000039939",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "started_at": "2026-08-03T06:05:02Z",
+          "completed_at": "2026-08-03T06:08:17Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-08-03T06:05:03Z",
+              "completed_at": "2026-08-03T06:05:04Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-08-03T06:05:04Z",
+              "completed_at": "2026-08-03T06:05:28Z"
+            },
+            {
+              "name": "Vybrat dostupný SSH klíč",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-08-03T06:05:28Z",
+              "completed_at": "2026-08-03T06:05:28Z"
+            },
+            {
+              "name": "Spustit kanonické nasazení na OVH",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 4,
+              "started_at": "2026-08-03T06:05:28Z",
+              "completed_at": "2026-08-03T06:08:14Z"
+            },
+            {
+              "name": "Veřejně ověřit stránku a data",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 5,
+              "started_at": "2026-08-03T06:08:14Z",
+              "completed_at": "2026-08-03T06:08:14Z"
+            },
+            {
+              "name": "Zapsat ověřitelný stav do repozitáře",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 6,
+              "started_at": "2026-08-03T06:08:14Z",
+              "completed_at": "2026-08-03T06:08:16Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 12,
+              "started_at": "2026-08-03T06:08:16Z",
+              "completed_at": "2026-08-03T06:08:16Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 13,
+              "started_at": "2026-08-03T06:08:16Z",
+              "completed_at": "2026-08-03T06:08:16Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
