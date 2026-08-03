@@ -1,0 +1,216 @@
+name: Rychle nasadit počasí na OVH
+run-name: Úzké nasazení počasí bez stavby celého obrazu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-hot-deploy-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-weather-hot-deploy
+  cancel-in-progress: true
+
+jobs:
+  hot-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Vybrat dostupný SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+              chmod 600 "$RUNNER_TEMP/nasekadan_key"
+              echo "secret=$name" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo 'Chybí použitelný SSH klíč.' >&2
+          exit 20
+
+      - name: Nasadit pouze počasí a datovou bránu
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+
+          test -s pocasi/index.html
+          test -s pocasi.js
+          test -s navigation.js
+          test -s upoutavky.js
+          test -s nginx/default.conf
+          test -s deploy/install-weather-proxy.sh
+
+          sudo install -D -m 0644 pocasi/index.html /var/www/nasekadan/pocasi/index.html
+          sudo install -D -m 0644 pocasi.js /var/www/nasekadan/pocasi.js
+          sudo install -D -m 0644 navigation.js /var/www/nasekadan/navigation.js
+          sudo install -D -m 0644 upoutavky.js /var/www/nasekadan/upoutavky.js
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then
+            cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
+          fi
+          if [[ -z "$cid" ]]; then
+            echo 'Běžící kontejner Naše Kadaň nebyl nalezen.' >&2
+            exit 31
+          fi
+
+          sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/pocasi /var/cache/nginx/weather
+          sudo docker cp pocasi/index.html "$cid:/usr/share/nginx/html/pocasi/index.html"
+          sudo docker cp pocasi.js "$cid:/usr/share/nginx/html/pocasi.js"
+          sudo docker cp navigation.js "$cid:/usr/share/nginx/html/navigation.js"
+          sudo docker cp upoutavky.js "$cid:/usr/share/nginx/html/upoutavky.js"
+          sudo docker cp nginx/default.conf "$cid:/etc/nginx/conf.d/default.conf"
+          sudo docker exec "$cid" nginx -t
+          sudo docker exec "$cid" nginx -s reload
+
+          chmod +x deploy/install-weather-proxy.sh
+          sudo bash deploy/install-weather-proxy.sh
+
+          grep -Fq 'Počasí v Kadani' /var/www/nasekadan/pocasi/index.html
+          grep -Fq '/api/pocasi-predpoved.json' /var/www/nasekadan/pocasi.js
+          sudo nginx -t
+          REMOTE
+
+      - name: Ověřit veřejné HTML, skripty a datové zdroje
+        id: verify-data
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          nonce="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          page="$(mktemp)"
+          script="$(mktemp)"
+          teaser="$(mktemp)"
+          forecast="$(mktemp)"
+          observation="$(mktemp)"
+
+          curl -kfsS --max-time 35 "$base/pocasi/?verify=$nonce" -o "$page"
+          grep -Fq 'Počasí v Kadani' "$page"
+
+          curl -kfsS --max-time 35 "$base/pocasi.js?verify=$nonce" -o "$script"
+          grep -Fq '/api/pocasi-predpoved.json' "$script"
+
+          curl -kfsS --max-time 35 "$base/upoutavky.js?verify=$nonce" -o "$teaser"
+          grep -Fq '/pocasi.js' "$teaser"
+
+          curl -kfsS --max-time 40 "$base/api/pocasi-predpoved.json?verify=$nonce" -o "$forecast"
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); s=d.get('properties',{}).get('timeseries',[]); assert isinstance(s,list) and len(s)>=24, 'Nedostatečná předpověď'; print(f'Předpověď ověřena: {len(s)} kroků.')" "$forecast"
+
+          today="$(TZ=Europe/Prague date +%Y%m%d)"
+          yesterday="$(TZ=Europe/Prague date -d yesterday +%Y%m%d)"
+          found=false
+          for day in "$today" "$yesterday"; do
+            if curl -kfsS --max-time 40 "$base/api/chmi-pocasi/10m-0-20000-0-11438-${day}.json?verify=$nonce" -o "$observation" \
+               && python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); assert isinstance(d,dict) and d" "$observation"; then
+              found=true
+              break
+            fi
+          done
+          [[ "$found" == true ]]
+          rm -f "$page" "$script" "$teaser" "$forecast" "$observation"
+
+      - name: Nainstalovat prohlížeč pro skutečnou kontrolu vykreslení
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Ověřit vykreslení na titulce a stránce počasí
+        id: verify-browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser = await chromium.launch({headless:true});
+            const page = await browser.newPage({viewport:{width:1440,height:1100}});
+            const nonce = Date.now();
+            await page.goto(`https://nasekadan.cz/?weather=${nonce}`, {waitUntil:'networkidle', timeout:90000});
+            await page.waitForSelector('#weather-strip .nk-weather-strip__now strong', {timeout:45000});
+            const strip = await page.locator('#weather-strip').innerText();
+            if (!strip.includes('Kadaň právě teď') || !strip.includes('°C')) throw new Error(`Neplatný pás počasí: ${strip}`);
+
+            await page.goto(`https://nasekadan.cz/pocasi/?weather=${nonce}`, {waitUntil:'networkidle', timeout:90000});
+            await page.waitForSelector('.nk-weather-hero .nk-weather-current strong', {timeout:45000});
+            const detail = await page.locator('#weather-app').innerText();
+            if (!detail.includes('°C') || !detail.includes('Předpověď na sedm dní') || !detail.includes('Nejbližších 24 hodin')) {
+              throw new Error('Podrobná předpověď se nevykreslila kompletně.');
+            }
+            console.log(strip.replace(/\s+/g,' ').slice(0,300));
+            await browser.close();
+          })().catch(error=>{ console.error(error); process.exit(1); });
+          JS
+
+      - name: Zapsat ověřitelný výsledek
+        if: always()
+        shell: bash
+        env:
+          KEY_OUTCOME: ${{ steps.key.outcome }}
+          KEY_SECRET: ${{ steps.key.outputs.secret }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          DATA_OUTCOME: ${{ steps.verify-data.outcome }}
+          BROWSER_OUTCOME: ${{ steps.verify-browser.outcome }}
+        run: |
+          set -u
+          status=failure
+          if [[ "$DEPLOY_OUTCOME" == success && "$DATA_OUTCOME" == success && "$BROWSER_OUTCOME" == success ]]; then
+            status=success
+          fi
+
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            mkdir -p .github
+            STATUS="$status" SOURCE_SHA="$GITHUB_SHA" RUN_ID="$GITHUB_RUN_ID" \
+              KEY_RESULT="$KEY_OUTCOME" KEY_NAME="$KEY_SECRET" DEPLOY_RESULT="$DEPLOY_OUTCOME" \
+              DATA_RESULT="$DATA_OUTCOME" BROWSER_RESULT="$BROWSER_OUTCOME" \
+              python3 -c "import json,os; from datetime import datetime,timezone; from pathlib import Path; payload={'status':os.environ['STATUS'],'source_sha':os.environ['SOURCE_SHA'],'run_id':os.environ['RUN_ID'],'checked_at':datetime.now(timezone.utc).isoformat(),'key_step':os.environ['KEY_RESULT'],'key_secret':os.environ['KEY_NAME'],'deploy':os.environ['DEPLOY_RESULT'],'data_verify':os.environ['DATA_RESULT'],'browser_verify':os.environ['BROWSER_RESULT'],'page':'https://nasekadan.cz/pocasi/'}; Path('.github/weather-live-status.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/weather-live-status.json
+            git commit -m "Zapsat stav živého počasí: $status [skip ci]" || true
+            if git push origin HEAD:main; then
+              break
+            fi
+            sleep 2
+          done
