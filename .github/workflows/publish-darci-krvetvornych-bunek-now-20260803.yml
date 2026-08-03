@@ -36,13 +36,23 @@ jobs:
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/publish_darci_krvetvornych_bunek_20260803.py')
+          s = p.read_text(encoding='utf-8')
+          old = r'''r'<section class="wrap hero"\b.*?</section>' '''.strip()
+          new = r'''r'<section class="wrap hero"[^>]*>.*?</section>' '''.strip()
+          if old not in s:
+              raise SystemExit('Původní chybný výraz nebyl nalezen.')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8', newline='\n')
+          PY
           python3 scripts/publish_darci_krvetvornych_bunek_20260803.py
           grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
           grep -Fq "$ARTICLE_REL" index.html clanky/index.html
           grep -Fq '/pocasi.js' index.html
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add "$ARTICLE_FILE" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+          git add scripts/publish_darci_krvetvornych_bunek_20260803.py "$ARTICLE_FILE" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
           git commit -m 'Publikovat: příběh dárkyně krvetvorných buněk z Kadaně'
           git push origin HEAD:main
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
