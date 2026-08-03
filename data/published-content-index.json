@@ -1,6 +1,6 @@
 {
   "schema_version": "1.3",
-  "generated_at": "2026-08-03T11:31:08.547407+00:00",
+  "generated_at": "2026-08-03T11:52:14.777539+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "54c894dc77dfaa082f525088a7111d68563d3384",
@@ -35,10 +35,22 @@
       "https://nasekadan.cz/clanky/parts/slovan-04.html",
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
-    "public_audit_at": "2026-08-03T10:17:15+00:00",
+    "public_audit_at": "2026-08-03T11:52:14.777539+00:00",
     "public_audit_sha256": "dbedead82a11ad8da5b9cbe460dfbf122b0e248e0442773116fa2c892446795f",
-    "repair_pending_public_verification": true,
-    "repair_reason": "Nový článek byl na titulce, ale chyběl ve viditelném archivu; JSON-LD archivu současně vynechával článek FVE."
+    "repair_pending_public_verification": false,
+    "public_repair_verification": {
+      "method": "direct-ssh-deploy-and-external-no-cache-check",
+      "completion_commit": "ed8eab512afb8cafc8861fbad2a8975668eb4386",
+      "archive_articles": 42,
+      "rss_articles": 42,
+      "donor_visible_archive_occurrences": 1,
+      "archive_contains_fve": true,
+      "donor_h1_match": true,
+      "donor_modified_at_match": true,
+      "sitemap_contains_donor": true,
+      "news_sitemap_contains_donor": true,
+      "deployment_health_has_valid_source": true
+    }
   },
   "articles": [
     {
