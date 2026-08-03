@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T10:08:00+00:00",
-  "lastQuickCheckAt": "2026-08-03T10:08:00+00:00",
+  "updatedAt": "2026-08-03T11:05:33+00:00",
+  "lastQuickCheckAt": "2026-08-03T11:05:33+00:00",
   "lastDeepCheckAt": "2026-08-03T10:07:36+00:00",
-  "repositoryMainShaObserved": "d6940a8842b17b6e496a0147e7da8e56216d45c8",
+  "repositoryMainShaObserved": "539a679e463ca4dfb165cea3a5f1a3d9b2fa6d2d",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 64,
@@ -38,7 +38,11 @@
           "rozhodnutí silničního správního úřadu, JSDI nebo jiné oficiální dopravní oznámení"
         ],
         "deliverySuppressed": true,
-        "relatedClosedIssues": [554, 555, 556]
+        "relatedClosedIssues": [
+          554,
+          555,
+          556
+        ]
       }
     ],
     "editorialLeadsRecordedWithoutAlert": [
@@ -59,7 +63,7 @@
       "Nemocnice Kadaň, petice a známé soudní spisové značky",
       "Prunéřov, Tušimice, ČEZ a energetické projekty",
       "kanonický registr organizací, všech 95 zdrojů, sourceStatus a monitoringCoverage",
-      "titulní stránka, archiv, RSS, sitemapy a zveřejnění článku FVE EPR Letiště v repozitáři",
+      "titulní stránka, archiv, RSS, sitemapy a zveřejnění článku FVE EPR Letiště",
       "nové monitoringové issue, pending alerty a kontrola duplicit"
     ],
     "observations": {
@@ -71,20 +75,20 @@
       "hospitalPetitionPublicMessages": 2,
       "hospitalPetitionStateChanged": false,
       "stateEPetitionFound": false,
-      "repositoryMainSha": "d6940a8842b17b6e496a0147e7da8e56216d45c8",
+      "repositoryMainSha": "539a679e463ca4dfb165cea3a5f1a3d9b2fa6d2d",
       "fveArticleMainCommitObserved": true,
+      "fveArticleLiveOnHomepage": true,
+      "fveArticleLiveInArchive": true,
       "fveArticleRepositoryIntegration": "article_home_archive_rss_sitemap_news_sitemap_llms_present",
       "publicSourceCommitVerification": "direct_fetch_unavailable_in_this_run",
-      "checkedAt": "2026-08-03T10:08:00+00:00"
+      "checkedAt": "2026-08-03T11:05:33+00:00"
     },
     "notes": [
       "Od předchozí kontroly nebyla v ověřených primárních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
-      "Šestihodinový sběr byl dokončen v 10:07 UTC. Data/city-news.json potvrzují 64 z 64 organizací, coveragePercent 100, directoryIsCanonicalRegistry=true a stav všech 95 unikátních zdrojů.",
-      "U známých nemocničních soudních spisů nebyl ve veřejně dostupných zdrojích zjištěn nový procesní pohyb.",
-      "Petice nevykazuje ověřený významný posun oproti uloženému stavu.",
+      "Poslední hluboký sběr byl dokončen v 10:07 UTC; nový šestihodinový průchod zatím nebyl nutný. Data/city-news.json nadále potvrzují 64 z 64 organizací, coveragePercent 100 a directoryIsCanonicalRegistry=true.",
+      "U známých nemocničních soudních spisů nebyl ve veřejně dostupných zdrojích zjištěn nový procesní pohyb a petice nevykazuje významný ověřený posun.",
       "Neověřená stopa o uzavírce II/225 zůstává bez autoritativního rozhodnutí, přesného termínu a objízdné trasy; doručení je nadále potlačeno.",
-      "Příběh dárkyně krvetvorných buněk byl evidován jako praktický pozitivní redakční námět, ale nebyl doručen jako nový monitoringový alert, protože už byl zaznamenán z uživatelského podnětu a nejde o novou službu.",
-      "Článek FVE EPR Letiště je v hlavní větvi indexovatelný a je provázán s titulní stránkou, archivem, RSS, sitemap.xml, news-sitemap.xml a llms.txt. Přímé porovnání veřejného deployment-health se v tomto běhu nepodařilo technicky načíst; nevznikl však podklad pro další konkurenční deploy.",
+      "Veřejná titulní stránka a archiv zobrazují článek FVE EPR Letiště se správným titulkem a datem. Přímé porovnání deployment-health.txt se zdrojovým commitem nebylo v tomto běhu technicky dostupné, proto nebyl spuštěn konkurenční deploy.",
       "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
     ]
   }
