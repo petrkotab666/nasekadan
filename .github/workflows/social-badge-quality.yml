@@ -1,0 +1,259 @@
+name: Kontrola červených štítků sociálních grafik
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'social/**.png'
+      - 'clanky/**.html'
+      - 'scripts/generate_social_cards.py'
+      - 'scripts/normalize_social_badges.py'
+      - '.github/workflows/social-badge-quality.yml'
+      - '.github/social-badge-quality-trigger.txt'
+  schedule:
+    - cron: '17 2 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: social-badge-quality
+  cancel-in-progress: true
+
+env:
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  audit-fix-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat obrazové nástroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow numpy
+
+      - name: Opravit generátor a prověřit všechny používané grafiky
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/normalize_social_badges.py
+          python3 scripts/normalize_social_badges.py \
+            --patch-generator \
+            --write \
+            --report data/social-badge-audit.json
+          python3 -m py_compile scripts/generate_social_cards.py
+
+          # Přegeneruje titulku a archiv z aktuálních metadat obrázků.
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/prepare_discovery.py
+
+          # Blokující kontrola: žádný odkazovaný obrázek nesmí mít text bez rezervy.
+          python3 scripts/normalize_social_badges.py \
+            --check \
+            --report data/social-badge-audit.json
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('data/social-badge-audit.json').read_text(encoding='utf-8'))
+          assert report['imagesScanned'] > 0, 'Audit nenašel žádné používané sociální obrázky.'
+          assert report['issuesAfter'] == 0, report
+          print(
+              f"Audit: {report['imagesScanned']} obrázků, "
+              f"{report['badgesFound']} štítků, "
+              f"{report['imagesChanged']} opravených obrázků."
+          )
+          PY
+
+      - name: Uložit opravy bezpečně do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň grafický audit'
+          git config user.email 'info@nasekadan.cz'
+
+          for attempt in 1 2 3 4 5; do
+            git add -A -- \
+              scripts/generate_social_cards.py \
+              scripts/normalize_social_badges.py \
+              data/social-badge-audit.json \
+              social \
+              index.html \
+              clanky \
+              rss.xml sitemap.xml news-sitemap.xml llms.txt
+
+            if git diff --cached --quiet; then
+              echo 'Všechny štítky už splňují pojistku.'
+              break
+            fi
+
+            git commit -m 'Sjednotit červené štítky sociálních grafik'
+            if git push origin HEAD:main; then
+              break
+            fi
+            [[ "$attempt" == 5 ]] && exit 1
+
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/normalize_social_badges.py --patch-generator --write --report data/social-badge-audit.json
+            python3 scripts/enforce_article_visibility.py
+            python3 scripts/prepare_discovery.py
+            python3 scripts/normalize_social_badges.py --check --report data/social-badge-audit.json
+            sleep $((attempt * 7))
+          done
+
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/normalize_social_badges.py --check --report data/social-badge-audit.json
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [[ -n "${KEY2:-}" ]]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč pro OVH.' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Připravit úzký produkční balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          deployed="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          bundle="$RUNNER_TEMP/nk-social-badges"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp data/social-badge-audit.json "$bundle/data/"
+          find social -maxdepth 1 -type f -name '*-badgefix-*.png' -exec cp {} "$bundle/social/" \;
+          printf 'source=%s\ndeployed_at=%s\ndeployer=social-badge-quality\n' "$sha" "$deployed" > "$bundle/deployment-health.txt"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/nk-social-badges.tgz" .
+
+      - name: Nasadit opravené grafiky a odkazy na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if scp -i "$RUNNER_TEMP/ovh_key" \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=25 \
+              "$RUNNER_TEMP/nk-social-badges.tgz" \
+              ubuntu@57.129.43.215:/tmp/nk-social-badges.tgz; then
+              break
+            fi
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep $((attempt * 8))
+          done
+
+          ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          stage=/tmp/nk-social-badges-stage
+          sudo rm -rf "$stage"
+          sudo install -d -m 0755 "$stage" /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data
+          sudo tar -xzf /tmp/nk-social-badges.tgz -C "$stage"
+          sudo cp -a "$stage"/. /var/www/nasekadan/
+          sudo find /var/www/nasekadan -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' -o -name '*.json' -o -name '*.png' \) -exec chmod 0644 {} +
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker cp "$stage/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp "$stage/rss.xml" nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp "$stage/sitemap.xml" nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp "$stage/news-sitemap.xml" nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp "$stage/llms.txt" nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp "$stage/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker cp "$stage/data/social-badge-audit.json" nasekadan-web:/usr/share/nginx/html/data/social-badge-audit.json
+            for file in "$stage"/clanky/*.html; do
+              sudo docker cp "$file" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$file")"
+            done
+            for file in "$stage"/social/*-badgefix-*.png; do
+              [[ -e "$file" ]] || continue
+              sudo docker cp "$file" "nasekadan-web:/usr/share/nginx/html/social/$(basename "$file")"
+            done
+          fi
+
+          sudo rm -rf "$stage" /tmp/nk-social-badges.tgz
+          REMOTE
+
+      - name: Veřejně ověřit opravené obrázky a metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          success=false
+
+          for attempt in $(seq 1 25); do
+            if python3 - "$stamp-$attempt" "$sha" <<'PY'
+          import json
+          import re
+          import ssl
+          import sys
+          import urllib.request
+          from pathlib import Path
+
+          stamp, sha = sys.argv[1:]
+          context = ssl._create_unverified_context()
+
+          def fetch(url, binary=False):
+              sep = '&' if '?' in url else '?'
+              request = urllib.request.Request(url + sep + 'v=' + stamp, headers={'User-Agent': 'NašeKadaňAudit/1.0'})
+              with urllib.request.urlopen(request, timeout=25, context=context) as response:
+                  data = response.read()
+                  if response.status != 200:
+                      raise RuntimeError(f'{url}: HTTP {response.status}')
+                  return data if binary else data.decode('utf-8', errors='replace')
+
+          report = json.loads(Path('data/social-badge-audit.json').read_text(encoding='utf-8'))
+          assert report['issuesAfter'] == 0
+          home = fetch('https://nasekadan.cz/')
+          health = fetch('https://nasekadan.cz/deployment-health.txt')
+          assert f'source={sha}' in health
+
+          checked = 0
+          for result in report['results']:
+              new_image = result.get('new_image')
+              if not new_image:
+                  continue
+              image_url = 'https://nasekadan.cz/' + new_image
+              image = fetch(image_url, binary=True)
+              assert image.startswith(b'\x89PNG\r\n\x1a\n')
+              for article_path in result['articles']:
+                  article_url = 'https://nasekadan.cz/' + article_path
+                  article = fetch(article_url)
+                  assert image_url in article
+              assert image_url in home or any(image_url in fetch('https://nasekadan.cz/' + path) for path in result['articles'])
+              checked += 1
+          print(f'Veřejně ověřeno {checked} nově opravených grafik.')
+          PY
+            then
+              success=true
+              break
+            fi
+            sleep 8
+          done
+          [[ "$success" == true ]]
