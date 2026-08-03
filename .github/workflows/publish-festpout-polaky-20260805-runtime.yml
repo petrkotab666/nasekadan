@@ -1,0 +1,84 @@
+name: Zveřejnit Festpouť Poláky 5. 8. 2026 v 7:30
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/drafts/festpout-polaky-2026.html'
+      - '.github/publication/festpout-polaky-2026/**'
+      - '.github/workflows/publish-festpout-polaky-20260805-runtime.yml'
+  schedule:
+    - cron: '30 5 5 8 *'
+    - cron: '38 5 5 8 *'
+    - cron: '48 5 5 8 *'
+    - cron: '0 6 5 8 *'
+    - cron: '15 6 5 8 *'
+    - cron: '30 6 5 8 *'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-festpout-polaky-20260805-runtime
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Obnovit kontrolovaný publikační balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/publication/festpout-polaky-2026/chunks/*.b64 | base64 -d > /tmp/festpout-bundle.tar.xz
+          echo 'cfc83b2cdc8f063c63b2b8086069d165cad4768031393704503d8f94ce409ae5  /tmp/festpout-bundle.tar.xz' | sha256sum -c -
+          rm -rf /tmp/festpout-unpack
+          mkdir -p /tmp/festpout-unpack
+          tar -xJf /tmp/festpout-bundle.tar.xz -C /tmp/festpout-unpack
+          install -D -m 0755 /tmp/festpout-unpack/publisher.py scripts/publish_festpout_polaky_20260805.py
+          install -D -m 0755 /tmp/festpout-unpack/deploy.sh scripts/deploy_festpout_polaky_20260805.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Předletová kontrola všech zámků
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py
+          bash -n scripts/deploy_festpout_polaky_20260805.sh
+          test -s .github/drafts/festpout-polaky-2026.html
+          test -s .github/publication/festpout-polaky-2026/release-manifest.json
+          grep -Fq 'NEVEŘEJNÝ REDAKČNÍ DRAFT' .github/drafts/festpout-polaky-2026.html
+          grep -Fq '2026, 8, 5, 7, 30' scripts/publish_festpout_polaky_20260805.py
+          grep -Fq '19:41' .github/drafts/festpout-polaky-2026.html
+          grep -Fq '00:30' .github/drafts/festpout-polaky-2026.html
+
+      - name: Publikovat, nasadit a veřejně ověřit
+        shell: bash
+        run: bash scripts/deploy_festpout_polaky_20260805.sh
+
+      - name: Zapsat incident při neúspěchu
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='Selhala primární publikace Festpouti Poláky 2026'
+          body="Primární publikační běh nebo veřejné ověření selhaly. Nezávislá záchranná vrstva zůstává naplánovaná.\n\nWorkflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nCílový článek: https://nasekadan.cz/clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html\nCommit: ${GITHUB_SHA}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
