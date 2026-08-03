@@ -7,8 +7,8 @@
     altitude: 300,
     stationId: '0-20000-0-11438',
     stationName: 'Tušimice',
-    forecastUrl: 'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=50.3760&lon=13.2713&altitude=300',
-    chmiBase: 'https://opendata.chmi.cz/meteorology/climate/now/data/',
+    forecastUrl: '/api/pocasi-predpoved.json',
+    chmiBase: '/api/chmi-pocasi/',
     cacheKey: 'nasekadan-weather-v2',
     cacheMinutes: 30
   };
@@ -41,11 +41,9 @@
       fetchForecast(),
       fetchObservation()
     ]);
-
     const forecast = forecastResult.status === 'fulfilled' ? forecastResult.value : null;
     const observation = observationResult.status === 'fulfilled' ? observationResult.value : null;
     if (!forecast && !observation) return null;
-
     return {
       fetchedAt: new Date().toISOString(),
       observation,
@@ -60,22 +58,19 @@
   async function fetchForecast() {
     const response = await fetch(CONFIG.forecastUrl, {
       headers: { 'Accept': 'application/json' },
-      mode: 'cors',
-      credentials: 'omit'
+      credentials: 'same-origin'
     });
     if (!response.ok) throw new Error(`Forecast HTTP ${response.status}`);
     const json = await response.json();
     const timeseries = json && json.properties && Array.isArray(json.properties.timeseries)
-      ? json.properties.timeseries
-      : [];
+      ? json.properties.timeseries : [];
     if (!timeseries.length) throw new Error('Forecast is empty');
 
     const now = Date.now();
     const future = timeseries.filter(item => Date.parse(item.time) >= now - 60 * 60 * 1000);
     const currentEntry = future[0] || timeseries[0];
     const currentDetails = currentEntry.data && currentEntry.data.instant
-      ? currentEntry.data.instant.details || {}
-      : {};
+      ? currentEntry.data.instant.details || {} : {};
     const currentSymbol = getSymbol(currentEntry);
 
     const hourly = future.slice(0, 30).map(item => {
@@ -100,15 +95,7 @@
       const next = pickNextPeriod(item.data || {});
       const dayKey = localDateKey(item.time);
       if (!dailyMap.has(dayKey)) {
-        dailyMap.set(dayKey, {
-          date: dayKey,
-          min: null,
-          max: null,
-          precipitation: 0,
-          maxWind: 0,
-          symbols: [],
-          representative: null
-        });
+        dailyMap.set(dayKey, { date: dayKey, min: null, max: null, precipitation: 0, maxWind: 0, symbols: [], representative: null });
       }
       const day = dailyMap.get(dayKey);
       const temp = numberOrNull(details.air_temperature);
@@ -158,15 +145,14 @@
         const url = `${CONFIG.chmiBase}10m-${CONFIG.stationId}-${date}.json`;
         const response = await fetch(url, {
           headers: { 'Accept': 'application/json' },
-          mode: 'cors',
-          credentials: 'omit'
+          credentials: 'same-origin'
         });
         if (!response.ok) continue;
         const json = await response.json();
         const parsed = parseChmiTable(json);
         if (parsed) return parsed;
       } catch (_) {
-        // The previous day is tried automatically.
+        // Při přelomu dne automaticky zkusíme také včerejší soubor.
       }
     }
     throw new Error('CHMI observation unavailable');
@@ -186,7 +172,6 @@
     let valueIndex = normalized.findIndex(key => key === 'VALUE' || key === 'HODNOTA');
     if (valueIndex < 0) valueIndex = normalized.findIndex(key => key.includes('VALUE'));
     let timeIndex = normalized.findIndex(key => key.includes('DATE') || key.includes('DATUM') || key.includes('TIME'));
-
     const knownElements = new Set(['T', 'H', 'F', 'FPRUM', 'FMAX', 'D', 'DPRUM', 'P', 'SRA10M']);
     const records = [];
 
@@ -294,7 +279,6 @@
     const daily = data.forecast && data.forecast.daily ? data.forecast.daily.slice(0, 7) : [];
     const updated = current.time || data.fetchedAt;
     const sourceParts = [data.source && data.source.observation, data.source && data.source.forecast].filter(Boolean);
-
     target.innerHTML = `
       <section class="nk-weather-hero">
         <div>
@@ -314,23 +298,14 @@
           ${metric('Aktualizace', formatDateTime(updated))}
         </dl>
       </section>
-
-      ${daily.length ? `
-      <section class="nk-weather-section">
+      ${daily.length ? `<section class="nk-weather-section">
         <div class="nk-weather-section__head"><div><p class="nk-weather-eyebrow">VÝHLED</p><h2>Předpověď na sedm dní</h2></div><p>Nejspolehlivější je nejbližších 24 až 72 hodin. U dalších dnů počítejte s možnou změnou.</p></div>
-        <div class="nk-weather-days">
-          ${daily.map((day, index) => dayCard(day, index)).join('')}
-        </div>
+        <div class="nk-weather-days">${daily.map((day, index) => dayCard(day, index)).join('')}</div>
       </section>` : ''}
-
-      ${hourly.length ? `
-      <section class="nk-weather-section">
+      ${hourly.length ? `<section class="nk-weather-section">
         <div class="nk-weather-section__head"><div><p class="nk-weather-eyebrow">HODINU PO HODINĚ</p><h2>Nejbližších 24 hodin</h2></div><p>Teplota, srážky a vítr přímo pro souřadnice Kadaně.</p></div>
-        <div class="nk-weather-hours" tabindex="0" aria-label="Hodinová předpověď">
-          ${hourly.map(hourCard).join('')}
-        </div>
+        <div class="nk-weather-hours" tabindex="0" aria-label="Hodinová předpověď">${hourly.map(hourCard).join('')}</div>
       </section>` : ''}
-
       <section class="nk-weather-source">
         <h2>Odkud údaje pocházejí</h2>
         <p>${escapeHtml(sourceParts.join(' · '))}. Aktuální měření je převzato z desetiminutových otevřených dat ČHMÚ. Bodová předpověď je počítána pro střed Kadaně v nadmořské výšce přibližně 300 metrů.</p>
@@ -384,24 +359,14 @@
     </article>`;
   }
 
-  function metric(label, value) {
-    return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`;
-  }
-
+  function metric(label, value) { return `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`; }
   function renderError(target) {
     target.innerHTML = isHome
       ? '<div class="wrap nk-weather-loading">Počasí je nyní dočasně nedostupné. <a href="/pocasi/">Otevřít stránku počasí</a></div>'
       : '<div class="nk-weather-error"><h2>Údaje se nepodařilo načíst</h2><p>Zkuste stránku obnovit později. Ostatní obsah webu tím není ovlivněn.</p></div>';
   }
-
-  function pickNextPeriod(data) {
-    return data.next_1_hours || data.next_6_hours || data.next_12_hours || { summary: {}, details: {} };
-  }
-
-  function getSymbol(entry) {
-    const next = pickNextPeriod(entry.data || {});
-    return next.summary && next.summary.symbol_code ? next.summary.symbol_code : 'cloudy';
-  }
+  function pickNextPeriod(data) { return data.next_1_hours || data.next_6_hours || data.next_12_hours || { summary: {}, details: {} }; }
+  function getSymbol(entry) { const next = pickNextPeriod(entry.data || {}); return next.summary && next.summary.symbol_code ? next.summary.symbol_code : 'cloudy'; }
 
   function describeSymbol(code) {
     const clean = String(code || 'cloudy').replace(/_(day|night|polartwilight)$/, '');
@@ -435,9 +400,7 @@
   }
 
   function calculateFeelsLike(tempValue, windValueMs, humidityValue) {
-    const temp = numberOrNull(tempValue);
-    const windMs = numberOrNull(windValueMs);
-    const humidity = numberOrNull(humidityValue);
+    const temp = numberOrNull(tempValue), windMs = numberOrNull(windValueMs), humidity = numberOrNull(humidityValue);
     if (temp === null) return null;
     if (temp <= 10 && windMs !== null && windMs > 1.3) {
       const windKmh = windMs * 3.6;
@@ -455,12 +418,10 @@
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date).reduce((acc, part) => { acc[part.type] = part.value; return acc; }, {});
     return `${parts.year}${parts.month}${parts.day}`;
   }
-
   function localDateKey(iso) {
     const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(iso)).reduce((acc, part) => { acc[part.type] = part.value; return acc; }, {});
     return `${parts.year}-${parts.month}-${parts.day}`;
   }
-
   function localHour(iso) { return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Prague', hour: '2-digit', hourCycle: 'h23' }).format(new Date(iso))); }
   function formatHour(iso) { return new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)); }
   function formatDateTime(iso) { return !iso || Number.isNaN(Date.parse(iso)) ? '—' : new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso)); }
@@ -486,9 +447,8 @@
       return parsed.data;
     } catch (_) { return null; }
   }
-
   function writeCache(data) {
-    try { localStorage.setItem(CONFIG.cacheKey, JSON.stringify({ savedAt: Date.now(), data })); } catch (_) { /* Weather also works without local storage. */ }
+    try { localStorage.setItem(CONFIG.cacheKey, JSON.stringify({ savedAt: Date.now(), data })); } catch (_) { /* Počasí funguje i bez localStorage. */ }
   }
 
   function injectStyles() {
