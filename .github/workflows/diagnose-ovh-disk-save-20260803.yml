@@ -1,0 +1,70 @@
+name: Uložit diagnostiku zaplněného disku OVH
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-ovh-disk-save-20260803.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zjistit využití disku
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' > .github/ovh-disk-diagnostic.txt <<'REMOTE'
+          set -u
+          echo "checked_at=$(date -Is)"
+          echo '=== DF ==='
+          df -h /
+          echo '=== INODES ==='
+          df -ih /
+          echo '=== ROOT DIRECTORIES ==='
+          sudo du -x -h -d1 / 2>/dev/null | sort -h | tail -30
+          echo '=== VAR DIRECTORIES ==='
+          sudo du -x -h -d1 /var 2>/dev/null | sort -h | tail -30
+          echo '=== HOME DIRECTORIES ==='
+          sudo du -x -h -d2 /home 2>/dev/null | sort -h | tail -40
+          echo '=== DOCKER SYSTEM DF ==='
+          sudo docker system df -v 2>/dev/null || true
+          echo '=== JOURNAL ==='
+          sudo journalctl --disk-usage 2>/dev/null || true
+          echo '=== LARGE LOGS ==='
+          sudo find /var/log -xdev -type f -size +20M -printf '%s %p\n' 2>/dev/null | sort -n | tail -30
+          echo '=== LARGE FILES ROOT FS ==='
+          sudo find / -xdev -type f -size +500M -printf '%s %p\n' 2>/dev/null | sort -n | tail -40
+          REMOTE
+          cat .github/ovh-disk-diagnostic.txt
+
+      - name: Uložit výsledek do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/ovh-disk-diagnostic.txt
+          git commit -m 'Uložit diagnostiku zaplnění OVH [skip ci]'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+          done
+          exit 1
