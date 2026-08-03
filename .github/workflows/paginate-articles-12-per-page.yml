@@ -1,0 +1,193 @@
+name: Rozdělit články do stránek po dvanácti
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/enforce_article_visibility.py'
+      - '.github/workflows/paginate-articles-12-per-page.yml'
+      - '.github/article-pagination-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: paginate-articles-12-per-page
+  cancel-in-progress: false
+
+env:
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  paginate-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat titulku a stránkovaný archiv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/enforce_article_visibility.py
+          python3 scripts/enforce_article_visibility.py
+          test -f clanky/strana-2.html
+          grep -Fq 'ARTICLE-PAGINATION-20260803' index.html
+          grep -Fq 'href="/clanky/strana-2.html"' index.html
+          grep -Fq 'aria-current="page">1</span>' clanky/index.html
+          grep -Fq 'aria-current="page">2</span>' clanky/strana-2.html
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          home = Path('index.html').read_text(encoding='utf-8')
+          grid = home.split('<div class="article-list">', 1)[1].split('<p class="archive-note">', 1)[0]
+          count = len(re.findall(r'data-auto-article=', grid))
+          assert count == 10, f'Na titulce má být 10 karet pod dvěma zvýrazněnými články, nalezeno {count}.'
+          pages = sorted(Path('clanky').glob('strana-*.html'), key=lambda p: int(re.search(r'(\d+)', p.stem).group(1)))
+          assert pages, 'Nevznikla žádná další stránka archivu.'
+          for page in [Path('clanky/index.html'), *pages]:
+              text = page.read_text(encoding='utf-8')
+              cards = len(re.findall(r'data-auto-article=', text))
+              assert 1 <= cards <= 12, f'{page}: neplatný počet karet {cards}'
+          print(f'Vzniklo {len(pages)+1} archivních stran.')
+          PY
+
+      - name: Uložit vygenerované stránky do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň stránkování'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4 5; do
+            git add -A -- index.html sitemap.xml clanky
+            if git diff --cached --quiet; then
+              echo 'Stránkování už je v main.'
+              break
+            fi
+            git commit -m 'Rozdělit archiv článků do stran po dvanácti'
+            if git push origin HEAD:main; then
+              break
+            fi
+            [[ "$attempt" == 5 ]] && exit 1
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/enforce_article_visibility.py
+            sleep $((attempt * 6))
+          done
+          git fetch origin main
+          git reset --hard origin/main
+          test -f clanky/strana-2.html
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [[ -n "${KEY2:-}" ]]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč pro OVH.' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit titulku a všechny strany archivu
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          deployed="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          bundle="$RUNNER_TEMP/nk-pagination"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky"
+          cp index.html sitemap.xml "$bundle/"
+          cp clanky/index.html "$bundle/clanky/"
+          cp clanky/strana-*.html "$bundle/clanky/"
+          printf 'source=%s\ndeployed_at=%s\ndeployer=paginate-articles-12-per-page\n' "$sha" "$deployed" > "$bundle/deployment-health.txt"
+
+          for attempt in 1 2 3; do
+            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/nk-pagination; then
+              break
+            fi
+            [[ "$attempt" == 3 ]] && exit 1
+            sleep $((attempt * 8))
+          done
+
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          src=/tmp/nk-pagination
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 "$src/index.html" /var/www/nasekadan/index.html
+          sudo install -m 0644 "$src/sitemap.xml" /var/www/nasekadan/sitemap.xml
+          sudo install -m 0644 "$src/deployment-health.txt" /var/www/nasekadan/deployment-health.txt
+          sudo install -m 0644 "$src/clanky/index.html" /var/www/nasekadan/clanky/index.html
+          sudo find /var/www/nasekadan/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete
+          for file in "$src"/clanky/strana-*.html; do
+            sudo install -m 0644 "$file" /var/www/nasekadan/clanky/
+          done
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$src/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp "$src/sitemap.xml" nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp "$src/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker exec nasekadan-web sh -c "rm -f /usr/share/nginx/html/clanky/strana-*.html"
+            for file in "$src"/clanky/strana-*.html; do
+              sudo docker cp "$file" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$file")"
+            done
+          fi
+          rm -rf "$src"
+          REMOTE
+
+      - name: Veřejně ověřit stránkování
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          last_file="$(ls clanky/strana-*.html | sort -V | tail -n1)"
+          last_name="$(basename "$last_file")"
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          success=false
+          for attempt in $(seq 1 25); do
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=${stamp}-${attempt}" -o "$RUNNER_TEMP/home.html" || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=${stamp}-${attempt}" -o "$RUNNER_TEMP/page1.html" || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/strana-2.html?v=${stamp}-${attempt}" -o "$RUNNER_TEMP/page2.html" || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/${last_name}?v=${stamp}-${attempt}" -o "$RUNNER_TEMP/last.html" || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=${stamp}-${attempt}" -o "$RUNNER_TEMP/health.txt" || true
+            if python3 - "$RUNNER_TEMP" "$sha" <<'PY'
+          from pathlib import Path
+          import re, sys
+          root = Path(sys.argv[1])
+          sha = sys.argv[2]
+          home = (root/'home.html').read_text(encoding='utf-8', errors='ignore')
+          page1 = (root/'page1.html').read_text(encoding='utf-8', errors='ignore')
+          page2 = (root/'page2.html').read_text(encoding='utf-8', errors='ignore')
+          last = (root/'last.html').read_text(encoding='utf-8', errors='ignore')
+          health = (root/'health.txt').read_text(encoding='utf-8', errors='ignore')
+          grid = home.split('<div class="article-list">', 1)[1].split('<p class="archive-note">', 1)[0] if '<div class="article-list">' in home else ''
+          assert len(re.findall(r'data-auto-article=', grid)) == 10
+          assert 'ARTICLE-PAGINATION-20260803' in home
+          assert 'href="/clanky/strana-2.html"' in home
+          assert 'aria-current="page">1</span>' in page1
+          assert 'aria-current="page">2</span>' in page2
+          assert 1 <= len(re.findall(r'data-auto-article=', page1)) <= 12
+          assert 1 <= len(re.findall(r'data-auto-article=', page2)) <= 12
+          assert 1 <= len(re.findall(r'data-auto-article=', last)) <= 12
+          assert f'source={sha}' in health
+          PY
+            then
+              success=true
+              break
+            fi
+            sleep 8
+          done
+          [[ "$success" == true ]]
