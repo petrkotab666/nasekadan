@@ -1,0 +1,195 @@
+name: Opravit veřejnou indexaci Naše Kadaň
+run-name: Vyčistit sitemapu a odstranit technické veřejné cesty
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-public-indexation-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-public-indexation-fix
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Vybrat SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+              chmod 600 "$RUNNER_TEMP/nasekadan_key"
+              echo "secret=$name" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo 'Chybí použitelný SSH klíč.' >&2
+          exit 20
+
+      - name: Vyčistit sitemapu a veřejný server
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+
+          python3 scripts/clean_sitemap_technical_entries.py
+          python3 - <<'PY'
+import re
+import xml.etree.ElementTree as ET
+from pathlib import Path
+path = Path('sitemap.xml')
+root = ET.parse(path).getroot()
+locs = [(next((c for c in node if c.tag.endswith('loc')), None).text or '').strip() for node in root]
+forbidden = re.compile(r'^https://nasekadan\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\.html)', re.I)
+assert len(locs) == len(set(locs)), 'Sitemap obsahuje duplicity.'
+assert not any(forbidden.search(url) for url in locs), 'Sitemap obsahuje technickou cestu.'
+assert 'https://nasekadan.cz/pocasi/' in locs, 'V sitemapě chybí /pocasi/.'
+print(f'Ověřeno {len(locs)} jedinečných veřejných adres.')
+PY
+
+          sudo install -D -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
+          sudo install -D -m 0644 robots.txt /var/www/nasekadan/robots.txt
+          sudo rm -rf /var/www/nasekadan/clanky/parts /var/www/nasekadan/research
+          sudo find /var/www/nasekadan -maxdepth 1 -type f -name 'google*.html' -delete
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          [[ -n "$cid" ]] || cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
+          [[ -n "$cid" ]]
+          sudo docker cp sitemap.xml "$cid:/usr/share/nginx/html/sitemap.xml"
+          sudo docker cp robots.txt "$cid:/usr/share/nginx/html/robots.txt"
+          sudo docker exec "$cid" rm -rf /usr/share/nginx/html/clanky/parts /usr/share/nginx/html/research
+          sudo docker exec "$cid" sh -c "find /usr/share/nginx/html -maxdepth 1 -type f -name 'google*.html' -delete"
+
+          tmp="$(mktemp)"
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
+            "https://nasekadan.cz/sitemap.xml?indexfix=$(date +%s)" -o "$tmp"
+          python3 - "$tmp" <<'PY'
+import re, sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+locs = [(next((c for c in node if c.tag.endswith('loc')), None).text or '').strip() for node in root]
+forbidden = re.compile(r'^https://nasekadan\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\.html)', re.I)
+assert len(locs) == len(set(locs))
+assert not any(forbidden.search(url) for url in locs)
+assert 'https://nasekadan.cz/pocasi/' in locs
+print(f'Veřejná sitemap ověřena: {len(locs)} adres.')
+PY
+          rm -f "$tmp"
+
+          for path in \
+            /clanky/parts/slovan-01.html \
+            /research/nemocnice-kadan-neindexovane-20260730/uver-vsechny-zaznamy/vysledky.html \
+            /googlec6d0b89322c33fa6.html; do
+            code="$(curl -k -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+              --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${path}?indexfix=$(date +%s)")"
+            [[ "$code" == 404 ]]
+          done
+          REMOTE
+
+          scp -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215:/opt/nasekadan/sitemap.xml "$RUNNER_TEMP/sitemap.xml"
+
+      - name: Ověřit veřejný web zvenku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          curl -kfsS --max-time 30 "https://nasekadan.cz/sitemap.xml?external=$GITHUB_RUN_ID" -o "$tmp"
+          python3 - "$tmp" <<'PY'
+import re, sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+locs = [(next((c for c in node if c.tag.endswith('loc')), None).text or '').strip() for node in root]
+forbidden = re.compile(r'^https://nasekadan\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\.html)', re.I)
+assert len(locs) == len(set(locs)), 'Veřejná sitemap obsahuje duplicity.'
+assert not any(forbidden.search(url) for url in locs), 'Veřejná sitemap obsahuje technickou cestu.'
+assert 'https://nasekadan.cz/pocasi/' in locs, 'Veřejná sitemap neobsahuje počasí.'
+print(f'Externě ověřeno {len(locs)} veřejných adres.')
+PY
+          rm -f "$tmp"
+
+      - name: Uložit čistou sitemapu a stav
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          KEY_SECRET: ${{ steps.key.outputs.secret }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const deploy = process.env.DEPLOY_OUTCOME || 'skipped';
+            const verify = process.env.VERIFY_OUTCOME || 'skipped';
+            const status = deploy === 'success' && verify === 'success' ? 'success' : 'failure';
+
+            if (fs.existsSync(process.env.RUNNER_TEMP + '/sitemap.xml')) {
+              const sitemap = fs.readFileSync(process.env.RUNNER_TEMP + '/sitemap.xml');
+              const current = await github.rest.repos.getContent({owner, repo, path: 'sitemap.xml', ref: 'main'});
+              await github.rest.repos.createOrUpdateFileContents({
+                owner, repo, path: 'sitemap.xml', branch: 'main',
+                message: 'Sestavit čistou veřejnou sitemapu [skip ci]',
+                sha: current.data.sha,
+                content: sitemap.toString('base64')
+              });
+            }
+
+            const payload = {
+              status,
+              run_id: String(context.runId),
+              source_sha: context.sha,
+              checked_at: new Date().toISOString(),
+              ssh_key: process.env.KEY_SECRET || '',
+              deploy,
+              external_verify: verify,
+              weather_in_sitemap: status === 'success',
+              technical_urls: 0,
+              duplicate_urls: 0
+            };
+            let sha;
+            try {
+              const old = await github.rest.repos.getContent({owner, repo, path: '.github/indexation-cleanup-status.json', ref: 'main'});
+              sha = old.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path: '.github/indexation-cleanup-status.json', branch: 'main',
+              message: `Zapsat stav opravy indexace: ${status} [skip ci]`,
+              sha,
+              content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')
+            });
