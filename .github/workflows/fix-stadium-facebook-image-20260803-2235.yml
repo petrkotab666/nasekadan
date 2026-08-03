@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/fix-stadium-facebook-image-20260803-2235.yml'
+      - '.github/fix-stadium-facebook-image-trigger.txt'
   workflow_dispatch:
 
 permissions:
@@ -15,9 +16,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  repair-deploy-rescrape:
+  repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     env:
       ARTICLE_PATH: clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
       ARTICLE_URL: https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
@@ -41,140 +42,94 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Ověřit zdrojový článek a přesný OG obrázek
-        shell: bash
+      - name: Ověřit přesný soubor z og:image
         run: |
           set -euo pipefail
-          python -m pip install --disable-pip-version-check --quiet Pillow
+          python -m pip install --quiet Pillow
           python3 <<'PY'
-          import os, re
+          import os,re
           from pathlib import Path
           from PIL import Image
-
-          article = Path(os.environ['ARTICLE_PATH']).read_text(encoding='utf-8')
-          image_path = Path(os.environ['IMAGE_PATH'])
-          image_url = os.environ['IMAGE_URL']
-          match = re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)', article, re.I)
-          assert match, 'Článek nemá og:image.'
-          assert match.group(1) == image_url, f'Článek odkazuje na jiný OG obrázek: {match.group(1)}'
-          assert image_path.is_file() and image_path.stat().st_size > 10000, 'OG obrázek chybí v repozitáři.'
-          with Image.open(image_path) as im:
-              assert im.size == (1200, 630), f'Chybné rozměry OG obrázku: {im.size}'
-              assert im.format == 'PNG', f'Chybný formát OG obrázku: {im.format}'
-          print('Zdrojový OG obrázek je v pořádku:', image_path, image_path.stat().st_size)
+          html=Path(os.environ['ARTICLE_PATH']).read_text(encoding='utf-8')
+          m=re.search(r'<meta\b[^>]*property=["\x27]og:image["\x27][^>]*content=["\x27]([^"\x27]+)',html,re.I)
+          assert m and m.group(1)==os.environ['IMAGE_URL'], m.group(1) if m else 'missing og:image'
+          p=Path(os.environ['IMAGE_PATH'])
+          assert p.is_file() and p.stat().st_size>10000
+          with Image.open(p) as im:
+              assert im.size==(1200,630) and im.format=='PNG'
           PY
 
-      - name: Nasadit přesný obrázek z og:image a článek na OVH
+      - name: Nasadit článek a oba obrázky na OVH
         id: deploy
-        shell: bash
         run: |
           set -euo pipefail
           key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
           test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-
-          tar -czf - "$ARTICLE_PATH" "$IMAGE_PATH" "$BASE_IMAGE_PATH" | \
-            ssh -i "$RUNNER_TEMP/ovh_key" \
-              -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-              ubuntu@57.129.43.215 'sudo mkdir -p /var/www/nasekadan && sudo tar -xzf - -C /var/www/nasekadan && sudo chmod -R a+rX /var/www/nasekadan'
-
-          ssh -i "$RUNNER_TEMP/ovh_key" \
-            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 "ARTICLE_PATH='$ARTICLE_PATH' IMAGE_PATH='$IMAGE_PATH' BASE_IMAGE_PATH='$BASE_IMAGE_PATH' IMAGE_URL='$IMAGE_URL' bash -s" <<'REMOTE'
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          tar -czf - "$ARTICLE_PATH" "$IMAGE_PATH" "$BASE_IMAGE_PATH" | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo mkdir -p /var/www/nasekadan && sudo tar -xzf - -C /var/www/nasekadan && sudo chmod -R a+rX /var/www/nasekadan'
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "ARTICLE_PATH='$ARTICLE_PATH' IMAGE_PATH='$IMAGE_PATH' BASE_IMAGE_PATH='$BASE_IMAGE_PATH' IMAGE_URL='$IMAGE_URL' bash -s" <<'REMOTE'
           set -euo pipefail
           cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
-          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          [[ -n "$cid" ]] || cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
           if [[ -n "$cid" ]]; then
             sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
             sudo docker cp "/var/www/nasekadan/$ARTICLE_PATH" "$cid:/usr/share/nginx/html/$ARTICLE_PATH"
             sudo docker cp "/var/www/nasekadan/$IMAGE_PATH" "$cid:/usr/share/nginx/html/$IMAGE_PATH"
             sudo docker cp "/var/www/nasekadan/$BASE_IMAGE_PATH" "$cid:/usr/share/nginx/html/$BASE_IMAGE_PATH"
           fi
-
           stamp="$(date +%s)"
-          article="$(curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 -A 'facebookexternalhit/1.1' "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?fbfix=$stamp")"
+          article="$(curl -kfsSL --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 -A 'facebookexternalhit/1.1' "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?fbfix=$stamp")"
           grep -Fq "$IMAGE_URL" <<<"$article"
-          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 -A 'facebookexternalhit/1.1' "$IMAGE_URL?fbfix=$stamp" -o /tmp/stadium-og.png
-          test "$(wc -c </tmp/stadium-og.png)" -gt 10000
-          python3 - <<'PY'
-          from PIL import Image
-          with Image.open('/tmp/stadium-og.png') as im:
-              assert im.size == (1200, 630), im.size
-              assert im.format == 'PNG', im.format
-          PY
+          curl -kfsSL --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 -A 'facebookexternalhit/1.1' "$IMAGE_URL?fbfix=$stamp" -o /tmp/og.png
+          test "$(wc -c </tmp/og.png)" -gt 10000
           REMOTE
 
-      - name: Ověřit veřejný náhled jako Facebook crawler
+      - name: Ověřit veřejný obrázek jako Facebook crawler
         id: verify
-        shell: bash
         run: |
           set -euo pipefail
-          sleep 4
+          sleep 3
           python3 <<'PY'
-          import os, re, time, urllib.request
-          from PIL import Image
+          import os,re,time,urllib.request
           from io import BytesIO
-
-          article_url = os.environ['ARTICLE_URL']
-          expected_image = os.environ['IMAGE_URL']
-          headers = {
-              'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-              'Cache-Control': 'no-cache',
-              'Accept': 'text/html,application/xhtml+xml,image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-          }
-          def fetch(url):
-              sep = '&' if '?' in url else '?'
-              req = urllib.request.Request(f'{url}{sep}fbfix={int(time.time()*1000)}', headers=headers)
-              with urllib.request.urlopen(req, timeout=35) as response:
-                  return response.status, dict(response.headers), response.read()
-
-          status, article_headers, body = fetch(article_url)
-          assert status == 200, status
-          text = body.decode('utf-8', 'replace')
-          match = re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)', text, re.I)
-          assert match, 'Veřejný článek nemá og:image.'
-          assert match.group(1) == expected_image, match.group(1)
-
-          status, image_headers, data = fetch(expected_image)
-          assert status == 200, status
-          assert 'image/png' in image_headers.get('Content-Type', '').lower(), image_headers.get('Content-Type')
-          assert len(data) > 10000, len(data)
-          with Image.open(BytesIO(data)) as image:
-              assert image.size == (1200, 630), image.size
-              assert image.format == 'PNG', image.format
-          print('Veřejný FB obrázek ověřen:', expected_image, len(data), image_headers.get('Content-Type'))
+          from PIL import Image
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          def get(url):
+              sep='&' if '?' in url else '?'
+              req=urllib.request.Request(url+sep+'fbfix='+str(int(time.time()*1000)),headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r:return r.status,dict(r.headers),r.read()
+          status,headers,data=get(os.environ['ARTICLE_URL'])
+          assert status==200
+          text=data.decode('utf-8','replace')
+          m=re.search(r'<meta\b[^>]*property=["\x27]og:image["\x27][^>]*content=["\x27]([^"\x27]+)',text,re.I)
+          assert m and m.group(1)==os.environ['IMAGE_URL']
+          status,headers,data=get(os.environ['IMAGE_URL'])
+          assert status==200 and 'image/png' in headers.get('Content-Type','').lower() and len(data)>10000
+          with Image.open(BytesIO(data)) as im: assert im.size==(1200,630) and im.format=='PNG'
+          print('OK',os.environ['IMAGE_URL'],len(data))
           PY
 
       - name: Přinutit Facebook znovu načíst odkaz
         id: facebook
         continue-on-error: true
-        shell: bash
         run: |
           set -euo pipefail
           token="${FB_TOKEN_1:-}"
           [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"
           [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"
           [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
-          if [[ -z "$token" ]]; then
-            echo 'Facebook token není pod známými názvy.'
-            echo 'refreshed=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' \
-            --data-urlencode "id=$ARTICLE_URL" \
-            --data-urlencode 'scrape=true' \
-            --data-urlencode "access_token=$token")"
+          if [[ -z "$token" ]]; then echo 'refreshed=false' >> "$GITHUB_OUTPUT"; exit 0; fi
+          response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' --data-urlencode "id=$ARTICLE_URL" --data-urlencode 'scrape=true' --data-urlencode "access_token=$token")"
           python3 - "$response" <<'PY'
-          import json, sys
-          data = json.loads(sys.argv[1])
-          if 'error' in data:
-              raise SystemExit(str(data['error']))
-          print(json.dumps(data, ensure_ascii=False)[:2000])
+          import json,sys
+          d=json.loads(sys.argv[1])
+          if 'error' in d: raise SystemExit(d['error'])
+          print(json.dumps(d,ensure_ascii=False)[:1200])
           PY
           echo 'refreshed=true' >> "$GITHUB_OUTPUT"
 
-      - name: Zapsat výsledek opravy
+      - name: Zapsat stav
         if: always()
         uses: actions/github-script@v7
         env:
@@ -184,28 +139,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const owner = context.repo.owner, repo = context.repo.repo;
-            const ok = process.env.DEPLOY === 'success' && process.env.VERIFY === 'success';
-            const payload = {
-              status: ok ? 'success' : 'failure',
-              run_id: String(context.runId),
-              checked_at: new Date().toISOString(),
-              article: process.env.ARTICLE_URL,
-              og_image: process.env.IMAGE_URL,
-              deploy: process.env.DEPLOY || 'skipped',
-              external_verify: process.env.VERIFY || 'skipped',
-              facebook_rescrape: process.env.FACEBOOK === 'true'
-            };
-            const path = '.github/stadium-facebook-image-status.json';
-            let sha;
-            try {
-              sha = (await github.rest.repos.getContent({owner, repo, path, ref: 'main'})).data.sha;
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner, repo, path, branch: 'main', sha,
-              message: `Zapsat stav opravy Facebook obrázku stadionu: ${payload.status} [skip ci]`,
-              content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')
-            });
-            if (!ok) core.setFailed('Oprava nebo veřejné ověření Facebook obrázku selhalo.');
+            const ok=process.env.DEPLOY==='success'&&process.env.VERIFY==='success';
+            const payload={status:ok?'success':'failure',run_id:String(context.runId),checked_at:new Date().toISOString(),article:process.env.ARTICLE_URL,og_image:process.env.IMAGE_URL,deploy:process.env.DEPLOY||'skipped',external_verify:process.env.VERIFY||'skipped',facebook_rescrape:process.env.FACEBOOK==='true'};
+            const owner=context.repo.owner,repo=context.repo.repo,path='.github/stadium-facebook-image-status.json';
+            let sha;try{sha=(await github.rest.repos.getContent({owner,repo,path,ref:'main'})).data.sha}catch(e){if(e.status!==404)throw e}
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path,branch:'main',sha,message:`Zapsat stav opravy FB obrázku: ${payload.status} [skip ci]`,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
+            if(!ok)core.setFailed('Oprava nebo ověření Facebook obrázku selhalo.');
