@@ -1,3 +1,4 @@
+# Spuštěno pro nezávislé ověření 3. 8. 2026
 name: Jednorázově ověřit živou publikaci FVE
 
 on:
@@ -29,7 +30,6 @@ jobs:
           h1='ČEZ chce u Kadaně postavit solární park s bateriemi. Jejich velikost, cena i platby městu zůstávají neznámé'
           stamp="verify-${GITHUB_RUN_ID}-$(date +%s)"
           tmp="$RUNNER_TEMP/fve-live"; mkdir -p "$tmp"
-          fetch(){ curl -4 -kfsS --max-time 25 "$1?v=$stamp" -o "$2"; }
           code_article=$(curl -4 -kLsS --max-time 25 -o "$tmp/article" -w '%{http_code}' "$article_url?v=$stamp" || true)
           code_home=$(curl -4 -kLsS --max-time 25 -o "$tmp/home" -w '%{http_code}' "$base/?v=$stamp" || true)
           code_archive=$(curl -4 -kLsS --max-time 25 -o "$tmp/archive" -w '%{http_code}' "$base/clanky/?v=$stamp" || true)
