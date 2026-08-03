@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nasekadan-canonical-production
@@ -26,6 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Nasadit aktuální main kanonickou cestou
+        id: deploy
         shell: bash
         run: |
           set -euo pipefail
@@ -33,6 +34,7 @@ jobs:
           sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
 
       - name: Zapojit veřejnou proxy meteorologických dat
+        id: proxy
         shell: bash
         run: |
           set -euo pipefail
@@ -40,6 +42,7 @@ jobs:
           sudo bash deploy/install-weather-proxy.sh
 
       - name: Ověřit stránku, skript a předpověď
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
@@ -83,12 +86,58 @@ print('Desetiminutová data ČHMÚ ověřena.')
 PY
           rm -f "$observation"
 
-      - name: Zapsat výsledek
+      - name: Zapsat ověřitelný stav do repozitáře
         if: always()
         shell: bash
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          PROXY_OUTCOME: ${{ steps.proxy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         run: |
+          set -u
+          status='failure'
+          if [[ "$DEPLOY_OUTCOME" == 'success' && "$PROXY_OUTCOME" == 'success' && "$VERIFY_OUTCOME" == 'success' ]]; then
+            status='success'
+          fi
+
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            mkdir -p .github
+            python3 - <<PY
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+payload = {
+    'status': '$status',
+    'source_sha': '$GITHUB_SHA',
+    'run_id': '$GITHUB_RUN_ID',
+    'generated_at': datetime.now(timezone.utc).isoformat(),
+    'deploy': '$DEPLOY_OUTCOME',
+    'proxy': '$PROXY_OUTCOME',
+    'verify': '$VERIFY_OUTCOME',
+    'page': 'https://nasekadan.cz/pocasi/'
+}
+Path('.github/weather-live-status.json').write_text(
+    json.dumps(payload, ensure_ascii=False, indent=2) + '\n',
+    encoding='utf-8'
+)
+PY
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/weather-live-status.json
+            git commit -m "Zapsat stav živého počasí: $status [skip ci]" || true
+            if git push origin HEAD:main; then
+              break
+            fi
+            sleep 2
+          done
+
           {
             echo '## Živé počasí Naše Kadaň'
+            echo "- Výsledek: $status"
             echo "- Commit: $GITHUB_SHA"
             echo '- Stránka: /pocasi/'
             echo '- Předpověď: serverová cache 15 minut'
