@@ -134,6 +134,46 @@ def draw_icon(draw: ImageDraw.ImageDraw, kind: str, accent: tuple[int, int, int]
         draw.rectangle((800, 430, 1060, 475), fill=white)
 
 
+
+# SOCIAL-BADGE-FIT-V1
+# Každý textový štítek měří skutečný text, zmenší písmo a ponechá bezpečný okraj.
+def draw_fitted_badge(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    text: str,
+    *,
+    max_width: int = 535,
+    fill: tuple[int, int, int, int] = (177, 36, 47, 255),
+    max_font_size: int = 23,
+    min_font_size: int = 14,
+    pad_x: int = 18,
+    pad_y: int = 8,
+) -> tuple[int, int, int, int]:
+    display = " ".join(text.split())
+    selected = font(min_font_size, bold=True)
+    bbox = draw.textbbox((0, 0), display, font=selected)
+    for size in range(max_font_size, min_font_size - 1, -1):
+        candidate = font(size, bold=True)
+        candidate_bbox = draw.textbbox((0, 0), display, font=candidate)
+        if candidate_bbox[2] - candidate_bbox[0] <= max_width - 2 * pad_x:
+            selected = candidate
+            bbox = candidate_bbox
+            break
+    while display and bbox[2] - bbox[0] > max_width - 2 * pad_x:
+        display = display[:-2].rstrip() + "…"
+        bbox = draw.textbbox((0, 0), display, font=selected)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    box_width = min(max_width, text_width + 2 * pad_x)
+    box_height = max(45, text_height + 2 * pad_y)
+    draw.rounded_rectangle((x, y, x + box_width, y + box_height), radius=9, fill=fill)
+    text_x = x + (box_width - text_width) / 2 - bbox[0]
+    text_y = y + (box_height - text_height) / 2 - bbox[1]
+    draw.text((text_x, text_y), display, font=selected, fill="white")
+    return (x, y, x + box_width, y + box_height)
+
+
 def create_card(title: str, category: str, output: Path) -> None:
     base, accent, icon = select_palette(title, category)
     image = Image.new("RGBA", (WIDTH, HEIGHT), (*base, 255))
@@ -161,10 +201,14 @@ def create_card(title: str, category: str, output: Path) -> None:
     draw.text((70, 52), "NAŠE KADAŇ", font=font(29, bold=True), fill="white")
     draw.rectangle((70, 98, 565, 106), fill=(177, 36, 47, 255))
 
-    category_font = font(23, bold=True)
-    category_width = min(535, draw.textbbox((0, 0), category, font=category_font)[2] + 38)
-    draw.rounded_rectangle((70, 130, 70 + category_width, 175), radius=9, fill=(177, 36, 47, 255))
-    draw.text((88, 139), category, font=category_font, fill="white")
+    draw_fitted_badge(
+        draw,
+        70,
+        130,
+        category,
+        max_width=535,
+        fill=(177, 36, 47, 255),
+    )
 
     lines, title_font = fit_title(draw, title, 575)
     y = 205
