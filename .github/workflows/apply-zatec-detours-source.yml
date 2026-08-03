@@ -1,10 +1,11 @@
-name: Trvale doplnit objížďky II/225
+name: Trvale opravit článek II/225 a titulku
 
 on:
   push:
     branches: [main]
     paths:
       - 'scripts/apply_zatec_detours_update.py'
+      - 'scripts/apply_reader_fixes_20260803.py'
       - '.github/zatec-detours-source-trigger.txt'
   workflow_dispatch:
 
@@ -19,27 +20,46 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Upravit publikační zdroj
+
+      - name: Upravit publikační zdroj, článek a titulku
         run: |
           set -euo pipefail
           python3 scripts/apply_zatec_detours_update.py
-          python3 -m py_compile scripts/publish_zatec_kadan_prejezd_20260803.py
+          python3 scripts/apply_reader_fixes_20260803.py
+          python3 -m py_compile scripts/publish_zatec_kadan_prejezd_20260803.py scripts/enforce_article_visibility.py
           grep -Fq 'Osobní auta přes Žabokliky' scripts/publish_zatec_kadan_prejezd_20260803.py
           grep -Fq 'Vysoké Třebčice' scripts/publish_zatec_kadan_prejezd_20260803.py
-      - name: Uložit zdroj do main
+          grep -Fq 'Druhý přejezd má vlastní termín' clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
+          ! grep -Fqi 'zmatek' clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
+          grep -Fq 'HOME_TOTAL = 14' scripts/enforce_article_visibility.py
+          grep -Fq 'PAGE_SIZE = 12' scripts/enforce_article_visibility.py
+
+      - name: Uložit opravy do main
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň redakční automat'
           git config user.email 'info@nasekadan.cz'
-          git add scripts/publish_zatec_kadan_prejezd_20260803.py
+          git add \
+            scripts/publish_zatec_kadan_prejezd_20260803.py \
+            scripts/enforce_article_visibility.py \
+            clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html \
+            .github/workflows/paginate-articles-12-per-page.yml
           if git diff --cached --quiet; then
-            echo 'Zdroj už je opravený.'
+            echo 'Opravy už jsou zapsané.'
             exit 0
           fi
-          git commit -m 'Trvale doplnit oficiální objížďky II/225'
+          git commit -m 'Opravit text II/225 a zobrazit 14 článků na titulce'
           for attempt in 1 2 3 4; do
             if git push origin HEAD:main; then exit 0; fi
             git pull --rebase origin main
+            python3 scripts/apply_zatec_detours_update.py
+            python3 scripts/apply_reader_fixes_20260803.py
+            git add \
+              scripts/publish_zatec_kadan_prejezd_20260803.py \
+              scripts/enforce_article_visibility.py \
+              clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html \
+              .github/workflows/paginate-articles-12-per-page.yml
+            git commit --amend --no-edit
             sleep $((attempt * 5))
           done
           exit 1
