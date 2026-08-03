@@ -81,3 +81,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# Trigger workflow after the workflow file existed on main.
