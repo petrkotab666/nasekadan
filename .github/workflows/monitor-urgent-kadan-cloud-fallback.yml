@@ -1,123 +1,17 @@
-name: Cloudová záloha rychlého monitoringu Kadaně
+name: Cloudová záloha rychlého monitoringu — nahrazena centrálním monitoringem
 
+# Původní cloudová záloha vytvářela souběžná upozornění a odlišné fingerprinty.
+# Je ponechána pouze jako ručně spustitelná diagnostika; automatické kontroly
+# zajišťuje jediný centrální monitoring „Kompletní monitoring Kadaně“.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '5 * * * *'
-  push:
-    branches: [main]
-    paths:
-      - '.github/triggers/urgent-cloud-fallback.txt'
-      - '.github/workflows/monitor-urgent-kadan-cloud-fallback.yml'
-      - 'data/urgent-kadan-sources.json'
-      - 'scripts/monitor_urgent_kadan.py'
-  pull_request:
-    paths:
-      - '.github/triggers/urgent-cloud-fallback.txt'
 
 permissions:
-  contents: write
-  issues: write
-
-concurrency:
-  group: urgent-kadan-cloud-fallback
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  fallback:
+  superseded:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Provést záložní rychlou kontrolu
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m py_compile scripts/monitor_national_kadan.py scripts/monitor_urgent_kadan.py
-          python3 scripts/monitor_urgent_kadan.py \
-            --config data/urgent-kadan-sources.json \
-            --state data/urgent-kadan-monitoring-state.json \
-            --status data/urgent-kadan-monitoring-status.json \
-            --output "$RUNNER_TEMP/urgent-kadan-alerts.json"
-
-      - name: Doručit nové nálezy
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          export ALERT_FILE="$RUNNER_TEMP/urgent-kadan-alerts.json"
-          python3 - <<'PY'
-          import json, os, subprocess, tempfile
-          from pathlib import Path
-          payload=json.loads(Path(os.environ['ALERT_FILE']).read_text(encoding='utf-8'))
-          for alert in payload.get('alerts') or []:
-              title=str(alert.get('title') or 'Nová událost na Kadaňsku').strip()
-              fingerprint='urgent-'+str(alert.get('fingerprint') or '').strip()
-              source=str(alert.get('sourceName') or 'Zdroj').strip()
-              url=str(alert.get('url') or '').strip()
-              published=str(alert.get('published') or 'neuvedeno').strip()
-              description=str(alert.get('description') or '').strip()
-              local=', '.join(str(x) for x in (alert.get('matchedLocalTerms') or []))
-              incident=', '.join(str(x) for x in (alert.get('matchedIncidentTerms') or []))
-              body='\n'.join([
-                  '## Nový nález z rychlého monitoringu', '',
-                  f'**Zdroj:** {source}',
-                  f'**Publikováno:** {published}',
-                  f'**Místní vazba:** {local or "přímá místní shoda"}',
-                  f'**Typ události:** {incident or "nová místní zpráva"}', '',
-                  f'### {title}', '', description[:2200], '',
-                  '### Přímý odkaz',
-                  f'- [{source}]({url})' if url else f'- {source}', '',
-                  '### Redakční postup',
-                  'Ihned otevřít zdroj, ověřit datum a místo a rozhodnout o rychlé zprávě nebo aktualizaci.', '',
-                  '_Nález doručila hodinová cloudová záloha rychlého monitoringu._',
-              ])
-              with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,suffix='.md') as handle:
-                  handle.write(body+'\n'); path=handle.name
-              try:
-                  subprocess.run([
-                      'python3','scripts/upsert_github_issue.py',
-                      '--fingerprint',fingerprint,
-                      '--title',f'[RYCHLÝ MONITORING KADAŇ] {title[:112]} [{fingerprint}]',
-                      '--body-file',path,
-                      '--assignee','petrkotab666',
-                  ],check=True)
-              finally:
-                  Path(path).unlink(missing_ok=True)
-          PY
-
-      - name: Uložit stav rychlého monitoringu
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add data/urgent-kadan-monitoring-state.json data/urgent-kadan-monitoring-status.json
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m 'Aktualizovat stav rychlého monitoringu Kadaně [skip ci]'
-          for attempt in 1 2 3 4; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
-              exit 0
-            fi
-            git rebase --abort 2>/dev/null || true
-            sleep $((attempt * 3))
-          done
-          exit 1
-
-      - name: Ověřit minimální pokrytí
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          data=json.load(open('data/urgent-kadan-monitoring-status.json',encoding='utf-8'))
-          assert data.get('checkedSources',0) >= 6, data
-          assert data.get('itemsParsed',0) >= 20, data
-          print(data)
-          PY
+      - name: Informace
+        run: echo 'Automatický běh je vypnutý, aby nevznikala duplicitní redakční upozornění.'
