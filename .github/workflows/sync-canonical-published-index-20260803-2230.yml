@@ -1,0 +1,282 @@
+name: Synchronizovat kanonický registr s živým webem po 44. článku
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/sync-canonical-published-index-20260803-2230.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-published-index-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Načíst živý web a přegenerovat kanonickou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import collections
+          import datetime
+          import hashlib
+          import html
+          import json
+          import re
+          import ssl
+          import subprocess
+          import time
+          import urllib.request
+          import xml.etree.ElementTree as ET
+
+          BASE = 'https://nasekadan.cz'
+          REGISTRY = 'data/published-content-index.json'
+          ctx = ssl._create_unverified_context()
+
+          def fetch(path_or_url):
+              url = path_or_url if path_or_url.startswith('http') else BASE + path_or_url
+              last = None
+              for attempt in range(5):
+                  try:
+                      sep = '&' if '?' in url else '?'
+                      req = urllib.request.Request(
+                          url + sep + 'canonical_audit=' + str(time.time_ns()),
+                          headers={'User-Agent': 'NaseKadanCanonicalAudit/1.2', 'Cache-Control': 'no-cache'},
+                      )
+                      with urllib.request.urlopen(req, timeout=45, context=ctx) as response:
+                          return response.read().decode('utf-8', 'replace')
+                  except Exception as exc:
+                      last = exc
+                      time.sleep(2 + attempt)
+              raise last
+
+          def unique(values):
+              result, seen = [], set()
+              for value in values:
+                  if value not in seen:
+                      seen.add(value)
+                      result.append(value)
+              return result
+
+          def clean_h1(page):
+              match = re.search(r'<h1[^>]*>(.*?)</h1>', page, re.I | re.S)
+              if not match:
+                  return ''
+              return ' '.join(html.unescape(re.sub(r'<[^>]+>', '', match.group(1))).split())
+
+          home = fetch('/')
+          archive = fetch('/clanky/')
+          rss = fetch('/rss.xml')
+          sitemap = fetch('/sitemap.xml')
+          news = fetch('/news-sitemap.xml')
+          health = fetch('/deployment-health.txt')
+
+          article_href = re.compile(r'href=["\'](/clanky/[^"\']+\.html)["\']', re.I)
+          home_urls = [BASE + path for path in unique(article_href.findall(home)) if '/parts/' not in path]
+          archive_urls = [BASE + path for path in unique(article_href.findall(archive)) if '/parts/' not in path]
+
+          rss_root = ET.fromstring(rss)
+          rss_urls = unique([
+              (node.text or '').strip()
+              for node in rss_root.findall('.//item/link')
+              if (node.text or '').strip()
+          ])
+
+          ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          sitemap_root = ET.fromstring(sitemap)
+          sitemap_urls = unique([
+              (node.text or '').strip()
+              for node in sitemap_root.findall('.//s:loc', ns)
+              if '/clanky/' in (node.text or '')
+              and (node.text or '').endswith('.html')
+              and '/parts/' not in (node.text or '')
+          ])
+
+          news_root = ET.fromstring(news)
+          news_urls = unique([
+              (node.text or '').strip()
+              for node in news_root.findall('.//s:loc', ns)
+              if (node.text or '').strip()
+          ])
+
+          with open(REGISTRY, encoding='utf-8') as handle:
+              data = json.load(handle)
+
+          articles = data['articles']
+          urls = [article['url'] for article in articles]
+          fingerprints = [article['fingerprint'] for article in articles]
+          duplicate_urls = sorted(url for url, count in collections.Counter(urls).items() if count > 1)
+          duplicate_fingerprints = sorted(fp for fp, count in collections.Counter(fingerprints).items() if count > 1)
+
+          assert len(articles) == 44, f'Expected 44 articles, got {len(articles)}'
+          assert not duplicate_urls, duplicate_urls
+          assert not duplicate_fingerprints, duplicate_fingerprints
+          assert set(urls) == set(archive_urls), 'Archive differs from canonical registry'
+          assert set(urls) == set(rss_urls), 'RSS differs from canonical registry'
+          assert set(urls) == set(sitemap_urls), 'Sitemap differs from canonical registry'
+          assert rss_urls == archive_urls, 'RSS order differs from archive order'
+          assert 'status=ok' in health, 'deployment-health.txt does not report status=ok'
+
+          all_h1_checked = True
+          for article in articles:
+              page = fetch(article['url'])
+              actual_h1 = clean_h1(page)
+              if actual_h1 != article['h1']:
+                  all_h1_checked = False
+                  raise AssertionError(f'H1 mismatch for {article["url"]}: {actual_h1!r} != {article["h1"]!r}')
+
+              article['status'] = {
+                  'homepage': article['url'] in home_urls,
+                  'archive': article['url'] in archive_urls,
+                  'rss': article['url'] in rss_urls,
+                  'sitemap': article['url'] in sitemap_urls,
+                  'news_sitemap': article['url'] in news_urls,
+              }
+              article['publication_status'] = 'published'
+
+              source_path = article.get('source_path')
+              if source_path:
+                  source_commit = subprocess.check_output(
+                      ['git', 'log', '-1', '--format=%H', '--', source_path], text=True
+                  ).strip()
+                  modified_at = subprocess.check_output(
+                      ['git', 'log', '-1', '--format=%cI', '--', source_path], text=True
+                  ).strip()
+                  if source_commit:
+                      article['source_commit'] = source_commit
+                  if modified_at:
+                      article['modified_at'] = modified_at
+
+          now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          health_source_match = re.search(r'^source=(.+)$', health, re.M)
+          health_source = health_source_match.group(1).strip() if health_source_match else ''
+
+          data['generated_at'] = now
+          data['source_commit'] = head
+          data['article_count'] = len(articles)
+          validation = data.setdefault('validation', {})
+          validation.update({
+              'homepage_count': len(home_urls),
+              'archive_count': len(archive_urls),
+              'rss_count': len(rss_urls),
+              'sitemap_all_articles_present': set(urls) == set(sitemap_urls),
+              'news_sitemap_recent_count': len(news_urls),
+              'deployment_health': 'verified',
+              'required_fields_complete': all(
+                  all(key in article for key in (
+                      'title', 'h1', 'url', 'published_at', 'modified_at',
+                      'persons', 'organizations', 'places', 'cases', 'topics',
+                      'fingerprint', 'status', 'source_commit'
+                  ))
+                  for article in articles
+              ),
+              'duplicate_urls': duplicate_urls,
+              'duplicate_fingerprints': duplicate_fingerprints,
+              'per_article_source_commits': all(bool(article.get('source_commit')) for article in articles),
+              'deployment_health_source': health_source,
+              'public_audit_at': now,
+              'public_audit_sha256': hashlib.sha256(
+                  (home + archive + rss + sitemap + news + health).encode('utf-8')
+              ).hexdigest(),
+              'repair_pending_public_verification': False,
+              'rss_order_matches_archive': rss_urls == archive_urls,
+              'public_repair_verification': {
+                  'method': 'github-actions-live-canonical-audit',
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'all_public_h1_checked': all_h1_checked,
+                  'deployment_health_nonempty': bool(health.strip()),
+                  'completed_at': now,
+              },
+              'last_registry_refresh': {
+                  'reason': 'synchronize the 44th live article, all public channels and latest article source commits',
+                  'trigger_commit': head,
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'completed_at': now,
+              },
+          })
+
+          with open(REGISTRY, 'w', encoding='utf-8') as handle:
+              json.dump(data, handle, ensure_ascii=False, indent=2)
+              handle.write('\n')
+
+          print(json.dumps({
+              'articles': len(articles),
+              'homepage': len(home_urls),
+              'archive': len(archive_urls),
+              'rss': len(rss_urls),
+              'sitemap': len(sitemap_urls),
+              'news': len(news_urls),
+              'duplicates': len(duplicate_urls) + len(duplicate_fingerprints),
+              'audit_at': now,
+          }, ensure_ascii=False))
+          PY
+
+      - name: Uložit opravený registr do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json
+          git commit -m 'Synchronizovat kanonickou evidenci 44 živých článků'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            git pull --rebase origin main
+          done
+          exit 1
+
+      - name: Nasadit registr a veřejně jej ověřit
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          cat data/published-content-index.json | ssh "${opts[@]}" ubuntu@57.129.43.215 'sudo install -d -m 0755 /var/www/nasekadan/data; sudo tee /var/www/nasekadan/data/published-content-index.json >/dev/null; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data; sudo docker cp /var/www/nasekadan/data/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi'
+          sleep 4
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/data/published-content-index.json?v=$q" | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d["validation"]; assert d["article_count"]==44; assert v["archive_count"]==44; assert v["rss_count"]==44; assert v["news_sitemap_recent_count"]==7; assert v["sitemap_all_articles_present"]; assert v["rss_order_matches_archive"]; assert v["deployment_health"]=="verified"; assert not v["duplicate_urls"]; assert not v["duplicate_fingerprints"]; assert v["public_repair_verification"]["all_public_h1_checked"]'
+
+      - name: Zapsat výsledek auditu
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo, path='.github/canonical-published-index-status.json';
+            let sha;
+            try { sha=(await github.rest.repos.getContent({owner,repo,path,ref:'main'})).data.sha; }
+            catch(e){ if(e.status!==404) throw e; }
+            const payload={status:'success',checked_at:new Date().toISOString(),article_count:44,archive_count:44,rss_count:44,news_sitemap_count:7,sitemap_complete:true,rss_order_matches_archive:true,duplicate_urls:0,duplicate_fingerprints:0,all_public_h1_checked:true,registry_publicly_verified:true};
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path,branch:'main',sha,message:'Potvrdit kanonickou evidenci 44 živých článků [skip ci]',content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
