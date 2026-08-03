@@ -110,7 +110,7 @@ def update_home() -> None:
     </article>
     <aside class="current-aside"><p class="aside-label">DALŠÍ AKTUÁLNÍ ČLÁNEK</p><p class="aside-date">3. 8. 2026 v 10:30</p><h2>ČEZ chce u Kadaně postavit solární park s bateriemi</h2><p>Přesný výkon a kapacita baterií, investiční cena ani výše plateb městu ve veřejných dokumentech nejsou.</p><a class="aside-button" href="/clanky/fve-epr-letiste-bess-kadan-2026.html">Přečíst článek →</a><div class="aside-links"><a href="/clanky/">Všechny články podle data</a></div></aside>
   </section>'''
-    text, count = re.subn(r'<section class="wrap hero"\b.*?</section>', hero, text, count=1, flags=re.S)
+    text, count = re.subn(r'<section class="wrap hero"[^>]*>.*?</section>', hero, text, count=1, flags=re.S)
     if count != 1:
         raise RuntimeError("Na titulce nebyla nalezena hlavní sekce hero.")
     write(path, text)
