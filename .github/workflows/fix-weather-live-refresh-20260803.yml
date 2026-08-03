@@ -1,0 +1,198 @@
+name: Opravit živou aktualizaci počasí
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-live-refresh-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-weather-live-refresh
+  cancel-in-progress: false
+
+env:
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  VERSION: 20260803-weather-live-refresh-3
+  MARKER: WEATHER_LIVE_REFRESH_V3
+
+jobs:
+  fix-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit obnovování a otestovat JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fix_weather_live_refresh_20260803.py
+          node --check pocasi.js
+          grep -Fq "$MARKER" pocasi.js
+          grep -Fq 'observationMaxAgeMinutes: 45' pocasi.js
+          grep -Fq 'refreshMinutes: 5' pocasi.js
+          grep -Fq "cache: 'no-store'" pocasi.js
+          grep -Fq "visibilitychange" pocasi.js
+          grep -Fq "/pocasi.js?v=$VERSION" index.html
+          grep -Fq "/pocasi.js?v=$VERSION" pocasi/index.html
+          test "$(grep -Fo 'data-nk-weather-direct="1"' index.html | wc -l)" -eq 1
+          test "$(grep -Fo 'data-nk-weather-direct="1"' pocasi/index.html | wc -l)" -eq 1
+          git diff --check
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – oprava počasí'
+          git config user.email 'info@nasekadan.cz'
+          git add pocasi.js index.html pocasi/index.html scripts/ensure_weather_loader.py scripts/fix_weather_live_refresh_20260803.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit zastaralou teplotu a živé obnovování počasí'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              if [[ "$attempt" == 5 ]]; then exit 1; fi
+              sleep $((attempt * 5))
+            done
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          node --check pocasi.js
+          grep -Fq "$MARKER" pocasi.js
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [[ -n "${KEY2:-}" ]]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč pro OVH.' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit opravu a obnovit serverová data
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/nk-weather-live-refresh"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/pocasi" "$bundle/deploy"
+          cp pocasi.js index.html "$bundle/"
+          cp pocasi/index.html "$bundle/pocasi/index.html"
+          cp deploy/update-weather-data.sh deploy/install-weather-timer.sh "$bundle/deploy/"
+
+          for attempt in 1 2 3; do
+            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/nk-weather-live-refresh; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then exit 1; fi
+            sleep $((attempt * 6))
+          done
+
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/pocasi /opt/nasekadan/deploy
+          sudo install -m 0644 /tmp/nk-weather-live-refresh/pocasi.js /var/www/nasekadan/pocasi.js
+          sudo install -m 0644 /tmp/nk-weather-live-refresh/index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 /tmp/nk-weather-live-refresh/pocasi/index.html /var/www/nasekadan/pocasi/index.html
+          sudo install -m 0755 /tmp/nk-weather-live-refresh/deploy/update-weather-data.sh /opt/nasekadan/deploy/update-weather-data.sh
+          sudo install -m 0755 /tmp/nk-weather-live-refresh/deploy/install-weather-timer.sh /opt/nasekadan/deploy/install-weather-timer.sh
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/pocasi
+            sudo docker cp /tmp/nk-weather-live-refresh/pocasi.js nasekadan-web:/usr/share/nginx/html/pocasi.js
+            sudo docker cp /tmp/nk-weather-live-refresh/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/nk-weather-live-refresh/pocasi/index.html nasekadan-web:/usr/share/nginx/html/pocasi/index.html
+          fi
+
+          # Znovu nainstalovat desetiminutový timer a okamžitě stáhnout dostupná data.
+          sudo bash /opt/nasekadan/deploy/install-weather-timer.sh
+          sudo systemctl is-enabled --quiet nasekadan-weather.timer
+          sudo systemctl is-active --quiet nasekadan-weather.timer
+          grep -Fq 'WEATHER_LIVE_REFRESH_V3' /var/www/nasekadan/pocasi.js
+          grep -Fq '20260803-weather-live-refresh-3' /var/www/nasekadan/index.html
+          rm -rf /tmp/nk-weather-live-refresh
+          REMOTE
+
+      - name: Veřejně ověřit nasazení bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          ok=false
+          for attempt in $(seq 1 30); do
+            js="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/pocasi.js?v=${stamp}-${attempt}" 2>/dev/null || true)"
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?weather=${stamp}-${attempt}" 2>/dev/null || true)"
+            page="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/pocasi/?weather=${stamp}-${attempt}" 2>/dev/null || true)"
+            forecast="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/api/pocasi-predpoved.json?weather=${stamp}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq "$MARKER" <<<"$js" \
+              && grep -Fq 'observationMaxAgeMinutes: 45' <<<"$js" \
+              && grep -Fq 'refreshMinutes: 5' <<<"$js" \
+              && grep -Fq "cache: 'no-store'" <<<"$js" \
+              && grep -Fq "/pocasi.js?v=$VERSION" <<<"$home" \
+              && grep -Fq "/pocasi.js?v=$VERSION" <<<"$page" \
+              && grep -Fq '"timeseries"' <<<"$forecast"; then
+              ok=true
+              break
+            fi
+            sleep 6
+          done
+          [[ "$ok" == true ]]
+
+      - name: Zapsat úspěšný stav
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          status = {
+            'status': 'success',
+            'checkedAt': datetime.now(timezone.utc).isoformat(),
+            'version': '20260803-weather-live-refresh-3',
+            'refreshMinutes': 5,
+            'observationMaxAgeMinutes': 45,
+            'checks': [
+              'public javascript contains live refresh marker',
+              'homepage and weather page use cache-busted script version',
+              'forecast endpoint returns timeseries',
+              'systemd weather timer is enabled and active'
+            ]
+          }
+          Path('.github/weather-live-refresh-status.json').write_text(json.dumps(status, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – kontrola počasí'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/weather-live-refresh-status.json
+          git commit -m 'Potvrdit živou aktualizaci počasí [skip ci]' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Založit incident při selhání
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh issue create \
+            --title '[POČASÍ] Selhala oprava živé aktualizace' \
+            --body "Oprava nebo veřejné ověření počasí selhaly. Běh: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            || true
