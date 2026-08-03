@@ -1,0 +1,133 @@
+name: Doplnit přesné objížďky k uzavírce II/225
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-zatec-detours-20260803.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-zatec-detours-20260803
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit oficiální objízdné trasy do zdrojového článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/publish_zatec_kadan_prejezd_20260803.py')
+          text = path.read_text(encoding='utf-8')
+
+          old_constants = '''PUBLISHED = "2026-08-03T18:35:00+02:00"
+          RSS_DATE = "Mon, 03 Aug 2026 18:35:00 +0200"'''
+          new_constants = '''PUBLISHED = "2026-08-03T18:35:00+02:00"
+          MODIFIED = "2026-08-03T21:55:00+02:00"
+          RSS_DATE = "Mon, 03 Aug 2026 18:35:00 +0200"'''
+          if old_constants not in text and 'MODIFIED = "2026-08-03T21:55:00+02:00"' not in text:
+              raise SystemExit('Nenalezen blok publikačních konstant.')
+          text = text.replace(old_constants, new_constants, 1)
+          text = text.replace('"dateModified": PUBLISHED,', '"dateModified": MODIFIED,', 1)
+          text = text.replace('<meta property="article:modified_time" content="{PUBLISHED}">', '<meta property="article:modified_time" content="{MODIFIED}">', 1)
+
+          old_reason = '''  <p>Odbor dopravně správních agend Městského úřadu Žatec povolil uzavírku od <strong>4. srpna 2026 v 7:00</strong> do <strong>11. srpna 2026 v 6:00</strong>. Stejný interval uvádí také informační systém Dopravy Ústeckého kraje, který tuto událost vede pod názvem <strong>Nové Sedlo – uzavírka železničního přejezdu</strong>.</p>
+
+  <div class="callout">'''
+          new_reason = '''  <p>Odbor dopravně správních agend Městského úřadu Žatec povolil uzavírku od <strong>4. srpna 2026 v 7:00</strong> do <strong>11. srpna 2026 v 6:00</strong>. Stejný interval uvádí také informační systém Dopravy Ústeckého kraje, který tuto událost vede pod názvem <strong>Nové Sedlo – uzavírka železničního přejezdu</strong>.</p>
+
+  <p>Důvodem omezení je podle města <strong>výstavba nového přejezdového systému</strong>, která má zvýšit bezpečnost silniční i železniční dopravy.</p>
+
+  <div class="callout">'''
+          if old_reason not in text and 'výstavba nového přejezdového systému' not in text:
+              raise SystemExit('Nenalezen odstavec pro doplnění důvodu uzavírky.')
+          text = text.replace(old_reason, new_reason, 1)
+
+          old_route = '''  <h2>Co čeká řidiče na cestě mezi Žatcem a Kadaní</h2>
+  <p>Přes první opravovaný přejezd na silnici II/225 nebude možné projet. Pro osobní a nákladní dopravu bude rozhodující dočasné dopravní značení na místě.</p>
+
+  <p>V dostupném oznámení města ani v krajském přehledu není podrobně popsána celá objízdná trasa pro běžná auta. Proto není bezpečné doporučovat konkrétní zkratku pouze podle mapy. Řidiči by měli počítat s delší cestou, sledovat značení a před cestou si nechat časovou rezervu.</p>
+
+  <p>Uzavírka začíná už následující ráno. Omezení tak může zasáhnout dojíždění za prací, cesty k lékaři i běžné spojení mezi Kadaní, obcemi na trase a Žatcem.</p>'''
+          new_route = '''  <h2>Osobní auta přes Žabokliky, těžší vozidla dlouhou objížďkou</h2>
+  <p>Přes uzavřený přejezd na silnici II/225 nebude možné projet. Město Žatec zveřejnilo dvě rozdílné objízdné trasy podle hmotnosti vozidla.</p>
+
+  <div class="info-box">
+    <strong>Vozidla do 3,5 tuny:</strong> budou vedena <strong>obousměrně přes Žabokliky</strong>. Tato kratší objížďka se týká zejména osobních aut a lehkých dodávek.
+  </div>
+
+  <div class="info-box">
+    <strong>Vozidla nad 3,5 tuny:</strong> ve směru ze Žatce pojedou od Kauflandu směrem na Plzeň přes <strong>Radíčeves, Sýrovice, Pšov, Dolánky, Vysoké Třebčice, Široké Třebčice, Račetice a Pětipsy</strong>. V Pětipsech se napojí zpět na silnici II/225.
+  </div>
+
+  <p>Pro těžší dopravu jde o výrazně delší trasu vedoucí jižně od Nechranické přehrady. Řidiči jedoucí v opačném směru se musí řídit dočasným dopravním značením. Město vyzývá k vyšší opatrnosti a k počítání s delší dobou jízdy.</p>
+
+  <p>Uzavírka začíná už následující ráno. Omezení tak může zasáhnout dojíždění za prací, cesty k lékaři i běžné spojení mezi Kadaní, obcemi na trase a Žatcem.</p>'''
+          if old_route not in text and 'Osobní auta přes Žabokliky' not in text:
+              raise SystemExit('Nenalezen původní blok o objížďce.')
+          text = text.replace(old_route, new_route, 1)
+
+          old_unknown = '''  <h2>Co se zatím z veřejných podkladů nedozvíme</h2>
+  <ul class="checklist">
+    <li>přesnou trasu značené objížďky pro všechna osobní a nákladní vozidla,</li>
+    <li>podrobný technický rozsah opravy jednotlivých přejezdů,</li>
+    <li>cenu prací a jméno dodavatele,</li>
+    <li>zda mohou nepředvídané okolnosti ovlivnit konečný termín otevření.</li>
+  </ul>'''
+          new_unknown = '''  <h2>Co se zatím z veřejných podkladů nedozvíme</h2>
+  <ul class="checklist">
+    <li>podrobnou technickou specifikaci nového přejezdového systému,</li>
+    <li>cenu prací a jméno dodavatele,</li>
+    <li>zda mohou nepředvídané okolnosti ovlivnit konečný termín otevření.</li>
+  </ul>'''
+          if old_unknown not in text and 'podrobnou technickou specifikaci nového přejezdového systému' not in text:
+              raise SystemExit('Nenalezen seznam dosud neznámých údajů.')
+          text = text.replace(old_unknown, new_unknown, 1)
+
+          old_side = '''  <div class="sidebox"><h3>Autobus 415</h3><p>Pojede přes Břežany. Kraj uvádí, že všechny jeho pravidelné zastávky zůstanou obsloužené.</p></div>'''
+          new_side = '''  <div class="sidebox"><h3>Objížďky</h3><ul><li>Do 3,5 t přes Žabokliky</li><li>Nad 3,5 t přes Pětipsy a Račetice</li></ul></div>
+  <div class="sidebox"><h3>Autobus 415</h3><p>Pojede přes Břežany. Kraj uvádí, že všechny jeho pravidelné zastávky zůstanou obsloužené.</p></div>'''
+          if old_side not in text and '<h3>Objížďky</h3>' not in text:
+              raise SystemExit('Nenalezen boční box autobusu.')
+          text = text.replace(old_side, new_side, 1)
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+          print('Zdrojový článek doplněn o oficiální objížďky.')
+          PY
+
+          python3 -m py_compile scripts/publish_zatec_kadan_prejezd_20260803.py
+          grep -Fq 'Osobní auta přes Žabokliky' scripts/publish_zatec_kadan_prejezd_20260803.py
+          grep -Fq 'Vysoké Třebčice' scripts/publish_zatec_kadan_prejezd_20260803.py
+          grep -Fq 'MODIFIED = "2026-08-03T21:55:00+02:00"' scripts/publish_zatec_kadan_prejezd_20260803.py
+
+      - name: Uložit změnu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň redakční automat'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/publish_zatec_kadan_prejezd_20260803.py
+          if git diff --cached --quiet; then
+            echo 'Zdroj už obsahuje objízdné trasy.'
+            exit 0
+          fi
+          git commit -m 'Doplnit oficiální objížďky uzavírky II/225'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep $((attempt * 5))
+          done
+          exit 1
