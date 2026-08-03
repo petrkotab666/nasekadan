@@ -33,15 +33,7 @@ jobs:
           chmod +x deploy/sync-production.sh
           sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
 
-      - name: Zapojit veřejnou proxy meteorologických dat
-        id: proxy
-        shell: bash
-        run: |
-          set -euo pipefail
-          chmod +x deploy/install-weather-proxy.sh
-          sudo bash deploy/install-weather-proxy.sh
-
-      - name: Ověřit stránku, skript a předpověď
+      - name: Ověřit stránku a živá meteorologická data
         id: verify
         shell: bash
         run: |
@@ -57,15 +49,7 @@ jobs:
           forecast="$(mktemp)"
           curl -kfsS --max-time 30 "${RESOLVE[@]}" \
             "$BASE/api/pocasi-predpoved.json?verify=$GITHUB_SHA" -o "$forecast"
-          python3 - "$forecast" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding='utf-8') as handle:
-    data = json.load(handle)
-series = data.get('properties', {}).get('timeseries', [])
-if not isinstance(series, list) or len(series) < 24:
-    raise SystemExit('Předpověď neobsahuje dostatek hodinových hodnot.')
-print(f'Předpověď ověřena: {len(series)} časových kroků.')
-PY
+          python3 -c "import json,sys; data=json.load(open(sys.argv[1],encoding='utf-8')); series=data.get('properties',{}).get('timeseries',[]); assert isinstance(series,list) and len(series)>=24, 'Předpověď neobsahuje dostatek hodnot'; print(f'Předpověď ověřena: {len(series)} kroků.')" "$forecast"
           rm -f "$forecast"
 
           today="$(TZ=Europe/Prague date +%Y%m%d)"
@@ -76,14 +60,7 @@ PY
             curl -kfsS --max-time 30 "${RESOLVE[@]}" \
               "$BASE/api/chmi-pocasi/10m-0-20000-0-11438-${yesterday}.json?verify=$GITHUB_SHA" -o "$observation"
           fi
-          python3 - "$observation" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding='utf-8') as handle:
-    data = json.load(handle)
-if not isinstance(data, dict) or not data:
-    raise SystemExit('Soubor ČHMÚ je prázdný nebo neplatný.')
-print('Desetiminutová data ČHMÚ ověřena.')
-PY
+          python3 -c "import json,sys; data=json.load(open(sys.argv[1],encoding='utf-8')); assert isinstance(data,dict) and data, 'Soubor ČHMÚ je prázdný'; print('Desetiminutová data ČHMÚ ověřena.')" "$observation"
           rm -f "$observation"
 
       - name: Zapsat ověřitelný stav do repozitáře
@@ -91,12 +68,11 @@ PY
         shell: bash
         env:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
-          PROXY_OUTCOME: ${{ steps.proxy.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
         run: |
           set -u
           status='failure'
-          if [[ "$DEPLOY_OUTCOME" == 'success' && "$PROXY_OUTCOME" == 'success' && "$VERIFY_OUTCOME" == 'success' ]]; then
+          if [[ "$DEPLOY_OUTCOME" == 'success' && "$VERIFY_OUTCOME" == 'success' ]]; then
             status='success'
           fi
 
@@ -105,26 +81,9 @@ PY
             git reset --hard origin/main
             git clean -fd
             mkdir -p .github
-            python3 - <<PY
-import json
-from datetime import datetime, timezone
-from pathlib import Path
-
-payload = {
-    'status': '$status',
-    'source_sha': '$GITHUB_SHA',
-    'run_id': '$GITHUB_RUN_ID',
-    'generated_at': datetime.now(timezone.utc).isoformat(),
-    'deploy': '$DEPLOY_OUTCOME',
-    'proxy': '$PROXY_OUTCOME',
-    'verify': '$VERIFY_OUTCOME',
-    'page': 'https://nasekadan.cz/pocasi/'
-}
-Path('.github/weather-live-status.json').write_text(
-    json.dumps(payload, ensure_ascii=False, indent=2) + '\n',
-    encoding='utf-8'
-)
-PY
+            STATUS="$status" SOURCE_SHA="$GITHUB_SHA" RUN_ID="$GITHUB_RUN_ID" \
+              DEPLOY_RESULT="$DEPLOY_OUTCOME" VERIFY_RESULT="$VERIFY_OUTCOME" \
+              python3 -c "import json,os; from datetime import datetime,timezone; from pathlib import Path; payload={'status':os.environ['STATUS'],'source_sha':os.environ['SOURCE_SHA'],'run_id':os.environ['RUN_ID'],'generated_at':datetime.now(timezone.utc).isoformat(),'deploy':os.environ['DEPLOY_RESULT'],'verify':os.environ['VERIFY_RESULT'],'page':'https://nasekadan.cz/pocasi/'}; Path('.github/weather-live-status.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\\n',encoding='utf-8')"
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add .github/weather-live-status.json
