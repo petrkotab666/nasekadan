@@ -1,0 +1,54 @@
+name: Diagnostika všech běhů počasí
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/inspect-runners-trigger.txt'
+
+permissions:
+  actions: read
+  pull-requests: write
+  contents: read
+
+jobs:
+  inspect-weather:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Vypsat aktivní i dokončené běhy počasí
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner, repo, branch: 'main', per_page: 100
+            });
+            const selected = runs
+              .filter(run => /počasí|weather/i.test(`${run.name} ${run.display_title || ''}`))
+              .slice(0, 20);
+            const blocks = [];
+            for (const run of selected) {
+              let jobs = [];
+              try {
+                const response = await github.rest.actions.listJobsForWorkflowRun({owner, repo, run_id: run.id, per_page: 100});
+                jobs = response.data.jobs || [];
+              } catch (error) {
+                jobs = [];
+              }
+              const jobLines = jobs.length ? jobs.map(job => {
+                const labels = (job.labels || []).join(', ') || 'bez štítků';
+                return `  - job \`${job.id}\` **${job.name}**: ${job.status}/${job.conclusion || 'bez závěru'}, runner=${job.runner_name || 'nepřidělen'}, labels=${labels}`;
+              }) : ['  - workflow nevytvořil žádný job'];
+              blocks.push([
+                `- run \`${run.id}\` **${run.name}** — ${run.status}/${run.conclusion || 'bez závěru'}`,
+                `  - název běhu: ${run.display_title || 'bez názvu'}`,
+                `  - commit: \`${run.head_sha}\``,
+                `  - vytvořeno: ${run.created_at}, aktualizováno: ${run.updated_at}`,
+                `  - ${run.html_url}`,
+                ...jobLines
+              ].join('\n'));
+            }
+            const body = ['## Aktivní i dokončené běhy počasí', '', ...(blocks.length ? blocks : ['- Žádný běh počasí nebyl nalezen.'])].join('\n');
+            await github.rest.issues.createComment({owner, repo, issue_number: context.issue.number, body});
