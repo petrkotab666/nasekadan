@@ -2,12 +2,6 @@ name: Zveřejnit FVE EPR Letiště 3. 8. 2026 v 10:30
 
 on:
   workflow_dispatch:
-    inputs:
-      force:
-        description: Zveřejnit nebo opravit ihned
-        required: false
-        default: false
-        type: boolean
   push:
     branches: [main]
     paths:
@@ -51,43 +45,47 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Předletová kontrola a časový zámek
+      - name: Předletová kontrola a nepřekročitelný časový zámek
         id: timing
         shell: bash
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/publish_fve_epr_20260803.py scripts/enforce_article_visibility.py scripts/prepare_discovery.py
+          test -s .github/drafts/${SLUG}.md
           grep -Fq "$EXPECTED_H1" scripts/publish_fve_epr_20260803.py
           grep -Fq '„Letiště“ je starý název lokality' scripts/publish_fve_epr_20260803.py
           grep -Fq 'Solární park zatím není v provozu' scripts/publish_fve_epr_20260803.py
-          force='${{ inputs.force || false }}'
-          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          now_epoch="$(date -u +%s)"
+          target_epoch="$(date -u -d "$TARGET_UTC" +%s)"
+          if (( now_epoch < target_epoch )); then
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'Předletová kontrola prošla; tvrdý zámek nepovolí publikaci před 10:30 Europe/Prague.'
+            exit 0
+          fi
           if [[ "${{ github.event_name }}" == schedule && "$(date -u +%F)" != 2026-08-03 ]]; then
             echo 'active=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [[ "$force" != true && "$now" < "$TARGET_UTC" ]]; then
-            echo 'active=false' >> "$GITHUB_OUTPUT"
-            echo 'Předletová kontrola prošla; článek zůstává neveřejný do 10:30.'
-            exit 0
-          fi
           echo 'active=true' >> "$GITHUB_OUTPUT"
 
-      - name: Sestavit článek, obrázek a přehledy
+      - name: Sestavit článek, sociální obrázek a přehledy
         if: steps.timing.outputs.active == 'true'
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install --disable-pip-version-check --quiet Pillow markdown
           python3 scripts/publish_fve_epr_20260803.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/enforce_article_visibility.py
           test -s "$ARTICLE"
           test -s "$SOCIAL"
-          grep -Fq "$EXPECTED_H1" "$ARTICLE"
-          grep -Fq "$PUBLIC_URL" rss.xml
-          grep -Fq "$PUBLIC_URL" sitemap.xml
-          grep -Fq "$PUBLIC_URL" news-sitemap.xml
-          grep -Fq "$PUBLIC_URL" llms.txt
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE"
+          grep -Fq 'Proč se projektu říká „Letiště“' "$ARTICLE"
+          grep -Fq 'Solární park zatím není v provozu' "$ARTICLE"
           ! grep -Fq 'noindex' "$ARTICLE"
+          for file in index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt; do
+            grep -Fq "$PUBLIC_URL" "$file" || grep -Fq "/clanky/${SLUG}.html" "$file"
+          done
 
       - name: Uložit veřejnou verzi do main
         if: steps.timing.outputs.active == 'true'
@@ -99,14 +97,16 @@ jobs:
           git add -A -- "$ARTICLE" "$SOCIAL" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt
           if ! git diff --cached --quiet; then
             git commit -m 'Publikovat: solární park EPR Letiště a baterie'
+            pushed=false
             for attempt in 1 2 3 4 5; do
               if git pull --rebase origin main && git push origin HEAD:main; then
+                pushed=true
                 break
               fi
               git rebase --abort 2>/dev/null || true
-              [[ "$attempt" == 5 ]] && exit 1
               sleep $((attempt * 7))
             done
+            $pushed || exit 1
           fi
           git fetch origin main
           git reset --hard origin/main
@@ -153,13 +153,15 @@ jobs:
           cp "$SOCIAL" "$bundle/social/"
           cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt "$bundle/"
           cp "$RUNNER_TEMP/deployment-health.txt" "$bundle/deployment-health.txt"
+          uploaded=false
           for attempt in 1 2 3; do
             if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/nk-fve-epr; then
+              uploaded=true
               break
             fi
-            [[ "$attempt" == 3 ]] && exit 1
             sleep $((attempt * 8))
           done
+          $uploaded || exit 1
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo -n true
@@ -218,7 +220,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          title='[PUBLIKACE SELHALA] FVE EPR Letiště 3. 8. 2026 10:30'
-          if ! gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json title --jq '.[].title' | grep -Fxq "$title"; then
-            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --assignee petrkotab666 --body "Automatické zveřejnění nebo veřejné ověření článku selhalo. Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Další naplánované běhy jsou připravené v 10:38, 10:48, 11:00, 11:15 a 11:30 SELČ."
+          title='Selhala publikace článku FVE EPR Letiště'
+          body="Automatická publikace nebo veřejné ověření článku selhaly.\n\nWorkflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nČlánek: ${PUBLIC_URL}\nCommit: ${GITHUB_SHA}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
           fi
