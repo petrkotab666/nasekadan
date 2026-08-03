@@ -1,6 +1,4 @@
-Spuštěno 2026-08-03 08:22 Europe/Prague
-Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH.
-Požadavek: nasadit aktuální main včetně opravy sitemap.xml a všech již sloučených změn počasí.
-Veřejně ověřit s cache-bustingem: titulní stránku, /clanky/, rss.xml, sitemap.xml, news-sitemap.xml a deployment-health.txt.
-Očekávaný výsledek evidence: 40 veřejných článků; sitemap nesmí obsahovat /clanky/parts/slovan-01.html až slovan-05.html.
-Důvod: dílčí HTML fragmenty článku o Slovanu byly omylem vedené jako samostatné indexovatelné stránky; oprava je v commitu 7f5fc31bbf482dd9af9cfca39a99c5db9c51c53e.
+Spuštěno automatickou opravou indexace neveřejné rešerše.
+Požadavek: nasadit aktuální main včetně sitemap.xml a noindex metadat v /research/.
+Veřejně ověřit: sitemap.xml nesmí obsahovat /research/ a veřejné rešeršní HTML musí mít noindex.
+Důvod: interní kopie výsledků Registru smluv byla omylem vedena jako indexovatelná veřejná stránka.

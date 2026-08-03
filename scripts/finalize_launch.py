@@ -16,7 +16,7 @@ BASE = "https://nasekadan.cz"
 DEFAULT_OG_IMAGE = f"{BASE}/social-preview.png"
 EXCLUDE_DIRS = {
     ".git", ".github", "deploy", "docker-entrypoint.d", "lms-rescue",
-    "nahled", "newsletter", "nginx", "parts", "scripts", "sdilet", "tools",
+    "nahled", "newsletter", "nginx", "parts", "research", "scripts", "sdilet", "tools",
 }
 
 
