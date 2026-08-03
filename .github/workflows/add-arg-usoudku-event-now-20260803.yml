@@ -29,7 +29,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit akci a zdroje monitoringu
+      - name: Ověřit a případně doplnit zdrojová data
         id: patch
         shell: bash
         run: |
@@ -45,13 +45,15 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add "$ARTICLE" data/organizations.json data/city-sources.json data/published-content-index.json
-          git commit -m 'Doplnit hudební večer ARG U Soudku do týdenního přehledu'
-          for attempt in 1 2 3; do
-            if git push origin HEAD:main; then break; fi
-            test "$attempt" -lt 3
-            git fetch origin main
-            git rebase origin/main
-          done
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit hudební večer ARG U Soudku do týdenního přehledu'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 3
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Nasadit aktualizovaný článek a veřejný registr
@@ -66,7 +68,9 @@ jobs:
           mkdir -p "$bundle/clanky" "$bundle/data"
           cp "$ARTICLE" "$bundle/clanky/"
           cp data/organizations.json data/published-content-index.json "$bundle/data/"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/arg-usoudku-bundle
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'rm -rf /tmp/arg-usoudku-bundle && mkdir -p /tmp/arg-usoudku-bundle && tar -xzf - -C /tmp/arg-usoudku-bundle'
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "EVENT_ID='$EVENT_ID' ARTICLE_REL='$ARTICLE_REL' bash -s" <<'REMOTE'
           set -euo pipefail
           src=/tmp/arg-usoudku-bundle
