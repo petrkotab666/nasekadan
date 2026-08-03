@@ -97,8 +97,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/nk-card-fix/clanky"
           cp index.html "$RUNNER_TEMP/nk-card-fix/index.html"
           cp clanky/index.html "$RUNNER_TEMP/nk-card-fix/clanky/index.html"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r \
-            "$RUNNER_TEMP/nk-card-fix" ubuntu@57.129.43.215:/tmp/nk-card-fix
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'rm -rf /tmp/nk-card-fix && mkdir -p /tmp/nk-card-fix/clanky'
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nk-card-fix/index.html" ubuntu@57.129.43.215:/tmp/nk-card-fix/index.html
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nk-card-fix/clanky/index.html" ubuntu@57.129.43.215:/tmp/nk-card-fix/clanky/index.html
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
             ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
