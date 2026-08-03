@@ -1,0 +1,93 @@
+name: Opravit detektor červených štítků
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/social-badge-detector-fix-trigger.txt'
+      - '.github/workflows/fix-social-badge-detector.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-social-badge-detector
+  cancel-in-progress: true
+
+jobs:
+  patch-and-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit přetečení při výpočtu jasu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/normalize_social_badges.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'rgb = array[..., :3].astype(np.int16)'
+          count = text.count(old)
+          if count == 0 and 'astype(np.int32)' not in text:
+              raise SystemExit('Nenalezen převod barevných kanálů.')
+          text = text.replace(old, 'rgb = array[..., :3].astype(np.int32)')
+          path.write_text(text, encoding='utf-8', newline='\n')
+          print(f'Opraveno převodů: {count}')
+          PY
+
+      - name: Spustit celý audit po opravě
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet Pillow numpy
+          python3 -m py_compile scripts/normalize_social_badges.py
+          python3 scripts/normalize_social_badges.py --patch-generator --write --report data/social-badge-audit.json
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/prepare_discovery.py
+          python3 scripts/normalize_social_badges.py --check --report data/social-badge-audit.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path('data/social-badge-audit.json').read_text(encoding='utf-8'))
+          assert report['imagesScanned'] == 44, report['imagesScanned']
+          assert report['badgesFound'] > 0, 'Detektor stále nenašel žádný štítek.'
+          assert report['issuesAfter'] == 0, report
+          print(report)
+          PY
+
+      - name: Uložit opravu a výsledek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň grafický audit'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4 5; do
+            git add -A -- scripts/normalize_social_badges.py scripts/generate_social_cards.py data/social-badge-audit.json social index.html clanky rss.xml sitemap.xml news-sitemap.xml llms.txt
+            if git diff --cached --quiet; then
+              echo 'Detektor i obrázky už jsou opravené.'
+              exit 0
+            fi
+            git commit -m 'Opravit detekci a rezervy červených štítků'
+            if git push origin HEAD:main; then exit 0; fi
+            [[ "$attempt" == 5 ]] && exit 1
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/normalize_social_badges.py')
+          text = path.read_text(encoding='utf-8').replace('astype(np.int16)', 'astype(np.int32)')
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+            python3 scripts/normalize_social_badges.py --patch-generator --write --report data/social-badge-audit.json
+            python3 scripts/enforce_article_visibility.py
+            python3 scripts/prepare_discovery.py
+            python3 scripts/normalize_social_badges.py --check --report data/social-badge-audit.json
+            sleep $((attempt * 6))
+          done
