@@ -1,4 +1,4 @@
-name: Diagnostika červených štítků
+name: Diagnostika červených štítků v2
 
 on:
   workflow_dispatch:
@@ -12,20 +12,20 @@ permissions:
   contents: write
 
 concurrency:
-  group: debug-social-badges
+  group: debug-social-badges-v2
   cancel-in-progress: true
 
 jobs:
   diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Spustit audit a vždy uložit log
+      - name: Spustit audit v2 a vždy uložit log
         shell: bash
         run: |
           set +e
@@ -33,7 +33,7 @@ jobs:
           install_status=$?
 
           if [[ "$install_status" == 0 ]]; then
-            python3 -m py_compile scripts/normalize_social_badges.py > /tmp/social-badge-compile.log 2>&1
+            python3 -m py_compile scripts/normalize_social_badges.py scripts/normalize_social_badges_v2.py > /tmp/social-badge-compile.log 2>&1
             compile_status=$?
           else
             compile_status=99
@@ -41,7 +41,7 @@ jobs:
           fi
 
           if [[ "$compile_status" == 0 ]]; then
-            python3 scripts/normalize_social_badges.py --patch-generator --write --report data/social-badge-audit.json > /tmp/social-badge-run.log 2>&1
+            python3 scripts/normalize_social_badges_v2.py --patch-generator --write --report data/social-badge-audit.json > /tmp/social-badge-run.log 2>&1
             run_status=$?
           else
             run_status=98
@@ -53,7 +53,7 @@ jobs:
             enforce_status=$?
             python3 scripts/prepare_discovery.py > /tmp/social-badge-discovery.log 2>&1
             discovery_status=$?
-            python3 scripts/normalize_social_badges.py --check --report data/social-badge-audit.json > /tmp/social-badge-check.log 2>&1
+            python3 scripts/normalize_social_badges_v2.py --check --report data/social-badge-audit.json > /tmp/social-badge-check.log 2>&1
             check_status=$?
           else
             enforce_status=97
@@ -85,13 +85,13 @@ jobs:
             cat /tmp/social-badge-discovery.log
             printf '%s\n' '===== FINAL CHECK ====='
             cat /tmp/social-badge-check.log
-          } > data/social-badge-debug.txt
+          } > data/social-badge-v2-debug.txt
 
           git config user.name 'Naše Kadaň diagnostika'
           git config user.email 'info@nasekadan.cz'
-          git add -A -- data/social-badge-debug.txt data/social-badge-audit.json scripts/generate_social_cards.py social index.html clanky rss.xml sitemap.xml news-sitemap.xml llms.txt
+          git add -A -- data/social-badge-v2-debug.txt data/social-badge-audit.json scripts/generate_social_cards.py scripts/normalize_social_badges_v2.py social index.html clanky rss.xml sitemap.xml news-sitemap.xml llms.txt
           if ! git diff --cached --quiet; then
-            git commit -m 'Uložit diagnostiku a výsledek auditu červených štítků'
+            git commit -m 'Uložit diagnostiku a výsledek auditu červených štítků v2'
             for attempt in 1 2 3 4; do
               if git push origin HEAD:main; then break; fi
               [[ "$attempt" == 4 ]] && exit 2
