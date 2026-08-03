@@ -1,6 +1,5 @@
-Spuštěno 2026-08-03 08:06 Europe/Prague
-Úkol: kanonicky nasadit hlavní větev, zapojit veřejnou nginx proxy do interního meteorologického endpointu a ověřit živou předpověď i desetiminutové měření ČHMÚ Tušimice.
+Spuštěno 2026-08-03 08:20 Europe/Prague
+Úkol: kanonicky nasadit hlavní větev a ověřit živou předpověď i desetiminutové měření ČHMÚ Tušimice.
 Očekávané veřejné cesty: /pocasi/, /pocasi.js, /api/pocasi-predpoved.json a /api/chmi-pocasi/10m-0-20000-0-11438-YYYYMMDD.json.
-Po dokončení workflow zapíše přesný výsledek do .github/weather-live-status.json, aby byl stav nezávisle kontrolovatelný.
-Tento finální běh zahrnuje trvalý odkaz Počasí v jednotné navigaci a patičce i instalaci veřejné datové brány přímo v kanonickém synchronizačním skriptu a desetiminutové serverové pojistce.
-Zdrojová verze před spuštěním: 5e8e408ab3004db97d5d46339f620b22aefea593.
+Po dokončení workflow zapíše přesný výsledek do .github/weather-live-status.json.
+Tento běh používá opravenou syntaxi workflow, trvalý odkaz Počasí v navigaci a patičce a instalaci veřejné datové brány v kanonickém synchronizačním skriptu i desetiminutové serverové pojistce.
