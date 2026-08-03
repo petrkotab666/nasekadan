@@ -227,6 +227,7 @@ def update_registry() -> None:
 def main() -> None:
     write(ARTICLE, article_page())
     update_home()
+    subprocess.run(["python3", str(ROOT / "scripts" / "restore_klaster_and_donor_appeal_20260803.py")], cwd=ROOT, check=True)
     update_archive()
     update_rss()
     update_sitemaps()
