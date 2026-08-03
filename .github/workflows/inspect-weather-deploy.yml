@@ -1,0 +1,86 @@
+name: Zkontrolovat běh nasazení počasí
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-inspect-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zjistit aktivní a poslední běhy počasí
+        id: inspect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner, repo, branch: 'main', per_page: 100
+            });
+            const selected = runs
+              .filter(run => /živé počasí|počasí/i.test(`${run.name} ${run.display_title || ''}`))
+              .slice(0, 12);
+            const output = [];
+            for (const run of selected) {
+              let jobs = [];
+              try {
+                const response = await github.rest.actions.listJobsForWorkflowRun({owner, repo, run_id: run.id, per_page: 100});
+                jobs = (response.data.jobs || []).map(job => ({
+                  id: job.id,
+                  name: job.name,
+                  status: job.status,
+                  conclusion: job.conclusion,
+                  runner_name: job.runner_name,
+                  labels: job.labels,
+                  started_at: job.started_at,
+                  completed_at: job.completed_at
+                }));
+              } catch (error) {
+                jobs = [{error: String(error)}];
+              }
+              output.push({
+                id: run.id,
+                name: run.name,
+                display_title: run.display_title,
+                status: run.status,
+                conclusion: run.conclusion,
+                event: run.event,
+                head_sha: run.head_sha,
+                created_at: run.created_at,
+                updated_at: run.updated_at,
+                html_url: run.html_url,
+                jobs
+              });
+            }
+            const fs = require('fs');
+            fs.writeFileSync('.github/weather-run-inspection.json', JSON.stringify({
+              generated_at: new Date().toISOString(),
+              inspected_by_run: context.runId,
+              runs: output
+            }, null, 2) + '\n');
+
+      - name: Uložit kontrolní výsledek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git rebase origin/main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/weather-run-inspection.json
+          git commit -m 'Zapsat kontrolu běhu počasí [skip ci]' || exit 0
+          git push origin HEAD:main
