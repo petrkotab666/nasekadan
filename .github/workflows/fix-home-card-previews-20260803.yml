@@ -1,0 +1,170 @@
+name: Opravit náhledy a pořadí článků
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-home-card-previews-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-home-card-previews-20260803
+  cancel-in-progress: false
+
+env:
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  LATEST_SLUG: silnice-zatec-kadan-prejezd-uzavirka-srpen-2026
+
+jobs:
+  fix-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vygenerovat správné karty
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/enforce_article_visibility.py
+          python3 scripts/enforce_article_visibility.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          home = Path('index.html').read_text(encoding='utf-8')
+          archive = Path('clanky/index.html').read_text(encoding='utf-8')
+          grid = home.split('<div class="article-list">', 1)[1].split('<p class="archive-note">', 1)[0]
+          cards = re.findall(r'data-auto-article="([^"]+)"', grid)
+          assert cards, 'Na titulce není žádná karta.'
+          assert cards[0] == 'silnice-zatec-kadan-prejezd-uzavirka-srpen-2026', cards[:3]
+          assert 'CARD-PREVIEW-FIX-20260803' in home
+          assert 'aspect-ratio:1200/630' in home
+          assert 'background-size:contain' in grid
+          assert '3. 8. 2026 · 10:30 · ENERGETIKA · TUŠIMICE · VEŘEJNÉ DOKUMENTY · 3. SRPNA 2026 · 10:30' not in home
+          assert '3. 8. 2026 · 04:00 · HISTORIE · VELKÁ REŠERŠE · 3. SRPNA 2026 V 04:00' not in home
+          assert '/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html' in archive
+          print('Lokální kontrola karet prošla:', len(cards), 'karet na titulce.')
+          PY
+
+      - name: Uložit opravené přehledy do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň opravný automat'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/enforce_article_visibility.py
+            git add index.html clanky/index.html
+            if git diff --cached --quiet; then
+              echo 'Přehledy jsou již opravené.'
+              break
+            fi
+            git commit -m 'Opravit ořez náhledů, metadata a pořadí článků'
+            if git push origin HEAD:main; then
+              break
+            fi
+            [[ "$attempt" == 5 ]] && exit 1
+            sleep $((attempt * 6))
+          done
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/enforce_article_visibility.py
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [[ -n "${KEY2:-}" ]]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč pro OVH.' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit pouze opravené přehledy
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          bundle="$RUNNER_TEMP/nk-card-fix"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky"
+          cp index.html "$bundle/index.html"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          printf 'source=%s\ndeployed_at=%s\ndeployer=fix-home-card-previews\n' "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$bundle/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/nk-card-fix
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/nk-card-fix
+          sudo -n true
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 "$src/index.html" /var/www/nasekadan/index.html
+          sudo install -m 0644 "$src/clanky/index.html" /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 "$src/deployment-health.txt" /var/www/nasekadan/deployment-health.txt
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$src/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp "$src/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -rf "$src"
+          REMOTE
+
+      - name: Ověřit živý web bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          ok=false
+          for attempt in $(seq 1 25); do
+            stamp="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?v=$stamp" -o /tmp/home.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/clanky/?v=$stamp" -o /tmp/archive.html || true
+            curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?v=$stamp" -o /tmp/health.txt || true
+            if python3 - <<'PY'
+          from pathlib import Path
+          import re
+          h = Path('/tmp/home.html').read_text(encoding='utf-8', errors='replace')
+          a = Path('/tmp/archive.html').read_text(encoding='utf-8', errors='replace')
+          grid = h.split('<div class="article-list">', 1)[1].split('<p class="archive-note">', 1)[0]
+          cards = re.findall(r'data-auto-article="([^"]+)"', grid)
+          assert cards and cards[0] == 'silnice-zatec-kadan-prejezd-uzavirka-srpen-2026'
+          assert 'CARD-PREVIEW-FIX-20260803' in h
+          assert 'aspect-ratio:1200/630' in h
+          assert 'background-size:contain' in grid
+          assert 'VEŘEJNÉ DOKUMENTY · 3. SRPNA 2026 · 10:30' not in h
+          assert 'VELKÁ REŠERŠE · 3. SRPNA 2026 V 04:00' not in h
+          assert '/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html' in a
+          PY
+            then
+              grep -Fq "source=$sha" /tmp/health.txt && ok=true && break
+            fi
+            sleep 7
+          done
+          [[ "$ok" == true ]]
+
+      - name: Zapsat úspěšný stav
+        if: success()
+        shell: bash
+        run: |
+          cat > .github/home-card-preview-status.json <<JSON
+          {"status":"success","checkedAt":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","fixes":["social previews use contain and 1200/630 ratio","duplicate dates removed","latest article is first card"]}
+          JSON
+          git config user.name 'Naše Kadaň kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/home-card-preview-status.json
+          git commit -m 'Potvrdit opravu náhledů článků [skip ci]' || exit 0
+          git push origin HEAD:main
