@@ -1,0 +1,65 @@
+name: Opravit sitemapu dílčích fragmentů
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-sitemap-fragments.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-sitemap-fragments
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Vyřadit neveřejné fragmenty článku ze sitemap
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          script = Path('scripts/finalize_launch.py')
+          text = script.read_text(encoding='utf-8')
+          old = '    "nahled", "newsletter", "nginx", "scripts", "sdilet", "tools",\n'
+          new = '    "nahled", "newsletter", "nginx", "parts", "scripts", "sdilet", "tools",\n'
+          if old not in text and new not in text:
+              raise SystemExit('Nelze najít očekávaný seznam EXCLUDE_DIRS')
+          if old in text:
+              script.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          sitemap = Path('sitemap.xml')
+          lines = sitemap.read_text(encoding='utf-8').splitlines()
+          removed = [line for line in lines if '/clanky/parts/' in line]
+          cleaned = [line for line in lines if '/clanky/parts/' not in line]
+          if len(removed) != 5:
+              raise SystemExit(f'Očekáváno 5 fragmentů, nalezeno {len(removed)}')
+          sitemap.write_text('\n'.join(cleaned) + '\n', encoding='utf-8')
+
+          registry = json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          assert registry['article_count'] == len(registry['articles']) == 40
+          assert not any('/clanky/parts/' in article['url'] for article in registry['articles'])
+          assert '/clanky/parts/' not in sitemap.read_text(encoding='utf-8')
+          print('Odstraněno 5 neveřejných fragmentů; registr 40 článků zůstává beze změny.')
+          PY
+
+      - name: Uložit opravu a odstranit jednorázový workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "nasekadan-bot"
+          git config user.email "nasekadan-bot@users.noreply.github.com"
+          git rm .github/workflows/fix-sitemap-fragments.yml
+          git add scripts/finalize_launch.py sitemap.xml
+          git commit -m "Opravit sitemapu: neindexovat dílčí fragmenty Slovanu"
+          git push
