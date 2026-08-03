@@ -44,7 +44,7 @@ jobs:
           test -s "$SOCIAL_FILE"
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Nasadit balíček na OVH přes archiv
+      - name: Nasadit balíček přímým proudem přes SSH
         id: deploy
         shell: bash
         run: |
@@ -53,10 +53,10 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh_opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
 
           bundle="$RUNNER_TEMP/stadium-cooling-bundle"
-          archive="$RUNNER_TEMP/stadium-cooling-bundle.tar.gz"
-          rm -rf "$bundle" "$archive"
+          rm -rf "$bundle"
           mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
           cp "$ARTICLE_FILE" "$bundle/clanky/"
           cp "$SOCIAL_FILE" "$bundle/social/"
@@ -64,43 +64,14 @@ jobs:
           cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
           cp data/published-content-index.json "$bundle/data/"
           printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.source.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
-          tar -C "$bundle" -czf "$archive" .
 
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$archive" ubuntu@57.129.43.215:/tmp/stadium-cooling-bundle.tar.gz
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          src=/tmp/stadium-cooling-bundle
-          tarball=/tmp/stadium-cooling-bundle.tar.gz
-          root=/var/www/nasekadan
-          article=klasterec-ochlazeni-zimni-stadion-kadan-2026.html
-          social=klasterec-ochlazeni-zimni-stadion-kadan-2026.png
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'df -h / /tmp /home || true; sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
+          tar -C "$bundle" -cf - . | ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo tar -xf - -C /var/www/nasekadan'
 
-          rm -rf "$src"
-          mkdir -p "$src"
-          tar -xzf "$tarball" -C "$src"
-          rm -f "$tarball"
-
-          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
-          sudo install -m 0644 "$src/clanky/$article" "$root/clanky/$article"
-          sudo install -m 0644 "$src/social/$social" "$root/social/$social"
-          sudo install -m 0644 "$src/clanky/index.html" "$root/clanky/index.html"
-          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
-            sudo install -m 0644 "$src/$f" "$root/$f"
-          done
-          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
-
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
-            sudo docker cp "$src/clanky/$article" "nasekadan-web:/usr/share/nginx/html/clanky/$article"
-            sudo docker cp "$src/social/$social" "nasekadan-web:/usr/share/nginx/html/social/$social"
-            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
-            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
-              sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"
-            done
-            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          if ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo docker inspect nasekadan-web >/dev/null 2>&1'; then
+            ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data'
+            tar -C "$bundle" -cf - . | ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo docker exec -i nasekadan-web tar -xf - -C /usr/share/nginx/html'
           fi
-          rm -rf "$src"
-          REMOTE
 
       - name: Ověřit veřejný web
         id: verify
