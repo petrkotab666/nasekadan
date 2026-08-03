@@ -1,6 +1,6 @@
-Spuštěno 2026-08-03 07:39 Europe/Prague
+Spuštěno 2026-08-03 08:22 Europe/Prague
 Kanál: jediný bezpečný self-hosted kanonický produkční deploy na OVH.
-Požadavek: nasadit aktuální main s novým počasím pro Kadaň.
-Veřejně ověřit s cache-bustingem: titulní stránku, /pocasi/, /pocasi.js, /api/pocasi-predpoved.json, dnešní nebo včerejší desetiminutová data ČHMÚ Tušimice a deployment-health.txt.
-Očekávaný výsledek: pod dopravní lištou se zobrazí stručné počasí; samostatná stránka nabídne aktuální měření, hodinový přehled a sedmidenní předpověď; data půjdou přes serverovou cache a při výpadku zůstane poslední platná hodnota.
-Důvod: nové soubory pocasi/index.html a pocasi.js, doplněná navigace a serverová proxy/cache v nginx/default.conf.
+Požadavek: nasadit aktuální main včetně opravy sitemap.xml a všech již sloučených změn počasí.
+Veřejně ověřit s cache-bustingem: titulní stránku, /clanky/, rss.xml, sitemap.xml, news-sitemap.xml a deployment-health.txt.
+Očekávaný výsledek evidence: 40 veřejných článků; sitemap nesmí obsahovat /clanky/parts/slovan-01.html až slovan-05.html.
+Důvod: dílčí HTML fragmenty článku o Slovanu byly omylem vedené jako samostatné indexovatelné stránky; oprava je v commitu 7f5fc31bbf482dd9af9cfca39a99c5db9c51c53e.
