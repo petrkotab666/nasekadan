@@ -1,0 +1,96 @@
+name: Nasadit živé počasí Naše Kadaň
+run-name: Produkční nasazení počasí a ověření dat
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-live-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: true
+
+jobs:
+  deploy-weather:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nasadit aktuální main kanonickou cestou
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Zapojit veřejnou proxy meteorologických dat
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/install-weather-proxy.sh
+          sudo bash deploy/install-weather-proxy.sh
+
+      - name: Ověřit stránku, skript a předpověď
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESOLVE=(--resolve nasekadan.cz:443:127.0.0.1)
+          BASE='https://nasekadan.cz'
+
+          curl -kfsS --max-time 25 "${RESOLVE[@]}" "$BASE/pocasi/?verify=$GITHUB_SHA" \
+            | grep -Fq 'Počasí v Kadani'
+          curl -kfsS --max-time 25 "${RESOLVE[@]}" "$BASE/pocasi.js?verify=$GITHUB_SHA" \
+            | grep -Fq '/api/pocasi-predpoved.json'
+
+          forecast="$(mktemp)"
+          curl -kfsS --max-time 30 "${RESOLVE[@]}" \
+            "$BASE/api/pocasi-predpoved.json?verify=$GITHUB_SHA" -o "$forecast"
+          python3 - "$forecast" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as handle:
+    data = json.load(handle)
+series = data.get('properties', {}).get('timeseries', [])
+if not isinstance(series, list) or len(series) < 24:
+    raise SystemExit('Předpověď neobsahuje dostatek hodinových hodnot.')
+print(f'Předpověď ověřena: {len(series)} časových kroků.')
+PY
+          rm -f "$forecast"
+
+          today="$(TZ=Europe/Prague date +%Y%m%d)"
+          yesterday="$(TZ=Europe/Prague date -d yesterday +%Y%m%d)"
+          observation="$(mktemp)"
+          if ! curl -kfsS --max-time 30 "${RESOLVE[@]}" \
+            "$BASE/api/chmi-pocasi/10m-0-20000-0-11438-${today}.json?verify=$GITHUB_SHA" -o "$observation"; then
+            curl -kfsS --max-time 30 "${RESOLVE[@]}" \
+              "$BASE/api/chmi-pocasi/10m-0-20000-0-11438-${yesterday}.json?verify=$GITHUB_SHA" -o "$observation"
+          fi
+          python3 - "$observation" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding='utf-8') as handle:
+    data = json.load(handle)
+if not isinstance(data, dict) or not data:
+    raise SystemExit('Soubor ČHMÚ je prázdný nebo neplatný.')
+print('Desetiminutová data ČHMÚ ověřena.')
+PY
+          rm -f "$observation"
+
+      - name: Zapsat výsledek
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## Živé počasí Naše Kadaň'
+            echo "- Commit: $GITHUB_SHA"
+            echo '- Stránka: /pocasi/'
+            echo '- Předpověď: serverová cache 15 minut'
+            echo '- Měření ČHMÚ Tušimice: serverová cache 10 minut'
+          } >> "$GITHUB_STEP_SUMMARY"
