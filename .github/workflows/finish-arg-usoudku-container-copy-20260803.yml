@@ -1,0 +1,103 @@
+name: Dokončit nasazení akce ARG do kontejneru
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/finish-arg-usoudku-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finish-arg-usoudku-container-copy-20260803
+  cancel-in-progress: false
+
+jobs:
+  finish-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_REL: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      EVENT_ID: arg-u-soudku-20260808
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Dokončit kopii do aktivního kontejneru
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "EVENT_ID='$EVENT_ID' ARTICLE_REL='$ARTICLE_REL' bash -s" <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          article="$root/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html"
+          organizations="$root/data/organizations.json"
+          registry="$root/data/published-content-index.json"
+          grep -Fq "data-event-id=\"${EVENT_ID}\"" "$article"
+          grep -Fq 'Na plný pecky s ARG' "$article"
+          grep -Fq 'Pivnice U Soudku Kadaň' "$organizations"
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          if [[ -n "$cid" ]]; then
+            sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$article" "$cid:/usr/share/nginx/html/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html"
+            sudo docker cp "$organizations" "$cid:/usr/share/nginx/html/data/organizations.json"
+            sudo docker cp "$registry" "$cid:/usr/share/nginx/html/data/published-content-index.json"
+          fi
+
+          live="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${ARTICLE_REL}?arg-final=$(date +%s)")"
+          grep -Fq "data-event-id=\"${EVENT_ID}\"" <<<"$live"
+          grep -Fq 'Na plný pecky s ARG' <<<"$live"
+          grep -Fq 'SOBOTA 8. 8. · OD 18:00' <<<"$live"
+          grep -Fq 'Čtyři veřejné akce v Kadani' <<<"$live"
+          df -h /
+          REMOTE
+
+      - name: Ověřit veřejný web zvenku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz${ARTICLE_REL}?external-arg-final=${stamp}")"
+          organizations="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/data/organizations.json?external-arg-final=${stamp}")"
+          grep -Fq "data-event-id=\"${EVENT_ID}\"" <<<"$article"
+          grep -Fq 'Na plný pecky s ARG' <<<"$article"
+          grep -Fq 'SOBOTA 8. 8. · OD 18:00' <<<"$article"
+          grep -Fq 'Čtyři veřejné akce v Kadani' <<<"$article"
+          grep -Fq 'Pivnice U Soudku Kadaň' <<<"$organizations"
+
+      - name: Zapsat konečný stav
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const deploy=process.env.DEPLOY_OUTCOME||'skipped';
+            const verify=process.env.VERIFY_OUTCOME||'skipped';
+            const status=deploy==='success'&&verify==='success'?'success':'failure';
+            const payload={status,run_id:String(context.runId),source_sha:context.sha,checked_at:new Date().toISOString(),cleanup:'success',deploy,external_verify:verify,article_updated:status==='success',event:'Na plný pecky s ARG',starts_at:'2026-08-08T18:00:00+02:00',venue:'Pivnice U Soudku Kadaň',social_monitoring_added:status==='success',mode:'host-copy-to-active-container'};
+            let sha;
+            try { const old=await github.rest.repos.getContent({owner,repo,path:'.github/arg-usoudku-live-status.json',ref:'main'}); sha=old.data.sha; }
+            catch(e){ if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:'.github/arg-usoudku-live-status.json',branch:'main',message:`Zapsat finální stav akce ARG: ${status} [skip ci]`,sha,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
