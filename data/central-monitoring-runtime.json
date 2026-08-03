@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T12:03:00+00:00",
-  "lastQuickCheckAt": "2026-08-03T12:03:00+00:00",
+  "updatedAt": "2026-08-03T14:04:00+00:00",
+  "lastQuickCheckAt": "2026-08-03T14:04:00+00:00",
   "lastDeepCheckAt": "2026-08-03T10:07:36+00:00",
-  "repositoryMainShaObserved": "335cf4cb15957fd95c8151f07f1d0afadc874803",
+  "repositoryMainShaObserved": "f37767c602ccd2511c69f6013f7c2917451339c5",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 64,
@@ -23,7 +23,8 @@
       "urgent-7726f6ffd33513770fd4",
       "all-kadansko-7a1879082c37ae4ac568",
       "all-kadansko-93e3dde7e913ad0a27b2",
-      "nemocnice-kadan-krvetvorne-bunky-andrea-reifova-20260731"
+      "nemocnice-kadan-krvetvorne-bunky-andrea-reifova-20260731",
+      "fve-publication-incident-issue-557"
     ],
     "unverifiedLeads": [
       {
@@ -38,33 +39,18 @@
           "rozhodnutí silničního správního úřadu, JSDI nebo jiné oficiální dopravní oznámení"
         ],
         "deliverySuppressed": true,
-        "relatedClosedIssues": [
-          554,
-          555,
-          556
-        ]
-      }
-    ],
-    "editorialLeadsRecordedWithoutAlert": [
-      {
-        "stableFingerprint": "nemocnice-kadan-krvetvorne-bunky-andrea-reifova-20260731",
-        "title": "Kadaňská nemocnice popsala příběh skutečné dárkyně krvetvorných buněk a připomněla registraci",
-        "publishedAt": "2026-07-31T08:09:00+02:00",
-        "status": "already_known_and_recorded",
-        "reasonNotAlerted": "Praktický pozitivní námět byl již zaznamenán v repozitáři z uživatelem doloženého veřejného příspěvku; nejde o nově zavedenou službu ani o mimořádný veřejný posun.",
-        "officialSource": "https://www.nemkadan.cz/pro-verejnost/verejnost/aktuality/rozhovor-s-osobnosti-950cs.html"
+        "relatedClosedIssues": [554, 555, 556]
       }
     ],
     "scopesChecked": [
-      "mimořádné události a regionální zpravodajství",
-      "Policie ČR, HZS, ZZS a krizové zdroje Ústeckého kraje",
-      "město Kadaň, úřední deska, územní plánování, veřejné zakázky a Registr smluv",
-      "dopravní omezení, železnice, II/225 a známá neověřená stopa",
-      "Nemocnice Kadaň, petice a známé soudní spisové značky",
+      "mimořádné události, Policie ČR, HZS, ZZS a krizové zdroje Ústeckého kraje",
+      "město Kadaň, úřední deska, nové veřejné dokumenty a regionální zpravodajství",
+      "dopravní omezení včetně neověřené stopy II/225",
+      "Nemocnice Kadaň, online petice a známé soudní spisové značky",
       "Prunéřov, Tušimice, ČEZ a energetické projekty",
-      "kanonický registr organizací, všech 95 zdrojů, sourceStatus a monitoringCoverage",
-      "titulní stránka, archiv, RSS, sitemapy a zveřejnění článku FVE EPR Letiště",
-      "nové monitoringové issue, pending alerty a kontrola duplicit"
+      "kanonický registr organizací, city-news coverage a sourceStatus",
+      "produkční stav článku FVE EPR Letiště a otevřený technický incident",
+      "monitoringové issue a kontrola duplicit"
     ],
     "observations": {
       "cityNewsGeneratedAt": "2026-08-03T10:07:36.625772+00:00",
@@ -75,25 +61,22 @@
       "hospitalPetitionPublicMessages": 2,
       "hospitalPetitionStateChanged": false,
       "stateEPetitionFound": false,
-      "repositoryMainSha": "335cf4cb15957fd95c8151f07f1d0afadc874803",
-      "fveArticleMainCommitObserved": true,
-      "fveArticleLastConfirmedLiveOnHomepage": true,
-      "fveArticleLastConfirmedLiveInArchive": true,
-      "fveArticleRepositoryIntegration": "article_home_archive_rss_sitemap_news_sitemap_llms_present",
+      "knownCourtCasesNewMovementFound": false,
+      "newEmergencyFound": false,
+      "repositoryMainSha": "f37767c602ccd2511c69f6013f7c2917451339c5",
       "technicalPublicationIncidentOpen": true,
       "technicalPublicationIssue": 557,
-      "technicalLastFailureCommit": "335cf4cb15957fd95c8151f07f1d0afadc874803",
-      "technicalRepairAttemptThisRun": "skipped_existing_incident_multiple_safe_attempts_already_recorded",
-      "publicSourceCommitVerification": "direct_live_fetch_not_reliably_available_in_this_run",
-      "checkedAt": "2026-08-03T12:03:00+00:00"
+      "technicalIncidentLatestKnownState": "article_http_200_and_indexable_but_home_archive_and_deployment_health_not_fully_verified",
+      "technicalRepairAttemptThisRun": "skipped_existing_incident_and_repeated_safe_attempts_already_exhausted",
+      "checkedAt": "2026-08-03T14:04:00+00:00"
     },
     "notes": [
-      "Od předchozí kontroly nebyla v ověřených primárních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
-      "Poslední hluboký sběr byl dokončen v 10:07 UTC; nový šestihodinový průchod zatím nebyl nutný. data/city-news.json nadále potvrzuje 64 z 64 organizací, coveragePercent 100 a directoryIsCanonicalRegistry=true.",
-      "U známých nemocničních soudních spisů nebyl ve veřejně dostupných zdrojích zjištěn nový procesní pohyb a petice nevykazuje významný ověřený posun.",
-      "Neověřená stopa o uzavírce II/225 zůstává bez autoritativního rozhodnutí, přesného termínu a objízdné trasy; doručení je nadále potlačeno.",
-      "Technický incident publikace FVE článku je již veden v Issue #557. Další nasazení nebylo v tomto běhu spuštěno, protože předchozí bezpečné opravné pokusy byly vyčerpány a nový souběžný deploy by porušil ochranu proti opakování při nezměněném stavu.",
-      "Duplicitní sportovní monitoring Issue #551 byl uzavřen jako duplicita; nevznikl nový alert ani nový redakční úkol.",
+      "Od předchozí hodinové kontroly nebyla v ověřených primárních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani nový dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
+      "Online petice za zachování Nemocnice Kadaň zůstává na 17 potvrzených a 2 nepotvrzených podporách se dvěma veřejnými vzkazy; nejde o významný posun.",
+      "U známých spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 nebyl nalezen nový veřejně ověřitelný procesní pohyb.",
+      "Stopa o uzavírce II/225 zůstává bez autoritativního rozhodnutí, přesného termínu a objízdné trasy; alert je nadále potlačen.",
+      "Technický incident publikace FVE článku zůstává veden v Issue #557. V tomto běhu nebyl spuštěn další deploy, protože při nezměněném stavu již proběhlo více bezpečných opravných pokusů a další opakování by porušilo ochranu proti souběhu a duplicitám.",
+      "Nový šestihodinový hluboký průchod zatím nebyl nutný; poslední byl dokončen v 10:07 UTC a potvrdil 64 z 64 organizací, coveragePercent 100 a directoryIsCanonicalRegistry=true.",
       "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
     ]
   }
