@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-03T05:59:13Z",
-  "last_quick_check_at": "2026-08-03T05:59:13Z",
+  "updated_at": "2026-08-03T07:06:46Z",
+  "last_quick_check_at": "2026-08-03T07:06:46Z",
   "last_deep_check_at": "2026-08-03T03:55:53Z",
   "canonical_registry": {
     "path": "data/organizations.json",
@@ -21,7 +21,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "f9ef6eabdadcc145e9b7b8c3eab4fb5870c53af7"
+    "main_sha_observed": "30ac2777935ca9a0545b108b937d9cfd61b3fa13"
   },
   "production": {
     "homepage_checked": true,
@@ -30,6 +30,8 @@
     "latest_public_article_title": "Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera",
     "latest_public_article_published_at": "2026-08-03T04:00:00+02:00",
     "homepage_and_archive_consistent": true,
+    "indexation_cleanup_external_verify": "success",
+    "indexation_cleanup_checked_at": "2026-08-03T07:05:49.640Z",
     "deployment_health_direct_fetch_available": false
   },
   "quick_check": {
@@ -37,12 +39,16 @@
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
     "petition": "no_significant_verified_change",
-    "technical": "public_homepage_and_archive_current"
+    "technical": "public_homepage_and_archive_current; indexation_cleanup_external_verify_success"
   },
   "last_significant_fingerprint": "uohs-nemocnice-kadan-luzka-s0098-2026",
   "new_significant_fingerprints": [],
   "notes": [
-    "Přímé načtení deployment-health.txt nebylo v tomto běhu dostupné přes veřejný vyhledávací nástroj; živá titulka a archiv byly ověřeny samostatně.",
-    "Nefunkční nebo blokované zdroje zůstávají ve sledování a mají být při nejbližším hlubokém průchodu ověřeny přes náhradní primární kanály."
+    "Hodinová kontrola oficiálních a důvěryhodných zdrojů neodhalila novou významnou mimořádnou událost, soudní pohyb ani dokument s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
+    "Veřejná titulka a archiv zobrazují jako nejnovější článek rešerši o kadaňském klášteře z 3. srpna 2026 ve 04:00.",
+    "Automatická oprava veřejné indexace skončila v 07:05 UTC stavem deploy=success a external_verify=success; veřejná kontrola neukázala technické ani duplicitní URL v sitemapě.",
+    "Přímé načtení deployment-health.txt nebylo přes dostupný webový nástroj možné; nebyl však zjištěn důkaz zastaralé produkce, proto nebyl spuštěn další deploy.",
+    "Petice nevykazuje ověřený významný posun; starší indexované počty vyhledávačů nebyly použity jako aktuální stav.",
+    "Nefunkční nebo blokované zdroje zůstávají ve sledování a budou znovu řešeny při nejbližším hlubokém průchodu."
   ]
 }
