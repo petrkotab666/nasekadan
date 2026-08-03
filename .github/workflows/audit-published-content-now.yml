@@ -51,7 +51,8 @@ jobs:
                   return response.read().decode('utf-8', errors='replace')
 
           def urls(text: str) -> set[str]:
-              return set(re.findall(r'https://nasekadan\.cz/clanky/[A-Za-z0-9._~%\-/]+\.html', text))
+              paths = re.findall(r'(?:https://nasekadan\.cz)?(/clanky/[A-Za-z0-9._~%\-/]+\.html)', text)
+              return {BASE + path for path in paths}
 
           homepage = archive = rss = sitemap = news = health = ''
           last_error = ''
@@ -117,7 +118,8 @@ jobs:
                   'news_sitemap': url in news_urls,
               }
 
-          duplicate_urls = sorted(url for url in expected if list(expected).count(url) > 1)
+          registry_urls = [article['url'] for article in registry['articles']]
+          duplicate_urls = sorted({url for url in registry_urls if registry_urls.count(url) > 1})
           fingerprints = {}
           for article in registry['articles']:
               fingerprints.setdefault(article['fingerprint'], []).append(article['url'])
@@ -126,7 +128,7 @@ jobs:
           if not source_match:
               raise SystemExit('deployment-health.txt neobsahuje platný source commit')
 
-          now = datetime.now(timezone.utc).astimezone().isoformat(timespec='seconds')
+          now = datetime.now(timezone.utc).isoformat(timespec='seconds')
           registry['generated_at'] = now
           validation = registry.setdefault('validation', {})
           validation.update({
