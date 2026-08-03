@@ -119,7 +119,7 @@ def update_home() -> None:
 def update_archive() -> None:
     path = ROOT / "clanky" / "index.html"
     text = path.read_text(encoding="utf-8")
-    if REL not in text:
+    if f'data-auto-article="{SLUG}"' not in text:
         card = f'''\n    <article class="article-card hospital" data-auto-article="{SLUG}"><div class="visual" style="background:linear-gradient(135deg,#071d34,#0f5890 55%,#b51f36)"><strong>{escape(TITLE)}</strong></div><div class="article-body"><span class="meta">3. 8. 2026 · 12:22 · NEMOCNICE KADAŇ · DÁRCOVSTVÍ · PRAKTICKÉ INFORMACE</span><h3>{escape(TITLE)}</h3><p>{escape(DESC)}</p><a class="read-more" href="{REL}">Přečíst článek →</a></div></article>\n'''
         text = text.replace('<div class="archive-list">', '<div class="archive-list">' + card, 1)
 
