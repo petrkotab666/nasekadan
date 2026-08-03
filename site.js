@@ -88,6 +88,18 @@ document.addEventListener('DOMContentLoaded', () => {
       [data-poll-id="sekani-travniku-kadan-2026"] .poll-results-status{color:#eef8fb!important;font-weight:800}
       [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-track{background:#f5f8f9;box-shadow:0 0 0 1px rgba(255,255,255,.65)}
       [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-fill{background:#d92f38}
+      /* POLL_ALZBETINSKY_HIGH_CONTRAST_V1: světlý text a jasně označená zvolená odpověď. */
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results{background:rgba(55,7,17,.34);border:1px solid rgba(255,255,255,.34);border-radius:16px;padding:18px 18px 14px}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-head,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-head strong,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-label{color:#ffffff!important;text-shadow:0 1px 2px rgba(0,0,0,.38)}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-total,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-value,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-status{color:#f9e9ed!important;font-weight:800}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-error{color:#ffe1e1!important}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-track{background:#fff7f8;box-shadow:0 0 0 1px rgba(255,255,255,.70)}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-fill{background:#e14650}
+      [data-poll-id] .poll-option[aria-pressed="true"]{background:#fff4f4!important;border-color:#f2c8cf!important;color:#74152a!important;text-shadow:none!important}
     `;
     document.head.appendChild(style);
   }
@@ -122,10 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const selected = button.getAttribute('data-poll-vote') === vote;
         button.style.borderColor = selected ? '#9f2626' : '';
         button.style.background = selected ? '#fff4f4' : '';
+        button.style.color = selected ? '#74152a' : '';
         button.setAttribute('aria-pressed', selected ? 'true' : 'false');
       });
     };
-    const setUnlocked = () => buttons.forEach((button) => {button.disabled=false;button.style.borderColor='';button.style.background='';button.setAttribute('aria-pressed','false');});
+    const setUnlocked = () => buttons.forEach((button) => {button.disabled=false;button.style.borderColor='';button.style.background='';button.style.color='';button.setAttribute('aria-pressed','false');});
     const voteWord = (count) => count === 1 ? 'hlas' : (count >= 2 && count <= 4 ? 'hlasy' : 'hlasů');
 
     const renderResults = (payload) => {
