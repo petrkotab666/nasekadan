@@ -8,12 +8,30 @@ import process_facebook_queue as queue
 import publish_facebook
 
 
-def wait_until_live(article_path: str, article: dict[str, str], timeout: int) -> None:
-    """Ověří živou stránku a přijme její aktuální jedinečný OG obrázek.
+def refresh_facebook_preview(article_url: str) -> None:
+    """Před zveřejněním přinutí Facebook znovu načíst aktuální OG metadata."""
+    _, token, _ = publish_facebook.resolve_page_credentials()
+    response = publish_facebook.request_json(
+        publish_facebook.graph_endpoint(""),
+        params={
+            "id": article_url,
+            "scrape": "true",
+            "access_token": token,
+        },
+        method="POST",
+    )
+    if response.get("error"):
+        raise RuntimeError(f"Facebook odmítl obnovení náhledu: {response['error']}")
+    print(f"Facebook cache odkazu obnovena před publikací: {article_url}")
 
-    Produkční sestavení může vytvořit jiný hash URL obrázku než pracovní běh
-    Facebook automatu. Rozhodující je skutečný obrázek uvedený na živé stránce:
-    musí patřit webu Naše Kadaň, nesmí být generický a musí být PNG 1200 × 630.
+
+def wait_until_live(article_path: str, article: dict[str, str], timeout: int) -> None:
+    """Ověří živou stránku, její přesný OG obrázek a obnoví cache Facebooku.
+
+    Rozhodující je skutečný obrázek uvedený na živé stránce: musí patřit webu
+    Naše Kadaň, nesmí být generický, musí vracet HTTP 200 jako image/png a mít
+    rozměry 1200 × 630. Až potom se Facebooku odešle scrape=true a příspěvek se
+    smí zveřejnit.
     """
     deadline = time.time() + timeout
     expected_title = article["title"]
@@ -23,7 +41,7 @@ def wait_until_live(article_path: str, article: dict[str, str], timeout: int) ->
         try:
             status, _, body = queue.fetch_bytes(
                 article["url"],
-                "NaseKadanFacebookPublisher/4.1",
+                "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
             )
             if status != 200:
                 raise RuntimeError(f"článek vrací HTTP {status}")
@@ -71,6 +89,7 @@ def wait_until_live(article_path: str, article: dict[str, str], timeout: int) ->
                 )
 
             article["image"] = live_image
+            refresh_facebook_preview(article["url"])
             print(
                 f"Připraveno pro Facebook: {article_path}, živý OG obrázek "
                 f"{dimensions[0]} × {dimensions[1]}, {len(image_data)} B"
@@ -79,7 +98,7 @@ def wait_until_live(article_path: str, article: dict[str, str], timeout: int) ->
         except Exception as exc:
             last_error = str(exc)
             print(
-                f"Čekám na správné nasazení {article_path}: {last_error}",
+                f"Čekám na správné nasazení a Facebook náhled {article_path}: {last_error}",
                 file=sys.stderr,
             )
             time.sleep(20)
