@@ -3,7 +3,6 @@ set -euo pipefail
 
 SITE_CONF="/etc/nginx/sites-available/nasekadan.cz"
 SNIPPET="/etc/nginx/snippets/nasekadan-weather.conf"
-INCLUDE_LINE="    include /etc/nginx/snippets/nasekadan-weather.conf;"
 
 if [[ ! -f "$SITE_CONF" ]]; then
   echo "Chybí veřejná konfigurace $SITE_CONF." >&2
@@ -35,19 +34,54 @@ location ^~ /api/chmi-pocasi/ {
 }
 NGINX
 
-if ! sudo grep -Fq "$INCLUDE_LINE" "$SITE_CONF"; then
-  sudo python3 - "$SITE_CONF" "$INCLUDE_LINE" <<'PY'
+if ! sudo grep -Fq 'include /etc/nginx/snippets/nasekadan-weather.conf;' "$SITE_CONF"; then
+  sudo python3 - "$SITE_CONF" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 path = Path(sys.argv[1])
-include_line = sys.argv[2]
 text = path.read_text(encoding="utf-8")
-marker = "    root /var/www/nasekadan;"
-if marker not in text:
-    raise SystemExit(f"V {path} chybí očekávaný document root.")
-text = text.replace(marker, marker + "\n" + include_line, 1)
-path.write_text(text, encoding="utf-8")
+lines = text.splitlines(keepends=True)
+include_path = 'include /etc/nginx/snippets/nasekadan-weather.conf;'
+
+blocks = []
+i = 0
+while i < len(lines):
+    if not re.match(r'^\s*server\s*\{', lines[i]):
+        i += 1
+        continue
+    start = i
+    depth = 0
+    while i < len(lines):
+        code = lines[i].split('#', 1)[0]
+        depth += code.count('{') - code.count('}')
+        i += 1
+        if depth == 0:
+            break
+    blocks.append((start, i))
+
+candidates = []
+for start, end in blocks:
+    block = ''.join(lines[start:end])
+    if 'nasekadan.cz' in block or '/var/www/nasekadan' in block:
+        candidates.append((start, end))
+
+if not candidates:
+    raise SystemExit(f'V {path} nebyl nalezen serverový blok pro nasekadan.cz.')
+
+offset = 0
+for start, end in candidates:
+    adjusted_start = start + offset
+    block = ''.join(lines[adjusted_start:end + offset])
+    if include_path in block:
+        continue
+    match = re.match(r'^(\s*)server\s*\{', lines[adjusted_start])
+    indent = (match.group(1) if match else '') + '    '
+    lines.insert(adjusted_start + 1, f'{indent}{include_path}\n')
+    offset += 1
+
+path.write_text(''.join(lines), encoding='utf-8')
 PY
 fi
 
