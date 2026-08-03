@@ -1,0 +1,159 @@
+name: Opravit chronologii RSS a ověřit kanonickou evidenci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-rss-chronology-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-rss-chronology-20260803
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Opravit pořadí RSS a rozšířit audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re
+          from datetime import datetime, timezone
+          from email.utils import parsedate_to_datetime
+          from pathlib import Path
+
+          rss_path = Path('rss.xml')
+          text = rss_path.read_text(encoding='utf-8')
+          monastery = 'https://nasekadan.cz/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html'
+          fve = 'https://nasekadan.cz/clanky/fve-epr-letiste-bess-kadan-2026.html'
+
+          blocks = list(re.finditer(r'<item>.*?</item>', text, flags=re.S))
+          by_link = {}
+          for m in blocks:
+              block = m.group(0)
+              lm = re.search(r'<link>\s*([^<]+?)\s*</link>', block)
+              if lm:
+                  by_link[lm.group(1).strip()] = (m.start(), m.end(), block)
+          assert monastery in by_link and fve in by_link
+          ms, me, mb = by_link[monastery]
+          fs, fe, fb = by_link[fve]
+          assert ms < fs, 'RSS už není v chybném pořadí nebo se struktura změnila.'
+          gap = text[me:fs]
+          text = text[:ms] + fb + gap + mb + text[fe:]
+          rss_path.write_text(text, encoding='utf-8')
+
+          ordered = []
+          for m in re.finditer(r'<item>.*?</item>', text, flags=re.S):
+              block = m.group(0)
+              lm = re.search(r'<link>\s*([^<]+?)\s*</link>', block)
+              dm = re.search(r'<pubDate>\s*([^<]+?)\s*</pubDate>', block)
+              if lm and dm:
+                  ordered.append((lm.group(1).strip(), parsedate_to_datetime(dm.group(1).strip())))
+          assert len(ordered) == 42
+          assert all(ordered[i][1] >= ordered[i+1][1] for i in range(len(ordered)-1)), 'RSS není chronologicky sestupné.'
+          assert ordered[0][0].endswith('zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html')
+          assert ordered[1][0] == fve
+          assert ordered[2][0] == monastery
+
+          now = datetime.now(timezone.utc).isoformat()
+          reg_path = Path('data/published-content-index.json')
+          reg = json.loads(reg_path.read_text(encoding='utf-8'))
+          reg['generated_at'] = now
+          reg.setdefault('validation', {})['rss_order_matches_archive'] = True
+          reg['validation']['public_audit_at'] = now
+          reg_path.write_text(json.dumps(reg, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          audit_path = Path('.github/canonical-registry-live-audit.json')
+          audit = json.loads(audit_path.read_text(encoding='utf-8'))
+          audit['checked_at'] = now
+          audit['rss_order_matches_archive'] = True
+          audit['repair'] = 'RSS chronologicky seřazeno: FVE 10:30 před klášterem 04:00.'
+          audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Připravit SSH klíč a nasadit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/rss-order-fix.tar.gz"
+          tar -czf "$bundle" rss.xml data/published-content-index.json
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$bundle" ubuntu@57.129.43.215:/tmp/rss-order-fix.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo tar -xzf /tmp/rss-order-fix.tar.gz -C /var/www/nasekadan
+          sudo chmod a+r /var/www/nasekadan/rss.xml /var/www/nasekadan/data/published-content-index.json
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          if [[ -n "$cid" ]]; then
+            sudo docker cp /var/www/nasekadan/rss.xml "$cid":/usr/share/nginx/html/rss.xml
+            sudo docker cp /var/www/nasekadan/data/published-content-index.json "$cid":/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -f /tmp/rss-order-fix.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit pořadí a úplnost bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, time, urllib.request, xml.etree.ElementTree as ET
+          BASE='https://nasekadan.cz'
+          def get(path):
+              sep='&' if '?' in path else '?'
+              req=urllib.request.Request(BASE+path+sep+'v='+str(time.time_ns()),headers={'User-Agent':'NaseKadanCanonicalRssOrderVerify/1.0','Cache-Control':'no-cache','Pragma':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r:
+                  return r.read().decode('utf-8','replace')
+          archive=get('/clanky/')
+          start=archive.index('<section class="archive-list" aria-label="Chronologický přehled článků">')
+          end=archive.index('</section>',start)
+          visible=archive[start:end]
+          archive_links=[]
+          for rel in re.findall(r'href=["\'](/clanky/[^/"\']+\.html)["\']', visible, re.I):
+              full=BASE+rel
+              if full not in archive_links:
+                  archive_links.append(full)
+          rss_root=ET.fromstring(get('/rss.xml'))
+          rss_links=[e.text.strip() for e in rss_root.findall('.//item/link') if e.text]
+          assert len(archive_links)==42 and len(rss_links)==42
+          assert rss_links == archive_links, (rss_links[:5], archive_links[:5])
+          assert rss_links[0].endswith('zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html')
+          assert rss_links[1].endswith('fve-epr-letiste-bess-kadan-2026.html')
+          assert rss_links[2].endswith('alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html')
+          sitemap=get('/sitemap.xml')
+          news=get('/news-sitemap.xml')
+          assert all(link in sitemap for link in rss_links)
+          assert rss_links[0] in news and rss_links[1] in news and rss_links[2] in news
+          health=get('/deployment-health.txt')
+          assert re.search(r'(?m)^source=[0-9a-f]{40}$',health)
+          PY
+
+      - name: Zapsat opravu a odstranit jednorázový workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add rss.xml data/published-content-index.json .github/canonical-registry-live-audit.json
+          git rm -f .github/fix-rss-chronology-trigger.txt
+          git rm -f .github/workflows/fix-rss-chronology-once-20260803.yml
+          git commit -m "Opravit chronologické pořadí RSS a rozšířit audit [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main
