@@ -1,17 +1,17 @@
 {
-  "generatedAt": "2026-08-03T15:17:42.025474+00:00",
+  "generatedAt": "2026-08-03T19:58:39.010442+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
     "Registr smluv – Město Kadaň (15)",
     "Kadaňské noviny (15)",
     "Kultura Kadaň (15)",
-    "Liďák Kadaň – kulturní program (15)",
+    "Liďák Kadaň – kulturní program (0)",
     "Kino Hvězda (0)",
     "Městská knihovna (15)",
     "Turistický portál Kadaň (15)",
     "Městské muzeum v Kadani (15)",
-    "Městské muzeum v Kadani – veřejný Facebook (15)",
+    "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
     "Technické služby Kadaň (15)",
@@ -41,7 +41,7 @@
     "ZUŠ Klementa Slavického Kadaň (15)",
     "Gymnázium Kadaň (15)",
     "Astronomicko přírodovědná observatoř Kadaň (15)",
-    "Observatoř Kadaň – veřejný Facebook (15)",
+    "Observatoř Kadaň – veřejný Facebook (0)",
     "SPŠS a OA Kadaň (15)",
     "Město Most – kalendář akcí (15)",
     "Sportovní areály Most – akce (15)",
@@ -82,7 +82,7 @@
     "Kadaňský hrad (14)",
     "Autokemp Prunéřov (6)",
     "Autokemp Prunéřov – zdroj 3 (3)",
-    "Autokemp Prunéřov – zdroj 4 (15)",
+    "Autokemp Prunéřov – zdroj 4 (0)",
     "Vzdělávání na Kadaňsku (15)",
     "Domovy sociálních služeb Kadaň a Mašťov (15)",
     "Kožní ambulance MUDr. Stanislava Voráče (1)",
@@ -92,7 +92,7 @@
     "Tenisový klub Kadaň (15)",
     "TJ Vodní sporty Kadaň (13)",
     "Gymnastika Kadaň – SK Kosagym (15)",
-    "Karate klub Kadaň a Klášterec (15)",
+    "Karate klub Kadaň a Klášterec (0)",
     "BK DDM Kadaň (15)",
     "Sportovní klub policie Kadaň (6)",
     "Policie ČR – Obvodní oddělení Kadaň (15)",
@@ -112,6 +112,7 @@
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
     "Římskokatolická farnost Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
   ],
   "sourceStatus": [
@@ -161,7 +162,7 @@
       "category": "Kultura a volný čas",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "Kino Hvězda",
@@ -202,7 +203,7 @@
       "category": "Muzeum a památky",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "Nemocnice Kadaň",
@@ -445,7 +446,7 @@
       "category": "Astronomie a veřejné akce",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "SPŠS a OA Kadaň",
@@ -779,7 +780,7 @@
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "Vzdělávání na Kadaňsku",
@@ -859,8 +860,9 @@
       "url": "https://karateklubkadan.cz/wp2/",
       "category": "Sportovní organizace a kluby",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "HTTPError: HTTP Error 401: Unauthorized"
     },
     {
       "name": "BK DDM Kadaň",
