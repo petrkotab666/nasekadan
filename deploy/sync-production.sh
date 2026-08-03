@@ -118,6 +118,14 @@ for _ in $(seq 1 60); do
 done
 curl -fsS http://127.0.0.1:3224/healthz >/dev/null
 
+# Veřejný nginx obsluhuje statický document root, zatímco meteorologická data
+# poskytuje interní kontejner. Instalace je idempotentní a proběhne také při
+# desetiminutové serverové pojistce, takže počasí nezávisí na GitHub runneru.
+if [[ -f deploy/install-weather-proxy.sh ]]; then
+  chmod +x deploy/install-weather-proxy.sh
+  sudo bash deploy/install-weather-proxy.sh
+fi
+
 verify_contains() {
   local url="$1"
   local needle="$2"
