@@ -1,4 +1,4 @@
-name: Kanonický audit publikovaného obsahu 2026-08-04 00:11
+name: Oprava RSS a kanonický audit 2026-08-04 00:23
 
 on:
   push:
@@ -12,10 +12,10 @@ permissions:
 
 concurrency:
   group: canonical-published-index-sync
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  audit:
+  repair-and-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -28,7 +28,46 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Načíst živý web, ověřit kanály a aktualizovat registr
+      - name: Opravit chybný popis první položky RSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('rss.xml')
+          text = path.read_text(encoding='utf-8')
+          bad = ('<item><title>Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?</title>'
+                 '<description><![CDATA[Vodoprávní úřad v Kadani zakázal odběr ze 14 toků. '
+                 'Samostatné opatření Chomutova zahrnuje dalších 11 toků včetně horní části Prunéřovského potoka.]]></description>')
+          good = ('<item><title>Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?</title>'
+                  '<description><![CDATA[Klášterec nabízí lidem v horku posezení na zimním stadionu. '
+                  'Kadaňský stadion má od srpna denní provoz, město ale podobnou možnost zatím neoznámilo.]]></description>')
+          count = text.count(bad)
+          if count == 1:
+              path.write_text(text.replace(bad, good, 1), encoding='utf-8')
+          elif good in text and bad not in text:
+              print('RSS už obsahuje správný popis; pokračuji veřejným auditem.')
+          else:
+              raise SystemExit(f'Bezpečná oprava zastavena: očekávaný fragment nalezen {count}×.')
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet -- rss.xml; then
+            git add rss.xml
+            git commit -m 'Opravit chybný popis článku o ochlazení v RSS'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then
+                break
+              fi
+              git pull --rebase origin main
+              if [ "$attempt" = 4 ]; then exit 1; fi
+            done
+          fi
+          echo "REPAIR_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Počkat na nasazení a veřejně ověřit všechny kanály
         shell: bash
         run: |
           set -euo pipefail
@@ -38,6 +77,7 @@ jobs:
           import hashlib
           import html
           import json
+          import os
           import re
           import ssl
           import subprocess
@@ -48,7 +88,10 @@ jobs:
           BASE = 'https://nasekadan.cz'
           REGISTRY = 'data/published-content-index.json'
           STATUS = '.github/canonical-published-index-status.json'
-          WORKFLOW = '.github/workflows/canonical-audit-20260804-0011.yml'
+          CORRECT = ('Klášterec nabízí lidem v horku posezení na zimním stadionu. '
+                     'Kadaňský stadion má od srpna denní provoz, město ale podobnou možnost zatím neoznámilo.')
+          WRONG = ('Vodoprávní úřad v Kadani zakázal odběr ze 14 toků. '
+                   'Samostatné opatření Chomutova zahrnuje dalších 11 toků včetně horní části Prunéřovského potoka.')
           ctx = ssl._create_unverified_context()
 
           def fetch(path_or_url):
@@ -60,7 +103,7 @@ jobs:
                       request = urllib.request.Request(
                           url + sep + 'canonical_audit=' + str(time.time_ns()),
                           headers={
-                              'User-Agent': 'NaseKadanCanonicalAudit/1.6',
+                              'User-Agent': 'NaseKadanCanonicalAudit/1.7',
                               'Cache-Control': 'no-cache, no-store, max-age=0',
                               'Pragma': 'no-cache',
                           },
@@ -88,15 +131,29 @@ jobs:
                   return ''
               return ' '.join(html.unescape(re.sub(r'<[^>]+>', '', match.group(1))).split())
 
+          deployed_rss = None
+          for attempt in range(80):
+              rss_candidate = fetch('/rss.xml')
+              root = ET.fromstring(rss_candidate)
+              first = root.find('.//item')
+              title = (first.findtext('title') or '').strip() if first is not None else ''
+              description = (first.findtext('description') or '').strip() if first is not None else ''
+              if ('Klášterec otevřel zimní stadion' in title
+                      and description == CORRECT
+                      and WRONG not in description):
+                  deployed_rss = rss_candidate
+                  break
+              time.sleep(10)
+          if deployed_rss is None:
+              raise AssertionError('Opravený popis první položky RSS se na veřejném webu včas neprojevil.')
+
           home = fetch('/')
           archive_first = fetch('/clanky/')
           archive_matches = unique(re.findall(r'href=["\'](/clanky/strana-(\d+)\.html)["\']', archive_first, re.I))
-          archive_paths = ['/clanky/'] + [
-              item[0] for item in sorted(archive_matches, key=lambda item: int(item[1]))
-          ]
+          archive_paths = ['/clanky/'] + [item[0] for item in sorted(archive_matches, key=lambda item: int(item[1]))]
           archive_pages = [archive_first] + [fetch(path) for path in archive_paths[1:]]
           archive = '\n'.join(archive_pages)
-          rss = fetch('/rss.xml')
+          rss = deployed_rss
           sitemap = fetch('/sitemap.xml')
           news = fetch('/news-sitemap.xml')
           health = fetch('/deployment-health.txt')
@@ -106,32 +163,20 @@ jobs:
           archive_urls = [BASE + path for path in unique(article_href.findall(archive)) if '/parts/' not in path]
 
           rss_root = ET.fromstring(rss)
-          rss_urls = unique([
-              (node.text or '').strip()
-              for node in rss_root.findall('.//item/link')
-              if (node.text or '').strip()
-          ])
+          rss_items = rss_root.findall('.//item')
+          rss_urls = unique([(node.findtext('link') or '').strip() for node in rss_items if (node.findtext('link') or '').strip()])
 
           ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
           sitemap_root = ET.fromstring(sitemap)
           sitemap_urls = unique([
-              (node.text or '').strip()
-              for node in sitemap_root.findall('.//s:loc', ns)
-              if '/clanky/' in (node.text or '')
-              and (node.text or '').endswith('.html')
-              and '/parts/' not in (node.text or '')
+              (node.text or '').strip() for node in sitemap_root.findall('.//s:loc', ns)
+              if '/clanky/' in (node.text or '') and (node.text or '').endswith('.html') and '/parts/' not in (node.text or '')
           ])
-
           news_root = ET.fromstring(news)
-          news_urls = unique([
-              (node.text or '').strip()
-              for node in news_root.findall('.//s:loc', ns)
-              if (node.text or '').strip()
-          ])
+          news_urls = unique([(node.text or '').strip() for node in news_root.findall('.//s:loc', ns) if (node.text or '').strip()])
 
           with open(REGISTRY, encoding='utf-8') as handle:
               data = json.load(handle)
-
           articles = data['articles']
           registry_urls = [article['url'] for article in articles]
           fingerprints = [article['fingerprint'] for article in articles]
@@ -140,23 +185,11 @@ jobs:
 
           assert not duplicate_urls, duplicate_urls
           assert not duplicate_fingerprints, duplicate_fingerprints
-          assert set(registry_urls) == set(archive_urls), (
-              'Archive differs from registry',
-              sorted(set(registry_urls) - set(archive_urls)),
-              sorted(set(archive_urls) - set(registry_urls)),
-          )
-          assert set(registry_urls) == set(rss_urls), (
-              'RSS differs from registry',
-              sorted(set(registry_urls) - set(rss_urls)),
-              sorted(set(rss_urls) - set(registry_urls)),
-          )
-          assert set(registry_urls) == set(sitemap_urls), (
-              'Sitemap differs from registry',
-              sorted(set(registry_urls) - set(sitemap_urls)),
-              sorted(set(sitemap_urls) - set(registry_urls)),
-          )
-          assert rss_urls == archive_urls, 'RSS order differs from archive order'
-          assert 'status=ok' in health, 'deployment-health.txt does not report status=ok'
+          assert set(registry_urls) == set(archive_urls), 'Archiv se liší od registru.'
+          assert set(registry_urls) == set(rss_urls), 'RSS se liší od registru.'
+          assert set(registry_urls) == set(sitemap_urls), 'Sitemap se liší od registru.'
+          assert rss_urls == archive_urls, 'Pořadí RSS se liší od archivu.'
+          assert 'status=ok' in health, 'deployment-health.txt nehlásí status=ok.'
 
           all_h1_checked = True
           changed_source_commits = []
@@ -165,8 +198,7 @@ jobs:
               actual_h1 = text_h1(page)
               if actual_h1 != article['h1']:
                   all_h1_checked = False
-                  raise AssertionError(f'H1 mismatch for {article["url"]}: {actual_h1!r} != {article["h1"]!r}')
-
+                  raise AssertionError(f'Neshoda H1: {article["url"]}: {actual_h1!r} != {article["h1"]!r}')
               article['status'] = {
                   'homepage': article['url'] in home_urls,
                   'archive': article['url'] in archive_urls,
@@ -175,37 +207,24 @@ jobs:
                   'news_sitemap': article['url'] in news_urls,
               }
               article['publication_status'] = 'published'
-
               source_path = article.get('source_path')
               if source_path:
-                  latest_commit = subprocess.check_output(
-                      ['git', 'log', '-1', '--format=%H', '--', source_path], text=True
-                  ).strip()
+                  latest_commit = subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', source_path], text=True).strip()
                   if latest_commit and latest_commit != article.get('source_commit'):
-                      changed_source_commits.append({
-                          'url': article['url'],
-                          'from': article.get('source_commit', ''),
-                          'to': latest_commit,
-                      })
+                      changed_source_commits.append({'url': article['url'], 'from': article.get('source_commit', ''), 'to': latest_commit})
                       article['source_commit'] = latest_commit
-
-              modified = re.search(
-                  r'<meta[^>]+property=["\']article:modified_time["\'][^>]+content=["\']([^"\']+)',
-                  page,
-                  re.I,
-              )
+              modified = re.search(r'<meta[^>]+property=["\']article:modified_time["\'][^>]+content=["\']([^"\']+)', page, re.I)
               if not modified:
                   modified = re.search(r'"dateModified"\s*:\s*"([^"]+)"', page)
               if modified:
                   article['modified_at'] = modified.group(1)
 
           now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          repair_sha = os.environ['REPAIR_SHA']
           health_source_match = re.search(r'^source=(.+)$', health, re.M)
           health_source = health_source_match.group(1).strip() if health_source_match else ''
-
           data['generated_at'] = now
-          data['source_commit'] = head
+          data['source_commit'] = repair_sha
           data['article_count'] = len(articles)
           validation = data.setdefault('validation', {})
           validation.update({
@@ -216,26 +235,19 @@ jobs:
               'sitemap_all_articles_present': set(registry_urls) == set(sitemap_urls),
               'news_sitemap_recent_count': len(news_urls),
               'deployment_health': 'verified',
-              'required_fields_complete': all(
-                  all(key in article for key in (
-                      'title', 'h1', 'url', 'published_at', 'modified_at',
-                      'persons', 'organizations', 'places', 'cases', 'topics',
-                      'fingerprint', 'status', 'source_commit'
-                  ))
-                  for article in articles
-              ),
+              'required_fields_complete': all(all(key in article for key in (
+                  'title', 'h1', 'url', 'published_at', 'modified_at', 'persons', 'organizations',
+                  'places', 'cases', 'topics', 'fingerprint', 'status', 'source_commit')) for article in articles),
               'duplicate_urls': duplicate_urls,
               'duplicate_fingerprints': duplicate_fingerprints,
               'per_article_source_commits': all(bool(article.get('source_commit')) for article in articles),
               'deployment_health_source': health_source,
               'public_audit_at': now,
-              'public_audit_sha256': hashlib.sha256(
-                  (home + archive + rss + sitemap + news + health).encode('utf-8')
-              ).hexdigest(),
+              'public_audit_sha256': hashlib.sha256((home + archive + rss + sitemap + news + health).encode('utf-8')).hexdigest(),
               'repair_pending_public_verification': False,
               'rss_order_matches_archive': rss_urls == archive_urls,
               'public_repair_verification': {
-                  'method': 'github-actions-live-canonical-audit-paginated-archive-v1.6',
+                  'method': 'github-actions-live-canonical-audit-paginated-archive-v1.7',
                   'homepage_articles': len(home_urls),
                   'archive_articles': len(archive_urls),
                   'archive_pages': len(archive_pages),
@@ -244,12 +256,15 @@ jobs:
                   'news_sitemap_articles': len(news_urls),
                   'all_public_h1_checked': all_h1_checked,
                   'deployment_health_nonempty': bool(health.strip()),
+                  'rss_description_repaired': True,
                   'completed_at': now,
               },
               'last_registry_refresh': {
-                  'reason': 'synchronize live publication channels and article source commits after footer normalization',
-                  'trigger_commit': head,
-                  'classification': 'registry_maintenance',
+                  'reason': 'repair the mismatched RSS description of the stadium cooling article and reverify all live publication channels',
+                  'trigger_commit': repair_sha,
+                  'updated_article_url': 'https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html',
+                  'classification': 'safe_repair',
+                  'repaired_field': 'rss.description',
                   'changed_article_source_commits': len(changed_source_commits),
                   'homepage_articles': len(home_urls),
                   'archive_articles': len(archive_urls),
@@ -260,7 +275,6 @@ jobs:
                   'completed_at': now,
               },
           })
-
           with open(REGISTRY, 'w', encoding='utf-8') as handle:
               json.dump(data, handle, ensure_ascii=False, indent=2)
               handle.write('\n')
@@ -280,24 +294,29 @@ jobs:
               'duplicate_fingerprints': len(duplicate_fingerprints),
               'all_public_h1_checked': all_h1_checked,
               'registry_publicly_verified': True,
+              'safe_repair': {
+                  'url': 'https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html',
+                  'field': 'rss.description',
+                  'commit': repair_sha,
+              },
               'changed_article_source_commits': len(changed_source_commits),
           }
           with open(STATUS, 'w', encoding='utf-8') as handle:
               json.dump(status, handle, ensure_ascii=False, indent=2)
               handle.write('\n')
-
           print(json.dumps(status, ensure_ascii=False))
           PY
 
-      - name: Uložit opravenou evidenci a odstranit jednorázový workflow
+      - name: Uložit ověřenou evidenci a odstranit jednorázový workflow
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin main
           git rm .github/workflows/canonical-audit-20260804-0011.yml
           git add data/published-content-index.json .github/canonical-published-index-status.json
-          git commit -m 'Synchronizovat kanonickou evidenci po normalizaci patičky [skip ci]'
+          git commit -m 'Zapsat veřejně ověřenou opravu popisu RSS [skip ci]'
           for attempt in 1 2 3 4; do
             if git push origin HEAD:main; then
               exit 0
