@@ -25,6 +25,11 @@ CSS_MARKER_START = "/* WATER-BAN-UPDATE-20260803-START */"
 CSS_MARKER_END = "/* WATER-BAN-UPDATE-20260803-END */"
 
 
+def clean_trailing_whitespace(text: str) -> str:
+    """Remove trailing spaces while preserving one final newline."""
+    return "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
+
+
 def replace_one(text: str, pattern: str, replacement: str, *, flags: int = 0, label: str) -> str:
     updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
     if count != 1:
@@ -207,7 +212,7 @@ def patch_article() -> None:
     if text.count(UPDATE_MARKER_START) != 1 or text.count(UPDATE_MARKER_END) != 1:
         raise RuntimeError("Aktualizační blok není právě jednou.")
 
-    ARTICLE.write_text(text, encoding="utf-8", newline="\n")
+    ARTICLE.write_text(clean_trailing_whitespace(text), encoding="utf-8", newline="\n")
 
 
 def patch_rss() -> None:
@@ -227,7 +232,7 @@ def patch_rss() -> None:
         flags=re.S,
     )
     text = text[:match.start()] + block + text[match.end():]
-    RSS.write_text(text, encoding="utf-8", newline="\n")
+    RSS.write_text(clean_trailing_whitespace(text), encoding="utf-8", newline="\n")
 
 
 def patch_sitemap() -> None:
@@ -244,7 +249,7 @@ def patch_sitemap() -> None:
     else:
         block = block.replace("</url>", "<lastmod>2026-08-03</lastmod></url>", 1)
     text = text[:match.start()] + block + text[match.end():]
-    SITEMAP.write_text(text, encoding="utf-8", newline="\n")
+    SITEMAP.write_text(clean_trailing_whitespace(text), encoding="utf-8", newline="\n")
 
 
 def patch_published_index() -> None:
