@@ -1,0 +1,74 @@
+name: Jednorázově ověřit živou publikaci FVE
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-fve-live-once-20260803.yml'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ověřit všechny veřejné výstupy
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          base='https://nasekadan.cz'
+          article_url="$base/clanky/fve-epr-letiste-bess-kadan-2026.html"
+          social_url="$base/social/fve-epr-letiste-baterie-kadan-20260803.png"
+          h1='ČEZ chce u Kadaně postavit solární park s bateriemi. Jejich velikost, cena i platby městu zůstávají neznámé'
+          stamp="verify-${GITHUB_RUN_ID}-$(date +%s)"
+          tmp="$RUNNER_TEMP/fve-live"; mkdir -p "$tmp"
+          fetch(){ curl -4 -kfsS --max-time 25 "$1?v=$stamp" -o "$2"; }
+          code_article=$(curl -4 -kLsS --max-time 25 -o "$tmp/article" -w '%{http_code}' "$article_url?v=$stamp" || true)
+          code_home=$(curl -4 -kLsS --max-time 25 -o "$tmp/home" -w '%{http_code}' "$base/?v=$stamp" || true)
+          code_archive=$(curl -4 -kLsS --max-time 25 -o "$tmp/archive" -w '%{http_code}' "$base/clanky/?v=$stamp" || true)
+          code_rss=$(curl -4 -kLsS --max-time 25 -o "$tmp/rss" -w '%{http_code}' "$base/rss.xml?v=$stamp" || true)
+          code_sitemap=$(curl -4 -kLsS --max-time 25 -o "$tmp/sitemap" -w '%{http_code}' "$base/sitemap.xml?v=$stamp" || true)
+          code_news=$(curl -4 -kLsS --max-time 25 -o "$tmp/news" -w '%{http_code}' "$base/news-sitemap.xml?v=$stamp" || true)
+          code_health=$(curl -4 -kLsS --max-time 25 -o "$tmp/health" -w '%{http_code}' "$base/deployment-health.txt?v=$stamp" || true)
+          code_social=$(curl -4 -kLsS --max-time 25 -o "$tmp/social" -w '%{http_code}' "$social_url?v=$stamp" || true)
+          yesno(){ "$@" >/dev/null 2>&1 && printf ano || printf ne; }
+          h1_ok=$(yesno grep -Fq "<h1>${h1}</h1>" "$tmp/article")
+          index_ok=$(yesno bash -c "grep -Fq 'index,follow' '$tmp/article' && ! grep -Fq 'noindex' '$tmp/article'")
+          home_ok=$(yesno grep -Fq "$article_url" "$tmp/home")
+          archive_ok=$(yesno grep -Fq "$article_url" "$tmp/archive")
+          rss_ok=$(yesno grep -Fq "$article_url" "$tmp/rss")
+          sitemap_ok=$(yesno grep -Fq "$article_url" "$tmp/sitemap")
+          news_ok=$(yesno grep -Fq "$article_url" "$tmp/news")
+          health_source=$(grep -E '^source=' "$tmp/health" 2>/dev/null | head -1 | cut -d= -f2- || true)
+          current_main=$(git ls-remote https://github.com/petrkotab666/nasekadan refs/heads/main 2>/dev/null | awk '{print $1}')
+          health_ok=ne; [[ -n "$health_source" && "$health_source" == "$current_main" ]] && health_ok=ano
+          social_ok=ne; [[ "$code_social" == 200 ]] && file "$tmp/social" | grep -qi 'PNG image' && social_ok=ano
+          overall=ano
+          [[ "$code_article" == 200 && "$h1_ok" == ano && "$index_ok" == ano && "$code_home" == 200 && "$home_ok" == ano && "$code_archive" == 200 && "$archive_ok" == ano && "$code_rss" == 200 && "$rss_ok" == ano && "$code_sitemap" == 200 && "$sitemap_ok" == ano && "$code_news" == 200 && "$news_ok" == ano && "$code_health" == 200 && "$health_ok" == ano && "$social_ok" == ano ]] || overall=ne
+          body=$(cat <<EOF
+          Nezávislá živá kontrola publikace FVE EPR Letiště.
+
+          - Celkově v pořádku: **$overall**
+          - Článek HTTP: $code_article; správný H1: $h1_ok; indexovatelný: $index_ok
+          - Titulka HTTP: $code_home; obsahuje článek: $home_ok
+          - Archiv HTTP: $code_archive; obsahuje článek: $archive_ok
+          - RSS HTTP: $code_rss; obsahuje článek: $rss_ok
+          - Sitemap HTTP: $code_sitemap; obsahuje článek: $sitemap_ok
+          - News sitemap HTTP: $code_news; obsahuje článek: $news_ok
+          - Sociální obrázek HTTP: $code_social; platný PNG: $social_ok
+          - deployment-health HTTP: $code_health; source odpovídá main: $health_ok
+          - health source: ${health_source:-chybí}
+          - aktuální main: ${current_main:-nezjištěn}
+
+          Kontrolní běh: $RUN_URL
+          EOF
+          )
+          gh issue comment 557 --repo "$REPO" --body "$body"
+          [[ "$overall" == ano ]]
