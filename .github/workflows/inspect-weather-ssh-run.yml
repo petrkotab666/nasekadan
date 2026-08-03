@@ -1,4 +1,4 @@
-name: Zjistit stav přímého SSH nasazení počasí
+name: Zjistit stav úzkého nasazení počasí
 
 on:
   push:
@@ -31,7 +31,7 @@ jobs:
             const response = await github.rest.actions.listWorkflowRuns({
               owner,
               repo,
-              workflow_id: 'deploy-weather-via-ssh.yml',
+              workflow_id: 'hot-deploy-weather-via-ssh.yml',
               branch: 'main',
               per_page: 10
             });
@@ -75,10 +75,10 @@ jobs:
               });
             }
             fs.mkdirSync('.github', {recursive: true});
-            fs.writeFileSync('.github/weather-ssh-run-status.json', JSON.stringify({
+            fs.writeFileSync('.github/weather-hot-run-status.json', JSON.stringify({
               generated_at: new Date().toISOString(),
               inspected_by_run: context.runId,
-              workflow: 'deploy-weather-via-ssh.yml',
+              workflow: 'hot-deploy-weather-via-ssh.yml',
               runs: result
             }, null, 2) + '\n');
 
@@ -91,8 +91,8 @@ jobs:
             git rebase origin/main
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add .github/weather-ssh-run-status.json
-            git commit -m 'Zapsat stav přímého SSH nasazení počasí [skip ci]' || exit 0
+            git add .github/weather-hot-run-status.json
+            git commit -m 'Zapsat stav úzkého nasazení počasí [skip ci]' || exit 0
             if git push origin HEAD:main; then
               exit 0
             fi
