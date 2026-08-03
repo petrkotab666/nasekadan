@@ -1,0 +1,112 @@
+name: Nasadit přímý loader počasí
+run-name: Doplnění počasí na titulku a kontrola v Chromiu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-loader-deploy-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy-loader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Vybrat SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"; chmod 600 "$RUNNER_TEMP/nasekadan_key"; exit 0; fi
+          done
+          exit 20
+
+      - name: Doplnit loader do veřejných HTML souborů
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          python3 scripts/ensure_weather_loader.py
+
+          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          sudo install -D -m 0644 pocasi/index.html /var/www/nasekadan/pocasi/index.html
+          sudo install -m 0644 pocasi.js /var/www/nasekadan/pocasi.js
+
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          [[ -n "$cid" ]] || cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
+          [[ -n "$cid" ]]
+          sudo docker cp index.html "$cid:/usr/share/nginx/html/index.html"
+          sudo docker cp pocasi/index.html "$cid:/usr/share/nginx/html/pocasi/index.html"
+          sudo docker cp pocasi.js "$cid:/usr/share/nginx/html/pocasi.js"
+          sudo docker exec "$cid" grep -Fq 'data-nk-weather-direct="1"' /usr/share/nginx/html/index.html
+          curl -fsS --max-time 15 http://127.0.0.1:3224/ | grep -Fq 'data-nk-weather-direct="1"'
+          REMOTE
+
+      - name: Nainstalovat Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Ověřit vykreslení na počítači i mobilu
+        id: browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const fs=require('fs');const{chromium}=require('playwright');
+          (async()=>{const browser=await chromium.launch({headless:true});const nonce=Date.now();
+          const desktop=await browser.newPage({viewport:{width:1440,height:1000}});
+          await desktop.goto(`https://nasekadan.cz/?weather=${nonce}`,{waitUntil:'domcontentloaded',timeout:90000});
+          await desktop.waitForSelector('#weather-strip .nk-weather-strip__now strong',{timeout:45000});
+          const strip=(await desktop.locator('#weather-strip').innerText()).replace(/\s+/g,' ').trim();
+          if(!strip.includes('Kadaň právě teď')||!strip.includes('°C'))throw new Error(strip);
+          await desktop.goto(`https://nasekadan.cz/pocasi/?weather=${nonce}`,{waitUntil:'domcontentloaded',timeout:90000});
+          await desktop.waitForSelector('.nk-weather-hero .nk-weather-current strong',{timeout:45000});
+          const detail=(await desktop.locator('#weather-app').innerText()).replace(/\s+/g,' ').trim();
+          for(const n of ['°C','Předpověď na sedm dní','Nejbližších 24 hodin'])if(!detail.includes(n))throw new Error(`Chybí ${n}`);
+          const mobile=await browser.newPage({viewport:{width:390,height:844},isMobile:true});
+          await mobile.goto(`https://nasekadan.cz/?weather-mobile=${nonce}`,{waitUntil:'domcontentloaded',timeout:90000});
+          await mobile.waitForSelector('#weather-strip .nk-weather-strip__now strong',{timeout:45000});
+          const box=await mobile.locator('#weather-strip').boundingBox();if(!box||box.width>391||box.height>280)throw new Error(JSON.stringify(box));
+          fs.writeFileSync('/tmp/weather-final-browser.json',JSON.stringify({strip,detail_preview:detail.slice(0,700),mobile_box:box},null,2));
+          console.log(strip);await browser.close();})().catch(e=>{console.error(e);process.exit(1)});
+          JS
+
+      - name: Zapsat finální výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          BROWSER_OUTCOME: ${{ steps.browser.outcome }}
+        with:
+          script: |
+            const fs=require('fs'),owner=context.repo.owner,repo=context.repo.repo;let details={};try{details=JSON.parse(fs.readFileSync('/tmp/weather-final-browser.json','utf8'));}catch(e){}
+            const ok=process.env.DEPLOY_OUTCOME==='success'&&process.env.BROWSER_OUTCOME==='success';
+            const payload={status:ok?'success':'failure',checked_at:new Date().toISOString(),run_id:String(context.runId),deploy:process.env.DEPLOY_OUTCOME||'',browser_verify:process.env.BROWSER_OUTCOME||'',page:'https://nasekadan.cz/pocasi/',...details};
+            let sha;try{const old=await github.rest.repos.getContent({owner,repo,path:'.github/weather-browser-status.json',ref:'main'});sha=old.data.sha;}catch(e){if(e.status!==404)throw e;}
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:'.github/weather-browser-status.json',message:`Zapsat finální kontrolu počasí: ${payload.status} [skip ci]`,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64'),sha,branch:'main'});
