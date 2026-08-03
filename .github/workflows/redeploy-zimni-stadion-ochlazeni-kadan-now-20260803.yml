@@ -1,0 +1,172 @@
+name: Opravit nasazení článku o ochlazení na stadionu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/redeploy-zimni-stadion-ochlazeni-kadan-now-20260803.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: redeploy-zimni-stadion-ochlazeni-kadan-20260803
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      ARTICLE_FILE: clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      SOCIAL_FILE: social/klasterec-ochlazeni-zimni-stadion-kadan-2026.png
+      EXPECTED_H1: Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Prověřit úplnost publikačního balíčku
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+          grep -Fq 'data-poll-id="ochlazeni-zimni-stadion-kadan-2026"' "$ARTICLE_FILE"
+          grep -Fq "$ARTICLE_REL" index.html clanky/index.html
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" rss.xml sitemap.xml news-sitemap.xml
+          grep -Fq '/pocasi.js' index.html
+          test -s "$SOCIAL_FILE"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit balíček na OVH přes archiv
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/stadium-cooling-bundle"
+          archive="$RUNNER_TEMP/stadium-cooling-bundle.tar.gz"
+          rm -rf "$bundle" "$archive"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp "$SOCIAL_FILE" "$bundle/social/"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.source.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+          tar -C "$bundle" -czf "$archive" .
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$archive" ubuntu@57.129.43.215:/tmp/stadium-cooling-bundle.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/stadium-cooling-bundle
+          tarball=/tmp/stadium-cooling-bundle.tar.gz
+          root=/var/www/nasekadan
+          article=klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+          social=klasterec-ochlazeni-zimni-stadion-kadan-2026.png
+
+          rm -rf "$src"
+          mkdir -p "$src"
+          tar -xzf "$tarball" -C "$src"
+          rm -f "$tarball"
+
+          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
+          sudo install -m 0644 "$src/clanky/$article" "$root/clanky/$article"
+          sudo install -m 0644 "$src/social/$social" "$root/social/$social"
+          sudo install -m 0644 "$src/clanky/index.html" "$root/clanky/index.html"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+            sudo install -m 0644 "$src/$f" "$root/$f"
+          done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/$article" "nasekadan-web:/usr/share/nginx/html/clanky/$article"
+            sudo docker cp "$src/social/$social" "nasekadan-web:/usr/share/nginx/html/social/$social"
+            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+              sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf "$src"
+          REMOTE
+
+      - name: Ověřit veřejný web
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 35 "$base$ARTICLE_REL?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 35 "$base/?v=$q")"
+          archive="$(curl -4 -kfsS -L --max-time 35 "$base/clanky/?v=$q")"
+          rss="$(curl -4 -kfsS -L --max-time 35 "$base/rss.xml?v=$q")"
+          sitemap="$(curl -4 -kfsS -L --max-time 35 "$base/sitemap.xml?v=$q")"
+          news="$(curl -4 -kfsS -L --max-time 35 "$base/news-sitemap.xml?v=$q")"
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
+          grep -Fq 'data-poll-id="ochlazeni-zimni-stadion-kadan-2026"' <<<"$article"
+          grep -Fq 'index,follow' <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq '/pocasi.js' <<<"$home"
+          grep -Fq "$ARTICLE_REL" <<<"$archive"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$sitemap"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$news"
+          curl -4 -kfsS -L --max-time 35 "$base/$SOCIAL_FILE?v=$q" -o /tmp/social.png
+          test "$(wc -c </tmp/social.png)" -gt 10000
+          curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+
+      - name: Zapsat konečný stav
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const deploy = process.env.DEPLOY || 'skipped';
+            const verify = process.env.VERIFY || 'skipped';
+            const status = deploy === 'success' && verify === 'success' ? 'success' : 'failure';
+            const payload = {
+              status,
+              run_id: String(context.runId),
+              source_sha: process.env.SOURCE_SHA || '',
+              checked_at: new Date().toISOString(),
+              deploy,
+              external_verify: verify,
+              article: 'https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html',
+              homepage: status === 'success',
+              archive: status === 'success',
+              rss: status === 'success',
+              sitemaps: status === 'success',
+              social_image: status === 'success',
+              poll: status === 'success',
+              weather_preserved: status === 'success'
+            };
+            let sha;
+            try {
+              sha = (await github.rest.repos.getContent({owner, repo, path: '.github/stadium-cooling-article-live-status.json', ref: 'main'})).data.sha;
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path: '.github/stadium-cooling-article-live-status.json', branch: 'main',
+              message: `Zapsat konečný stav článku o ochlazení: ${status} [skip ci]`, sha,
+              content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')
+            });
