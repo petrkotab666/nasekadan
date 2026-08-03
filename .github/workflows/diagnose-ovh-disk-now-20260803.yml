@@ -1,0 +1,46 @@
+name: Prověřit zaplněný disk OVH
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/diagnose-ovh-disk-now-20260803.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Zjistit využití disku
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== DF ==='
+          df -h /
+          echo '=== INODES ==='
+          df -ih /
+          echo '=== ROOT DIRECTORIES ==='
+          sudo du -x -h -d1 / 2>/dev/null | sort -h | tail -30
+          echo '=== VAR DIRECTORIES ==='
+          sudo du -x -h -d1 /var 2>/dev/null | sort -h | tail -30
+          echo '=== HOME DIRECTORIES ==='
+          sudo du -x -h -d2 /home 2>/dev/null | sort -h | tail -40
+          echo '=== DOCKER SYSTEM DF ==='
+          sudo docker system df -v 2>/dev/null || true
+          echo '=== JOURNAL ==='
+          sudo journalctl --disk-usage 2>/dev/null || true
+          echo '=== LARGE LOGS ==='
+          sudo find /var/log -xdev -type f -size +20M -printf '%s %p\n' 2>/dev/null | sort -n | tail -30
+          echo '=== LARGE FILES ROOT FS ==='
+          sudo find / -xdev -type f -size +500M -printf '%s %p\n' 2>/dev/null | sort -n | tail -40
+          REMOTE
