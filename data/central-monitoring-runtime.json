@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T11:05:33+00:00",
-  "lastQuickCheckAt": "2026-08-03T11:05:33+00:00",
+  "updatedAt": "2026-08-03T12:03:00+00:00",
+  "lastQuickCheckAt": "2026-08-03T12:03:00+00:00",
   "lastDeepCheckAt": "2026-08-03T10:07:36+00:00",
-  "repositoryMainShaObserved": "539a679e463ca4dfb165cea3a5f1a3d9b2fa6d2d",
+  "repositoryMainShaObserved": "335cf4cb15957fd95c8151f07f1d0afadc874803",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 64,
@@ -75,20 +75,25 @@
       "hospitalPetitionPublicMessages": 2,
       "hospitalPetitionStateChanged": false,
       "stateEPetitionFound": false,
-      "repositoryMainSha": "539a679e463ca4dfb165cea3a5f1a3d9b2fa6d2d",
+      "repositoryMainSha": "335cf4cb15957fd95c8151f07f1d0afadc874803",
       "fveArticleMainCommitObserved": true,
-      "fveArticleLiveOnHomepage": true,
-      "fveArticleLiveInArchive": true,
+      "fveArticleLastConfirmedLiveOnHomepage": true,
+      "fveArticleLastConfirmedLiveInArchive": true,
       "fveArticleRepositoryIntegration": "article_home_archive_rss_sitemap_news_sitemap_llms_present",
-      "publicSourceCommitVerification": "direct_fetch_unavailable_in_this_run",
-      "checkedAt": "2026-08-03T11:05:33+00:00"
+      "technicalPublicationIncidentOpen": true,
+      "technicalPublicationIssue": 557,
+      "technicalLastFailureCommit": "335cf4cb15957fd95c8151f07f1d0afadc874803",
+      "technicalRepairAttemptThisRun": "skipped_existing_incident_multiple_safe_attempts_already_recorded",
+      "publicSourceCommitVerification": "direct_live_fetch_not_reliably_available_in_this_run",
+      "checkedAt": "2026-08-03T12:03:00+00:00"
     },
     "notes": [
       "Od předchozí kontroly nebyla v ověřených primárních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
-      "Poslední hluboký sběr byl dokončen v 10:07 UTC; nový šestihodinový průchod zatím nebyl nutný. Data/city-news.json nadále potvrzují 64 z 64 organizací, coveragePercent 100 a directoryIsCanonicalRegistry=true.",
+      "Poslední hluboký sběr byl dokončen v 10:07 UTC; nový šestihodinový průchod zatím nebyl nutný. data/city-news.json nadále potvrzuje 64 z 64 organizací, coveragePercent 100 a directoryIsCanonicalRegistry=true.",
       "U známých nemocničních soudních spisů nebyl ve veřejně dostupných zdrojích zjištěn nový procesní pohyb a petice nevykazuje významný ověřený posun.",
       "Neověřená stopa o uzavírce II/225 zůstává bez autoritativního rozhodnutí, přesného termínu a objízdné trasy; doručení je nadále potlačeno.",
-      "Veřejná titulní stránka a archiv zobrazují článek FVE EPR Letiště se správným titulkem a datem. Přímé porovnání deployment-health.txt se zdrojovým commitem nebylo v tomto běhu technicky dostupné, proto nebyl spuštěn konkurenční deploy.",
+      "Technický incident publikace FVE článku je již veden v Issue #557. Další nasazení nebylo v tomto běhu spuštěno, protože předchozí bezpečné opravné pokusy byly vyčerpány a nový souběžný deploy by porušil ochranu proti opakování při nezměněném stavu.",
+      "Duplicitní sportovní monitoring Issue #551 byl uzavřen jako duplicita; nevznikl nový alert ani nový redakční úkol.",
       "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
     ]
   }
