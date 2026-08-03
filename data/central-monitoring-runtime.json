@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T08:08:50+00:00",
-  "lastQuickCheckAt": "2026-08-03T08:08:50+00:00",
+  "updatedAt": "2026-08-03T09:02:00+00:00",
+  "lastQuickCheckAt": "2026-08-03T09:02:00+00:00",
   "lastDeepCheckAt": "2026-08-03T03:55:53+00:00",
-  "repositoryMainShaObserved": "b5cea3ae233bfa61f768dc7268ece228c0929e6f",
+  "repositoryMainShaObserved": "6ba04d7a3ab103c91e4d6c3b3744816ad09a312b",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 64,
@@ -42,11 +42,11 @@
     "scopesChecked": [
       "mimořádné události a regionální zpravodajství",
       "Policie ČR, HZS a krizové zdroje Ústeckého kraje",
-      "dopravní uzavírky, II/225, krajský krizový portál a Správa a údržba silnic Ústeckého kraje",
-      "město Kadaň, Nemocnice Kadaň, KTK, tepelné hospodářství a organizace z kanonického registru",
-      "známé soudní spisové značky 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026",
-      "petice za zachování Nemocnice Kadaň a případná státní ePetice",
-      "živá titulní stránka a archiv Naše Kadaň",
+      "město Kadaň, úřední deska, územní plánování a Registr smluv",
+      "dopravní omezení, železnice, II/225 a známá neověřená stopa",
+      "Nemocnice Kadaň, petice a známé soudní spisové značky",
+      "Prunéřov, Tušimice, ČEZ a energetické projekty",
+      "živá titulní stránka, archiv a připravované zveřejnění článku FVE EPR Letiště",
       "kanonický registr organizací, sourceStatus a monitoringCoverage",
       "nové GitHub monitoringové issue a kontrola duplicit"
     ],
@@ -57,27 +57,22 @@
       "hospitalPetitionPublicMessages": 2,
       "hospitalPetitionStateChanged": false,
       "stateEPetitionFound": false,
-      "repositoryMainSha": "b5cea3ae233bfa61f768dc7268ece228c0929e6f",
-      "publicHomepageLatestArticle": "Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera",
-      "publicHomepageLatestPublishedAt": "2026-08-03T04:00:00+02:00",
-      "indexationCleanupExternalVerify": "success",
-      "duplicateAlertWorkflowsDisabled": [
-        ".github/workflows/monitor-urgent-kadan.yml",
-        ".github/workflows/monitor-urgent-kadan-cloud-fallback.yml",
-        ".github/workflows/monitor-all-kadansko.yml",
-        ".github/workflows/monitor-national-kadan.yml"
-      ],
-      "checkedAt": "2026-08-03T08:08:50+00:00"
+      "repositoryMainSha": "6ba04d7a3ab103c91e4d6c3b3744816ad09a312b",
+      "publicHomepageLatestArticleObserved": "Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera",
+      "publicHomepageLatestPublishedAtObserved": "2026-08-03T04:00:00+02:00",
+      "fveArticleMainCommitObserved": true,
+      "fveArticlePublicVerification": "temporarily_inconclusive_during_active_publication_workflows",
+      "publicSourceCommitVerification": "fetch_unavailable",
+      "checkedAt": "2026-08-03T09:02:00+00:00"
     },
     "notes": [
-      "Od předchozí kontroly nebyla v primárních oficiálních zdrojích potvrzena nová mimořádná událost s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
-      "Tři automatické issue #554, #555 a #556 zachytily jedinou mediální stopu o uzavírce II/225 pod třemi různými fingerprinty. Byly uzavřeny jako neověřená stopa a duplicity; uživatel nebyl upozorněn.",
-      "Přesný termín, místo, objížďka a primární rozhodnutí k možné uzavírce II/225 zatím nebyly dohledány. Stopu centrální monitoring dále sleduje a doručí ji až po autoritativním ověření.",
-      "Čtyři dřívější automatické GitHub monitoringy byly přepnuty pouze na ruční spuštění, aby jediným automatickým redakčním monitorem zůstal centrální monitoring a nevznikala duplicitní upozornění.",
+      "Od předchozí kontroly nebyla v primárních oficiálních zdrojích potvrzena nová mimořádná událost, soudní pohyb ani nový dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
+      "Kanonický registr zůstává pokryt v rozsahu 64 z 64 organizací; data/city-news.json potvrzuje coveragePercent 100 a directoryIsCanonicalRegistry=true.",
       "U známých nemocničních soudních spisů nebyl ve veřejně indexovaných zdrojích zjištěn nový procesní pohyb.",
-      "Kanonický registr zůstává pokryt v rozsahu 64 z 64 organizací; data/city-news.json potvrzuje 100% pokrytí a eviduje stav každého zdroje.",
-      "Petice nevykazuje ověřený významný posun oproti uloženému stavu.",
-      "Bez důkazu zastaralé produkce nebyl spuštěn opravný deploy."
+      "Petice nevykazuje ověřený významný posun oproti uloženému stavu; veřejně indexované kopie byly starší než vlastní uložené měření, proto nebyl počet snížen.",
+      "Neověřená stopa o uzavírce II/225 zůstává bez autoritativního rozhodnutí, přesného termínu a objízdné trasy; doručení je nadále potlačeno.",
+      "Článek o FVE EPR Letiště byl v době kontroly vložen do main dvěma navazujícími publikačními commity. Veřejná kontrola probíhala souběžně s aktivními pojistnými workflow a externí fetch článku, sitemap a deployment-health byl dočasně neprůkazný; další deploy nebyl spuštěn, aby se nekřížil s již běžící kanonickou opravou.",
+      "Žádný nový alert ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný nález a technický stav ještě nebyl vyhodnocen jako trvalé selhání."
     ]
   }
 }
