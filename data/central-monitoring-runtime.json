@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T07:06:46+00:00",
-  "lastQuickCheckAt": "2026-08-03T07:06:46+00:00",
+  "updatedAt": "2026-08-03T08:08:50+00:00",
+  "lastQuickCheckAt": "2026-08-03T08:08:50+00:00",
   "lastDeepCheckAt": "2026-08-03T03:55:53+00:00",
-  "repositoryMainShaObserved": "30ac2777935ca9a0545b108b937d9cfd61b3fa13",
+  "repositoryMainShaObserved": "b5cea3ae233bfa61f768dc7268ece228c0929e6f",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 64,
@@ -18,11 +18,31 @@
       "uohs-nemocnice-kadan-luzka-s0098-2026",
       "fve-epr-letiste-bess-planovaci-smlouvy-20260802",
       "prakticti-lekari-nemocnice-kadan-srpen-2026",
-      "sports-gallery-kadan-duplicate-20260802"
+      "sports-gallery-kadan-duplicate-20260802",
+      "urgent-7726f6ffd33513770fd4",
+      "all-kadansko-7a1879082c37ae4ac568",
+      "all-kadansko-93e3dde7e913ad0a27b2"
+    ],
+    "unverifiedLeads": [
+      {
+        "stableFingerprint": "ii225-zeleznicni-prejezd-smer-kadan-20260803",
+        "title": "Mediální stopa o chystané uzavírce II/225 u železničního přejezdu směrem na Kadaň",
+        "firstObservedAt": "2026-08-03T07:41:31.945387+00:00",
+        "status": "awaiting_primary_source",
+        "missing": [
+          "přesný začátek a konec omezení",
+          "jednoznačné určení železničního přejezdu a dotčeného úseku",
+          "rozsah uzavírky a objízdná trasa",
+          "rozhodnutí silničního správního úřadu, JSDI nebo jiné oficiální dopravní oznámení"
+        ],
+        "deliverySuppressed": true,
+        "relatedClosedIssues": [554, 555, 556]
+      }
     ],
     "scopesChecked": [
       "mimořádné události a regionální zpravodajství",
       "Policie ČR, HZS a krizové zdroje Ústeckého kraje",
+      "dopravní uzavírky, II/225, krajský krizový portál a Správa a údržba silnic Ústeckého kraje",
       "město Kadaň, Nemocnice Kadaň, KTK, tepelné hospodářství a organizace z kanonického registru",
       "známé soudní spisové značky 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026",
       "petice za zachování Nemocnice Kadaň a případná státní ePetice",
@@ -37,21 +57,27 @@
       "hospitalPetitionPublicMessages": 2,
       "hospitalPetitionStateChanged": false,
       "stateEPetitionFound": false,
-      "repositoryMainSha": "30ac2777935ca9a0545b108b937d9cfd61b3fa13",
+      "repositoryMainSha": "b5cea3ae233bfa61f768dc7268ece228c0929e6f",
       "publicHomepageLatestArticle": "Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera",
       "publicHomepageLatestPublishedAt": "2026-08-03T04:00:00+02:00",
       "indexationCleanupExternalVerify": "success",
-      "indexationCleanupCheckedAt": "2026-08-03T07:05:49.640+00:00",
-      "checkedAt": "2026-08-03T07:06:46+00:00"
+      "duplicateAlertWorkflowsDisabled": [
+        ".github/workflows/monitor-urgent-kadan.yml",
+        ".github/workflows/monitor-urgent-kadan-cloud-fallback.yml",
+        ".github/workflows/monitor-all-kadansko.yml",
+        ".github/workflows/monitor-national-kadan.yml"
+      ],
+      "checkedAt": "2026-08-03T08:08:50+00:00"
     },
     "notes": [
-      "Od předchozí kontroly nebyla v oficiálních a důvěryhodných zdrojích zjištěna nová mimořádná událost s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
+      "Od předchozí kontroly nebyla v primárních oficiálních zdrojích potvrzena nová mimořádná událost s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
+      "Tři automatické issue #554, #555 a #556 zachytily jedinou mediální stopu o uzavírce II/225 pod třemi různými fingerprinty. Byly uzavřeny jako neověřená stopa a duplicity; uživatel nebyl upozorněn.",
+      "Přesný termín, místo, objížďka a primární rozhodnutí k možné uzavírce II/225 zatím nebyly dohledány. Stopu centrální monitoring dále sleduje a doručí ji až po autoritativním ověření.",
+      "Čtyři dřívější automatické GitHub monitoringy byly přepnuty pouze na ruční spuštění, aby jediným automatickým redakčním monitorem zůstal centrální monitoring a nevznikala duplicitní upozornění.",
       "U známých nemocničních soudních spisů nebyl ve veřejně indexovaných zdrojích zjištěn nový procesní pohyb.",
       "Kanonický registr zůstává pokryt v rozsahu 64 z 64 organizací; data/city-news.json potvrzuje 100% pokrytí a eviduje stav každého zdroje.",
-      "Petice nevykazuje ověřený významný posun oproti uloženému stavu; starší indexované počty nebyly použity jako aktuální údaj.",
-      "Veřejná titulka a archiv jsou vzájemně konzistentní a ukazují nejnovější článek z 3. srpna 2026 ve 04:00.",
-      "Oprava veřejné indexace byla v 07:05 UTC nasazena a externě ověřena jako úspěšná; nebyly nalezeny technické ani duplicitní URL.",
-      "Přímé načtení deployment-health.txt a XML výstupů nebylo v dostupném webovém nástroji spolehlivé; bez důkazu zastaralé produkce nebyl spuštěn opravný deploy."
+      "Petice nevykazuje ověřený významný posun oproti uloženému stavu.",
+      "Bez důkazu zastaralé produkce nebyl spuštěn opravný deploy."
     ]
   }
 }
