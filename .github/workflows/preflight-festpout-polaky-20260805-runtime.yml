@@ -1,0 +1,82 @@
+name: Předlet Festpouť Poláky 2026
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 4 8 *'
+    - cron: '10 5 5 8 *'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Obnovit kontrolovaný balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/publication/festpout-polaky-2026/chunks/*.b64 | base64 -d > /tmp/festpout-bundle.tar.xz
+          echo 'cfc83b2cdc8f063c63b2b8086069d165cad4768031393704503d8f94ce409ae5  /tmp/festpout-bundle.tar.xz' | sha256sum -c -
+          rm -rf /tmp/festpout-unpack && mkdir -p /tmp/festpout-unpack
+          tar -xJf /tmp/festpout-bundle.tar.xz -C /tmp/festpout-unpack
+          install -D -m 0755 /tmp/festpout-unpack/publisher.py scripts/publish_festpout_polaky_20260805.py
+          install -D -m 0755 /tmp/festpout-unpack/deploy.sh scripts/deploy_festpout_polaky_20260805.sh
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit živý primární zdroj
+        shell: bash
+        run: |
+          set -euo pipefail
+          official=''
+          for attempt in 1 2 3 4; do
+            official="$(curl -4 -kfsSL --max-time 25 "https://www.chbany.cz/festival-2026?v=${GITHUB_RUN_ID}-${attempt}" 2>/dev/null || true)"
+            [[ -n "$official" ]] && break
+            sleep $((attempt * 4))
+          done
+          test -n "$official"
+          ! grep -Eqi 'Festpouť[^<]{0,100}(zrušena|zrušeno|nekoná se)' <<<"$official"
+          for needle in '15.8.2026' '19.41' '22.30' '21.55' '0.30' 'Totální nasazení' 'UDG'; do grep -Fq "$needle" <<<"$official"; done
+
+      - name: Zkušebně vytvořit článek a všechny plochy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py
+          bash -n scripts/deploy_festpout_polaky_20260805.sh
+          python3 scripts/publish_festpout_polaky_20260805.py --dry-run
+          test -s clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
+          test -s social/festpout-polaky-vlaky-kadan-20260805.png
+          grep -Fq '<h1>Na Festpouť v Polákách pojedou zvláštní vlaky z Kadaně. Zahrají UDG, Pekař i Totální nasazení</h1>' clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
+          ! grep -Fqi noindex clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
+          git diff --check
+
+      - name: Předčasná publikace je zakázaná
+        if: github.event.schedule == '0 18 4 8 *'
+        shell: bash
+        run: |
+          code="$(curl -4 -kso /dev/null -w '%{http_code}' --max-time 20 'https://nasekadan.cz/clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html?v=preflight' || true)"
+          test "$code" != 200
+
+      - name: Zapsat předletový incident
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          title='Předlet Festpouti Poláky 2026 našel chybu'
+          body="Předletová kontrola zdroje, kontrolního součtu, článku nebo publikačních ploch selhala. Tvrdá časová závora nepovolí publikaci s neověřenými daty.\n\nWorkflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
