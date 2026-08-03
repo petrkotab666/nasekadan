@@ -1,3 +1,4 @@
+# Jednorázový opravný běh spuštěn 3. 8. 2026
 name: Jednorázově opravit publikaci FVE EPR Letiště
 
 on:
@@ -64,8 +65,6 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m 'Publikovat: solární park EPR Letiště a baterie'
           fi
-          # prepare_discovery.py upravuje i nesouvisející veřejné stránky. Tyto
-          # nezahrnuté změny zahodíme, aby bezpečný rebase nic neblokovalo.
           git reset --hard HEAD
           pushed=false
           for attempt in 1 2 3 4 5; do
