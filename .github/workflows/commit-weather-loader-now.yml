@@ -1,0 +1,43 @@
+name: Jednorázově zapsat loader počasí
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-loader-commit-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  commit-loader:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Doplnit a zapsat loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ensure_weather_loader.py
+          grep -Fq 'data-nk-weather-direct="1"' index.html
+          grep -Fq 'data-nk-weather-direct="1"' pocasi/index.html
+          git config user.name 'Naše Kadaň – oprava počasí'
+          git config user.email 'info@nasekadan.cz'
+          git add -- index.html pocasi/index.html
+          if git diff --cached --quiet; then
+            echo 'Loader už je zapsaný.'
+            exit 0
+          fi
+          git commit -m 'Trvale obnovit loader počasí po publikaci'
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
