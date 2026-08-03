@@ -1,0 +1,115 @@
+{
+  "generated_at": "2026-08-03T06:18:06.702Z",
+  "inspected_by_run": 30789687756,
+  "workflow": "hot-deploy-weather-via-ssh.yml",
+  "runs": [
+    {
+      "id": 30789581116,
+      "name": "Úzké nasazení počasí bez stavby celého obrazu",
+      "display_title": "Úzké nasazení počasí bez stavby celého obrazu",
+      "status": "completed",
+      "conclusion": "failure",
+      "event": "push",
+      "head_sha": "3c5eb8e683829b680c14d4449e527b2afb431cf4",
+      "created_at": "2026-08-03T06:15:14Z",
+      "updated_at": "2026-08-03T06:17:38Z",
+      "html_url": "https://github.com/petrkotab666/nasekadan/actions/runs/30789581116",
+      "jobs": [
+        {
+          "id": 91610114148,
+          "name": "hot-deploy",
+          "status": "completed",
+          "conclusion": "failure",
+          "runner_name": "GitHub Actions 1000039955",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "started_at": "2026-08-03T06:15:22Z",
+          "completed_at": "2026-08-03T06:17:37Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 1,
+              "started_at": "2026-08-03T06:15:23Z",
+              "completed_at": "2026-08-03T06:15:24Z"
+            },
+            {
+              "name": "Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 2,
+              "started_at": "2026-08-03T06:15:24Z",
+              "completed_at": "2026-08-03T06:17:23Z"
+            },
+            {
+              "name": "Vybrat dostupný SSH klíč",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 3,
+              "started_at": "2026-08-03T06:17:23Z",
+              "completed_at": "2026-08-03T06:17:23Z"
+            },
+            {
+              "name": "Nasadit pouze počasí a datovou bránu",
+              "status": "completed",
+              "conclusion": "failure",
+              "number": 4,
+              "started_at": "2026-08-03T06:17:23Z",
+              "completed_at": "2026-08-03T06:17:32Z"
+            },
+            {
+              "name": "Ověřit veřejné HTML, skripty a datové zdroje",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 5,
+              "started_at": "2026-08-03T06:17:32Z",
+              "completed_at": "2026-08-03T06:17:32Z"
+            },
+            {
+              "name": "Nainstalovat prohlížeč pro skutečnou kontrolu vykreslení",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 6,
+              "started_at": "2026-08-03T06:17:32Z",
+              "completed_at": "2026-08-03T06:17:32Z"
+            },
+            {
+              "name": "Ověřit vykreslení na titulce a stránce počasí",
+              "status": "completed",
+              "conclusion": "skipped",
+              "number": 7,
+              "started_at": "2026-08-03T06:17:32Z",
+              "completed_at": "2026-08-03T06:17:32Z"
+            },
+            {
+              "name": "Zapsat ověřitelný výsledek",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 8,
+              "started_at": "2026-08-03T06:17:32Z",
+              "completed_at": "2026-08-03T06:17:35Z"
+            },
+            {
+              "name": "Post Run actions/checkout@v4",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 16,
+              "started_at": "2026-08-03T06:17:35Z",
+              "completed_at": "2026-08-03T06:17:35Z"
+            },
+            {
+              "name": "Complete job",
+              "status": "completed",
+              "conclusion": "success",
+              "number": 17,
+              "started_at": "2026-08-03T06:17:35Z",
+              "completed_at": "2026-08-03T06:17:35Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
