@@ -21,6 +21,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Načíst nejnovější stav hlavní větve
+        shell: bash
+        run: git pull --ff-only origin main
+
       - name: Vyřadit neveřejné fragmenty článku ze sitemap
         shell: bash
         run: |
@@ -42,15 +46,15 @@ jobs:
           lines = sitemap.read_text(encoding='utf-8').splitlines()
           removed = [line for line in lines if '/clanky/parts/' in line]
           cleaned = [line for line in lines if '/clanky/parts/' not in line]
-          if len(removed) != 5:
-              raise SystemExit(f'Očekáváno 5 fragmentů, nalezeno {len(removed)}')
+          if len(removed) not in (0, 5):
+              raise SystemExit(f'Očekáváno 0 nebo 5 fragmentů, nalezeno {len(removed)}')
           sitemap.write_text('\n'.join(cleaned) + '\n', encoding='utf-8')
 
           registry = json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
           assert registry['article_count'] == len(registry['articles']) == 40
           assert not any('/clanky/parts/' in article['url'] for article in registry['articles'])
           assert '/clanky/parts/' not in sitemap.read_text(encoding='utf-8')
-          print('Odstraněno 5 neveřejných fragmentů; registr 40 článků zůstává beze změny.')
+          print(f'Odstraněno {len(removed)} neveřejných fragmentů; registr 40 článků zůstává beze změny.')
           PY
 
       - name: Uložit opravu a odstranit jednorázový workflow
@@ -62,4 +66,11 @@ jobs:
           git rm .github/workflows/fix-sitemap-fragments.yml
           git add scripts/finalize_launch.py sitemap.xml
           git commit -m "Opravit sitemapu: neindexovat dílčí fragmenty Slovanu"
-          git push
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            if git push; then
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
