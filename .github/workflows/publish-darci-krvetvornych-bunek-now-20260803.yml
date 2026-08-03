@@ -1,0 +1,190 @@
+name: Publikovat příběh dárkyně z Nemocnice Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-darci-krvetvornych-bunek-now-20260803.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-darci-krvetvornych-bunek-20260803
+  cancel-in-progress: false
+
+jobs:
+  publish-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_REL: /clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html
+      ARTICLE_FILE: clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html
+      EXPECTED_H1: Zaregistrovala se v Kadani. O rok později darovala krvetvorné buňky konkrétnímu pacientovi
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit všechny publikační výstupy
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/publish_darci_krvetvornych_bunek_20260803.py
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+          grep -Fq "$ARTICLE_REL" index.html
+          grep -Fq "$ARTICLE_REL" clanky/index.html
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" rss.xml
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" sitemap.xml
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" news-sitemap.xml
+          grep -Fq '/pocasi.js' index.html
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$ARTICLE_FILE" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+          git commit -m 'Publikovat: příběh dárkyně krvetvorných buněk z Kadaně'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then break; fi
+            test "$attempt" -lt 3
+            git fetch origin main
+            git rebase origin/main
+          done
+          source_sha="$(git rev-parse HEAD)"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit malý nasazovací balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/donor-article-bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\npublished_at=2026-08-03T12:22:00+02:00\nmode=direct-donor-article-bundle\n' '${{ steps.publish.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+
+      - name: Nasadit na ostrý web
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/donor-article-bundle"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/donor-article-bundle
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "ARTICLE_REL='$ARTICLE_REL' EXPECTED_H1='$EXPECTED_H1' bash -s" <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          src=/tmp/donor-article-bundle
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          sudo install -m 0644 "$src/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html" "$root/clanky/"
+          sudo install -m 0644 "$src/clanky/index.html" "$root/clanky/index.html"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          sudo chmod -R a+rX "$root"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+
+          check(){ curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz$1?donor-publish=$(date +%s)"; }
+          article="$(check "$ARTICLE_REL")"
+          home="$(check '/')"
+          archive="$(check '/clanky/')"
+          rss="$(check '/rss.xml')"
+          sitemap="$(check '/sitemap.xml')"
+          news="$(check '/news-sitemap.xml')"
+          health="$(check '/deployment-health.txt')"
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
+          grep -Fq 'index,follow' <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq '/pocasi.js' <<<"$home"
+          grep -Fq "$ARTICLE_REL" <<<"$archive"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$sitemap"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$news"
+          grep -Fq '^status=ok' <<<"$health"
+          rm -rf /tmp/donor-article-bundle
+          REMOTE
+
+      - name: Ověřit web zvenku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          base=https://nasekadan.cz
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          tmp="$RUNNER_TEMP/donor-public"; mkdir -p "$tmp"
+          get(){ curl -4 -kfsS -L --max-time 30 "$base$1?v=$stamp" -o "$2"; }
+          get "$ARTICLE_REL" "$tmp/article"
+          get '/' "$tmp/home"
+          get '/clanky/' "$tmp/archive"
+          get '/rss.xml' "$tmp/rss"
+          get '/sitemap.xml' "$tmp/sitemap"
+          get '/news-sitemap.xml' "$tmp/news"
+          get '/api/pocasi-predpoved.json' "$tmp/weather"
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$tmp/article"
+          grep -Fq 'index,follow' "$tmp/article"
+          grep -Fq "$ARTICLE_REL" "$tmp/home"
+          grep -Fq '/pocasi.js' "$tmp/home"
+          grep -Fq "$ARTICLE_REL" "$tmp/archive"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" "$tmp/rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" "$tmp/sitemap"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" "$tmp/news"
+          python3 -m json.tool "$tmp/weather" >/dev/null
+
+      - name: Zapsat výsledek publikace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.publish.outputs.source_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const deploy = process.env.DEPLOY_OUTCOME || 'skipped';
+            const verify = process.env.VERIFY_OUTCOME || 'skipped';
+            const status = deploy === 'success' && verify === 'success' ? 'success' : 'failure';
+            const payload = {
+              status,
+              run_id: String(context.runId),
+              source_sha: process.env.SOURCE_SHA || '',
+              checked_at: new Date().toISOString(),
+              deploy,
+              external_verify: verify,
+              article: 'https://nasekadan.cz/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html',
+              homepage: status === 'success',
+              archive: status === 'success',
+              rss: status === 'success',
+              sitemaps: status === 'success',
+              weather_preserved: status === 'success'
+            };
+            let sha;
+            try {
+              const old = await github.rest.repos.getContent({owner, repo, path: '.github/donor-article-live-status.json', ref: 'main'});
+              sha = old.data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path: '.github/donor-article-live-status.json', branch: 'main',
+              message: `Zapsat stav publikace článku o dárcovství: ${status} [skip ci]`,
+              sha,
+              content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')
+            });
