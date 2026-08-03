@@ -8,7 +8,7 @@ TARGETS = (ROOT / "index.html", ROOT / "pocasi" / "index.html")
 MARKER = 'data-nk-weather-direct="1"'
 LOADER = (
     '<script data-nk-weather-direct="1" data-nk-weather="direct" '
-    'src="/pocasi.js?v=20260803-weather-static-2" defer></script>'
+    'src="/pocasi.js?v=20260803-weather-live-refresh-3" defer></script>'
 )
 
 

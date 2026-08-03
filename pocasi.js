@@ -9,8 +9,10 @@
     stationName: 'Tušimice',
     forecastUrl: '/api/pocasi-predpoved.json',
     chmiBase: '/api/chmi-pocasi/',
-    cacheKey: 'nasekadan-weather-v2',
-    cacheMinutes: 30
+    cacheKey: 'nasekadan-weather-v3',
+    cacheMinutes: 5,
+    refreshMinutes: 5,
+    observationMaxAgeMinutes: 45
   };
 
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
@@ -22,19 +24,41 @@
   const target = isHome ? createStrip() : document.getElementById('weather-app');
   if (!target) return;
 
+  // WEATHER_LIVE_REFRESH_V3: cache je jen okamžitá záloha, nikoli důvod přeskočit síťovou aktualizaci.
   const cached = readCache();
   if (cached) render(target, cached, true);
-  const cacheIsFresh = cached && cached.fetchedAt && Number.isFinite(Date.parse(cached.fetchedAt))
-    && Date.now() - Date.parse(cached.fetchedAt) < CONFIG.cacheMinutes * 60 * 1000;
-  if (cacheIsFresh) return;
 
-  loadWeather().then(data => {
-    if (!data) return;
-    writeCache(data);
-    render(target, data, false);
-  }).catch(() => {
-    if (!cached) renderError(target);
+  let refreshInFlight = false;
+  let lastRefreshStartedAt = 0;
+
+  async function refreshWeather(force = false) {
+    const now = Date.now();
+    if (refreshInFlight) return;
+    if (!force && now - lastRefreshStartedAt < 60 * 1000) return;
+    refreshInFlight = true;
+    lastRefreshStartedAt = now;
+    try {
+      const data = await loadWeather();
+      if (!data) {
+        if (!cached) renderError(target);
+        return;
+      }
+      writeCache(data);
+      render(target, data, false);
+    } catch (_) {
+      if (!cached) renderError(target);
+    } finally {
+      refreshInFlight = false;
+    }
+  }
+
+  // Načíst čerstvá data při každém otevření, poté každých pět minut a při návratu do záložky.
+  refreshWeather(true);
+  window.setInterval(() => refreshWeather(true), CONFIG.refreshMinutes * 60 * 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshWeather(true);
   });
+  window.addEventListener('focus', () => refreshWeather(true));
 
   async function loadWeather() {
     const [forecastResult, observationResult] = await Promise.allSettled([
@@ -42,7 +66,10 @@
       fetchObservation()
     ]);
     const forecast = forecastResult.status === 'fulfilled' ? forecastResult.value : null;
-    const observation = observationResult.status === 'fulfilled' ? observationResult.value : null;
+    const rawObservation = observationResult.status === 'fulfilled' ? observationResult.value : null;
+    // ČHMÚ může během výpadku ponechat poslední denní soubor beze změny. Staré měření proto nesmí přebít aktuální předpověď.
+    const observation = rawObservation && isFreshTimestamp(rawObservation.time, CONFIG.observationMaxAgeMinutes)
+      ? rawObservation : null;
     if (!forecast && !observation) return null;
     return {
       fetchedAt: new Date().toISOString(),
@@ -56,9 +83,10 @@
   }
 
   async function fetchForecast() {
-    const response = await fetch(CONFIG.forecastUrl, {
-      headers: { 'Accept': 'application/json' },
-      credentials: 'same-origin'
+    const response = await fetch(cacheBusted(CONFIG.forecastUrl), {
+      headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+      credentials: 'same-origin',
+      cache: 'no-store'
     });
     if (!response.ok) throw new Error(`Forecast HTTP ${response.status}`);
     const json = await response.json();
@@ -142,10 +170,11 @@
     const dates = [0, -1].map(offset => formatPragueDate(offset));
     for (const date of dates) {
       try {
-        const url = `${CONFIG.chmiBase}10m-${CONFIG.stationId}-${date}.json`;
+        const url = cacheBusted(`${CONFIG.chmiBase}10m-${CONFIG.stationId}-${date}.json`);
         const response = await fetch(url, {
-          headers: { 'Accept': 'application/json' },
-          credentials: 'same-origin'
+          headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+          credentials: 'same-origin',
+          cache: 'no-store'
         });
         if (!response.ok) continue;
         const json = await response.json();
@@ -411,6 +440,19 @@
       return round1(c1 + c2 * temp + c3 * humidity + c4 * temp * humidity + c5 * temp * temp + c6 * humidity * humidity + c7 * temp * temp * humidity + c8 * temp * humidity * humidity + c9 * temp * temp * humidity * humidity);
     }
     return round1(temp);
+  }
+
+  function cacheBusted(url) {
+    const separator = String(url).includes('?') ? '&' : '?';
+    return `${url}${separator}_weather=${Date.now()}`;
+  }
+
+  function isFreshTimestamp(value, maxAgeMinutes) {
+    const timestamp = Date.parse(value);
+    if (!Number.isFinite(timestamp)) return false;
+    const age = Date.now() - timestamp;
+    // Malý záporný rozdíl tolerujeme kvůli rozdílnému času serverů.
+    return age >= -5 * 60 * 1000 && age <= maxAgeMinutes * 60 * 1000;
   }
 
   function formatPragueDate(dayOffset) {
