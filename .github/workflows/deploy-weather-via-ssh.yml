@@ -1,0 +1,154 @@
+name: Nasadit počasí přímo na OVH přes SSH
+run-name: Přímé nasazení počasí a veřejná kontrola
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-ssh-deploy-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-weather-ssh-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Vybrat dostupný SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+              chmod 600 "$RUNNER_TEMP/nasekadan_key"
+              echo "secret=$name" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo 'Chybí použitelný SSH klíč.' >&2
+          exit 20
+
+      - name: Spustit kanonické nasazení na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 \
+            "set -euo pipefail; cd /opt/nasekadan; git fetch --prune origin main; git reset --hard origin/main; git clean -fd; sudo git config --global --add safe.directory /opt/nasekadan; sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh"
+
+      - name: Veřejně ověřit stránku a data
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          nonce="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          page="$(mktemp)"
+          script="$(mktemp)"
+          forecast="$(mktemp)"
+          observation="$(mktemp)"
+          health="$(mktemp)"
+
+          curl -kfsS --max-time 35 "$base/pocasi/?verify=$nonce" -o "$page"
+          grep -Fq 'Počasí v Kadani' "$page"
+
+          curl -kfsS --max-time 35 "$base/pocasi.js?verify=$nonce" -o "$script"
+          grep -Fq '/api/pocasi-predpoved.json' "$script"
+
+          curl -kfsS --max-time 40 "$base/api/pocasi-predpoved.json?verify=$nonce" -o "$forecast"
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); s=d.get('properties',{}).get('timeseries',[]); assert isinstance(s,list) and len(s)>=24, 'Nedostatečná předpověď'; print(f'Předpověď: {len(s)} časových kroků.')" "$forecast"
+
+          today="$(TZ=Europe/Prague date +%Y%m%d)"
+          yesterday="$(TZ=Europe/Prague date -d yesterday +%Y%m%d)"
+          observation_ok=false
+          for day in "$today" "$yesterday"; do
+            if curl -kfsS --max-time 40 "$base/api/chmi-pocasi/10m-0-20000-0-11438-${day}.json?verify=$nonce" -o "$observation" \
+               && python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); assert isinstance(d,dict) and d" "$observation"; then
+              observation_ok=true
+              break
+            fi
+          done
+          [[ "$observation_ok" == true ]]
+
+          curl -kfsS --max-time 35 "$base/deployment-health.txt?verify=$nonce" -o "$health"
+          grep -Fq 'site=nasekadan.cz' "$health"
+
+          rm -f "$page" "$script" "$forecast" "$observation"
+          cp "$health" "$RUNNER_TEMP/weather-deployment-health.txt"
+          rm -f "$health"
+
+      - name: Zapsat ověřitelný stav do repozitáře
+        if: always()
+        shell: bash
+        env:
+          KEY_OUTCOME: ${{ steps.key.outcome }}
+          KEY_SECRET: ${{ steps.key.outputs.secret }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+        run: |
+          set -u
+          status=failure
+          if [[ "$DEPLOY_OUTCOME" == success && "$VERIFY_OUTCOME" == success ]]; then
+            status=success
+          fi
+          health=''
+          if [[ -s "$RUNNER_TEMP/weather-deployment-health.txt" ]]; then
+            health="$(cat "$RUNNER_TEMP/weather-deployment-health.txt")"
+          fi
+
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            mkdir -p .github
+            STATUS="$status" SOURCE_SHA="$GITHUB_SHA" RUN_ID="$GITHUB_RUN_ID" \
+              KEY_RESULT="$KEY_OUTCOME" KEY_NAME="$KEY_SECRET" DEPLOY_RESULT="$DEPLOY_OUTCOME" \
+              VERIFY_RESULT="$VERIFY_OUTCOME" HEALTH="$health" \
+              python3 -c "import json,os; from datetime import datetime,timezone; from pathlib import Path; payload={'status':os.environ['STATUS'],'source_sha':os.environ['SOURCE_SHA'],'run_id':os.environ['RUN_ID'],'checked_at':datetime.now(timezone.utc).isoformat(),'key_step':os.environ['KEY_RESULT'],'key_secret':os.environ['KEY_NAME'],'deploy':os.environ['DEPLOY_RESULT'],'verify':os.environ['VERIFY_RESULT'],'deployment_health':os.environ['HEALTH'],'page':'https://nasekadan.cz/pocasi/'}; Path('.github/weather-live-status.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')"
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/weather-live-status.json
+            git commit -m "Zapsat stav živého počasí: $status [skip ci]" || true
+            if git push origin HEAD:main; then
+              break
+            fi
+            sleep 2
+          done
+
+          {
+            echo '## Přímé nasazení počasí na OVH'
+            echo "- Výsledek: $status"
+            echo "- SSH klíč: ${KEY_SECRET:-nenalezen}"
+            echo "- Deploy: ${DEPLOY_OUTCOME:-unknown}"
+            echo "- Veřejná kontrola: ${VERIFY_OUTCOME:-unknown}"
+          } >> "$GITHUB_STEP_SUMMARY"
