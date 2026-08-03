@@ -1,0 +1,161 @@
+name: Opravit kanonický registr po změně článku
+
+on:
+  push:
+    paths:
+      - '.github/canonical-registry-fix-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ověřit živý web a opravit registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          python3 - <<'PY'
+          import datetime as dt
+          import hashlib
+          import json
+          import re
+          import time
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          BASE = 'https://nasekadan.cz'
+          TARGET = 'https://nasekadan.cz/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html'
+          TARGET_COMMIT = 'c370a9c4beada82b7236af5a4438e25ed54f12a0'
+          TARGET_MODIFIED = '2026-08-03T12:42:09+02:00'
+          reg_path = Path('data/published-content-index.json')
+          status_path = Path('.github/canonical-registry-sync-status.json')
+
+          def get(path):
+              url = BASE + path + ('&' if '?' in path else '?') + 'audit=' + str(int(time.time()))
+              last = None
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(url, headers={'User-Agent':'NaseKadanCanonicalAudit/1.1','Cache-Control':'no-cache','Pragma':'no-cache'})
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          body = r.read().decode('utf-8','replace')
+                          if r.status == 200 and body.strip():
+                              return body
+                  except Exception as exc:
+                      last = exc
+                      time.sleep(2 + attempt * 2)
+              raise RuntimeError(f'Nelze načíst {url}: {last}')
+
+          def links_html(body):
+              return {BASE + p for p in re.findall(r'href=["\'](/clanky/[^/"\']+\.html)["\']', body, re.I)}
+
+          def links_xml(body, rss=False):
+              root = ET.fromstring(body)
+              values = []
+              if rss:
+                  values = [e.text.strip() for e in root.findall('.//item/link') if e.text]
+              else:
+                  values = [e.text.strip() for e in root.iter() if e.tag.endswith('loc') and e.text]
+              return {u.split('#',1)[0] for u in values if re.fullmatch(r'https://nasekadan\.cz/clanky/[^/]+\.html', u.split('#',1)[0])}
+
+          home = get('/')
+          archive = get('/clanky/')
+          rss = get('/rss.xml')
+          sitemap = get('/sitemap.xml')
+          news = get('/news-sitemap.xml')
+          health = get('/deployment-health.txt')
+          article = get('/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html')
+
+          if 'Krvetvorné buňky jí odebrali pomocí separátoru' not in article:
+              raise RuntimeError('Veřejný článek neobsahuje ověřenou opravenou formulaci')
+
+          sets = {
+              'homepage': links_html(home),
+              'archive': links_html(archive),
+              'rss': links_xml(rss, True),
+              'sitemap': links_xml(sitemap),
+              'news_sitemap': links_xml(news),
+          }
+          if not all(TARGET in sets[k] for k in sets):
+              raise RuntimeError('Nový článek není ve všech povinných veřejných kanálech')
+
+          data = json.loads(reg_path.read_text(encoding='utf-8'))
+          before = None
+          target = None
+          for item in data['articles']:
+              if item['url'] == TARGET:
+                  target = item
+                  before = {'modified_at': item.get('modified_at'), 'source_commit': item.get('source_commit')}
+                  break
+          if target is None:
+              raise RuntimeError('Cílový veřejný článek chybí v registru')
+
+          target['modified_at'] = TARGET_MODIFIED
+          target['source_commit'] = TARGET_COMMIT
+          target['publication_status'] = 'published'
+          target['status'] = {k: TARGET in v for k, v in sets.items()}
+
+          registered = {a['url'] for a in data['articles']}
+          if registered != sets['archive'] or registered != sets['rss']:
+              raise RuntimeError(f'Rozpor registr/archiv/RSS: {len(registered)}/{len(sets["archive"])}/{len(sets["rss"])}')
+          if not registered <= sets['sitemap']:
+              raise RuntimeError('Hlavní sitemapa neobsahuje všechny registrované články')
+
+          urls = [a['url'] for a in data['articles']]
+          fps = [a['fingerprint'] for a in data['articles']]
+          dup_urls = sorted({u for u in urls if urls.count(u) > 1})
+          dup_fps = sorted({f for f in fps if fps.count(f) > 1})
+          if dup_urls or dup_fps:
+              raise RuntimeError('Registr obsahuje duplicity')
+
+          now = dt.datetime.now(dt.timezone.utc).isoformat()
+          data['generated_at'] = now
+          data['source_commit'] = TARGET_COMMIT
+          data['article_count'] = len(data['articles'])
+          val = data.setdefault('validation', {})
+          val['homepage_count'] = len(sets['homepage'])
+          val['archive_count'] = len(sets['archive'])
+          val['rss_count'] = len(sets['rss'])
+          val['sitemap_all_articles_present'] = registered <= sets['sitemap']
+          val['news_sitemap_recent_count'] = len(registered & sets['news_sitemap'])
+          val['deployment_health'] = 'verified'
+          val['duplicate_urls'] = dup_urls
+          val['duplicate_fingerprints'] = dup_fps
+          val['per_article_source_commits'] = all(bool(a.get('source_commit')) for a in data['articles'])
+          sha = re.search(r'\b[0-9a-f]{40}\b', health, re.I)
+          val['deployment_health_source'] = sha.group(0) if sha else None
+          val['public_audit_at'] = now
+          audit = json.dumps({k: sorted(v) for k,v in sets.items()}, ensure_ascii=False, sort_keys=True).encode()
+          val['public_audit_sha256'] = hashlib.sha256(audit).hexdigest()
+
+          reg_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          status_path.write_text(json.dumps({
+              'status':'success',
+              'checked_at':now,
+              'article_count':len(registered),
+              'homepage_count':len(sets['homepage']),
+              'archive_count':len(sets['archive']),
+              'rss_count':len(sets['rss']),
+              'news_sitemap_recent_count':len(registered & sets['news_sitemap']),
+              'deployment_health':'verified',
+              'target_url':TARGET,
+              'before':before,
+              'after':{'modified_at':TARGET_MODIFIED,'source_commit':TARGET_COMMIT},
+              'duplicate_urls':dup_urls,
+              'duplicate_fingerprints':dup_fps
+          }, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git add data/published-content-index.json .github/canonical-registry-sync-status.json
+          git rm -f .github/canonical-registry-fix-trigger.txt
+          git rm -f .github/workflows/canonical-registry-fix-triggered-20260803.yml
+          git rm -f .github/workflows/canonical-registry-sync-20260803-1307.yml
+          git commit -m "Opravit kanonický registr po veřejné změně článku [skip ci]"
+          git push origin HEAD:main
