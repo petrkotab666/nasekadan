@@ -41,18 +41,49 @@ def article_info(path: Path):
         dt = dt.replace(tzinfo=timezone.utc)
     title = first([r'<h1[^>]*>(.*?)</h1>', r'<title>(.*?)</title>'], text, path.stem)
     title = re.sub(r'\s*\|\s*Naše Kadaň\s*$', '', title)
-    desc = first([r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)', r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>'], text, '')
+    desc = first([
+        r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
+        r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>'
+    ], text, '')
     tag = first([r'<p[^>]+class=["\'][^"\']*tag[^"\']*["\'][^>]*>(.*?)</p>'], text, 'AKTUÁLNĚ')
+    image = first([
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)',
+        r'<link[^>]+rel=["\']image_src["\'][^>]+href=["\']([^"\']+)'
+    ], text, '/social-card.png')
     href = '/clanky/' + path.name
-    return {'path': path, 'href': href, 'dt': dt, 'title': title, 'desc': desc, 'tag': tag}
+    return {
+        'path': path,
+        'href': href,
+        'dt': dt,
+        'title': title,
+        'desc': desc,
+        'tag': tag,
+        'image': image,
+    }
+
+
+def image_style(image: str, hero: bool = False) -> str:
+    image = image.replace("'", '%27')
+    overlay = (
+        'linear-gradient(90deg,rgba(7,23,34,.76),rgba(7,23,34,.14) 72%)'
+        if hero else
+        'linear-gradient(rgba(7,23,34,.04),rgba(7,23,34,.18))'
+    )
+    return (
+        f"background-image:{overlay},url('{escape(image, quote=True)}');"
+        'background-size:cover;background-position:center;background-repeat:no-repeat'
+    )
 
 
 def card(a):
     d = a['dt']
     meta = f"{d.day}. {d.month}. {d.year} · {d.strftime('%H:%M')} · {a['tag']}"
+    title = escape(a['title'])
     return f'''    <article class="article-card hospital" data-auto-article="{escape(a['path'].stem)}">
-      <div class="visual" style="background:linear-gradient(135deg,#10242e,#315d70 58%,#9d222a)"><strong>{escape(a['title'])}</strong></div>
-      <div class="article-body"><span class="meta">{escape(meta)}</span><h3>{escape(a['title'])}</h3><p>{escape(a['desc'])}</p><a class="read-more" href="{a['href']}">Přečíst článek →</a></div>
+      <div class="visual" role="img" aria-label="{title}" style="{image_style(a['image'])}"></div>
+      <div class="article-body"><span class="meta">{escape(meta)}</span><h3>{title}</h3><p>{escape(a['desc'])}</p><a class="read-more" href="{a['href']}">Přečíst článek →</a></div>
     </article>'''
 
 
@@ -71,7 +102,7 @@ def hero(a, second):
     </aside>'''
     return f'''  <section class="wrap hero" id="clanky" data-auto-latest-hero="1" data-latest-article-href="{escape(a['href'])}">
     <article class="lead">
-      <div class="photo" style="background:linear-gradient(135deg,#10242e,#22606b 55%,#9d222a)"><span>{escape(a['tag'])}</span><strong>{d.day}. {d.month}. {d.year}</strong></div>
+      <div class="photo" style="{image_style(a['image'], hero=True)}"><span>{escape(a['tag'])}</span><strong>{d.day}. {d.month}. {d.year}</strong></div>
       <div class="copy">
         <small>{escape(a['tag'])} · {d.day}. {d.month}. {d.year} · {d.strftime('%H:%M')}</small>
         <h1>{escape(a['title'])}</h1>
@@ -93,6 +124,26 @@ def replace_between(text, start, end, replacement):
     return text[:s + len(start)] + '\n' + replacement + '\n    ' + text[e:]
 
 
+def validate_cards(text: str, label: str) -> None:
+    cards = re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?</article>', text, re.I | re.S)
+    if not cards:
+        raise RuntimeError(f'{label}: nebyly nalezeny žádné karty článků')
+    broken = []
+    for block in cards:
+        href = first([r'href=["\'](/clanky/[^"\']+\.html)'], block, 'neznámá karta')
+        visual = re.search(r'<div\b[^>]*class=["\'][^"\']*visual[^"\']*["\'][^>]*>.*?</div>', block, re.I | re.S)
+        if not visual:
+            broken.append(f'{href}: chybí visual')
+            continue
+        visual_html = visual.group(0)
+        if 'background-image:' not in visual_html:
+            broken.append(f'{href}: chybí background-image')
+        if re.search(r'<strong\b', visual_html, re.I):
+            broken.append(f'{href}: zdvojený titulek ve visual')
+    if broken:
+        raise RuntimeError(label + ': ' + '; '.join(broken[:12]))
+
+
 def main():
     articles = []
     for p in sorted((ROOT / 'clanky').glob('*.html')):
@@ -105,19 +156,28 @@ def main():
     if not articles:
         raise SystemExit('Nenalezen žádný publikovaný článek')
 
-    # První článek je velký hlavní blok a druhý článek je vedlejší blok. V běžném
-    # seznamu se proto nesmějí opakovat; v archivu naopak musí zůstat všechny.
     featured = articles[:2]
     home_cards = '\n'.join(card(a) for a in articles[2:])
     archive_cards = '\n'.join(card(a) for a in articles)
 
     h = HOME.read_text(encoding='utf-8')
-    h = re.sub(r'  <section class="wrap hero" id="clanky".*?</section>', hero(articles[0], articles[1] if len(articles) > 1 else None), h, count=1, flags=re.S)
+    h = re.sub(
+        r'  <section class="wrap hero" id="clanky".*?</section>',
+        hero(articles[0], articles[1] if len(articles) > 1 else None),
+        h,
+        count=1,
+        flags=re.S,
+    )
     h = replace_between(h, '<div class="article-list">', '<p class="archive-note">', home_cards)
     HOME.write_text(h, encoding='utf-8', newline='\n')
 
     atext = ARCHIVE.read_text(encoding='utf-8')
-    atext = replace_between(atext, '<section class="archive-list" aria-label="Chronologický přehled článků">', '</section>', archive_cards)
+    atext = replace_between(
+        atext,
+        '<section class="archive-list" aria-label="Chronologický přehled článků">',
+        '</section>',
+        archive_cards,
+    )
     ARCHIVE.write_text(atext, encoding='utf-8', newline='\n')
 
     home_text = HOME.read_text(encoding='utf-8')
@@ -126,7 +186,12 @@ def main():
     assert all(x['href'] in home_text for x in articles)
     assert all(x['href'] in archive_text for x in articles)
     assert all(x['href'] not in article_list for x in featured)
-    print(f'Viditelnost zajištěna pro {len(articles)} článků. Nejnovější dva se na titulce neopakují: {articles[0]["href"]}')
+    validate_cards(home_text, 'Titulní strana')
+    validate_cards(archive_text, 'Archiv článků')
+    print(
+        f'Viditelnost a obrázky zajištěny pro {len(articles)} článků. '
+        f'Nejnovější dva se na titulce neopakují: {articles[0]["href"]}'
+    )
 
 
 if __name__ == '__main__':
