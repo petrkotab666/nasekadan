@@ -14,21 +14,21 @@ def patch_site_js() -> None:
     text = SITE_JS.read_text(encoding="utf-8")
 
     if MARKER not in text:
-        anchor = '      [data-poll-id=\\"sekani-travniku-kadan-2026\\"] .poll-result-fill{background:#d92f38}\n'
+        anchor = '      [data-poll-id="sekani-travniku-kadan-2026"] .poll-result-fill{background:#d92f38}\n'
         if anchor not in text:
             raise SystemExit("V site.js chybí očekávaný blok kontrastu ankety.")
         block = '''      /* POLL_ALZBETINSKY_HIGH_CONTRAST_V1: světlý text a jasně označená zvolená odpověď. */
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-results{background:rgba(55,7,17,.34);border:1px solid rgba(255,255,255,.34);border-radius:16px;padding:18px 18px 14px}
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-results-head,
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-results-head strong,
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-result-label{color:#ffffff!important;text-shadow:0 1px 2px rgba(0,0,0,.38)}
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-results-total,
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-result-value,
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-results-status{color:#f9e9ed!important;font-weight:800}
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-results-error{color:#ffe1e1!important}
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-result-track{background:#fff7f8;box-shadow:0 0 0 1px rgba(255,255,255,.70)}
-      [data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-result-fill{background:#e14650}
-      [data-poll-id] .poll-option[aria-pressed=\\"true\\"]{background:#fff4f4!important;border-color:#f2c8cf!important;color:#74152a!important;text-shadow:none!important}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results{background:rgba(55,7,17,.34);border:1px solid rgba(255,255,255,.34);border-radius:16px;padding:18px 18px 14px}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-head,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-head strong,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-label{color:#ffffff!important;text-shadow:0 1px 2px rgba(0,0,0,.38)}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-total,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-value,
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-status{color:#f9e9ed!important;font-weight:800}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-results-error{color:#ffe1e1!important}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-track{background:#fff7f8;box-shadow:0 0 0 1px rgba(255,255,255,.70)}
+      [data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-fill{background:#e14650}
+      [data-poll-id] .poll-option[aria-pressed="true"]{background:#fff4f4!important;border-color:#f2c8cf!important;color:#74152a!important;text-shadow:none!important}
 '''
         text = text.replace(anchor, anchor + block, 1)
 
@@ -52,8 +52,8 @@ def patch_site_js() -> None:
 def patch_html(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     updated, count = re.subn(
-        r'/site\.js(?:\?v=[^\"\']*)?',
-        f'/site.js?v={VERSION}',
+        r"/site\.js(?:\?v=[^\"']*)?",
+        f"/site.js?v={VERSION}",
         text,
     )
     if count == 0:
@@ -70,9 +70,9 @@ def main() -> None:
     article = ARTICLE.read_text(encoding="utf-8")
     required = [
         MARKER,
-        '[data-poll-id=\\"alzbetinsky-klaster-kadan-2026\\"] .poll-result-label',
+        '[data-poll-id="alzbetinsky-klaster-kadan-2026"] .poll-result-label',
         "button.style.color = selected ? '#74152a' : '';",
-        f'/site.js?v={VERSION}',
+        f"/site.js?v={VERSION}",
     ]
     missing = [item for item in required if item not in site and item not in article]
     if missing:
@@ -82,4 +82,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# Trigger workflow after the workflow file existed on main.
+# Trigger workflow after correcting literal quote matching.
