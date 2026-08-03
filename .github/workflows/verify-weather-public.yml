@@ -1,0 +1,103 @@
+name: Ověřit veřejné počasí Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-public-verify-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prověřit veřejnou stránku a data
+        shell: bash
+        run: |
+          set +e
+          base='https://nasekadan.cz'
+          nonce="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          page_file="$(mktemp)"
+          js_file="$(mktemp)"
+          forecast_file="$(mktemp)"
+          observation_file="$(mktemp)"
+          health_file="$(mktemp)"
+
+          page_ok=false
+          script_ok=false
+          forecast_ok=false
+          observation_ok=false
+          health_ok=false
+          observation_url=''
+
+          if curl -kfsS --max-time 30 "$base/pocasi/?verify=$nonce" -o "$page_file" \
+             && grep -Fq 'Počasí v Kadani' "$page_file"; then
+            page_ok=true
+          fi
+
+          if curl -kfsS --max-time 30 "$base/pocasi.js?verify=$nonce" -o "$js_file" \
+             && grep -Fq '/api/pocasi-predpoved.json' "$js_file"; then
+            script_ok=true
+          fi
+
+          if curl -kfsS --max-time 35 "$base/api/pocasi-predpoved.json?verify=$nonce" -o "$forecast_file" \
+             && python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); s=d.get('properties',{}).get('timeseries',[]); raise SystemExit(0 if isinstance(s,list) and len(s)>=24 else 1)" "$forecast_file"; then
+            forecast_ok=true
+          fi
+
+          today="$(TZ=Europe/Prague date +%Y%m%d)"
+          yesterday="$(TZ=Europe/Prague date -d yesterday +%Y%m%d)"
+          for day in "$today" "$yesterday"; do
+            candidate="$base/api/chmi-pocasi/10m-0-20000-0-11438-${day}.json?verify=$nonce"
+            if curl -kfsS --max-time 35 "$candidate" -o "$observation_file" \
+               && python3 -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); raise SystemExit(0 if isinstance(d,dict) and d else 1)" "$observation_file"; then
+              observation_ok=true
+              observation_url="$candidate"
+              break
+            fi
+          done
+
+          if curl -kfsS --max-time 30 "$base/deployment-health.txt?verify=$nonce" -o "$health_file" \
+             && grep -Fq 'site=nasekadan.cz' "$health_file"; then
+            health_ok=true
+          fi
+
+          overall=failure
+          if [[ "$page_ok" == true && "$script_ok" == true && "$forecast_ok" == true && "$observation_ok" == true ]]; then
+            overall=success
+          fi
+
+          PAGE_OK="$page_ok" SCRIPT_OK="$script_ok" FORECAST_OK="$forecast_ok" \
+          OBSERVATION_OK="$observation_ok" HEALTH_OK="$health_ok" OVERALL="$overall" \
+          OBSERVATION_URL="$observation_url" HEALTH_FILE="$health_file" \
+          python3 -c "import json,os; from datetime import datetime,timezone; from pathlib import Path; health=''; p=Path(os.environ['HEALTH_FILE']); health=p.read_text(encoding='utf-8',errors='replace').strip() if p.exists() else ''; payload={'status':os.environ['OVERALL'],'checked_at':datetime.now(timezone.utc).isoformat(),'run_id':os.environ.get('GITHUB_RUN_ID',''),'page_ok':os.environ['PAGE_OK']=='true','script_ok':os.environ['SCRIPT_OK']=='true','forecast_ok':os.environ['FORECAST_OK']=='true','observation_ok':os.environ['OBSERVATION_OK']=='true','deployment_health_ok':os.environ['HEALTH_OK']=='true','observation_url':os.environ['OBSERVATION_URL'],'deployment_health':health,'page':'https://nasekadan.cz/pocasi/'}; Path('.github/weather-public-status.json').write_text(json.dumps(payload,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')"
+
+          rm -f "$page_file" "$js_file" "$forecast_file" "$observation_file" "$health_file"
+
+      - name: Uložit výsledek veřejné kontroly
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add .github/weather-public-status.json
+            git commit -m 'Zapsat veřejnou kontrolu počasí [skip ci]' || exit 0
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep 2
+          done
+          exit 1
