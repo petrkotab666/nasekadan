@@ -1,4 +1,4 @@
-name: Zjistit stav úzkého nasazení počasí
+name: Zjistit stav přímé diagnostiky serveru počasí
 
 on:
   push:
@@ -31,56 +31,17 @@ jobs:
             const response = await github.rest.actions.listWorkflowRuns({
               owner,
               repo,
-              workflow_id: 'hot-deploy-weather-via-ssh.yml',
+              workflow_id: 'inspect-weather-server-direct.yml',
               branch: 'main',
               per_page: 10
             });
             const result = [];
             for (const run of response.data.workflow_runs || []) {
-              const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
-                owner,
-                repo,
-                run_id: run.id,
-                per_page: 100
-              });
-              result.push({
-                id: run.id,
-                name: run.name,
-                display_title: run.display_title,
-                status: run.status,
-                conclusion: run.conclusion,
-                event: run.event,
-                head_sha: run.head_sha,
-                created_at: run.created_at,
-                updated_at: run.updated_at,
-                html_url: run.html_url,
-                jobs: (jobsResponse.data.jobs || []).map(job => ({
-                  id: job.id,
-                  name: job.name,
-                  status: job.status,
-                  conclusion: job.conclusion,
-                  runner_name: job.runner_name,
-                  labels: job.labels,
-                  started_at: job.started_at,
-                  completed_at: job.completed_at,
-                  steps: (job.steps || []).map(step => ({
-                    name: step.name,
-                    status: step.status,
-                    conclusion: step.conclusion,
-                    number: step.number,
-                    started_at: step.started_at,
-                    completed_at: step.completed_at
-                  }))
-                }))
-              });
+              const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({owner,repo,run_id:run.id,per_page:100});
+              result.push({id:run.id,status:run.status,conclusion:run.conclusion,head_sha:run.head_sha,created_at:run.created_at,updated_at:run.updated_at,html_url:run.html_url,jobs:(jobsResponse.data.jobs||[]).map(job=>({id:job.id,name:job.name,status:job.status,conclusion:job.conclusion,runner_name:job.runner_name,steps:(job.steps||[]).map(step=>({name:step.name,status:step.status,conclusion:step.conclusion,number:step.number}))}))});
             }
-            fs.mkdirSync('.github', {recursive: true});
-            fs.writeFileSync('.github/weather-hot-run-status.json', JSON.stringify({
-              generated_at: new Date().toISOString(),
-              inspected_by_run: context.runId,
-              workflow: 'hot-deploy-weather-via-ssh.yml',
-              runs: result
-            }, null, 2) + '\n');
+            fs.mkdirSync('.github',{recursive:true});
+            fs.writeFileSync('.github/weather-server-run-status.json',JSON.stringify({generated_at:new Date().toISOString(),workflow:'inspect-weather-server-direct.yml',runs:result},null,2)+'\n');
 
       - name: Uložit výsledek diagnostiky
         shell: bash
@@ -91,11 +52,9 @@ jobs:
             git rebase origin/main
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add .github/weather-hot-run-status.json
-            git commit -m 'Zapsat stav úzkého nasazení počasí [skip ci]' || exit 0
-            if git push origin HEAD:main; then
-              exit 0
-            fi
+            git add .github/weather-server-run-status.json
+            git commit -m 'Zapsat přímou diagnostiku serveru počasí [skip ci]' || exit 0
+            if git push origin HEAD:main; then exit 0; fi
             git rebase --abort 2>/dev/null || true
             sleep 2
           done
