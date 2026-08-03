@@ -1,0 +1,167 @@
+name: Nezávislá okamžitá záchrana publikace kláštera
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/alzbetinsky-independent-rescue-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-alzbetinsky-klaster-20260803-independent
+  cancel-in-progress: false
+
+env:
+  ARTICLE_REL: /clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html
+  ARTICLE_PATH: clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html
+  SOCIAL_PATH: social/alzbetinsky-klaster-kadan-pacienti-20260803.png
+
+jobs:
+  rescue:
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 40
+    steps:
+      - name: Povolit pouze cílový den
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(date -u +%Y-%m-%d)" = "2026-08-03"
+
+      - name: Stáhnout nejnovější main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit a bezpečně uložit úplnou publikaci
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – nezávislá záchrana kláštera'
+          git config user.email 'info@nasekadan.cz'
+          venv="$RUNNER_TEMP/alzbetinsky-rescue-venv"
+          rm -rf "$venv"
+          python3 -m venv "$venv"
+          "$venv/bin/python" -m pip install --disable-pip-version-check --quiet pillow
+
+          published=false
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            "$venv/bin/python" -m py_compile scripts/publish_alzbetinsky_klaster_20260803.py
+            "$venv/bin/python" scripts/publish_alzbetinsky_klaster_20260803.py --validate-source-only
+            "$venv/bin/python" scripts/publish_alzbetinsky_klaster_20260803.py
+
+            grep -Fq 'Kam odešli poslední pacienti?' "$ARTICLE_PATH"
+            grep -Fq 'data-poll-id="alzbetinsky-klaster-kadan-2026"' "$ARTICLE_PATH"
+            grep -Fq 'data-promos data-context="sidebar"' "$ARTICLE_PATH"
+            grep -Fq 'Léčebna tbc a respiračních nemocí v Kadani' "$ARTICLE_PATH"
+            grep -Fq 'data-latest-article-href="/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html"' index.html
+            grep -Fq "$ARTICLE_REL" clanky/index.html
+            grep -Fq "https://nasekadan.cz$ARTICLE_REL" rss.xml sitemap.xml news-sitemap.xml
+            test -s "$SOCIAL_PATH"
+            git diff --check
+
+            git add "$ARTICLE_PATH" "$SOCIAL_PATH" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
+            git commit -m 'Zveřejnit článek o alžbětinském klášteře [skip ci]' || true
+            if git push origin HEAD:main; then
+              published=true
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          test "$published" = true
+          git fetch origin main
+          git reset --hard origin/main
+          test -s "$ARTICLE_PATH"
+
+      - name: Kanonicky nasadit na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n true
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Ověřit veřejnou publikaci bez cache
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          python3 - "$source_sha" <<'PY'
+          import json, sys, time, urllib.request
+          source_sha=sys.argv[1]
+          base='https://nasekadan.cz'
+          rel='/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html'
+          checks={
+            rel:['Kam odešli poslední pacienti?','data-poll-id="alzbetinsky-klaster-kadan-2026"','Léčebna tbc a respiračních nemocí v Kadani','data-promos data-context="sidebar"'],
+            '/':['data-latest-article-href="/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html"',rel],
+            '/clanky/':[rel],
+            '/rss.xml':[base+rel],
+            '/sitemap.xml':[base+rel],
+            '/news-sitemap.xml':[base+rel],
+            '/deployment-health.txt':['source='+source_sha],
+          }
+          for path, markers in checks.items():
+            last=''
+            for attempt in range(12):
+              sep='&' if '?' in path else '?'
+              url=base+path+sep+'independent_rescue='+str(int(time.time()*1000))
+              try:
+                req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-Independent-Rescue/1.0','Cache-Control':'no-cache'})
+                with urllib.request.urlopen(req,timeout=25) as r:
+                  last=r.read().decode('utf-8','replace')
+                if all(m in last for m in markers):
+                  break
+              except Exception as exc:
+                last=str(exc)
+              time.sleep(5+attempt*2)
+            else:
+              raise SystemExit(f'{path}: chybí veřejné potvrzení: {last[:400]}')
+          image=urllib.request.urlopen(base+'/social/alzbetinsky-klaster-kadan-pacienti-20260803.png?independent=1',timeout=25).read()
+          if len(image)<10000:
+            raise SystemExit('Sociální obrázek je neúplný.')
+          poll=urllib.request.urlopen(base+'/api/newsletter/poll/results?poll=alzbetinsky-klaster-kadan-2026&independent=1',timeout=25).read()
+          payload=json.loads(poll.decode('utf-8','replace'))
+          if payload.get('ok') is not True:
+            raise SystemExit('Anketa nevrací ok=true.')
+          print('Veřejná kontrola zdrojových ploch a ankety prošla.')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Ověřit skutečně vykreslený DOM
+        id: browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser"
+          output="$RUNNER_TEMP/alzbetinsky-independent.dom.html"
+          timeout 80s "$browser" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --window-size=1440,1500 --virtual-time-budget=15000 --dump-dom \
+            "https://nasekadan.cz${ARTICLE_REL}?independent_render=${GITHUB_RUN_ID}" > "$output"
+          grep -Fq 'Kam odešli poslední pacienti?' "$output"
+          grep -Fq 'poll-results' "$output"
+          grep -Fq 'article-aside-adstream' "$output"
+          grep -Eq 'article-aside-ad-|promo-card|article-ad-auto' "$output"
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek do issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          VERIFY_OK: ${{ steps.verify.outputs.ok }}
+          BROWSER_OK: ${{ steps.browser.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.VERIFY_OK === 'true' && process.env.BROWSER_OK === 'true';
+            const body = ok
+              ? '✅ Nezávislá záchrana článek sestavila, uložila do main, kanonicky nasadila na OVH a veřejně ověřila. Článek je první na titulní straně, v archivu, RSS a obou sitemapách; funguje sociální obrázek, anketa, reklamy i vykreslený DOM.\n\nhttps://nasekadan.cz/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html'
+              : '🚨 Nezávislá záchrana nebyla kompletně ověřena. Issue zůstává otevřené a připravené watchdogy mohou pokračovat.';
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 545, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: 545, state: 'closed', state_reason: 'completed'});
