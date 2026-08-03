@@ -1,0 +1,285 @@
+name: Kanonický audit publikovaného obsahu 2026-08-04 01:12
+
+on:
+  push:
+    paths:
+      - '.github/workflows/canonical-audit-20260804-0112.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-published-index-sync
+  cancel-in-progress: false
+
+jobs:
+  audit-and-repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Nastavit Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit živý web a synchronizovat kanonický registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import collections
+          import datetime
+          import hashlib
+          import html
+          import json
+          import re
+          import ssl
+          import subprocess
+          import time
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          BASE = 'https://nasekadan.cz'
+          REGISTRY = Path('data/published-content-index.json')
+          ctx = ssl._create_unverified_context()
+
+          def fetch(path):
+              url = path if path.startswith('http') else BASE + path
+              last = None
+              for attempt in range(8):
+                  try:
+                      sep = '&' if '?' in url else '?'
+                      req = urllib.request.Request(
+                          url + sep + 'canonical_audit=' + str(time.time_ns()),
+                          headers={
+                              'User-Agent': 'NaseKadanCanonicalAudit/1.8',
+                              'Cache-Control': 'no-cache, no-store, max-age=0',
+                              'Pragma': 'no-cache',
+                          },
+                      )
+                      with urllib.request.urlopen(req, timeout=30, context=ctx) as response:
+                          return response.read().decode('utf-8', errors='replace')
+                  except Exception as exc:
+                      last = exc
+                      time.sleep(3 + attempt * 2)
+              raise RuntimeError(f'Nelze načíst {url}: {last}')
+
+          def unique(seq):
+              return list(dict.fromkeys(seq))
+
+          def h1_text(page):
+              match = re.search(r'<h1\b[^>]*>(.*?)</h1>', page, re.I | re.S)
+              if not match:
+                  return ''
+              return ' '.join(html.unescape(re.sub(r'<[^>]+>', '', match.group(1))).split())
+
+          def article_links(page):
+              paths = re.findall(r'href=["\'](/clanky/[^"\'#?]+\.html)["\']', page, re.I)
+              return unique([
+                  BASE + path for path in paths
+                  if '/parts/' not in path and not re.search(r'/strana-\d+\.html$', path)
+              ])
+
+          home = fetch('/')
+          archive_first = fetch('/clanky/')
+          page_nums = sorted({int(x) for x in re.findall(r'/clanky/strana-(\d+)\.html', archive_first)})
+          archive_paths = ['/clanky/'] + [f'/clanky/strana-{n}.html' for n in page_nums]
+          archive_pages = [archive_first] + [fetch(path) for path in archive_paths[1:]]
+          archive = '\n'.join(archive_pages)
+          rss = fetch('/rss.xml')
+          sitemap = fetch('/sitemap.xml')
+          news = fetch('/news-sitemap.xml')
+          health = fetch('/deployment-health.txt')
+
+          home_urls = article_links(home)
+          archive_urls = article_links(archive)
+
+          rss_root = ET.fromstring(rss)
+          rss_urls = unique([
+              (item.findtext('link') or '').strip()
+              for item in rss_root.findall('.//item')
+              if (item.findtext('link') or '').strip()
+          ])
+
+          ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          sitemap_root = ET.fromstring(sitemap)
+          sitemap_urls = unique([
+              (node.text or '').strip()
+              for node in sitemap_root.findall('.//s:loc', ns)
+              if '/clanky/' in (node.text or '')
+              and (node.text or '').endswith('.html')
+              and '/parts/' not in (node.text or '')
+              and not re.search(r'/strana-\d+\.html$', (node.text or ''))
+          ])
+          news_root = ET.fromstring(news)
+          news_urls = unique([
+              (node.text or '').strip()
+              for node in news_root.findall('.//s:loc', ns)
+              if (node.text or '').strip()
+          ])
+
+          data = json.loads(REGISTRY.read_text(encoding='utf-8'))
+          articles = data['articles']
+          registry_urls = [a['url'] for a in articles]
+          fingerprints = [a['fingerprint'] for a in articles]
+          duplicate_urls = sorted([u for u, n in collections.Counter(registry_urls).items() if n > 1])
+          duplicate_fingerprints = sorted([f for f, n in collections.Counter(fingerprints).items() if n > 1])
+
+          assert not duplicate_urls, duplicate_urls
+          assert not duplicate_fingerprints, duplicate_fingerprints
+          assert set(registry_urls) == set(archive_urls), {
+              'missing_in_archive': sorted(set(registry_urls) - set(archive_urls)),
+              'missing_in_registry': sorted(set(archive_urls) - set(registry_urls)),
+          }
+          assert set(registry_urls) == set(rss_urls), {
+              'missing_in_rss': sorted(set(registry_urls) - set(rss_urls)),
+              'extra_in_rss': sorted(set(rss_urls) - set(registry_urls)),
+          }
+          assert set(registry_urls) == set(sitemap_urls), {
+              'missing_in_sitemap': sorted(set(registry_urls) - set(sitemap_urls)),
+              'extra_in_sitemap': sorted(set(sitemap_urls) - set(registry_urls)),
+          }
+          assert rss_urls == archive_urls, 'Pořadí RSS se liší od archivu.'
+          assert 'status=ok' in health, 'deployment-health.txt nehlásí status=ok.'
+
+          changed_source_commits = []
+          for article in articles:
+              page = fetch(article['url'])
+              actual_h1 = h1_text(page)
+              assert actual_h1 == article['h1'], f'Neshoda H1: {article["url"]}: {actual_h1!r} != {article["h1"]!r}'
+              article['status'] = {
+                  'homepage': article['url'] in home_urls,
+                  'archive': article['url'] in archive_urls,
+                  'rss': article['url'] in rss_urls,
+                  'sitemap': article['url'] in sitemap_urls,
+                  'news_sitemap': article['url'] in news_urls,
+              }
+              article['publication_status'] = 'published'
+              source_path = article.get('source_path')
+              if source_path:
+                  latest = subprocess.check_output(
+                      ['git', 'log', '-1', '--format=%H', '--', source_path], text=True
+                  ).strip()
+                  if latest and latest != article.get('source_commit'):
+                      changed_source_commits.append({
+                          'url': article['url'],
+                          'from': article.get('source_commit', ''),
+                          'to': latest,
+                      })
+                      article['source_commit'] = latest
+              modified = re.search(
+                  r'<meta[^>]+property=["\']article:modified_time["\'][^>]+content=["\']([^"\']+)',
+                  page,
+                  re.I,
+              )
+              if not modified:
+                  modified = re.search(r'"dateModified"\s*:\s*"([^"]+)"', page)
+              if modified:
+                  article['modified_at'] = modified.group(1)
+
+          now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          health_source_match = re.search(r'^source=(.+)$', health, re.M)
+          health_source = health_source_match.group(1).strip() if health_source_match else ''
+
+          data['generated_at'] = now
+          data['source_commit'] = head
+          data['article_count'] = len(articles)
+          validation = data.setdefault('validation', {})
+          validation.update({
+              'homepage_count': len(home_urls),
+              'archive_count': len(archive_urls),
+              'archive_page_count': len(archive_paths),
+              'rss_count': len(rss_urls),
+              'sitemap_all_articles_present': set(registry_urls) == set(sitemap_urls),
+              'news_sitemap_recent_count': len(news_urls),
+              'deployment_health': 'verified',
+              'required_fields_complete': all(all(k in a for k in (
+                  'title', 'h1', 'url', 'published_at', 'modified_at', 'persons',
+                  'organizations', 'places', 'cases', 'topics', 'fingerprint',
+                  'status', 'source_commit')) for a in articles),
+              'duplicate_urls': duplicate_urls,
+              'duplicate_fingerprints': duplicate_fingerprints,
+              'per_article_source_commits': all(bool(a.get('source_commit')) for a in articles),
+              'deployment_health_source': health_source,
+              'public_audit_at': now,
+              'public_audit_sha256': hashlib.sha256(
+                  (home + archive + rss + sitemap + news + health).encode('utf-8')
+              ).hexdigest(),
+              'repair_pending_public_verification': False,
+              'public_repair_verification': {
+                  'method': 'github-actions-live-canonical-audit-paginated-archive-v1.8',
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'archive_pages': len(archive_paths),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'all_public_h1_checked': True,
+                  'deployment_health_nonempty': bool(health.strip()),
+                  'completed_at': now,
+              },
+              'rss_order_matches_archive': rss_urls == archive_urls,
+              'last_registry_refresh': {
+                  'reason': 'synchronize article source commits after later repository edits and re-audit all live publication channels',
+                  'trigger_commit': head,
+                  'classification': 'registry_consistency_repair' if changed_source_commits else 'no_content_change',
+                  'changed_source_commits': changed_source_commits,
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'archive_pages': len(archive_paths),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'completed_at': now,
+              },
+          })
+
+          REGISTRY.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps({
+              'article_count': len(articles),
+              'changed_source_commits': changed_source_commits,
+              'homepage': len(home_urls),
+              'archive': len(archive_urls),
+              'rss': len(rss_urls),
+              'sitemap': len(sitemap_urls),
+              'news_sitemap': len(news_urls),
+          }, ensure_ascii=False, indent=2))
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet -- data/published-content-index.json; then
+            git add data/published-content-index.json
+            git commit -m 'Synchronizovat kanonickou evidenci s živým webem [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              if [ "$attempt" = 4 ]; then exit 1; fi
+            done
+          fi
+
+      - name: Odstranit jednorázový workflow
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          rm -f .github/workflows/canonical-audit-20260804-0112.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet; then
+            git add .github/workflows/canonical-audit-20260804-0112.yml
+            git commit -m 'Odstranit dokončený jednorázový kanonický audit [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              if [ "$attempt" = 4 ]; then exit 1; fi
+            done
+          fi
