@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     {href:'/#akce',label:'Akce',section:'events'},
     {href:'/pruvodce/',label:'Průvodce',section:'guide'},
     {href:'/prakticke/',label:'Praktická Kadaň',section:'practical'},
+    {href:'/pocasi/',label:'Počasí',section:'weather'},
     {href:'/inzerce/',label:'Inzerce',section:'advertising'},
     {href:'/zapojte-se/',label:'Zapojte se',section:'tips'}
   ];
@@ -17,6 +18,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(path.startsWith('/clanky')||path.startsWith('/zpravy'))return 'articles';
     if(path.startsWith('/pruvodce'))return 'guide';
     if(path.startsWith('/prakticke'))return 'practical';
+    if(path.startsWith('/pocasi'))return 'weather';
     if(path.startsWith('/inzerce'))return 'advertising';
     if(path.startsWith('/zapojte-se'))return 'tips';
     if(path==='/'&&hash==='#akce')return 'events';
@@ -87,6 +89,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         <a href="/clanky/">Naše články</a>
         <a href="/#akce">Akce</a>
         <a href="/pruvodce/">Průvodce</a>
+        <a href="/pocasi/">Počasí v Kadani</a>
         <a href="/prehled-zdroju/">Přehled zdrojů</a>
       </div>
       <div class="footer-column">
