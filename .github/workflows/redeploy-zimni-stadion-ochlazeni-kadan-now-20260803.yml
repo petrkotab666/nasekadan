@@ -17,7 +17,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       ARTICLE_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
       ARTICLE_FILE: clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
@@ -44,6 +44,32 @@ jobs:
           test -s "$SOCIAL_FILE"
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Bezpečně uvolnit provozní místo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== PŘED ÚKLIDEM ==='
+          df -h /
+          sudo journalctl --vacuum-size=100M 2>/dev/null || true
+          sudo apt-get clean 2>/dev/null || true
+          sudo rm -rf /var/cache/apt/archives/* /tmp/stadium-cooling-bundle /tmp/stadium-cooling-bundle.tar.gz 2>/dev/null || true
+          sudo find /var/log -xdev -type f -name '*.gz' -delete 2>/dev/null || true
+          sudo find /var/log -xdev -type f -size +100M -exec truncate -s 0 {} + 2>/dev/null || true
+          sudo find /var/lib/docker/containers -xdev -type f -name '*-json.log' -size +50M -exec truncate -s 0 {} + 2>/dev/null || true
+          sudo docker container prune -f 2>/dev/null || true
+          sudo docker image prune -af 2>/dev/null || true
+          sudo docker builder prune -af 2>/dev/null || true
+          sync
+          echo '=== PO ÚKLIDU ==='
+          df -h /
+          REMOTE
+
       - name: Nasadit balíček přímým proudem přes SSH
         id: deploy
         shell: bash
@@ -65,13 +91,14 @@ jobs:
           cp data/published-content-index.json "$bundle/data/"
           printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.source.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
 
-          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'df -h / /tmp /home || true; sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
           tar -C "$bundle" -cf - . | ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo tar -xf - -C /var/www/nasekadan'
 
           if ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo docker inspect nasekadan-web >/dev/null 2>&1'; then
             ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data'
             tar -C "$bundle" -cf - . | ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'sudo docker exec -i nasekadan-web tar -xf - -C /usr/share/nginx/html'
           fi
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'df -h /'
 
       - name: Ověřit veřejný web
         id: verify
