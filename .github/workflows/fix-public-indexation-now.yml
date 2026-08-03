@@ -63,19 +63,7 @@ jobs:
           git clean -fd
 
           python3 scripts/clean_sitemap_technical_entries.py
-          python3 - <<'PY'
-import re
-import xml.etree.ElementTree as ET
-from pathlib import Path
-path = Path('sitemap.xml')
-root = ET.parse(path).getroot()
-locs = [(next((c for c in node if c.tag.endswith('loc')), None).text or '').strip() for node in root]
-forbidden = re.compile(r'^https://nasekadan\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\.html)', re.I)
-assert len(locs) == len(set(locs)), 'Sitemap obsahuje duplicity.'
-assert not any(forbidden.search(url) for url in locs), 'Sitemap obsahuje technickou cestu.'
-assert 'https://nasekadan.cz/pocasi/' in locs, 'V sitemapě chybí /pocasi/.'
-print(f'Ověřeno {len(locs)} jedinečných veřejných adres.')
-PY
+          python3 -c "import re,xml.etree.ElementTree as ET; r=ET.parse('sitemap.xml').getroot(); u=[(next((c for c in n if c.tag.endswith('loc')),None).text or '').strip() for n in r]; f=re.compile(r'^https://nasekadan\\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\\.html)',re.I); assert len(u)==len(set(u)),'duplicity'; assert not any(f.search(x) for x in u),'technická cesta'; assert 'https://nasekadan.cz/pocasi/' in u,'chybí počasí'; print(f'Ověřeno {len(u)} jedinečných adres.')"
 
           sudo install -D -m 0644 sitemap.xml /var/www/nasekadan/sitemap.xml
           sudo install -D -m 0644 robots.txt /var/www/nasekadan/robots.txt
@@ -93,25 +81,11 @@ PY
           tmp="$(mktemp)"
           curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 \
             "https://nasekadan.cz/sitemap.xml?indexfix=$(date +%s)" -o "$tmp"
-          python3 - "$tmp" <<'PY'
-import re, sys
-import xml.etree.ElementTree as ET
-root = ET.parse(sys.argv[1]).getroot()
-locs = [(next((c for c in node if c.tag.endswith('loc')), None).text or '').strip() for node in root]
-forbidden = re.compile(r'^https://nasekadan\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\.html)', re.I)
-assert len(locs) == len(set(locs))
-assert not any(forbidden.search(url) for url in locs)
-assert 'https://nasekadan.cz/pocasi/' in locs
-print(f'Veřejná sitemap ověřena: {len(locs)} adres.')
-PY
+          python3 -c "import re,sys,xml.etree.ElementTree as ET; r=ET.parse(sys.argv[1]).getroot(); u=[(next((c for c in n if c.tag.endswith('loc')),None).text or '').strip() for n in r]; f=re.compile(r'^https://nasekadan\\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\\.html)',re.I); assert len(u)==len(set(u)); assert not any(f.search(x) for x in u); assert 'https://nasekadan.cz/pocasi/' in u; print(f'Veřejná sitemap: {len(u)} adres.')" "$tmp"
           rm -f "$tmp"
 
-          for path in \
-            /clanky/parts/slovan-01.html \
-            /research/nemocnice-kadan-neindexovane-20260730/uver-vsechny-zaznamy/vysledky.html \
-            /googlec6d0b89322c33fa6.html; do
-            code="$(curl -k -sS -o /dev/null -w '%{http_code}' --max-time 20 \
-              --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${path}?indexfix=$(date +%s)")"
+          for path in /clanky/parts/slovan-01.html /research/nemocnice-kadan-neindexovane-20260730/uver-vsechny-zaznamy/vysledky.html /googlec6d0b89322c33fa6.html; do
+            code="$(curl -k -sS -o /dev/null -w '%{http_code}' --max-time 20 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${path}?indexfix=$(date +%s)")"
             [[ "$code" == 404 ]]
           done
           REMOTE
@@ -127,17 +101,7 @@ PY
           set -euo pipefail
           tmp="$(mktemp)"
           curl -kfsS --max-time 30 "https://nasekadan.cz/sitemap.xml?external=$GITHUB_RUN_ID" -o "$tmp"
-          python3 - "$tmp" <<'PY'
-import re, sys
-import xml.etree.ElementTree as ET
-root = ET.parse(sys.argv[1]).getroot()
-locs = [(next((c for c in node if c.tag.endswith('loc')), None).text or '').strip() for node in root]
-forbidden = re.compile(r'^https://nasekadan\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\.html)', re.I)
-assert len(locs) == len(set(locs)), 'Veřejná sitemap obsahuje duplicity.'
-assert not any(forbidden.search(url) for url in locs), 'Veřejná sitemap obsahuje technickou cestu.'
-assert 'https://nasekadan.cz/pocasi/' in locs, 'Veřejná sitemap neobsahuje počasí.'
-print(f'Externě ověřeno {len(locs)} veřejných adres.')
-PY
+          python3 -c "import re,sys,xml.etree.ElementTree as ET; r=ET.parse(sys.argv[1]).getroot(); u=[(next((c for c in n if c.tag.endswith('loc')),None).text or '').strip() for n in r]; f=re.compile(r'^https://nasekadan\\.cz/(?:clanky/parts/|research/|nahled/|api/|data/|statistiky/|google[a-z0-9_-]+\\.html)',re.I); assert len(u)==len(set(u)),'duplicity'; assert not any(f.search(x) for x in u),'technická cesta'; assert 'https://nasekadan.cz/pocasi/' in u,'chybí počasí'; print(f'Externě ověřeno {len(u)} adres.')" "$tmp"
           rm -f "$tmp"
 
       - name: Uložit čistou sitemapu a stav
@@ -160,26 +124,10 @@ PY
             if (fs.existsSync(process.env.RUNNER_TEMP + '/sitemap.xml')) {
               const sitemap = fs.readFileSync(process.env.RUNNER_TEMP + '/sitemap.xml');
               const current = await github.rest.repos.getContent({owner, repo, path: 'sitemap.xml', ref: 'main'});
-              await github.rest.repos.createOrUpdateFileContents({
-                owner, repo, path: 'sitemap.xml', branch: 'main',
-                message: 'Sestavit čistou veřejnou sitemapu [skip ci]',
-                sha: current.data.sha,
-                content: sitemap.toString('base64')
-              });
+              await github.rest.repos.createOrUpdateFileContents({owner, repo, path: 'sitemap.xml', branch: 'main', message: 'Sestavit čistou veřejnou sitemapu [skip ci]', sha: current.data.sha, content: sitemap.toString('base64')});
             }
 
-            const payload = {
-              status,
-              run_id: String(context.runId),
-              source_sha: context.sha,
-              checked_at: new Date().toISOString(),
-              ssh_key: process.env.KEY_SECRET || '',
-              deploy,
-              external_verify: verify,
-              weather_in_sitemap: status === 'success',
-              technical_urls: 0,
-              duplicate_urls: 0
-            };
+            const payload = {status, run_id: String(context.runId), source_sha: context.sha, checked_at: new Date().toISOString(), ssh_key: process.env.KEY_SECRET || '', deploy, external_verify: verify, weather_in_sitemap: status === 'success', technical_urls: 0, duplicate_urls: 0};
             let sha;
             try {
               const old = await github.rest.repos.getContent({owner, repo, path: '.github/indexation-cleanup-status.json', ref: 'main'});
@@ -187,9 +135,4 @@ PY
             } catch (error) {
               if (error.status !== 404) throw error;
             }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner, repo, path: '.github/indexation-cleanup-status.json', branch: 'main',
-              message: `Zapsat stav opravy indexace: ${status} [skip ci]`,
-              sha,
-              content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')
-            });
+            await github.rest.repos.createOrUpdateFileContents({owner, repo, path: '.github/indexation-cleanup-status.json', branch: 'main', message: `Zapsat stav opravy indexace: ${status} [skip ci]`, sha, content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')});
