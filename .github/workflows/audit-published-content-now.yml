@@ -52,7 +52,7 @@ jobs:
                   return response.read().decode('utf-8', errors='replace')
 
           def urls(text: str) -> set[str]:
-              paths = re.findall(r'(?:https://nasekadan\\.cz)?(/clanky/[A-Za-z0-9._~%\\-/]+\\.html)', text)
+              paths = re.findall(r'(?:https://nasekadan[.]cz)?(/clanky/[A-Za-z0-9._~%/-]+[.]html)', text)
               return {BASE + path for path in paths}
 
           homepage = archive = rss = sitemap = news = health = ''
@@ -100,11 +100,11 @@ jobs:
           for url, article in expected.items():
               path = url.removeprefix(BASE)
               text = fetch(path)
-              match = re.search(r'<h1\\b[^>]*>(.*?)</h1>', text, re.I | re.S)
+              match = re.search(r'<h1\b[^>]*>(.*?)</h1>', text, re.I | re.S)
               if not match:
                   h1_mismatches.append({'url': url, 'expected': article['h1'], 'actual': None})
                   continue
-              actual = re.sub(r'\\s+', ' ', unescape(re.sub(r'<[^>]+>', ' ', match.group(1)))).strip()
+              actual = re.sub(r'\s+', ' ', unescape(re.sub(r'<[^>]+>', ' ', match.group(1)))).strip()
               if actual != article['h1']:
                   h1_mismatches.append({'url': url, 'expected': article['h1'], 'actual': actual})
           if h1_mismatches:
