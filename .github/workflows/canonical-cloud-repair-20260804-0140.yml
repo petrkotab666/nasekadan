@@ -1,0 +1,357 @@
+name: Opravit kanonickou evidenci a deployment-health 2026-08-04 01:40
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/canonical-cloud-repair-20260804-0140.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-cloud-repair
+  cancel-in-progress: false
+
+env:
+  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  repair-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Připravit bezpečný statický balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          bundle="$RUNNER_TEMP/nk-canonical-repair"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=canonical-cloud-repair\n' \
+            "$sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$bundle/deployment-health.txt"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/nk-canonical-repair.tgz" .
+          echo "DEPLOY_SHA=$sha" >> "$GITHUB_ENV"
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${KEY1:-}" ]]; then
+            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          elif [[ -n "${KEY2:-}" ]]; then
+            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          else
+            echo 'Chybí SSH klíč pro OVH.' >&2
+            exit 1
+          fi
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Atomicky synchronizovat veřejné indexy a články
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nk-canonical-repair.tgz" ubuntu@57.129.43.215:/tmp/nk-canonical-repair.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo -n true
+          stage=/tmp/nk-canonical-repair-stage
+          sudo rm -rf "$stage"
+          sudo install -d -m 0755 "$stage" /var/www/nasekadan /var/www/nasekadan/clanky
+          sudo tar -xzf /tmp/nk-canonical-repair.tgz -C "$stage"
+
+          # Záloha pouze měněných textových souborů pro případ chyby před veřejným ověřením.
+          backup=/tmp/nk-canonical-repair-backup
+          sudo rm -rf "$backup"
+          sudo install -d -m 0755 "$backup/clanky"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+            if [[ -f "/var/www/nasekadan/$f" ]]; then sudo cp -a "/var/www/nasekadan/$f" "$backup/$f"; fi
+          done
+          if compgen -G '/var/www/nasekadan/clanky/*.html' >/dev/null; then
+            sudo cp -a /var/www/nasekadan/clanky/*.html "$backup/clanky/"
+          fi
+
+          sudo cp -a "$stage/index.html" /var/www/nasekadan/index.html
+          sudo cp -a "$stage/rss.xml" /var/www/nasekadan/rss.xml
+          sudo cp -a "$stage/sitemap.xml" /var/www/nasekadan/sitemap.xml
+          sudo cp -a "$stage/news-sitemap.xml" /var/www/nasekadan/news-sitemap.xml
+          sudo cp -a "$stage/llms.txt" /var/www/nasekadan/llms.txt
+          sudo cp -a "$stage/deployment-health.txt" /var/www/nasekadan/deployment-health.txt
+          sudo cp -a "$stage/clanky"/*.html /var/www/nasekadan/clanky/
+          sudo chmod 0644 /var/www/nasekadan/index.html /var/www/nasekadan/rss.xml \
+            /var/www/nasekadan/sitemap.xml /var/www/nasekadan/news-sitemap.xml \
+            /var/www/nasekadan/llms.txt /var/www/nasekadan/deployment-health.txt \
+            /var/www/nasekadan/clanky/*.html
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+              sudo docker cp "$stage/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            for f in "$stage"/clanky/*.html; do
+              sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")"
+            done
+          fi
+          sudo rm -rf "$stage" /tmp/nk-canonical-repair.tgz
+          REMOTE
+
+      - name: Veřejně ověřit všechny kanály a aktualizovat registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import collections
+          import datetime
+          import hashlib
+          import html
+          import json
+          import os
+          import re
+          import ssl
+          import subprocess
+          import time
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          BASE='https://nasekadan.cz'
+          REG=Path('data/published-content-index.json')
+          STATUS=Path('.github/canonical-published-index-status.json')
+          DEPLOY_SHA=os.environ['DEPLOY_SHA']
+          ctx=ssl._create_unverified_context()
+
+          def fetch(path):
+              url=path if path.startswith('http') else BASE+path
+              last=None
+              for attempt in range(30):
+                  try:
+                      sep='&' if '?' in url else '?'
+                      req=urllib.request.Request(url+sep+'canonical_repair='+str(time.time_ns()),headers={
+                          'User-Agent':'NaseKadanCanonicalRepair/2.0',
+                          'Cache-Control':'no-cache, no-store, max-age=0',
+                          'Pragma':'no-cache',
+                      })
+                      with urllib.request.urlopen(req,timeout=30,context=ctx) as r:
+                          return r.read().decode('utf-8','replace')
+                  except Exception as exc:
+                      last=exc
+                      time.sleep(3)
+              raise RuntimeError(f'Nelze načíst {url}: {last}')
+
+          def uniq(xs): return list(dict.fromkeys(xs))
+          def norm_url(value):
+              value=html.unescape(value.strip())
+              if value.startswith('/'): return BASE+value
+              if value.startswith('clanky/'): return BASE+'/'+value
+              return value
+          def article_urls(page):
+              vals=re.findall(r'href=["\']((?:https://nasekadan\.cz)?/?clanky/[^"\'#?]+\.html)["\']',page,re.I)
+              out=[]
+              for value in vals:
+                  url=norm_url(value)
+                  if '/parts/' in url or re.search(r'/strana-\d+\.html$',url) or url.endswith('/clanky/index.html'):
+                      continue
+                  out.append(url)
+              return uniq(out)
+          def h1(page):
+              match=re.search(r'<h1\b[^>]*>(.*?)</h1>',page,re.I|re.S)
+              return '' if not match else ' '.join(html.unescape(re.sub(r'<[^>]+>','',match.group(1))).split())
+
+          # Počkat konkrétně na nový health marker, ne pouze na HTTP 200.
+          health=''
+          for _ in range(45):
+              candidate=fetch('/deployment-health.txt')
+              if f'source={DEPLOY_SHA}' in candidate and 'mode=canonical-cloud-repair' in candidate:
+                  health=candidate
+                  break
+              time.sleep(4)
+          if not health:
+              raise AssertionError('Nový kanonický deployment-health se veřejně neprojevil.')
+
+          home=fetch('/')
+          first=fetch('/clanky/')
+          page_nums=sorted({int(x) for x in re.findall(r'(?:/clanky/)?strana-(\d+)\.html',first,re.I)})
+          archive_paths=['/clanky/']+[f'/clanky/strana-{n}.html' for n in page_nums]
+          archive_pages=[first]+[fetch(path) for path in archive_paths[1:]]
+          archive='\n'.join(archive_pages)
+          rss=fetch('/rss.xml')
+          sitemap=fetch('/sitemap.xml')
+          news=fetch('/news-sitemap.xml')
+
+          home_urls=article_urls(home)
+          archive_urls=article_urls(archive)
+          rss_root=ET.fromstring(rss)
+          rss_urls=uniq([norm_url((item.findtext('link') or '').strip()) for item in rss_root.findall('.//item') if (item.findtext('link') or '').strip()])
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          sitemap_root=ET.fromstring(sitemap)
+          sitemap_urls=uniq([
+              norm_url((node.text or '').strip()) for node in sitemap_root.findall('.//s:loc',ns)
+              if '/clanky/' in (node.text or '') and (node.text or '').endswith('.html')
+              and '/parts/' not in (node.text or '') and not re.search(r'/strana-\d+\.html$',(node.text or ''))
+              and not (node.text or '').endswith('/clanky/index.html')
+          ])
+          news_root=ET.fromstring(news)
+          news_urls=uniq([norm_url((node.text or '').strip()) for node in news_root.findall('.//s:loc',ns) if (node.text or '').strip()])
+
+          data=json.loads(REG.read_text(encoding='utf-8'))
+          articles=data['articles']
+          registry_urls=[a['url'] for a in articles]
+          fingerprints=[a['fingerprint'] for a in articles]
+          duplicate_urls=sorted([u for u,c in collections.Counter(registry_urls).items() if c>1])
+          duplicate_fingerprints=sorted([f for f,c in collections.Counter(fingerprints).items() if c>1])
+
+          assert not duplicate_urls, duplicate_urls
+          assert not duplicate_fingerprints, duplicate_fingerprints
+          assert set(registry_urls)==set(archive_urls), {'archive_missing':sorted(set(registry_urls)-set(archive_urls)),'archive_extra':sorted(set(archive_urls)-set(registry_urls))}
+          assert set(registry_urls)==set(rss_urls), {'rss_missing':sorted(set(registry_urls)-set(rss_urls)),'rss_extra':sorted(set(rss_urls)-set(registry_urls))}
+          assert set(registry_urls)==set(sitemap_urls), {'sitemap_missing':sorted(set(registry_urls)-set(sitemap_urls)),'sitemap_extra':sorted(set(sitemap_urls)-set(registry_urls))}
+          assert rss_urls==archive_urls, 'Pořadí RSS se liší od archivu.'
+
+          changed=[]
+          for article in articles:
+              page=fetch(article['url'])
+              actual_h1=h1(page)
+              assert actual_h1==article['h1'], f'Neshoda H1 {article["url"]}: {actual_h1!r} != {article["h1"]!r}'
+              article['status']={
+                  'homepage':article['url'] in home_urls,
+                  'archive':article['url'] in archive_urls,
+                  'rss':article['url'] in rss_urls,
+                  'sitemap':article['url'] in sitemap_urls,
+                  'news_sitemap':article['url'] in news_urls,
+              }
+              article['publication_status']='published'
+              source_path=article.get('source_path')
+              if source_path:
+                  latest=subprocess.check_output(['git','log','-1','--format=%H','--',source_path],text=True).strip()
+                  if latest and latest!=article.get('source_commit'):
+                      changed.append({'url':article['url'],'from':article.get('source_commit',''),'to':latest})
+                      article['source_commit']=latest
+              modified=re.search(r'<meta[^>]+property=["\']article:modified_time["\'][^>]+content=["\']([^"\']+)',page,re.I)
+              if not modified:
+                  modified=re.search(r'"dateModified"\s*:\s*"([^"]+)"',page)
+              if modified:
+                  article['modified_at']=modified.group(1)
+
+          now=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          data['generated_at']=now
+          data['source_commit']=DEPLOY_SHA
+          data['article_count']=len(articles)
+          validation=data.setdefault('validation',{})
+          validation.update({
+              'homepage_count':len(home_urls),
+              'archive_count':len(archive_urls),
+              'archive_page_count':len(archive_paths),
+              'rss_count':len(rss_urls),
+              'sitemap_all_articles_present':set(registry_urls)==set(sitemap_urls),
+              'news_sitemap_recent_count':len(news_urls),
+              'deployment_health':'verified',
+              'required_fields_complete':all(all(key in a for key in (
+                  'title','h1','url','published_at','modified_at','persons','organizations','places','cases','topics','fingerprint','status','source_commit'
+              )) for a in articles),
+              'duplicate_urls':duplicate_urls,
+              'duplicate_fingerprints':duplicate_fingerprints,
+              'per_article_source_commits':all(bool(a.get('source_commit')) for a in articles),
+              'deployment_health_source':DEPLOY_SHA,
+              'public_audit_at':now,
+              'public_audit_sha256':hashlib.sha256((home+archive+rss+sitemap+news+health).encode('utf-8')).hexdigest(),
+              'repair_pending_public_verification':False,
+              'public_repair_verification':{
+                  'method':'github-actions-cloud-ssh-live-canonical-repair-v2.0',
+                  'homepage_articles':len(home_urls),
+                  'archive_articles':len(archive_urls),
+                  'archive_pages':len(archive_paths),
+                  'rss_articles':len(rss_urls),
+                  'sitemap_articles':len(sitemap_urls),
+                  'news_sitemap_articles':len(news_urls),
+                  'all_public_h1_checked':True,
+                  'deployment_health_nonempty':bool(health.strip()),
+                  'deployment_health_source':DEPLOY_SHA,
+                  'completed_at':now,
+              },
+              'rss_order_matches_archive':rss_urls==archive_urls,
+              'last_registry_refresh':{
+                  'reason':'repair stale deployment-health and synchronize article source commits after later repository edits',
+                  'trigger_commit':DEPLOY_SHA,
+                  'classification':'registry_consistency_repair',
+                  'changed_source_commits':changed,
+                  'homepage_articles':len(home_urls),
+                  'archive_articles':len(archive_urls),
+                  'archive_pages':len(archive_paths),
+                  'rss_articles':len(rss_urls),
+                  'sitemap_articles':len(sitemap_urls),
+                  'news_sitemap_articles':len(news_urls),
+                  'completed_at':now,
+              },
+          })
+          REG.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          status={
+              'status':'success',
+              'checked_at':now,
+              'registry_publicly_verified':True,
+              'article_count':len(articles),
+              'homepage_count':len(home_urls),
+              'archive_count':len(archive_urls),
+              'archive_page_count':len(archive_paths),
+              'rss_count':len(rss_urls),
+              'sitemap_count':len(sitemap_urls),
+              'news_sitemap_count':len(news_urls),
+              'duplicate_urls':duplicate_urls,
+              'duplicate_fingerprints':duplicate_fingerprints,
+              'rss_order_matches_archive':rss_urls==archive_urls,
+              'all_public_h1_checked':True,
+              'deployment_health_source':DEPLOY_SHA,
+              'deployment_health_raw':health,
+              'changed_source_commits':changed,
+          }
+          STATUS.write_text(json.dumps(status,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(status,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Uložit opravený registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json .github/canonical-published-index-status.json
+          git commit -m 'Opravit kanonickou evidenci a veřejný deployment-health [skip ci]'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            git pull --rebase origin main
+            if [ "$attempt" = 4 ]; then exit 1; fi
+          done
+
+      - name: Odstranit jednorázovou opravu
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          rm -f .github/workflows/canonical-cloud-repair-20260804-0140.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/canonical-cloud-repair-20260804-0140.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Odstranit dokončenou kanonickou cloudovou opravu [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              if [ "$attempt" = 4 ]; then exit 1; fi
+            done
+          fi
