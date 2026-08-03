@@ -1,0 +1,293 @@
+checked_at=2026-08-03T20:21:34+00:00
+=== DF ===
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        96G   96G     0 100% /
+=== INODES ===
+Filesystem     Inodes IUsed IFree IUse% Mounted on
+/dev/sda1         13M  1.1M   12M    9% /
+=== ROOT DIRECTORIES ===
+4.0K	/bin.usr-is-merged
+4.0K	/lib.usr-is-merged
+4.0K	/media
+4.0K	/mnt
+4.0K	/sbin.usr-is-merged
+4.0K	/srv
+8.0K	/snap
+16K	/lost+found
+208K	/root
+7.4M	/etc
+3.0G	/usr
+3.7G	/opt
+8.6G	/tmp
+37G	/home
+45G	/var
+96G	/
+=== VAR DIRECTORIES ===
+4.0K	/var/local
+4.0K	/var/mail
+4.0K	/var/opt
+4.0K	/var/snap
+16K	/var/spool
+76K	/var/tmp
+196K	/var/crash
+3.5M	/var/backups
+263M	/var/cache
+433M	/var/www
+639M	/var/log
+44G	/var/lib
+45G	/var
+=== HOME DIRECTORIES ===
+12K	/home/ubuntu/.lastminuteslevy-monitor
+12K	/home/ubuntu/.ssh
+76K	/home/ubuntu/.pki
+500K	/home/ubuntu/.docker
+4.2M	/home/ubuntu/.config
+922M	/home/ubuntu/.cache
+1.1G	/home/ubuntu/.npm
+7.3G	/home/ubuntu/actions-runner
+27G	/home/ubuntu/actions-runners
+37G	/home
+37G	/home/ubuntu
+=== DOCKER SYSTEM DF ===
+Images space usage:
+
+REPOSITORY      TAG                                        IMAGE ID       CREATED       SIZE      SHARED SIZE   UNIQUE SIZE   CONTAINERS
+nasekadan-web   88cd100a5e9e2f16844a4d13aeb12aa8ef963830   adee69b9059b   2 hours ago   3.33GB    52.62MB       3.277GB       1
+nasekadan-web   eac9e0e32bcbbbf73ccdbbc23f82bfd033fc4596   cd5b3a0d511d   2 hours ago   3.33GB    52.62MB       3.277GB       0
+nasekadan-web   1a9c9298f89c8d313476566eba791daa73fc1c4e   6ad777e486fa   2 hours ago   3.33GB    52.62MB       3.276GB       0
+nasekadan-web   95634b4321ece6fe55385133188c4fbe917502f2   65391451a56e   3 hours ago   3.33GB    52.62MB       3.276GB       0
+nasekadan-web   9a8dbd3e6b9c269e9f30c7c88af206a12f85c82e   0fa852f3eea3   3 hours ago   3.33GB    52.62MB       3.276GB       0
+nasekadan-web   42dd08a1ec21b9419d3b573f40a13aa4cc6f16c6   70f7192b0768   4 hours ago   3.33GB    52.62MB       3.275GB       0
+nasekadan-web   521b730660eb5b9abc1a87a4c8484f24663b9535   b70d93f21289   4 hours ago   3.33GB    52.62MB       3.275GB       0
+nasekadan-web   99c24c500ebcfe7542f6b7e49a417ea23aa9c41a   6d5cae1986ae   5 hours ago   3.33GB    52.6MB        3.274GB       0
+dilynazakazku   22245b6a2152b02bed197797383f82de971308da   1b58577dce98   2 days ago    284MB     0B            283.6MB       1
+
+Containers space usage:
+
+CONTAINER ID   IMAGE                                                    COMMAND                  LOCAL VOLUMES   SIZE      CREATED       STATUS                   NAMES
+3e6b9a46c75e   nasekadan-web:88cd100a5e9e2f16844a4d13aeb12aa8ef963830   "/docker-entrypoint.…"   0               819kB     2 hours ago   Up 2 hours (unhealthy)   nasekadan-web
+41864991fce0   dilynazakazku:22245b6a2152b02bed197797383f82de971308da   "docker-entrypoint.s…"   0               12.3kB    2 days ago    Up 2 days                dilynazakazku
+
+Local Volumes space usage:
+
+VOLUME NAME   LINKS     SIZE
+
+Build cache usage: 28.46GB
+
+CACHE ID       CACHE TYPE     SIZE      CREATED       LAST USED     USAGE     SHARED
+jqvvursokhrw   regular        3.64MB    4 hours ago   4 hours ago   1         true
+kw57pgq83h5o   regular        3.85MB    4 hours ago   4 hours ago   1         false
+bjdgrc57dvvf   regular        1.79MB    4 hours ago   4 hours ago   1         true
+yr1nq8g4szk2   regular        3.2MB     4 hours ago   4 hours ago   1         false
+na6htq7srvi3   regular        629B      4 hours ago   4 hours ago   1         true
+vghjxktjnfg1   regular        955B      4 hours ago   4 hours ago   1         true
+1wrhs789dr85   regular        57.9MB    4 hours ago   4 hours ago   1         false
+ll5a7uq1195z   regular        402B      4 hours ago   4 hours ago   1         true
+ag1kik1ym85r   regular        1.21kB    4 hours ago   4 hours ago   1         true
+7kh31mwzdji4   regular        1.4kB     4 hours ago   4 hours ago   1         true
+oxal37znjjy5   regular        16.6kB    4 hours ago   4 hours ago   1         false
+4mrfqro73r6i   regular        15.5MB    4 hours ago   4 hours ago   1         true
+qyumor2p198p   regular        78.4kB    4 hours ago   4 hours ago   1         true
+bqp3ncucosvr   regular        41.3kB    4 hours ago   4 hours ago   1         true
+74rhtc95hl7w   regular        21.3kB    4 hours ago   4 hours ago   1         true
+y9wcr6lrcczd   regular        3.22GB    4 hours ago   4 hours ago   1         true
+gscunffqvxjo   regular        13.1kB    4 hours ago   4 hours ago   1         true
+s74od83no1rw   regular        32.8MB    4 hours ago   4 hours ago   1         true
+h9dkmxl0xhvk   regular        71.4kB    4 hours ago   4 hours ago   1         true
+5e4cncfn9fax   regular        3.22GB    3 hours ago   3 hours ago   1         true
+ufke5w5p1u03   regular        41.3kB    3 hours ago   3 hours ago   1         true
+oc7g6tggtb9a   regular        78.5kB    3 hours ago   3 hours ago   1         true
+xtdzeusuxscx   regular        13.1kB    3 hours ago   3 hours ago   1         true
+ui8mokicua7o   regular        71.4kB    3 hours ago   3 hours ago   1         true
+ul2ka8nig0h6   regular        21.3kB    3 hours ago   3 hours ago   1         true
+3qcbkd4tgi27   regular        32.8MB    3 hours ago   3 hours ago   1         true
+thg52h5xskz8   regular        13.1kB    3 hours ago   3 hours ago   1         true
+b5a788v5u4f7   regular        41.3kB    3 hours ago   3 hours ago   1         true
+swcdxdxm7suh   regular        3.22GB    3 hours ago   3 hours ago   1         true
+l7hljfiviv4a   regular        32.8MB    3 hours ago   3 hours ago   1         true
+msrfr7we8u3d   regular        71.4kB    3 hours ago   3 hours ago   1         true
+m12kykrvcq3k   regular        21.3kB    3 hours ago   3 hours ago   1         true
+46ya3j39baa3   regular        78.4kB    3 hours ago   3 hours ago   1         true
+0wpp1qxhiitp   regular        340kB     2 hours ago   2 hours ago   1         false
+wdg89352ck0w   regular        942kB     2 hours ago   2 hours ago   1         false
+79nrjnv3jb0n   regular        1.13MB    2 hours ago   2 hours ago   1         false
+5n0ywe7mb92j   regular        3.22GB    2 hours ago   2 hours ago   1         true
+k0sjk9uto3gz   regular        1.11MB    2 hours ago   2 hours ago   1         false
+gkk18w33n990   regular        21.3kB    2 hours ago   2 hours ago   1         true
+8o7m1lz0dcjf   regular        71.4kB    2 hours ago   2 hours ago   1         true
+qb9rci3kd7n9   regular        197kB     2 hours ago   2 hours ago   1         false
+rl4uo8ficocn   regular        1.11MB    2 hours ago   2 hours ago   1         false
+axvt69gqhkm8   regular        41.3kB    2 hours ago   2 hours ago   1         true
+phvq1qagz404   regular        1.71GB    2 hours ago   2 hours ago   1         false
+ud20xt557uz3   regular        8.19kB    2 hours ago   2 hours ago   1         false
+gnehll4r5mra   regular        30.3MB    2 hours ago   2 hours ago   1         false
+yoxr4gmcuifm   regular        1.9MB     2 hours ago   2 hours ago   1         false
+qh4dcqofhyaj   regular        328kB     2 hours ago   2 hours ago   1         false
+ktjzy41e8xwp   regular        8.19kB    2 hours ago   2 hours ago   1         false
+yot46tjbrrwf   regular        61.4kB    2 hours ago   2 hours ago   1         false
+w9qrffz0zt6i   regular        53.2kB    2 hours ago   2 hours ago   1         false
+y1b1y80n9bjq   regular        1.13MB    2 hours ago   2 hours ago   1         false
+bvs9e0uydv57   regular        8.19kB    2 hours ago   2 hours ago   1         false
+tgclzfoewuut   regular        61.4kB    2 hours ago   2 hours ago   1         false
+p40haj05rpk6   regular        8.19kB    2 hours ago   2 hours ago   1         false
+z7vm8ypxmiio   regular        8.19kB    2 hours ago   2 hours ago   1         false
+prz7xtqhtzxa   regular        61.4kB    2 hours ago   2 hours ago   1         false
+j29k9utbe5ku   regular        13.1kB    2 hours ago   2 hours ago   1         true
+uh17kuh1tfdi   regular        1.85MB    2 hours ago   2 hours ago   1         false
+088x29wsgl29   regular        73.7kB    2 hours ago   2 hours ago   1         false
+6zchbe10pl7p   regular        229kB     2 hours ago   2 hours ago   1         false
+7b51vcrkxjct   regular        8.19kB    2 hours ago   2 hours ago   1         false
+wjlxah7anw9z   regular        32.8MB    2 hours ago   2 hours ago   1         true
+339j5fcl3k6h   regular        78.4kB    2 hours ago   2 hours ago   1         true
+sb9mza3d62ho   regular        250kB     2 hours ago   2 hours ago   1         false
+n06gs3p1x87v   regular        8.19kB    2 hours ago   2 hours ago   1         false
+7m2kcsexj8ow   regular        8.19kB    2 hours ago   2 hours ago   1         false
+109fpxc16d9x   regular        16.4kB    2 hours ago   2 hours ago   1         false
+ewb9d0zgw2uq   regular        193kB     2 hours ago   2 hours ago   1         false
+xr0h5u22pscc   regular        8.19kB    2 hours ago   2 hours ago   1         false
+mzo8dpbrp1lg   regular        1.11MB    2 hours ago   2 hours ago   1         false
+map4ae921fw8   regular        73.7kB    2 hours ago   2 hours ago   1         false
+p5vjoisnjkcc   regular        71.4kB    2 hours ago   2 hours ago   1         true
+15l4itvggsml   regular        61.4kB    2 hours ago   2 hours ago   1         false
+w2ppze5891xg   regular        8.19kB    2 hours ago   2 hours ago   1         false
+qf26ozlevjic   regular        1.71GB    2 hours ago   2 hours ago   1         false
+0fh9qxle77f0   regular        8.19kB    2 hours ago   2 hours ago   1         false
+eaep1eu631ts   regular        250kB     2 hours ago   2 hours ago   1         false
+mmgo5n6dwsd5   regular        53.2kB    2 hours ago   2 hours ago   1         false
+ts5nmsshdzf6   regular        1.11MB    2 hours ago   2 hours ago   1         false
+b5t7h9dlhmh7   regular        8.19kB    2 hours ago   2 hours ago   1         false
+53qepbwk69m3   regular        16.4kB    2 hours ago   2 hours ago   1         false
+v3sy442nycdh   regular        30.3MB    2 hours ago   2 hours ago   1         false
+vrqyy95z3eu2   regular        61.4kB    2 hours ago   2 hours ago   1         false
+sc9565yvwq1o   regular        8.19kB    2 hours ago   2 hours ago   1         false
+ewvte4cue42f   regular        328kB     2 hours ago   2 hours ago   1         false
+y4gqn3opj1je   regular        8.19kB    2 hours ago   2 hours ago   1         false
+jhxmbkts786i   regular        1.9MB     2 hours ago   2 hours ago   1         false
+hfk538vtdgn4   regular        8.19kB    2 hours ago   2 hours ago   1         false
+l35zw79cjl3y   regular        340kB     2 hours ago   2 hours ago   1         false
+qv8zfwdmknd9   regular        229kB     2 hours ago   2 hours ago   1         false
+cfp0cj5ztkvg   regular        197kB     2 hours ago   2 hours ago   1         false
+ro0ufkujultf   regular        32.8MB    2 hours ago   2 hours ago   1         true
+a124gxfjjqpj   regular        78.4kB    2 hours ago   2 hours ago   1         true
+dypbhl6b54x9   regular        8.19kB    2 hours ago   2 hours ago   1         false
+dqziqgdeh0fm   regular        3.22GB    2 hours ago   2 hours ago   1         true
+jdlnxtfebmp2   regular        13.1kB    2 hours ago   2 hours ago   1         true
+birfmw1fxvl0   regular        21.3kB    2 hours ago   2 hours ago   1         true
+flzlrsgipe2s   regular        942kB     2 hours ago   2 hours ago   1         false
+d8in79tw2or3   regular        1.13MB    2 hours ago   2 hours ago   1         false
+sn830zbybn9x   regular        41.3kB    2 hours ago   2 hours ago   1         true
+jge1smhxjib3   regular        1.13MB    2 hours ago   2 hours ago   1         false
+zpkr1puhyhjz   regular        61.4kB    2 hours ago   2 hours ago   1         false
+jmso4d2v6oi4   regular        193kB     2 hours ago   2 hours ago   1         false
+isl9ceseqofr   regular        1.85MB    2 hours ago   2 hours ago   1         false
+4rukp21xitjr   regular        1.9MB     2 hours ago   2 hours ago   1         false
+buqhx3d83cxf   regular        1.11MB    2 hours ago   2 hours ago   1         false
+eu2h4t3zrieq   regular        41.3kB    2 hours ago   2 hours ago   1         true
+km0nn7n6tdvk   regular        193kB     2 hours ago   2 hours ago   1         false
+4ryncis679au   regular        8.19kB    2 hours ago   2 hours ago   1         false
+rjhy34fg9fu9   regular        21.3kB    2 hours ago   2 hours ago   1         true
+nkrcss6n3rv8   regular        8.19kB    2 hours ago   2 hours ago   1         false
+nkuaq24r0wja   regular        8.19kB    2 hours ago   2 hours ago   1         false
+qpqt0dfcf4zu   regular        61.4kB    2 hours ago   2 hours ago   1         false
+0e0yz20zk8sr   regular        340kB     2 hours ago   2 hours ago   1         false
+tgujxk48wdti   regular        1.71GB    2 hours ago   2 hours ago   1         false
+q0mctiuqe38o   regular        8.19kB    2 hours ago   2 hours ago   1         false
+tp4w0i62lskz   regular        61.4kB    2 hours ago   2 hours ago   1         false
+hgt1qcar3p0y   regular        1.85MB    2 hours ago   2 hours ago   1         false
+rtz2l3do8vug   regular        16.4kB    2 hours ago   2 hours ago   1         false
+71p9w6dweh23   regular        3.22GB    2 hours ago   2 hours ago   1         true
+46hjhfyudrch   regular        78.4kB    2 hours ago   2 hours ago   1         true
+seg304epzqff   regular        8.19kB    2 hours ago   2 hours ago   1         false
+n4mlfz6mo2zk   regular        8.19kB    2 hours ago   2 hours ago   1         false
+iic3s8yrauiy   regular        229kB     2 hours ago   2 hours ago   1         false
+69wa72ue874k   regular        30.3MB    2 hours ago   2 hours ago   1         false
+qpsfr7w61l30   regular        250kB     2 hours ago   2 hours ago   1         false
+na8eaiv45x5w   regular        8.19kB    2 hours ago   2 hours ago   1         false
+aoclqh5h4kp2   regular        73.7kB    2 hours ago   2 hours ago   1         false
+u81b3l5mekmn   regular        13.1kB    2 hours ago   2 hours ago   1         true
+7mcn054kk1eu   regular        61.4kB    2 hours ago   2 hours ago   1         false
+6s031b9y70f2   regular        328kB     2 hours ago   2 hours ago   1         false
+7iukeoltcc9w   regular        8.19kB    2 hours ago   2 hours ago   1         false
+i9cae47e35op   regular        197kB     2 hours ago   2 hours ago   1         false
+vlveymar6ju0   regular        942kB     2 hours ago   2 hours ago   1         false
+l388mfkgrchs   regular        1.13MB    2 hours ago   2 hours ago   1         false
+niylneqlm1pq   regular        1.13MB    2 hours ago   2 hours ago   1         false
+qypla62zh7ai   regular        32.8MB    2 hours ago   2 hours ago   1         true
+f3cbeu7r7hg6   regular        53.2kB    2 hours ago   2 hours ago   1         false
+vnwl7evzufp4   regular        1.11MB    2 hours ago   2 hours ago   1         false
+iwdp2vdzff78   regular        71.4kB    2 hours ago   2 hours ago   1         true
+mk93u04o9p6z   regular        942kB     2 hours ago   2 hours ago   1         false
+18jozeh1vghw   regular        193kB     2 hours ago   2 hours ago   1         false
+v36razcuy1fh   regular        1.9MB     2 hours ago   2 hours ago   1         false
+p6rh596jhf0p   regular        29.6kB    4 hours ago   2 hours ago   16        true
+w9z6kdcf3mo6   regular        1.11MB    2 hours ago   2 hours ago   1         false
+vyp72d6kpidj   regular        8.19kB    2 hours ago   2 hours ago   1         false
+ja1xq8gytbaa   regular        8.19kB    2 hours ago   2 hours ago   1         false
+2etb8yicee2g   regular        8.19kB    2 hours ago   2 hours ago   1         false
+kog0ponha36v   regular        1.85MB    2 hours ago   2 hours ago   1         false
+urdohn082qmt   regular        61.4kB    2 hours ago   2 hours ago   1         false
+k1ix9kzpu2ta   regular        61.4kB    2 hours ago   2 hours ago   1         false
+sn8w5xt82o21   source.local   16.4kB    4 hours ago   2 hours ago   15        false
+us8irfd7nkoo   regular        8.19kB    4 hours ago   2 hours ago   15        false
+mpcuqo1iiq56   regular        8.19kB    2 hours ago   2 hours ago   1         false
+qisqxo0u19v8   regular        8.19kB    2 hours ago   2 hours ago   1         false
+z7hy00t3fn5j   regular        73.7kB    2 hours ago   2 hours ago   2         false
+w11jyjeirljo   regular        1.72GB    2 hours ago   2 hours ago   1         false
+j4uuyg6x95ab   regular        30.3MB    2 hours ago   2 hours ago   1         false
+zgm5hc79a7xa   source.local   4.1kB     4 hours ago   2 hours ago   15        false
+8eyfime2lwza   source.local   1.71GB    4 hours ago   2 hours ago   15        false
+64ik0r0i4tjf   regular        340kB     2 hours ago   2 hours ago   1         false
+ik4uuc28fkun   regular        53.2kB    2 hours ago   2 hours ago   1         false
+wf8aw7pblcwm   regular        8.19kB    2 hours ago   2 hours ago   1         false
+ry1v8kkpg0oo   regular        16.4kB    2 hours ago   2 hours ago   1         false
+n0zayrq7o782   regular        1.13MB    2 hours ago   2 hours ago   1         false
+19p482s51u7e   regular        229kB     2 hours ago   2 hours ago   1         false
+y1amepos5ybg   regular        197kB     2 hours ago   2 hours ago   1         false
+yazjthvml3q9   regular        1.13MB    2 hours ago   2 hours ago   1         false
+e0fn6r201x5i   regular        8.19kB    2 hours ago   2 hours ago   1         false
+vprxamcam2ts   regular        61.4kB    2 hours ago   2 hours ago   1         false
+oxwaufmjxwvu   regular        1.11MB    2 hours ago   2 hours ago   1         false
+ymtgf9zs70w8   regular        250kB     2 hours ago   2 hours ago   1         false
+ubaaljim56ho   regular        328kB     2 hours ago   2 hours ago   1         false
+ox54hguro7xm   regular        8.19kB    2 hours ago   2 hours ago   1         false
+ar3ozudnjm6f   regular        111MB     2 hours ago   2 hours ago   1         false
+=== JOURNAL ===
+Archived and active journals take up 465.0M in the file system.
+=== LARGE LOGS ===
+25165824 /var/log/journal/0b7bd60529a6410a821c7a929d422046/system@7404d6d07b5c43939dabe926373d4e57-00000000005eff14-000658269315ef62.journal
+39087588 /var/log/syslog.1
+51912774 /var/log/auth.log.1
+56770560 /var/log/syslog
+65750016 /var/log/btmp.1
+=== LARGE FILES ROOT FS ===
+559442533 /opt/nasekadan/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10586/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10598/fs/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10650/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10792/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/10806/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11000/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11014/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11104/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11118/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11179/fs/site/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11208/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11222/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11231/fs/site/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11260/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11274/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11283/fs/site/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11312/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11326/fs/usr/share/nginx/html/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+559442533 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/11335/fs/site/.git/objects/pack/pack-5adaf6c337b2846259b1b61c3e2c8821c66e18cc.pack
+1063821153 /home/ubuntu/actions-runner/_work/lastminuteslevy/lastminuteslevy/.git/objects/pack/pack-73933057e11780b492e535e1ef5a12c98018f7de.pack
+1518785091 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/d0905c6581a030558ef3811f4b1c6a489abef90663272e8261e8b762c06f1ea9
+1519093313 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/00ec25a3925ee8bb5d766d2fd559813922cd680bb44998c41aea91d4f574fb84
+1519151470 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/e2104c85987438a7b41ff4466b44b523ffd7116b8d456e7b972a85f7bedc60e9
+1519412477 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/082b4c8a81da448acae9a07947de75b066d43f8a388baa60dade1a1eef66dccc
+1519510699 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/b49515f3e45ea3850f2c6fa014646a8298e31fe41a6aedf6c014b891702809a6
+1519723762 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/02a881522782d8efca468632090ffc722b2d5fb3893b57571d135cdd5d6d24b6
+1519757299 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/f4645c2714edd0e49c408db65b731989f3a8a34419bab82fc775bebfe997eb48
+1519773124 /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/5e506e383cf4ae6fbc6a5302f970e7683fc975654dccddde8a766266b4365cb5
+3343300538 /tmp/sDovolena_cedok_cs.xml
+5476610048 /tmp/lastminuteslevy-runtime.sqlite
