@@ -8,6 +8,11 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / 'index.html'
 ARCHIVE = ROOT / 'clanky' / 'index.html'
+CARD_FIX_MARKER = 'CARD-PREVIEW-FIX-20260803'
+MONTHS = (
+    'LEDNA|ÚNORA|BREZNA|BŘEZNA|DUBNA|KVĚTNA|KVETNA|ČERVNA|CERVNA|'
+    'ČERVENCE|CERVENCE|SRPNA|ZÁŘÍ|ZARI|ŘÍJNA|RIJNA|LISTOPADU|PROSINCE'
+)
 
 
 def clean(v: str) -> str:
@@ -20,6 +25,22 @@ def first(patterns, text, default=''):
         if m:
             return clean(m.group(1))
     return default
+
+
+def normalize_tag(value: str) -> str:
+    """Odstraní datum a čas z konce rubriky, aby se v kartě neopakovaly."""
+    tag = clean(value)
+    patterns = (
+        rf'\s*·\s*\d{{1,2}}\.\s*(?:{MONTHS})\s+\d{{4}}(?:\s*(?:·|V)\s*\d{{1,2}}:\d{{2}})?\s*$',
+        r'\s*·\s*\d{1,2}\.\s*\d{1,2}\.\s*\d{4}(?:\s*(?:·|V)\s*\d{1,2}:\d{2})?\s*$',
+    )
+    while True:
+        original = tag
+        for pattern in patterns:
+            tag = re.sub(pattern, '', tag, flags=re.I).strip(' ·')
+        if tag == original:
+            break
+    return tag or 'AKTUÁLNĚ'
 
 
 def article_info(path: Path):
@@ -45,7 +66,9 @@ def article_info(path: Path):
         r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
         r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>'
     ], text, '')
-    tag = first([r'<p[^>]+class=["\'][^"\']*tag[^"\']*["\'][^>]*>(.*?)</p>'], text, 'AKTUÁLNĚ')
+    tag = normalize_tag(first([
+        r'<p[^>]+class=["\'][^"\']*tag[^"\']*["\'][^>]*>(.*?)</p>'
+    ], text, 'AKTUÁLNĚ'))
     image = first([
         r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
         r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
@@ -71,9 +94,11 @@ def image_style(image: str, hero: bool = False) -> str:
         if hero else
         'linear-gradient(rgba(7,23,34,.04),rgba(7,23,34,.18))'
     )
+    size = 'cover' if hero else 'contain'
     return (
         f"background-image:{overlay},url('{escape(image, quote=True)}');"
-        'background-size:cover;background-position:center;background-repeat:no-repeat'
+        f'background-color:#0b202b;background-size:{size};'
+        'background-position:center;background-repeat:no-repeat'
     )
 
 
@@ -124,6 +149,26 @@ def replace_between(text, start, end, replacement):
     return text[:s + len(start)] + '\n' + replacement + '\n    ' + text[e:]
 
 
+def ensure_preview_css(text: str, archive: bool = False) -> str:
+    if archive:
+        css = f'''
+    /* {CARD_FIX_MARKER} */
+    .archive-list .article-card .visual{{background-size:contain!important;background-position:center!important;background-repeat:no-repeat!important;background-color:#0b202b!important}}
+    .archive-list .article-card .visual:after{{display:none!important}}
+'''
+    else:
+        css = f'''
+    /* {CARD_FIX_MARKER} */
+    .article-list .article-card .visual{{height:auto!important;min-height:0!important;aspect-ratio:1200/630;padding:0!important;background-size:contain!important;background-position:center!important;background-repeat:no-repeat!important;background-color:#0b202b!important}}
+    .article-list .article-card .visual:after{{display:none!important}}
+'''
+    block_pattern = rf'\s*/\* {re.escape(CARD_FIX_MARKER)} \*/.*?(?=\n\s*</style>)'
+    text = re.sub(block_pattern, '', text, flags=re.S)
+    if '</style>' not in text:
+        raise RuntimeError('Stránka nemá uzavírací značku </style>.')
+    return text.replace('</style>', css + '  </style>', 1)
+
+
 def validate_cards(text: str, label: str) -> None:
     cards = re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?</article>', text, re.I | re.S)
     if not cards:
@@ -138,6 +183,8 @@ def validate_cards(text: str, label: str) -> None:
         visual_html = visual.group(0)
         if 'background-image:' not in visual_html:
             broken.append(f'{href}: chybí background-image')
+        if 'background-size:contain' not in visual_html:
+            broken.append(f'{href}: náhled není contain')
         if re.search(r'<strong\b', visual_html, re.I):
             broken.append(f'{href}: zdvojený titulek ve visual')
     if broken:
@@ -156,8 +203,8 @@ def main():
     if not articles:
         raise SystemExit('Nenalezen žádný publikovaný článek')
 
-    featured = articles[:2]
-    home_cards = '\n'.join(card(a) for a in articles[2:])
+    # Nejnovější články zůstávají nejen v hero bloku, ale také na začátku mřížky.
+    home_cards = '\n'.join(card(a) for a in articles)
     archive_cards = '\n'.join(card(a) for a in articles)
 
     h = HOME.read_text(encoding='utf-8')
@@ -169,6 +216,7 @@ def main():
         flags=re.S,
     )
     h = replace_between(h, '<div class="article-list">', '<p class="archive-note">', home_cards)
+    h = ensure_preview_css(h, archive=False)
     HOME.write_text(h, encoding='utf-8', newline='\n')
 
     atext = ARCHIVE.read_text(encoding='utf-8')
@@ -178,19 +226,22 @@ def main():
         '</section>',
         archive_cards,
     )
+    atext = ensure_preview_css(atext, archive=True)
     ARCHIVE.write_text(atext, encoding='utf-8', newline='\n')
 
     home_text = HOME.read_text(encoding='utf-8')
     archive_text = ARCHIVE.read_text(encoding='utf-8')
     article_list = home_text.split('<div class="article-list">', 1)[-1].split('<p class="archive-note">', 1)[0]
-    assert all(x['href'] in home_text for x in articles)
+    assert all(x['href'] in article_list for x in articles)
     assert all(x['href'] in archive_text for x in articles)
-    assert all(x['href'] not in article_list for x in featured)
+    first_card = re.search(r'data-auto-article="([^"]+)"', article_list)
+    assert first_card and first_card.group(1) == articles[0]['path'].stem
+    assert CARD_FIX_MARKER in home_text and 'aspect-ratio:1200/630' in home_text
     validate_cards(home_text, 'Titulní strana')
     validate_cards(archive_text, 'Archiv článků')
     print(
-        f'Viditelnost a obrázky zajištěny pro {len(articles)} článků. '
-        f'Nejnovější dva se na titulce neopakují: {articles[0]["href"]}'
+        f'Viditelnost, pořadí, metadata a úplné náhledy zajištěny pro {len(articles)} článků. '
+        f'První karta: {articles[0]["href"]}'
     )
 
 
