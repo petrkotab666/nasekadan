@@ -1,0 +1,78 @@
+name: Sestavit pojistky publikace Festpouti Poláky
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/setup-festpout-publication-20260803.yml'
+      - '.github/publication/festpout-polaky-2026/chunks/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: setup-festpout-publication-20260803
+  cancel-in-progress: false
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Rozbalit ověřený balíček
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/publication/festpout-polaky-2026/chunks/*.b64 | base64 -d > /tmp/festpout-bundle.tar.xz
+          echo 'cfc83b2cdc8f063c63b2b8086069d165cad4768031393704503d8f94ce409ae5  /tmp/festpout-bundle.tar.xz' | sha256sum -c -
+          rm -rf /tmp/festpout-unpack
+          mkdir -p /tmp/festpout-unpack
+          tar -xJf /tmp/festpout-bundle.tar.xz -C /tmp/festpout-unpack
+          install -D -m 0755 /tmp/festpout-unpack/publisher.py scripts/publish_festpout_polaky_20260805.py
+          install -D -m 0755 /tmp/festpout-unpack/deploy.sh scripts/deploy_festpout_polaky_20260805.sh
+          install -D -m 0644 /tmp/festpout-unpack/manifest.json .github/publication/festpout-polaky-2026/release-manifest.json
+          install -D -m 0644 /tmp/festpout-unpack/primary.yml .github/workflows/publish-festpout-polaky-20260805.yml
+          install -D -m 0644 /tmp/festpout-unpack/watchdog.yml .github/workflows/watchdog-festpout-polaky-20260805.yml
+          install -D -m 0644 /tmp/festpout-unpack/rescue.yml .github/workflows/rescue-festpout-polaky-20260805.yml
+          install -D -m 0644 /tmp/festpout-unpack/preflight.yml .github/workflows/preflight-festpout-polaky-20260805.yml
+
+      - name: Ověřit všechny vrstvy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py
+          bash -n scripts/deploy_festpout_polaky_20260805.sh
+          test -s .github/drafts/festpout-polaky-2026.html
+          test -s .github/publication/festpout-polaky-2026/release-manifest.json
+          grep -Fq '2026, 8, 5, 7, 30' scripts/publish_festpout_polaky_20260805.py
+          grep -Fq "cron: '30 5 5 8 *'" .github/workflows/publish-festpout-polaky-20260805.yml
+          grep -Fq 'Watchdog Festpouť Poláky 2026' .github/workflows/watchdog-festpout-polaky-20260805.yml
+          grep -Fq 'Poslední záchrana Festpouti Poláky 2026' .github/workflows/rescue-festpout-polaky-20260805.yml
+
+      - name: Uložit balíček na main a uklidit přepravní soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň publikační automat'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/publish_festpout_polaky_20260805.py scripts/deploy_festpout_polaky_20260805.sh
+          git add .github/publication/festpout-polaky-2026/release-manifest.json
+          git add .github/workflows/publish-festpout-polaky-20260805.yml
+          git add .github/workflows/watchdog-festpout-polaky-20260805.yml
+          git add .github/workflows/rescue-festpout-polaky-20260805.yml
+          git add .github/workflows/preflight-festpout-polaky-20260805.yml
+          git rm -r .github/publication/festpout-polaky-2026/chunks
+          git rm .github/workflows/setup-festpout-publication-20260803.yml
+          git commit -m 'Přidat vícenásobné pojistky publikace Festpouti Poláky'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 7))
+          done
+          exit 1
