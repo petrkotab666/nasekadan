@@ -1,0 +1,13 @@
+{
+  "status": "success",
+  "checkedAt": "2026-08-03T18:29:20.205395+00:00",
+  "version": "20260803-weather-live-refresh-3",
+  "refreshMinutes": 5,
+  "observationMaxAgeMinutes": 45,
+  "checks": [
+    "public javascript contains live refresh marker",
+    "homepage and weather page use cache-busted script version",
+    "forecast endpoint returns timeseries",
+    "systemd weather timer is enabled and active"
+  ]
+}
