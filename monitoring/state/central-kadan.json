@@ -1,56 +1,69 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-03T13:03:44Z",
-  "last_quick_check_at": "2026-08-03T13:03:44Z",
-  "last_deep_check_at": "2026-08-03T10:07:36Z",
+  "updated_at": "2026-08-03T22:04:53Z",
+  "last_quick_check_at": "2026-08-03T22:04:53Z",
+  "last_deep_check_at": "2026-08-03T16:00:50Z",
   "canonical_registry": {
-    "path": "data/organizations.json",
+    "paths": [
+      "data/organizations.json",
+      "data/city-sources.json",
+      "data/regional-sources.json"
+    ],
     "directory_is_canonical_registry": true,
-    "directory_organizations": 64,
-    "monitored_directory_organizations": 64,
+    "directory_organizations": 65,
+    "monitored_directory_organizations": 65,
     "coverage_percent": 100.0,
-    "missing_directory_organizations": []
+    "missing_directory_organizations": [],
+    "registry_shas": {
+      "organizations": "131a573482229f11b57224e56623c1e26fd1dcb2",
+      "city_sources": "e76ed5c513effbf7ef79b0d844da461d71b65f87",
+      "regional_sources": "c2baf56b8a4fa63fd8064ab6649c0c039fc4d7a3"
+    }
   },
   "city_news": {
     "path": "data/city-news.json",
-    "generated_at": "2026-08-03T10:07:36.625772+00:00",
-    "total_unique_sources": 95,
-    "known_failed_sources": 15,
+    "generated_at": "2026-08-03T19:58:39.010442+00:00",
+    "total_unique_sources": 98,
+    "known_failed_sources": 13,
     "failed_sources_require_fallback": true
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "571dd7f3fd6eb0998b177f38f90b989802789745"
+    "main_sha_observed": "284ea79c0c92bedacd546060a75cafdadb4e4bfa"
   },
   "production": {
     "homepage_checked": true,
     "archive_checked": true,
-    "latest_public_article_url": "https://nasekadan.cz/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html",
-    "latest_public_article_title": "Zaregistrovala se v Kadani. O rok později darovala krvetvorné buňky konkrétnímu pacientovi",
-    "latest_public_article_published_at": "2026-08-03T12:22:00+02:00",
+    "latest_public_article_url": "https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html",
+    "latest_public_article_title": "Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna",
+    "latest_public_article_published_at": "2026-08-03T18:35:00+02:00",
     "homepage_and_archive_consistent": true,
-    "fve_article_url": "https://nasekadan.cz/clanky/fve-epr-letiste-bess-kadan-2026.html",
-    "fve_article_visible_on_homepage": true,
-    "fve_article_visible_in_archive": true,
-    "deployment_health_direct_fetch_available": false
+    "sitemap_direct_fetch_available": false,
+    "rss_direct_fetch_available": false,
+    "deployment_health_direct_fetch_available": false,
+    "repair_attempted": false
   },
   "quick_check": {
     "extraordinary_events": "no_new_significant_verified_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
-    "petition": "no_significant_verified_change; conflicting_stale_search_counts_not_used",
-    "technical": "public_homepage_and_archive_current; fve_article_visible; deployment_health_unavailable"
+    "petition": "no_significant_verified_change",
+    "technical": "public_homepage_and_archive_current; no_deploy_needed"
   },
-  "last_significant_fingerprint": "uohs-nemocnice-kadan-luzka-s0098-2026",
+  "duplicate_fingerprints_suppressed": [
+    "surface-water-ban-kadan-chomutov-update-20260803",
+    "ii225-zeleznicni-prejezd-smer-kadan-20260803",
+    "zimni-stadion-ochlazeni-klasterec-kadan-20260803"
+  ],
   "new_significant_fingerprints": [],
   "notes": [
-    "Rychlá kontrola oficiálních a důvěryhodných zdrojů neodhalila novou významnou mimořádnou událost, soudní pohyb ani dokument s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
-    "Kanonický adresář má 64 organizací; veřejný výstup city-news potvrzuje directoryIsCanonicalRegistry=true, shodu 64/64 a coveragePercent=100.",
-    "Veřejná titulka i archiv jsou aktuální a shodně zobrazují článek o dárkyni krvetvorných buněk z 3. srpna 2026 ve 12:22 jako nejnovější.",
-    "Článek o FVE EPR Letiště z 3. srpna 2026 v 10:30 je viditelný na titulce i v archivu se správným titulkem a perexem.",
-    "Přímé načtení článku, RSS, sitemap a deployment-health.txt bylo dostupným webovým nástrojem omezené; titulka a archiv však neposkytují důkaz zastaralé produkce, proto nebyl spuštěn další deploy.",
-    "Vyhledávače vracely u soukromé petice různé starší počty podpisů; tyto neaktuální a rozporné hodnoty nebyly použity jako současný stav.",
-    "Nefunkční nebo blokované zdroje zůstávají ve sledování a budou znovu řešeny při dalším hlubokém průchodu."
+    "Rychlá kontrola oficiálních a důvěryhodných zdrojů neodhalila novou významnou mimořádnou událost, soudní pohyb ani dokument s přímou vazbou na Kadaň, Prunéřov, Tušimice nebo sledovaný region.",
+    "Byly načteny všechny tři kanonické registry. Poslední city-news výstup potvrzuje shodu 65/65 organizací, coveragePercent 100 a 98 unikátních zdrojů.",
+    "Třináct blokovaných nebo technicky nefunkčních přímých zdrojů zůstává ve sledování a musí být při hlubokém průchodu řešeno přes náhradní primární kanály.",
+    "Veřejná titulka i archiv jsou aktuální a shodně zobrazují článek o uzavírce silnice Žatec–Kadaň z 3. srpna 2026 v 18:35 jako nejnovější.",
+    "Přímé načtení RSS, sitemap a deployment-health nebylo dostupným nástrojem možné; titulka a archiv neposkytují důkaz zastaralé produkce, proto nebyl spuštěn deploy.",
+    "U známých soudních spisů ani u soukromé petice Nemocnice Kadaň nebyla nalezena nová spolehlivě ověřená významná změna.",
+    "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
 }
