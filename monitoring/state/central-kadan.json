@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-03T07:06:46Z",
-  "last_quick_check_at": "2026-08-03T07:06:46Z",
-  "last_deep_check_at": "2026-08-03T03:55:53Z",
+  "updated_at": "2026-08-03T13:03:44Z",
+  "last_quick_check_at": "2026-08-03T13:03:44Z",
+  "last_deep_check_at": "2026-08-03T10:07:36Z",
   "canonical_registry": {
     "path": "data/organizations.json",
     "directory_is_canonical_registry": true,
@@ -14,41 +14,43 @@
   },
   "city_news": {
     "path": "data/city-news.json",
-    "generated_at": "2026-08-03T03:55:53.251367Z",
+    "generated_at": "2026-08-03T10:07:36.625772+00:00",
     "total_unique_sources": 95,
-    "known_failed_sources": 12,
+    "known_failed_sources": 15,
     "failed_sources_require_fallback": true
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "30ac2777935ca9a0545b108b937d9cfd61b3fa13"
+    "main_sha_observed": "571dd7f3fd6eb0998b177f38f90b989802789745"
   },
   "production": {
     "homepage_checked": true,
     "archive_checked": true,
-    "latest_public_article_url": "https://nasekadan.cz/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html",
-    "latest_public_article_title": "Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera",
-    "latest_public_article_published_at": "2026-08-03T04:00:00+02:00",
+    "latest_public_article_url": "https://nasekadan.cz/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html",
+    "latest_public_article_title": "Zaregistrovala se v Kadani. O rok později darovala krvetvorné buňky konkrétnímu pacientovi",
+    "latest_public_article_published_at": "2026-08-03T12:22:00+02:00",
     "homepage_and_archive_consistent": true,
-    "indexation_cleanup_external_verify": "success",
-    "indexation_cleanup_checked_at": "2026-08-03T07:05:49.640Z",
+    "fve_article_url": "https://nasekadan.cz/clanky/fve-epr-letiste-bess-kadan-2026.html",
+    "fve_article_visible_on_homepage": true,
+    "fve_article_visible_in_archive": true,
     "deployment_health_direct_fetch_available": false
   },
   "quick_check": {
     "extraordinary_events": "no_new_significant_verified_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
-    "petition": "no_significant_verified_change",
-    "technical": "public_homepage_and_archive_current; indexation_cleanup_external_verify_success"
+    "petition": "no_significant_verified_change; conflicting_stale_search_counts_not_used",
+    "technical": "public_homepage_and_archive_current; fve_article_visible; deployment_health_unavailable"
   },
   "last_significant_fingerprint": "uohs-nemocnice-kadan-luzka-s0098-2026",
   "new_significant_fingerprints": [],
   "notes": [
-    "Hodinová kontrola oficiálních a důvěryhodných zdrojů neodhalila novou významnou mimořádnou událost, soudní pohyb ani dokument s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
-    "Veřejná titulka a archiv zobrazují jako nejnovější článek rešerši o kadaňském klášteře z 3. srpna 2026 ve 04:00.",
-    "Automatická oprava veřejné indexace skončila v 07:05 UTC stavem deploy=success a external_verify=success; veřejná kontrola neukázala technické ani duplicitní URL v sitemapě.",
-    "Přímé načtení deployment-health.txt nebylo přes dostupný webový nástroj možné; nebyl však zjištěn důkaz zastaralé produkce, proto nebyl spuštěn další deploy.",
-    "Petice nevykazuje ověřený významný posun; starší indexované počty vyhledávačů nebyly použity jako aktuální stav.",
-    "Nefunkční nebo blokované zdroje zůstávají ve sledování a budou znovu řešeny při nejbližším hlubokém průchodu."
+    "Rychlá kontrola oficiálních a důvěryhodných zdrojů neodhalila novou významnou mimořádnou událost, soudní pohyb ani dokument s přímou vazbou na Kadaň, Prunéřov nebo Tušimice.",
+    "Kanonický adresář má 64 organizací; veřejný výstup city-news potvrzuje directoryIsCanonicalRegistry=true, shodu 64/64 a coveragePercent=100.",
+    "Veřejná titulka i archiv jsou aktuální a shodně zobrazují článek o dárkyni krvetvorných buněk z 3. srpna 2026 ve 12:22 jako nejnovější.",
+    "Článek o FVE EPR Letiště z 3. srpna 2026 v 10:30 je viditelný na titulce i v archivu se správným titulkem a perexem.",
+    "Přímé načtení článku, RSS, sitemap a deployment-health.txt bylo dostupným webovým nástrojem omezené; titulka a archiv však neposkytují důkaz zastaralé produkce, proto nebyl spuštěn další deploy.",
+    "Vyhledávače vracely u soukromé petice různé starší počty podpisů; tyto neaktuální a rozporné hodnoty nebyly použity jako současný stav.",
+    "Nefunkční nebo blokované zdroje zůstávají ve sledování a budou znovu řešeny při dalším hlubokém průchodu."
   ]
 }
