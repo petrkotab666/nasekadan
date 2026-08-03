@@ -1,0 +1,106 @@
+name: Hlídání počasí po publikaci
+run-name: Obnovit počasí, pokud publikace přepíše titulku
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'pocasi/index.html'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-weather-loader-guard
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vynutit loader počasí
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/ensure_weather_loader.py
+          grep -Fq 'data-nk-weather-direct="1"' index.html
+          grep -Fq 'data-nk-weather-direct="1"' pocasi/index.html
+
+      - name: Zapsat opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – hlídač počasí'
+          git config user.email 'info@nasekadan.cz'
+          git add -- index.html pocasi/index.html
+          if git diff --cached --quiet; then
+            echo 'Loader už je v repozitáři.'
+          else
+            git commit -m 'Obnovit loader počasí po publikaci [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git pull --rebase origin main && git push origin HEAD:main; then
+                break
+              fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt * 4))
+            done
+          fi
+
+      - name: Vybrat SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+              chmod 600 "$RUNNER_TEMP/nasekadan_key"
+              exit 0
+            fi
+          done
+          echo 'Chybí SSH klíč.' >&2
+          exit 20
+
+      - name: Nasadit opravenou titulku
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 index.html ubuntu@57.129.43.215:/tmp/nk-weather-index.html
+          scp -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 pocasi/index.html ubuntu@57.129.43.215:/tmp/nk-weather-detail.html
+          scp -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 pocasi.js ubuntu@57.129.43.215:/tmp/nk-pocasi.js
+          ssh -i "$RUNNER_TEMP/nasekadan_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "set -e; sudo install -m 0644 /tmp/nk-weather-index.html /var/www/nasekadan/index.html; sudo install -D -m 0644 /tmp/nk-weather-detail.html /var/www/nasekadan/pocasi/index.html; sudo install -m 0644 /tmp/nk-pocasi.js /var/www/nasekadan/pocasi.js; cid=\$(sudo docker ps --filter name=^/nasekadan-web\$ -q | head -n1); test -n \"\$cid\" || cid=\$(sudo docker ps --filter publish=3224 -q | head -n1); test -n \"\$cid\"; sudo docker cp /tmp/nk-weather-index.html \"\$cid:/usr/share/nginx/html/index.html\"; sudo docker cp /tmp/nk-weather-detail.html \"\$cid:/usr/share/nginx/html/pocasi/index.html\"; sudo docker cp /tmp/nk-pocasi.js \"\$cid:/usr/share/nginx/html/pocasi.js\"; rm -f /tmp/nk-weather-index.html /tmp/nk-weather-detail.html /tmp/nk-pocasi.js"
+
+      - name: Ověřit veřejný loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            home="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/?weather-guard=${GITHUB_RUN_ID}-${attempt}" 2>/dev/null || true)"
+            detail="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/pocasi/?weather-guard=${GITHUB_RUN_ID}-${attempt}" 2>/dev/null || true)"
+            if grep -Fq 'data-nk-weather-direct="1"' <<<"$home" && grep -Fq 'data-nk-weather-direct="1"' <<<"$detail"; then
+              echo 'Loader počasí je veřejně dostupný.'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
