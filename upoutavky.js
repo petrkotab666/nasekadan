@@ -5,6 +5,24 @@ document.addEventListener('DOMContentLoaded',()=>{
   const articleUrl='/clanky/nemocnice-kadan-software-kyberbezpecnost.html';
   const title='64,7 milionu za software: Nemocnice Kadaň ukázala jen část skládačky';
 
+  const nav=document.querySelector('header nav');
+  if(nav&&!nav.querySelector('a[href="/pocasi/"]')){
+    const weatherLink=document.createElement('a');
+    weatherLink.href='/pocasi/';
+    weatherLink.textContent='Počasí';
+    weatherLink.dataset.weatherNav='1';
+    const tipLink=nav.querySelector('a[href="/zapojte-se/"]');
+    if(tipLink)nav.insertBefore(weatherLink,tipLink);else nav.appendChild(weatherLink);
+  }
+
+  if((path==='/'||path==='/pocasi')&&!document.querySelector('script[data-nk-weather]')){
+    const weatherScript=document.createElement('script');
+    weatherScript.src='/pocasi.js?v=20260803-weather-1';
+    weatherScript.defer=true;
+    weatherScript.dataset.nkWeather='1';
+    document.head.appendChild(weatherScript);
+  }
+
   if(path==='/clanky/petice-nemocnice-kadan.html'&&!document.getElementById('next-cyber-analysis')){
     const article=document.querySelector('.article');
     if(article){
