@@ -1,0 +1,104 @@
+name: Diagnostika červených štítků
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/social-badge-debug-trigger.txt'
+      - '.github/workflows/debug-social-badges.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: debug-social-badges
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Spustit audit a vždy uložit log
+        shell: bash
+        run: |
+          set +e
+          python3 -m pip install --disable-pip-version-check --quiet Pillow numpy > /tmp/social-badge-install.log 2>&1
+          install_status=$?
+
+          if [[ "$install_status" == 0 ]]; then
+            python3 -m py_compile scripts/normalize_social_badges.py > /tmp/social-badge-compile.log 2>&1
+            compile_status=$?
+          else
+            compile_status=99
+            printf 'Přeskočeno kvůli chybě instalace.\n' > /tmp/social-badge-compile.log
+          fi
+
+          if [[ "$compile_status" == 0 ]]; then
+            python3 scripts/normalize_social_badges.py --patch-generator --write --report data/social-badge-audit.json > /tmp/social-badge-run.log 2>&1
+            run_status=$?
+          else
+            run_status=98
+            printf 'Přeskočeno kvůli chybě kompilace.\n' > /tmp/social-badge-run.log
+          fi
+
+          if [[ "$run_status" == 0 ]]; then
+            python3 scripts/enforce_article_visibility.py > /tmp/social-badge-enforce.log 2>&1
+            enforce_status=$?
+            python3 scripts/prepare_discovery.py > /tmp/social-badge-discovery.log 2>&1
+            discovery_status=$?
+            python3 scripts/normalize_social_badges.py --check --report data/social-badge-audit.json > /tmp/social-badge-check.log 2>&1
+            check_status=$?
+          else
+            enforce_status=97
+            discovery_status=97
+            check_status=97
+            printf 'Přeskočeno kvůli chybě hlavního běhu.\n' > /tmp/social-badge-enforce.log
+            cp /tmp/social-badge-enforce.log /tmp/social-badge-discovery.log
+            cp /tmp/social-badge-enforce.log /tmp/social-badge-check.log
+          fi
+
+          mkdir -p data
+          {
+            printf 'generated_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            printf 'install_status=%s\n' "$install_status"
+            printf 'compile_status=%s\n' "$compile_status"
+            printf 'run_status=%s\n' "$run_status"
+            printf 'enforce_status=%s\n' "$enforce_status"
+            printf 'discovery_status=%s\n' "$discovery_status"
+            printf 'check_status=%s\n\n' "$check_status"
+            printf '%s\n' '===== INSTALL ====='
+            cat /tmp/social-badge-install.log
+            printf '%s\n' '===== COMPILE ====='
+            cat /tmp/social-badge-compile.log
+            printf '%s\n' '===== MAIN RUN ====='
+            cat /tmp/social-badge-run.log
+            printf '%s\n' '===== ENFORCE ====='
+            cat /tmp/social-badge-enforce.log
+            printf '%s\n' '===== DISCOVERY ====='
+            cat /tmp/social-badge-discovery.log
+            printf '%s\n' '===== FINAL CHECK ====='
+            cat /tmp/social-badge-check.log
+          } > data/social-badge-debug.txt
+
+          git config user.name 'Naše Kadaň diagnostika'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- data/social-badge-debug.txt data/social-badge-audit.json scripts/generate_social_cards.py social index.html clanky rss.xml sitemap.xml news-sitemap.xml llms.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'Uložit diagnostiku a výsledek auditu červených štítků'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              [[ "$attempt" == 4 ]] && exit 2
+              sleep $((attempt * 5))
+            done
+          fi
+
+          if [[ "$install_status" != 0 || "$compile_status" != 0 || "$run_status" != 0 || "$enforce_status" != 0 || "$discovery_status" != 0 || "$check_status" != 0 ]]; then
+            exit 1
+          fi
