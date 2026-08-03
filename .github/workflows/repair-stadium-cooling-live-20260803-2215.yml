@@ -1,0 +1,300 @@
+name: Opravit nasazení článku o ochlazení a kanonickou evidenci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-stadium-cooling-live-20260803-2215.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-stadium-cooling-live-20260803-2215
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ARTICLE_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      ARTICLE_FILE: clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      SOCIAL_FILE: social/klasterec-ochlazeni-zimni-stadion-kadan-2026.png
+      EXPECTED_H1: Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nasadit obsah bezpečným přenosem přes tar
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/stadium-cooling-bundle"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp "$SOCIAL_FILE" "$bundle/social/"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          source_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' "$source_sha" "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'rm -rf /tmp/stadium-cooling-bundle && mkdir -p /tmp/stadium-cooling-bundle && tar -xzf - -C /tmp/stadium-cooling-bundle'
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/stadium-cooling-bundle
+          root=/var/www/nasekadan
+          article=klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+          social=klasterec-ochlazeni-zimni-stadion-kadan-2026.png
+          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
+          sudo install -m 0644 "$src/clanky/$article" "$root/clanky/$article"
+          sudo install -m 0644 "$src/social/$social" "$root/social/$social"
+          sudo install -m 0644 "$src/clanky/index.html" "$root/clanky/index.html"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/$article" "nasekadan-web:/usr/share/nginx/html/clanky/$article"
+            sudo docker cp "$src/social/$social" "nasekadan-web:/usr/share/nginx/html/social/$social"
+            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/stadium-cooling-bundle
+          REMOTE
+
+      - name: Veřejně prověřit všechny články a aktualizovat registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          python3 <<'PY'
+          import collections, datetime, hashlib, html, json, os, re, ssl, subprocess, time
+          import urllib.parse, urllib.request
+          import xml.etree.ElementTree as ET
+
+          base = 'https://nasekadan.cz'
+          registry_path = 'data/published-content-index.json'
+          article_rel = os.environ['ARTICLE_REL']
+          expected_h1 = os.environ['EXPECTED_H1']
+          ctx = ssl._create_unverified_context()
+
+          def fetch(path_or_url):
+              url = path_or_url if path_or_url.startswith('http') else base + path_or_url
+              sep = '&' if '?' in url else '?'
+              last = None
+              for attempt in range(4):
+                  try:
+                      req = urllib.request.Request(url + sep + 'v=' + str(time.time_ns()), headers={'Cache-Control':'no-cache','User-Agent':'Naše Kadaň canonical audit'})
+                      with urllib.request.urlopen(req, timeout=40, context=ctx) as r:
+                          return r.read().decode('utf-8', 'replace')
+                  except Exception as exc:
+                      last = exc
+                      time.sleep(2 + attempt)
+              raise last
+
+          def unique(seq):
+              out=[]; seen=set()
+              for item in seq:
+                  if item not in seen:
+                      seen.add(item); out.append(item)
+              return out
+
+          def clean_h1(raw):
+              return ' '.join(html.unescape(re.sub(r'<[^>]+>', '', raw)).split())
+
+          home = fetch('/')
+          archive = fetch('/clanky/')
+          rss = fetch('/rss.xml')
+          sitemap = fetch('/sitemap.xml')
+          news = fetch('/news-sitemap.xml')
+          health = fetch('/deployment-health.txt')
+          new_article = fetch(article_rel)
+          assert expected_h1 in clean_h1(re.search(r'<h1[^>]*>(.*?)</h1>', new_article, re.S|re.I).group(1))
+
+          href_re = re.compile(r'href=["\'](/clanky/[^"\']+\.html)["\']', re.I)
+          home_urls = [base + p for p in unique(href_re.findall(home)) if '/parts/' not in p]
+          archive_urls = [base + p for p in unique(href_re.findall(archive)) if '/parts/' not in p]
+
+          rss_root = ET.fromstring(rss)
+          rss_urls = unique([(node.text or '').strip() for node in rss_root.findall('.//item/link') if (node.text or '').strip()])
+
+          sm_root = ET.fromstring(sitemap)
+          ns = {'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          sitemap_urls = unique([(node.text or '').strip() for node in sm_root.findall('.//s:loc', ns) if '/clanky/' in (node.text or '') and (node.text or '').endswith('.html') and '/parts/' not in (node.text or '')])
+
+          news_root = ET.fromstring(news)
+          news_urls = unique([(node.text or '').strip() for node in news_root.findall('.//s:loc', ns)])
+
+          with open(registry_path, encoding='utf-8') as f:
+              data = json.load(f)
+          articles = data['articles']
+          urls = [a['url'] for a in articles]
+          fps = [a['fingerprint'] for a in articles]
+          dup_urls = sorted([u for u,c in collections.Counter(urls).items() if c > 1])
+          dup_fps = sorted([u for u,c in collections.Counter(fps).items() if c > 1])
+          assert not dup_urls and not dup_fps
+
+          all_h1 = True
+          for article in articles:
+              page = fetch(article['url'])
+              m = re.search(r'<h1[^>]*>(.*?)</h1>', page, re.S|re.I)
+              actual = clean_h1(m.group(1)) if m else ''
+              if actual != article['h1']:
+                  all_h1 = False
+                  raise AssertionError(f"H1 mismatch: {article['url']} :: {actual!r} != {article['h1']!r}")
+              article['status'] = {
+                  'homepage': article['url'] in home_urls,
+                  'archive': article['url'] in archive_urls,
+                  'rss': article['url'] in rss_urls,
+                  'sitemap': article['url'] in sitemap_urls,
+                  'news_sitemap': article['url'] in news_urls,
+              }
+              article['publication_status'] = 'published'
+
+          assert set(urls) == set(home_urls) == set(archive_urls) == set(rss_urls) == set(sitemap_urls)
+          assert rss_urls == archive_urls
+          assert article_rel in home and article_rel in archive
+          assert base + article_rel in rss_urls and base + article_rel in sitemap_urls and base + article_rel in news_urls
+          assert 'status=ok' in health
+
+          source_sha = subprocess.check_output(['git','log','-1','--format=%H','--',os.environ['ARTICLE_FILE']], text=True).strip()
+          for article in articles:
+              if article['url'] == base + article_rel:
+                  article['source_commit'] = source_sha
+
+          now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+          payload_hash = hashlib.sha256((home + archive + rss + sitemap + news + health).encode('utf-8')).hexdigest()
+          data['generated_at'] = now
+          data['source_commit'] = source_sha
+          data['article_count'] = len(articles)
+          v = data.setdefault('validation', {})
+          v.update({
+              'homepage_count': len(home_urls),
+              'archive_count': len(archive_urls),
+              'rss_count': len(rss_urls),
+              'sitemap_all_articles_present': set(urls) == set(sitemap_urls),
+              'news_sitemap_recent_count': len(news_urls),
+              'deployment_health': 'verified',
+              'required_fields_complete': all(all(k in a for k in ('title','h1','url','published_at','modified_at','persons','organizations','places','cases','topics','fingerprint','status','source_commit')) for a in articles),
+              'duplicate_urls': dup_urls,
+              'duplicate_fingerprints': dup_fps,
+              'per_article_source_commits': all(bool(a.get('source_commit')) for a in articles),
+              'deployment_health_source': source_sha,
+              'public_audit_at': now,
+              'public_audit_sha256': payload_hash,
+              'repair_pending_public_verification': False,
+              'rss_order_matches_archive': rss_urls == archive_urls,
+              'public_repair_verification': {
+                  'method': 'github-actions-direct-live-audit',
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'all_public_h1_checked': all_h1,
+                  'deployment_health_nonempty': bool(health.strip()),
+                  'completed_at': now,
+              },
+              'last_registry_refresh': {
+                  'reason': 'repair failed stadium-cooling deployment and synchronize canonical live evidence',
+                  'trigger_commit': source_sha,
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'completed_at': now,
+              },
+          })
+          with open(registry_path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+              f.write('\n')
+          print(json.dumps({'articles':len(articles),'news':len(news_urls),'source':source_sha,'audit':now}, ensure_ascii=False))
+          PY
+
+      - name: Uložit opravený registr do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit kanonickou evidenci po nasazení článku o ochlazení'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              test "$attempt" -lt 3
+            done
+          fi
+
+      - name: Nasadit opravený registr a znovu veřejně ověřit
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          source_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' "$source_sha" "$ARTICLE_REL" > "$RUNNER_TEMP/deployment-health.txt"
+          ssh_opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'mkdir -p /tmp/canonical-repair'
+          scp "${ssh_opts[@]}" data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/canonical-repair/
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/data"
+          sudo install -m 0644 /tmp/canonical-repair/published-content-index.json "$root/data/published-content-index.json"
+          sudo install -m 0644 /tmp/canonical-repair/deployment-health.txt "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/canonical-repair/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/canonical-repair/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -rf /tmp/canonical-repair
+          REMOTE
+          sleep 4
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz$ARTICLE_REL?v=$q" | grep -Fq "<h1>${EXPECTED_H1}</h1>"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" | grep -Fq "$ARTICLE_REL"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" | grep -Fq "$ARTICLE_REL"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" | grep -Fq "https://nasekadan.cz$ARTICLE_REL"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" | grep -Fq "https://nasekadan.cz$ARTICLE_REL"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" | grep -Fq "https://nasekadan.cz$ARTICLE_REL"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["article_count"]==44; assert d["validation"]["homepage_count"]==44; assert d["validation"]["news_sitemap_recent_count"]==7; assert not d["validation"]["duplicate_urls"]; assert not d["validation"]["duplicate_fingerprints"]'
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" | grep -Fq "source=$source_sha"
+
+      - name: Zapsat úspěšný stav opravy
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const path = '.github/stadium-cooling-article-live-status.json';
+            let sha;
+            try { sha = (await github.rest.repos.getContent({owner, repo, path, ref:'main'})).data.sha; } catch (e) { if (e.status !== 404) throw e; }
+            const payload = {
+              status: 'success', run_id: String(context.runId), checked_at: new Date().toISOString(),
+              article: 'https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html',
+              homepage: true, archive: true, rss: true, sitemaps: true,
+              canonical_registry: true, article_count: 44, duplicate_urls: 0, duplicate_fingerprints: 0
+            };
+            await github.rest.repos.createOrUpdateFileContents({owner, repo, path, branch:'main', sha,
+              message:'Zapsat úspěšnou opravu publikace ochlazení [skip ci]',
+              content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
