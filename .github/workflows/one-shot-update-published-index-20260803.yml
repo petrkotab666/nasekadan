@@ -1,0 +1,150 @@
+name: Jednorázově doplnit kanonický registr
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/one-shot-update-published-index-20260803.trigger'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-shot-update-published-index-20260803
+  cancel-in-progress: false
+
+jobs:
+  update-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Veřejně ověřit článek a aktualizovat registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import datetime as dt
+          import hashlib
+          import json
+          import re
+          import subprocess
+          import time
+          import urllib.request
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          base = 'https://nasekadan.cz'
+          rel = '/clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html'
+          public_url = base + rel
+          title = 'Kam odešli poslední pacienti? Skrytý příběh kadaňského kláštera'
+          paths = ['/', '/clanky/', '/rss.xml', '/sitemap.xml', '/news-sitemap.xml', '/deployment-health.txt', rel]
+          bodies = {}
+          stamp = str(int(time.time() * 1000))
+          for path in paths:
+              sep = '&' if '?' in path else '?'
+              req = urllib.request.Request(
+                  base + path + sep + 'registry_check=' + stamp,
+                  headers={'User-Agent': 'NaseKadan-Canonical-Registry/1.0', 'Cache-Control': 'no-cache'},
+              )
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  bodies[path] = response.read().decode('utf-8', 'replace')
+
+          assert title in bodies[rel], 'Veřejný článek neobsahuje očekávaný H1.'
+          assert rel in bodies['/'], 'Článek chybí na titulní straně.'
+          assert rel in bodies['/clanky/'], 'Článek chybí v archivu.'
+          assert public_url in bodies['/rss.xml'], 'Článek chybí v RSS.'
+          assert public_url in bodies['/sitemap.xml'], 'Článek chybí v sitemap.xml.'
+          assert public_url in bodies['/news-sitemap.xml'], 'Článek chybí v news-sitemap.xml.'
+          assert 'source=' in bodies['/deployment-health.txt'], 'deployment-health.txt neobsahuje source commit.'
+
+          archive_urls = sorted(set(re.findall(r'href=["\'](/clanky/[^"\']+\.html)["\']', bodies['/clanky/'])))
+          rss_count = len(re.findall(r'<item(?:\s|>)', bodies['/rss.xml']))
+          news_count = len(re.findall(r'<url(?:\s|>)', bodies['/news-sitemap.xml']))
+          source_match = re.search(r'(?m)^source=([0-9a-f]{40})\s*$', bodies['/deployment-health.txt'])
+          deployment_source = source_match.group(1) if source_match else None
+
+          registry_path = Path('data/published-content-index.json')
+          data = json.loads(registry_path.read_text(encoding='utf-8'))
+          article = {
+              'title': title,
+              'h1': title,
+              'url': public_url,
+              'published_at': '2026-08-03T04:00:00+02:00',
+              'modified_at': '2026-08-03T04:00:00+02:00',
+              'persons': ['Richard Weiner'],
+              'organizations': ['Město Kadaň', 'Řád svaté Alžběty', 'Oblastní muzeum v Chomutově'],
+              'places': ['Kadaň', 'Chomutov'],
+              'cases': ['Alžbětinský klášter', 'Léčebna TBC a respiračních nemocí v Kadani', 'Budoucí využití městského areálu'],
+              'topics': ['Historie', 'Zdravotnictví', 'Památky', 'Veřejný majetek'],
+              'fingerprint': hashlib.sha256('alzbetinsky-klaster-kadan|historie-zdravotnictvi|1966|pacienti-lecebna'.encode()).hexdigest()[:24],
+              'status': {
+                  'homepage': True,
+                  'archive': True,
+                  'rss': True,
+                  'sitemap': True,
+                  'news_sitemap': True,
+              },
+              'source_path': 'clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html',
+              'publication_status': 'published',
+              'source_commit': 'b17932a8abf32d4faf8797016f38cb11ff6bf300',
+          }
+
+          articles = [item for item in data.get('articles', []) if item.get('url') != public_url]
+          articles.insert(0, article)
+          data['articles'] = articles
+          data['schema_version'] = '1.2'
+          data['generated_at'] = dt.datetime.now(ZoneInfo('Europe/Prague')).replace(microsecond=0).isoformat()
+          data['source_commit'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          data['article_count'] = len(articles)
+
+          urls = [item['url'] for item in articles]
+          fingerprints = [item['fingerprint'] for item in articles]
+          duplicate_urls = sorted({value for value in urls if urls.count(value) > 1})
+          duplicate_fingerprints = sorted({value for value in fingerprints if fingerprints.count(value) > 1})
+          required = ['title', 'h1', 'url', 'published_at', 'modified_at', 'persons', 'organizations', 'places', 'cases', 'topics', 'fingerprint', 'status', 'source_path', 'publication_status', 'source_commit']
+          required_complete = all(all(key in item for key in required) for item in articles)
+
+          validation = data.setdefault('validation', {})
+          validation.update({
+              'homepage_count': len(archive_urls),
+              'archive_count': len(archive_urls),
+              'rss_count': rss_count,
+              'sitemap_all_articles_present': all(url in bodies['/sitemap.xml'] for url in urls),
+              'news_sitemap_recent_count': news_count,
+              'deployment_health': 'verified',
+              'deployment_health_source': deployment_source,
+              'required_fields_complete': required_complete,
+              'duplicate_urls': duplicate_urls,
+              'duplicate_fingerprints': duplicate_fingerprints,
+              'per_article_source_commits': all(bool(item.get('source_commit')) for item in articles),
+          })
+
+          assert len(articles) == 40, f'Očekáváno 40 veřejných článků, nalezeno {len(articles)}.'
+          assert len(archive_urls) == 40, f'Veřejný archiv obsahuje {len(archive_urls)} článků místo 40.'
+          assert rss_count == 40, f'RSS obsahuje {rss_count} položek místo 40.'
+          assert validation['sitemap_all_articles_present'], 'Sitemap neobsahuje všechny veřejné články.'
+          assert required_complete, 'Registr nemá všechna povinná pole.'
+          assert not duplicate_urls, f'Duplicitní URL: {duplicate_urls}'
+          assert not duplicate_fingerprints, f'Duplicitní fingerprinty: {duplicate_fingerprints}'
+
+          registry_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Ověřit JSON a uložit jedinou opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool data/published-content-index.json >/dev/null
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -f .github/workflows/one-shot-update-published-index-20260803.yml .github/one-shot-update-published-index-20260803.trigger
+          git add data/published-content-index.json
+          git commit -m 'Doplnit veřejný článek o klášteře do kanonického registru [skip ci]'
+          git pull --rebase origin main
+          git push origin HEAD:main
