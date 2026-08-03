@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-03T04:06:53.955014+00:00",
+  "checkedAt": "2026-08-03T07:57:39.574887+00:00",
   "bootstrap": false,
   "sourceCount": 106,
-  "checkedSources": 93,
-  "failedSources": 13,
-  "itemsParsed": 6610,
-  "uniqueItems": 3572,
-  "newAlerts": 0,
+  "checkedSources": 92,
+  "failedSources": 14,
+  "itemsParsed": 6622,
+  "uniqueItems": 3579,
+  "newAlerts": 2,
   "alertsCapped": false,
   "suppressed": {
     "genericTitle": 705,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 6,
-    "notEditoriallySignificant": 1,
+    "broadWithoutLocalMatch": 10,
+    "notEditoriallySignificant": 2,
     "notFreshOrUndated": 1,
-    "duplicate": 2333
+    "duplicate": 2338
   },
   "coverage": {
     "directoryOrganizations": 64,
@@ -521,8 +521,9 @@
       "url": "https://www.cez.cz/cs/pro-media/tiskove-zpravy",
       "category": "Energetika",
       "tier": "utility",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "ČEZ Distribuce – plánované odstávky",
@@ -612,7 +613,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 268
+      "itemsParsed": 272
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -871,7 +872,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 6
+      "itemsParsed": 7
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -879,7 +880,7 @@
       "category": "Média – jižní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 0
+      "itemsParsed": 2
     },
     {
       "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
@@ -887,7 +888,7 @@
       "category": "Média – Krušné hory a Ohře",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 0
+      "itemsParsed": 1
     },
     {
       "name": "Google News – Pětipsy, Radonice, Rokle, Veliká Ves a Vilémov",
@@ -895,7 +896,7 @@
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 0
+      "itemsParsed": 2
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
@@ -903,7 +904,7 @@
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 1
+      "itemsParsed": 3
     },
     {
       "name": "Google News – kadaňské organizace a služby",
