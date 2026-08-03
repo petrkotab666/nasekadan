@@ -1,0 +1,261 @@
+name: Opravit obrázek článku o dárcovství
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-donor-og-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-donor-og-image-20260803
+  cancel-in-progress: false
+
+jobs:
+  generate-deploy-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE_PATH: clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html
+      IMAGE_PATH: social/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026-f27e1dbd56.png
+      IMAGE_URL: https://nasekadan.cz/social/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026-f27e1dbd56.png
+      FACEBOOK_POST_ID: 1143365655537112_122108365059403047
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      FB_TOKEN_1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      FB_TOKEN_3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vytvořit vlastní kartu 1200 × 630
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 -m pip install --quiet pillow
+          python3 <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont, ImageFilter
+          import os, re
+
+          article_path = Path(os.environ['ARTICLE_PATH'])
+          image_path = Path(os.environ['IMAGE_PATH'])
+          image_url = os.environ['IMAGE_URL']
+          image_path.parent.mkdir(parents=True, exist_ok=True)
+
+          W, H = 1200, 630
+          im = Image.new('RGB', (W, H), '#081b2a')
+          px = im.load()
+          top = (7, 29, 50)
+          bottom = (126, 15, 34)
+          for y in range(H):
+              t = y / (H - 1)
+              for x in range(W):
+                  side = max(0, (x - 680) / 520)
+                  mix = min(1, t * 0.35 + side * 0.75)
+                  px[x, y] = tuple(int(top[i] * (1-mix) + bottom[i] * mix) for i in range(3))
+
+          glow = Image.new('RGBA', (W, H), (0,0,0,0))
+          gd = ImageDraw.Draw(glow)
+          for cx, cy, r, a in [(1000,120,145,115),(910,345,105,95),(1090,470,75,85),(760,95,50,55)]:
+              gd.ellipse((cx-r,cy-r,cx+r,cy+r), fill=(224,22,55,a))
+              gd.ellipse((cx-r*0.58,cy-r*0.58,cx+r*0.58,cy+r*0.58), fill=(255,104,126,a//2))
+          glow = glow.filter(ImageFilter.GaussianBlur(18))
+          im = Image.alpha_composite(im.convert('RGBA'), glow)
+          d = ImageDraw.Draw(im)
+
+          font_dir = Path('/usr/share/fonts/truetype/dejavu')
+          def font(name, size):
+              return ImageFont.truetype(str(font_dir / name), size=size)
+          f_logo = font('DejaVuSans-Bold.ttf', 30)
+          f_kicker = font('DejaVuSans-Bold.ttf', 25)
+          f_title = font('DejaVuSerif-Bold.ttf', 59)
+          f_footer = font('DejaVuSans.ttf', 26)
+          f_badge = font('DejaVuSans-Bold.ttf', 34)
+
+          # Logo Naše Kadaň
+          d.rounded_rectangle((62, 48, 125, 111), radius=15, fill=(255,255,255,238))
+          d.text((76, 62), 'NK', font=f_badge, fill='#9f2635')
+          d.text((143, 61), 'NAŠE KADAŇ', font=f_logo, fill='white')
+
+          d.rounded_rectangle((62, 145, 555, 190), radius=22, fill=(181,31,54,245))
+          d.text((84, 153), 'PŘÍBĚH, KTERÝ DÁVÁ NADĚJI', font=f_kicker, fill='white')
+
+          title_lines = [
+              'Zaregistrovala se',
+              'přímo v Kadani.',
+              'O rok později',
+              'darovala krvetvorné buňky.'
+          ]
+          y = 220
+          for line in title_lines:
+              d.text((62, y), line, font=f_title, fill='white', stroke_width=1, stroke_fill=(0,0,0,40))
+              y += 70
+
+          d.rounded_rectangle((62, 535, 760, 590), radius=18, fill=(255,255,255,235))
+          d.text((86, 547), 'Registrace je dostupná v Nemocnici Kadaň', font=f_footer, fill='#7a1523')
+
+          # Symbolické krevní buňky na pravé straně
+          for cx,cy,r in [(980,145,110),(890,355,82),(1055,440,66)]:
+              d.ellipse((cx-r,cy-r,cx+r,cy+r), fill='#b40028', outline='#ff8498', width=7)
+              d.ellipse((cx-r*0.47,cy-r*0.47,cx+r*0.47,cy+r*0.47), fill='#750018')
+              d.arc((cx-r*0.72,cy-r*0.72,cx+r*0.72,cy+r*0.72), 205, 345, fill='#ffb2bd', width=8)
+
+          im.convert('RGB').save(image_path, 'PNG', optimize=True)
+
+          html = article_path.read_text(encoding='utf-8')
+          html = re.sub(r'<meta property="og:image" content="[^"]*">', f'<meta property="og:image" content="{image_url}">', html, count=1)
+          html = re.sub(r'<meta name="twitter:image" content="[^"]*">', f'<meta name="twitter:image" content="{image_url}">', html, count=1)
+          html = html.replace('"image":["https://nasekadan.cz/social-preview.png"]', f'"image":["{image_url}"]')
+          html = html.replace('content="https://nasekadan.cz/social-preview.png"', f'content="{image_url}"')
+
+          marker = f'<meta property="og:image" content="{image_url}">'
+          extras = (
+              f'{marker}'
+              f'<meta property="og:image:secure_url" content="{image_url}">'
+              '<meta property="og:image:type" content="image/png">'
+              '<meta property="og:image:width" content="1200">'
+              '<meta property="og:image:height" content="630">'
+              '<meta property="og:image:alt" content="Příběh dárkyně krvetvorných buněk z Kadaně">'
+          )
+          html = re.sub(r'<meta property="og:image" content="[^"]*">(?:<meta property="og:image:(?:secure_url|type|width|height|alt)" content="[^"]*">)*', extras, html, count=1)
+          if 'name="twitter:image:alt"' not in html:
+              html = html.replace(f'<meta name="twitter:image" content="{image_url}">', f'<meta name="twitter:image" content="{image_url}"><meta name="twitter:image:alt" content="Příběh dárkyně krvetvorných buněk z Kadaně">', 1)
+          html = re.sub(r'<meta property="article:modified_time" content="[^"]*">', '<meta property="article:modified_time" content="2026-08-03T14:30:00+02:00">', html, count=1)
+          html = html.replace('"dateModified":"2026-08-03T12:49:19+02:00"', '"dateModified":"2026-08-03T14:30:00+02:00"')
+          article_path.write_text(html, encoding='utf-8')
+
+          # Kontroly rozměrů a metadat
+          check = Image.open(image_path)
+          assert check.size == (1200,630)
+          assert check.format == 'PNG'
+          text = article_path.read_text(encoding='utf-8')
+          assert image_url in text
+          assert 'og:image:width" content="1200' in text
+          assert 'og:image:height" content="630' in text
+          print(image_path, image_path.stat().st_size)
+          PY
+
+      - name: Zapsat obrázek a metadata do main
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$ARTICLE_PATH" "$IMAGE_PATH"
+          git commit -m 'Doplnit vlastní Facebook obrázek článku o dárcovství'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then break; fi
+            test "$attempt" -lt 3
+            git fetch origin main
+            git rebase origin/main
+          done
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit článek a obrázek na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          tar -czf - "$ARTICLE_PATH" "$IMAGE_PATH" | ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'sudo mkdir -p /var/www/nasekadan && sudo tar -xzf - -C /var/www/nasekadan && sudo chmod -R a+rX /var/www/nasekadan'
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "ARTICLE_PATH='$ARTICLE_PATH' IMAGE_PATH='$IMAGE_PATH' IMAGE_URL='$IMAGE_URL' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
+          if [[ -n "$cid" ]]; then
+            sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp "/var/www/nasekadan/$ARTICLE_PATH" "$cid:/usr/share/nginx/html/$ARTICLE_PATH"
+            sudo docker cp "/var/www/nasekadan/$IMAGE_PATH" "$cid:/usr/share/nginx/html/$IMAGE_PATH"
+          fi
+          article="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html?ogfix=$(date +%s)")"
+          grep -Fq "$IMAGE_URL" <<<"$article"
+          img="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$IMAGE_URL?ogfix=$(date +%s)")"
+          test "${#img}" -gt 30000
+          REMOTE
+
+      - name: Ověřit obrázek zvenku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          python3 <<'PY'
+          import os, time, urllib.request
+          article_url=os.environ['ARTICLE_URL']
+          image_url=os.environ['IMAGE_URL']
+          def get(url):
+              req=urllib.request.Request(url+('?' if '?' not in url else '&')+f'v={int(time.time()*1000)}',headers={'User-Agent':'NaseKadan-OG-Verify/1.0','Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=30) as r:
+                  return r.headers, r.read()
+          headers, html=get(article_url)
+          text=html.decode('utf-8','replace')
+          assert image_url in text
+          assert 'og:image:width" content="1200' in text
+          assert 'og:image:height" content="630' in text
+          ih, data=get(image_url)
+          assert data[:8] == b'\x89PNG\r\n\x1a\n'
+          assert len(data) > 30000
+          assert 'image/png' in ih.get('Content-Type','')
+          print('OG image live:', len(data), ih.get('Content-Type'))
+          PY
+
+      - name: Požádat Facebook o nové načtení odkazu
+        id: facebook
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${FB_TOKEN_1:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
+          if [[ -z "$token" ]]; then
+            echo 'Facebook token není pod známými názvy; obrázek a metadata jsou přesto opravené.'
+            echo 'refreshed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' \
+            --data-urlencode "id=$ARTICLE_URL" \
+            --data-urlencode 'scrape=true' \
+            --data-urlencode "access_token=$token")"
+          python3 - "$response" <<'PY'
+          import json,sys
+          data=json.loads(sys.argv[1])
+          if 'error' in data: raise SystemExit(str(data['error']))
+          print(json.dumps(data,ensure_ascii=False)[:1500])
+          PY
+          echo 'refreshed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek opravy
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.commit.outputs.source_sha }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+          FACEBOOK: ${{ steps.facebook.outputs.refreshed }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner,repo=context.repo.repo;
+            const ok=process.env.DEPLOY==='success'&&process.env.VERIFY==='success';
+            const payload={status:ok?'success':'failure',run_id:String(context.runId),source_sha:process.env.SOURCE_SHA||'',checked_at:new Date().toISOString(),image:'https://nasekadan.cz/social/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026-f27e1dbd56.png',dimensions:'1200x630',deploy:process.env.DEPLOY||'skipped',external_verify:process.env.VERIFY||'skipped',facebook_rescrape:process.env.FACEBOOK==='true',facebook_post_id:'1143365655537112_122108365059403047'};
+            let sha;
+            try{const old=await github.rest.repos.getContent({owner,repo,path:'.github/donor-og-fix-status.json',ref:'main'});sha=old.data.sha}catch(e){if(e.status!==404)throw e}
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:'.github/donor-og-fix-status.json',branch:'main',message:`Zapsat stav opravy OG obrázku: ${payload.status} [skip ci]`,sha,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
