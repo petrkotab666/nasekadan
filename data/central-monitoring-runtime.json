@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-03T18:01:42+00:00",
-  "lastQuickCheckAt": "2026-08-03T18:01:42+00:00",
+  "updatedAt": "2026-08-03T19:05:00+00:00",
+  "lastQuickCheckAt": "2026-08-03T19:05:00+00:00",
   "lastDeepCheckAt": "2026-08-03T16:00:50+00:00",
-  "repositoryMainShaObserved": "1a9c9298f89c8d313476566eba791daa73fc1c4e",
+  "repositoryMainShaObserved": "7bed2146127134b2def397c55e3ff67c21aada34",
   "canonicalRegistry": "data/organizations.json",
   "coverageSnapshot": {
     "directoryOrganizations": 65,
@@ -33,7 +33,7 @@
       "Prunéřov, Tušimice, ČEZ, elektrárny, doly a energetické projekty",
       "Slovan, lávka u Shellu, Alžbětinský klášter, Spolkový dům, koupaliště a optická trasa KTK",
       "city-news coverage, sourceStatus, nové GitHub Issues a kontrola duplicit",
-      "veřejný web a nejnovější schválené články v rozsahu dostupném z tohoto běhu"
+      "veřejný web, titulní stránka, archiv a nejnovější schválené články v rozsahu dostupném z tohoto běhu"
     ],
     "observations": {
       "cityNewsGeneratedAt": "2026-08-03T15:17:42.025474+00:00",
@@ -48,24 +48,27 @@
       "knownCourtCasesNewMovementFound": false,
       "newEmergencyFound": false,
       "newSignificantInstitutionalDocumentFound": false,
-      "repositoryMainSha": "1a9c9298f89c8d313476566eba791daa73fc1c4e",
+      "repositoryMainSha": "7bed2146127134b2def397c55e3ff67c21aada34",
       "ii225LeadStatus": "resolved_verified_published_duplicate_suppressed",
       "technicalPublicationIncidentOpen": false,
-      "homepageDirectFetchAvailable": false,
-      "archiveDirectFetchAvailable": false,
+      "homepageDirectFetchAvailable": true,
+      "archiveDirectFetchAvailable": true,
       "sitemapDirectFetchAvailable": false,
       "rssDirectFetchAvailable": false,
       "deploymentHealthDirectFetchAvailable": false,
-      "technicalRepairAttemptThisRun": "none_without_evidence_of_incident",
-      "checkedAt": "2026-08-03T18:01:42+00:00"
+      "homepageLatestArticleVisible": true,
+      "homepageCardRepairPresentInMain": true,
+      "homepageCardRepairPubliclyConfirmed": false,
+      "technicalRepairAttemptThisRun": "none; existing canonical repair and deploy at 7bed2146127134b2def397c55e3ff67c21aada34 was still propagating, so no duplicate deploy was attempted",
+      "checkedAt": "2026-08-03T19:05:00+00:00"
     },
     "notes": [
       "Hodinová kontrola neodhalila novou ověřenou mimořádnou událost, soudní pohyb ani dokument s vysokým veřejným významem pro Kadaň, Prunéřov nebo Tušimice.",
-      "Kanonický registr a aktuální city-news výstup nadále potvrzují sledování 65 z 65 organizací, coveragePercent 100 a 98 unikátních zdrojů.",
+      "Kanonický registr a poslední úplný city-news výstup nadále potvrzují sledování 65 z 65 organizací, coveragePercent 100 a 98 unikátních zdrojů.",
       "Dvanáct přímých zdrojů zůstává blokovaných nebo technicky nefunkčních; organizace zůstávají sledované přes náhradní kanály a nejsou vyřazeny.",
-      "Stopa k uzavírce II/225 byla mezitím ověřena primárními zdroji, publikována a v tomto běhu potlačena jako již vyřešená duplicita.",
       "U známých spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 nebyl nalezen nový veřejně ověřitelný procesní pohyb.",
       "Online petice za zachování Nemocnice Kadaň nevykazuje spolehlivě ověřený významný posun oproti poslednímu doloženému stavu.",
+      "Titulní stránka i archiv byly dostupné a nejnovější článek byl veřejně viditelný. Oprava náhledů, metadat a pořadí je v main; její veřejné potvrzení přes deployment-health, RSS a sitemapu nebylo v tomto běhu technicky dostupné. Proto nebyl opakován již provedený bezpečný deploy.",
       "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
     ]
   }
