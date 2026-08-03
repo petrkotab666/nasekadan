@@ -1,0 +1,86 @@
+name: Přímá diagnostika serveru počasí
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/weather-server-inspect-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+      KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      KEY_DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      KEY_SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+      KEY_SSH_KEY: ${{ secrets.SSH_KEY }}
+      KEY_OVH_PRIVATE_KEY: ${{ secrets.OVH_PRIVATE_KEY }}
+    steps:
+      - name: Vybrat SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY KEY_DEPLOY_SSH_KEY KEY_SERVER_SSH_KEY KEY_SSH_KEY KEY_OVH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [[ -n "$value" ]]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/nasekadan_key"
+              chmod 600 "$RUNNER_TEMP/nasekadan_key"
+              exit 0
+            fi
+          done
+          exit 20
+
+      - name: Prověřit veřejný nginx, kontejner a adresy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/nasekadan_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -u
+          echo '=== SITE CONFIG ==='
+          sudo sed -n '1,260p' /etc/nginx/sites-available/nasekadan.cz || true
+          echo '=== WEATHER SNIPPET ==='
+          sudo cat /etc/nginx/snippets/nasekadan-weather.conf || true
+          echo '=== ACTIVE WEATHER IN NGINX -T ==='
+          sudo nginx -T 2>&1 | grep -n -A18 -B5 'pocasi-predpoved\|chmi-pocasi\|nasekadan-weather' || true
+          echo '=== CONTAINER ==='
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          [[ -n "$cid" ]] || cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
+          echo "cid=$cid"
+          sudo docker exec "$cid" nginx -T 2>&1 | grep -n -A20 -B5 'pocasi-predpoved\|chmi-pocasi\|weather_cache' || true
+          echo '=== STATIC FILES ==='
+          sudo ls -l /var/www/nasekadan/pocasi/index.html /var/www/nasekadan/pocasi.js /var/www/nasekadan/upoutavky.js || true
+          echo '=== INTERNAL URLS ==='
+          for path in \
+            '/pocasi/' \
+            '/pocasi.js' \
+            '/upoutavky.js' \
+            '/api/pocasi-predpoved.json' \
+            '/api/chmi-pocasi/10m-0-20000-0-11438-20260803.json'; do
+            printf '%s -> ' "$path"
+            curl -sS -o /tmp/weather-body -w 'HTTP %{http_code} type=%{content_type} bytes=%{size_download}\n' --max-time 30 "http://127.0.0.1:3224$path" || true
+            head -c 120 /tmp/weather-body 2>/dev/null | tr '\n' ' '; echo
+          done
+          echo '=== PUBLIC LOCAL HTTPS ==='
+          for path in \
+            '/pocasi/' \
+            '/pocasi.js' \
+            '/upoutavky.js' \
+            '/api/pocasi-predpoved.json' \
+            '/api/chmi-pocasi/10m-0-20000-0-11438-20260803.json'; do
+            printf '%s -> ' "$path"
+            curl -k -sS --resolve nasekadan.cz:443:127.0.0.1 -o /tmp/weather-body -w 'HTTP %{http_code} type=%{content_type} bytes=%{size_download}\n' --max-time 30 "https://nasekadan.cz$path" || true
+            head -c 120 /tmp/weather-body 2>/dev/null | tr '\n' ' '; echo
+          done
+          REMOTE
