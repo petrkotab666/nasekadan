@@ -1,5 +1,5 @@
-Spuštěno 2026-08-03 13:39 Europe/Prague po bezpečném uvolnění disku.
+Spuštěno 2026-08-04 01:31 Europe/Prague kvůli opravě kanonické evidence a veřejného deployment-health.
 Kanál: kanonický self-hosted produkční deploy na OVH.
-Požadavek: nasadit aktuální main po opravě chybějícího článku v archivu a kanonickém registru.
-Veřejně ověřit bez cache: titulní stránku, /clanky/, rss.xml, sitemap.xml, news-sitemap.xml a deployment-health.txt.
-Očekávaný výsledek: 42 veřejných článků; článek o dárkyni právě jednou ve viditelném archivu; článek FVE zachován v archivu i JSON-LD; žádné duplicitní URL ani fingerprinty.
+Požadavek: nasadit aktuální main a obnovit deployment-health.txt v kanonickém formátu site/source/generated/mode.
+Veřejně ověřit bez cache: titulní stránku, /clanky/ včetně stránkování, rss.xml, sitemap.xml, news-sitemap.xml, všechna H1 a deployment-health.txt.
+Očekávaný výsledek: 44 veřejných článků; 14 na titulce; 44 v archivu, RSS a hlavní sitemapě; 7 v news sitemapě; stejné pořadí RSS a archivu; žádné duplicitní URL ani fingerprinty.
