@@ -1,4 +1,5 @@
-Spuštěno automatickou opravou indexace neveřejné rešerše.
-Požadavek: nasadit aktuální main včetně sitemap.xml a noindex metadat v /research/.
-Veřejně ověřit: sitemap.xml nesmí obsahovat /research/ a veřejné rešeršní HTML musí mít noindex.
-Důvod: interní kopie výsledků Registru smluv byla omylem vedena jako indexovatelná veřejná stránka.
+Spuštěno 2026-08-03 08:40 Europe/Prague.
+Kanál: kanonický self-hosted produkční deploy na OVH.
+Požadavek: nasadit aktuální main po opravě veřejné evidence a indexace neveřejné rešerše.
+Veřejně ověřit bez cache: titulní stránku, /clanky/, rss.xml, sitemap.xml, news-sitemap.xml, deployment-health.txt a /research/nemocnice-kadan-neindexovane-20260730/uver-vsechny-zaznamy/vysledky.html.
+Očekávaný výsledek: 40 článků v archivu, RSS a sitemapě; žádné /clanky/parts/ ani /research/ v sitemapě; rešeršní HTML s noindex,nofollow,noarchive; deployment-health s novým zdrojovým commitem.
