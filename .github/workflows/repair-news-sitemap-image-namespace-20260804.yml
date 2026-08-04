@@ -1,0 +1,298 @@
+name: Opravit XML namespace news sitemap
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-news-sitemap-image-namespace-20260804
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] news sitemap XML namespace 20260804')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Zapsat spuštění
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Oprava neplatného XML news-sitemap.xml byla spuštěna. Run ${context.runId}.`
+            });
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Opravit namespace a zapsat čekající audit
+        id: repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, re
+          import xml.etree.ElementTree as ET
+
+          news = Path('news-sitemap.xml')
+          text = news.read_text(encoding='utf-8')
+          if '<image:' in text and 'xmlns:image=' not in text:
+              text = re.sub(
+                  r'(<urlset\b[^>]*xmlns:news="http://www\.google\.com/schemas/sitemap-news/0\.9")',
+                  r'\1 xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"',
+                  text,
+                  count=1,
+              )
+          if '<image:' in text and 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' not in text:
+              raise SystemExit('Nepodařilo se doplnit image namespace.')
+          news.write_text(text, encoding='utf-8', newline='\n')
+          ET.parse(news)
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          validation['repair_pending_public_verification'] = True
+          validation['last_consistency_repair'] = {
+              'classification': 'news_sitemap_invalid_xml_undeclared_image_namespace',
+              'reason': 'news-sitemap.xml používala prvky image:image bez deklarace xmlns:image, takže dokument nebyl XML well-formed.',
+              'affected_file': 'news-sitemap.xml',
+              'method': 'declare-google-image-sitemap-namespace-validate-deploy-and-publicly-verify',
+              'status': 'pending_public_verification',
+              'started_at': now,
+          }
+          data['generated_at'] = now
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            git add news-sitemap.xml data/published-content-index.json
+            git commit -m 'Opravit XML namespace v news sitemapě'
+            repair_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit opravenou sitemapu a registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            news-sitemap.xml data/published-content-index.json ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -f /tmp/news-sitemap.xml /tmp/published-content-index.json
+          REMOTE
+
+      - name: Veřejně ověřit všechny povinné kanály
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          REPAIR_SHA='${{ steps.repair.outputs.repair_sha }}' python3 - <<'PY'
+          import json, os, time, urllib.request
+          import xml.etree.ElementTree as ET
+
+          base = 'https://nasekadan.cz'
+          urls = {
+              'blood': '/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html',
+              'josef': '/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html',
+              'stadium': '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html',
+          }
+          def get(path, attempt):
+              sep = '&' if '?' in path else '?'
+              req = urllib.request.Request(
+                  base + path + sep + f'canonicalxml={int(time.time()*1000)}-{attempt}',
+                  headers={'User-Agent':'NaseKadan-Canonical-XML/1.0','Cache-Control':'no-cache','Pragma':'no-cache'},
+              )
+              with urllib.request.urlopen(req, timeout=35) as response:
+                  return response.read()
+
+          last = ''
+          for attempt in range(1, 21):
+              try:
+                  home = get('/', attempt).decode('utf-8', 'replace')
+                  archive = get('/clanky/', attempt).decode('utf-8', 'replace')
+                  rss = get('/rss.xml', attempt).decode('utf-8', 'replace')
+                  sitemap = get('/sitemap.xml', attempt).decode('utf-8', 'replace')
+                  news_bytes = get('/news-sitemap.xml', attempt)
+                  registry = json.loads(get('/data/published-content-index.json', attempt).decode('utf-8'))
+                  health = get('/deployment-health.txt', attempt).decode('utf-8', 'replace')
+                  root = ET.fromstring(news_bytes)
+                  news_text = news_bytes.decode('utf-8', 'replace')
+                  assert 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' in news_text
+                  assert root.tag.endswith('urlset')
+                  for rel in urls.values():
+                      absolute = base + rel
+                      assert rel in home or rel in archive
+                      assert rel in archive
+                      assert absolute in rss
+                      assert absolute in sitemap
+                      assert absolute in news_text
+                  assert registry.get('article_count') == 47
+                  validation = registry.get('validation', {})
+                  assert validation.get('duplicate_urls') == []
+                  assert validation.get('duplicate_fingerprints') == []
+                  assert 'status=ok' in health
+                  print('Veřejná XML a kanonická kontrola uspěla.')
+                  break
+              except Exception as exc:
+                  last = repr(exc)
+                  time.sleep(min(4 + attempt * 2, 18))
+          else:
+              raise SystemExit('Veřejná kontrola selhala: ' + last)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Dokončit evidenci opravy a odstranit jednorázový workflow
+        id: finalize
+        shell: bash
+        env:
+          REPAIR_SHA: ${{ steps.repair.outputs.repair_sha }}
+        run: |
+          set -euo pipefail
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            REPAIR_SHA="$REPAIR_SHA" python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          repair = validation.setdefault('last_consistency_repair', {})
+          repair.update({
+              'classification': 'news_sitemap_invalid_xml_undeclared_image_namespace',
+              'reason': 'news-sitemap.xml používala prvky image:image bez deklarace xmlns:image, takže dokument nebyl XML well-formed.',
+              'affected_file': 'news-sitemap.xml',
+              'method': 'declare-google-image-sitemap-namespace-validate-deploy-and-publicly-verify',
+              'status': 'success',
+              'source_commit': os.environ['REPAIR_SHA'],
+              'completed_at': now,
+              'public_verification': {
+                  'homepage': True,
+                  'archive': True,
+                  'rss': True,
+                  'sitemap': True,
+                  'news_sitemap_xml_well_formed': True,
+                  'image_namespace_declared': True,
+                  'registry': True,
+                  'deployment_health': True,
+              },
+          })
+          validation['repair_pending_public_verification'] = False
+          validation['news_sitemap_xml_well_formed'] = True
+          validation['news_sitemap_image_namespace_declared'] = True
+          validation['deployment_health_source'] = os.environ['REPAIR_SHA']
+          data['generated_at'] = now
+          data['source_commit'] = os.environ['REPAIR_SHA']
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            git rm -f .github/workflows/repair-news-sitemap-image-namespace-20260804.yml
+            git add data/published-content-index.json
+            git commit -m 'Evidence: potvrdit opravu XML news sitemapy'
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit finální registr a deployment health
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          printf 'status=ok\nsource=%s\narticle_count=47\nrepair=news-sitemap-image-namespace\n' '${{ steps.finalize.outputs.final_sha }}' > "$RUNNER_TEMP/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Uzavřít opravný požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Bezpečně opraven významný nesoulad: news-sitemap.xml je nyní platné XML s deklarovaným image namespace. Veřejně ověřeno. Opravný commit ${{ steps.repair.outputs.repair_sha }}, finální evidenční commit ${{ steps.finalize.outputs.final_sha }}, článků: 47.`
+            });
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Oprava XML news sitemapy selhala. Run ${context.runId}; požadavek zůstává otevřený.`
+            });
