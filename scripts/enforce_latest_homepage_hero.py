@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
-"""Zajistí, že hlavní blok titulní stránky odkazuje na nejnovější článek.
+"""Zajistí správný hlavní blok titulní stránky.
 
-Pokud už redakčně připravený hlavní blok odkazuje na nejnovější publikovaný
-článek, jeho vzhled se zachová. Jestli jej některý starý publikační skript
-přepíše starší zprávou, blok se bezpečně sestaví z metadat skutečně
-nejnovějšího článku. Budoucí naplánované články se před časem publikace
+Běžně zobrazuje nejnovější publikovaný článek. Pokud má hlavní blok platné
+časově omezené redakční připnutí v atributu ``data-editorial-pin``, zachová je
+až do uvedeného času. Po vypršení připnutí se automaticky vrátí k běžnému
+chronologickému řazení. Budoucí naplánované články se před časem publikace
 nezobrazují.
 """
 from __future__ import annotations
 
-# Servisní spouštěč kanonického OVH deploye po publikaci MVE Hradiště 31. 7. 2026.
-# Nemění chování skriptu; sledovaná cesta pouze aktivuje existující cloudový postup.
-
 from datetime import datetime, timezone, timedelta
 from html import escape, unescape
 from pathlib import Path
+from zoneinfo import ZoneInfo
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / "index.html"
 ARCHIVE = ROOT / "clanky" / "index.html"
-HERO_RE = re.compile(r'  <section\b[^>]*class=["\'][^"\']*\bhero\b[^"\']*["\'][^>]*\bid=["\']clanky["\'][^>]*>.*?</section>', re.I | re.S)
-LEAD_RE = re.compile(r'<article\b[^>]*class=["\'][^"\']*\blead\b[^"\']*["\'][^>]*>.*?</article>', re.I | re.S)
+PRAGUE = ZoneInfo("Europe/Prague")
+HERO_RE = re.compile(
+    r'  <section\b[^>]*class=["\'][^"\']*\bhero\b[^"\']*["\'][^>]*\bid=["\']clanky["\'][^>]*>.*?</section>',
+    re.I | re.S,
+)
+LEAD_RE = re.compile(
+    r'<article\b[^>]*class=["\'][^"\']*\blead\b[^"\']*["\'][^>]*>.*?</article>',
+    re.I | re.S,
+)
 
 
 def clean(value: str) -> str:
@@ -40,11 +45,14 @@ def article_info(path: Path):
     text = path.read_text(encoding="utf-8", errors="replace")
     if re.search(r'<meta[^>]+name=["\']robots["\'][^>]+content=["\'][^"\']*noindex', text, re.I):
         return None
-    raw = first((
-        r'<meta[^>]+property=["\']article:published_time["\'][^>]+content=["\']([^"\']+)',
-        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']article:published_time["\']',
-        r'"datePublished"\s*:\s*"([^"]+)"',
-    ), text)
+    raw = first(
+        (
+            r'<meta[^>]+property=["\']article:published_time["\'][^>]+content=["\']([^"\']+)',
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']article:published_time["\']',
+            r'"datePublished"\s*:\s*"([^"]+)"',
+        ),
+        text,
+    )
     if not raw:
         return None
     try:
@@ -57,11 +65,19 @@ def article_info(path: Path):
         return None
     title = first((r'<h1\b[^>]*>(.*?)</h1>', r'<title>(.*?)</title>'), text, path.stem)
     title = re.sub(r'\s*\|\s*Naše Kadaň\s*$', '', title)
-    description = first((
-        r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
-        r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>',
-    ), text, "")
-    tag = first((r'<p[^>]+class=["\'][^"\']*tag[^"\']*["\'][^>]*>(.*?)</p>',), text, "AKTUÁLNĚ")
+    description = first(
+        (
+            r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
+            r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>',
+        ),
+        text,
+        "",
+    )
+    tag = first(
+        (r'<p[^>]+class=["\'][^"\']*tag[^"\']*["\'][^>]*>(.*?)</p>',),
+        text,
+        "AKTUÁLNĚ",
+    )
     return {
         "path": path,
         "href": "/clanky/" + path.name,
@@ -72,15 +88,48 @@ def article_info(path: Path):
     }
 
 
-def markerize(section: str, href: str) -> str:
+def markerize(section: str, href: str, *, preserve_editorial_pin: bool) -> str:
     opening = re.match(r'<section\b[^>]*>', section.strip(), re.I | re.S)
     if not opening:
         raise RuntimeError("Hlavní blok nemá platnou značku section.")
     tag = opening.group(0)
     tag = re.sub(r'\s+data-auto-latest-hero=["\'][^"\']*["\']', '', tag, flags=re.I)
     tag = re.sub(r'\s+data-latest-article-href=["\'][^"\']*["\']', '', tag, flags=re.I)
-    tag = tag[:-1] + f' data-auto-latest-hero="1" data-latest-article-href="{escape(href, quote=True)}">'
+    if not preserve_editorial_pin:
+        tag = re.sub(r'\s+data-editorial-pin=["\'][^"\']*["\']', '', tag, flags=re.I)
+    tag = tag[:-1] + (
+        f' data-auto-latest-hero="1" '
+        f'data-latest-article-href="{escape(href, quote=True)}">'
+    )
     return section.replace(opening.group(0), tag, 1)
+
+
+def active_editorial_pin(section: str, articles: list[dict]) -> tuple[str, datetime] | None:
+    opening = re.match(r'<section\b[^>]*>', section.strip(), re.I | re.S)
+    if not opening:
+        return None
+    tag = opening.group(0)
+    pin_match = re.search(r'data-editorial-pin=["\']([^"\']+)["\']', tag, re.I)
+    href_match = re.search(r'data-latest-article-href=["\']([^"\']+)["\']', tag, re.I)
+    if not pin_match or not href_match:
+        return None
+
+    expiry_match = re.search(r'-(\d{8})-(\d{4})$', pin_match.group(1))
+    if not expiry_match:
+        raise RuntimeError("Redakční připnutí nemá rozpoznatelný čas vypršení.")
+    expiry = datetime.strptime(
+        expiry_match.group(1) + expiry_match.group(2), "%Y%m%d%H%M"
+    ).replace(tzinfo=PRAGUE)
+    if datetime.now(PRAGUE) >= expiry:
+        return None
+
+    href = unescape(href_match.group(1))
+    if not any(article["href"] == href for article in articles):
+        raise RuntimeError(f"Připnutý článek není mezi publikovanými články: {href}")
+    lead = LEAD_RE.search(section)
+    if not lead or href not in lead.group(0):
+        raise RuntimeError("Připnutý odkaz neodpovídá hlavnímu článku v hero bloku.")
+    return href, expiry
 
 
 def build_hero(latest, second) -> str:
@@ -129,28 +178,44 @@ def main() -> int:
     if latest["href"] not in archive_list:
         raise RuntimeError(f"Nejnovější článek chybí v archivu: {latest['href']}")
 
-    # Nejnovější dva články se záměrně zobrazují v hero a vedlejším bloku,
-    # nikoli znovu v běžném seznamu karet. Starší kontrola vyžadovala nejnovější
-    # článek současně i v seznamu a byla v přímém rozporu s touto publikační zásadou.
     match = HERO_RE.search(home)
     if not match:
         raise RuntimeError("Na titulní stránce nebyl nalezen hlavní blok.")
     current = match.group(0)
-    lead = LEAD_RE.search(current)
-    if lead and latest["href"] in lead.group(0):
-        replacement = markerize(current, latest["href"])
-        action = "zachován"
+    pin = active_editorial_pin(current, articles)
+
+    if pin:
+        expected_href, expiry = pin
+        replacement = markerize(
+            current, expected_href, preserve_editorial_pin=True
+        )
+        action = f"redakčně připnut do {expiry.isoformat()}"
     else:
-        replacement = build_hero(latest, articles[1] if len(articles) > 1 else None)
-        action = "opraven"
+        expected_href = latest["href"]
+        lead = LEAD_RE.search(current)
+        if lead and latest["href"] in lead.group(0):
+            replacement = markerize(
+                current, latest["href"], preserve_editorial_pin=False
+            )
+            action = "zachován"
+        else:
+            replacement = build_hero(
+                latest, articles[1] if len(articles) > 1 else None
+            )
+            action = "opraven"
+
     home = home[:match.start()] + replacement + home[match.end():]
     HOME.write_text(home, encoding="utf-8", newline="\n")
 
     check = HOME.read_text(encoding="utf-8")
     hero = HERO_RE.search(check)
-    if not hero or latest["href"] not in hero.group(0) or 'data-auto-latest-hero="1"' not in hero.group(0):
-        raise RuntimeError("Kontrola nejnovějšího hlavního článku neprošla.")
-    print(f"Hlavní článek {action}: {latest['href']}")
+    if (
+        not hero
+        or expected_href not in hero.group(0)
+        or 'data-auto-latest-hero="1"' not in hero.group(0)
+    ):
+        raise RuntimeError("Kontrola hlavního článku neprošla.")
+    print(f"Hlavní článek {action}: {expected_href}")
     return 0
 
 
