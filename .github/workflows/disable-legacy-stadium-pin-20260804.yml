@@ -40,14 +40,25 @@ jobs:
             git reset --hard origin/main
             python3 - <<'PY'
           from pathlib import Path
+          import re
           path = Path('scripts/enforce_article_visibility.py')
           text = path.read_text(encoding='utf-8')
-          old_href = "HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'"
-          old_until = "HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T18:00:00+02:00')"
-          if old_href in text:
-              text = text.replace(old_href, "HOMEPAGE_PIN_HREF = ''", 1)
-          if old_until in text:
-              text = text.replace(old_until, "HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)", 1)
+          text, href_count = re.subn(
+              r"^HOMEPAGE_PIN_HREF\s*=.*$",
+              "HOMEPAGE_PIN_HREF = ''",
+              text,
+              count=1,
+              flags=re.M,
+          )
+          text, until_count = re.subn(
+              r"^HOMEPAGE_PIN_UNTIL\s*=.*$",
+              "HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)",
+              text,
+              count=1,
+              flags=re.M,
+          )
+          if href_count != 1 or until_count != 1:
+              raise SystemExit(f'Neočekávaný počet konfigurací připnutí: href={href_count}, until={until_count}')
           if "HOMEPAGE_PIN_HREF = ''" not in text or 'datetime.fromtimestamp(0, tz=timezone.utc)' not in text:
               raise SystemExit('Historické připnutí se nepodařilo bezpečně vypnout.')
           compile(text, str(path), 'exec')
