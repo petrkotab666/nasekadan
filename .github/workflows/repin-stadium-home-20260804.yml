@@ -17,7 +17,7 @@ jobs:
   repin:
     if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[ops] obnovit připnutí zimáku')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       ARTICLE_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
       EXPECTED_H1: Kadaň otevřela zimní stadion lidem před vedrem. Přijít lze denně od 8 do 18 hodin
@@ -54,7 +54,9 @@ jobs:
           sudo install -m 0644 /tmp/nasekadan-index-pinned.html /var/www/nasekadan/index.html
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker cp /tmp/nasekadan-index-pinned.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker exec nasekadan-web grep -Fq 'data-latest-article-href="/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html"' /usr/share/nginx/html/index.html
           fi
+          grep -Fq 'data-latest-article-href="/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html"' /var/www/nasekadan/index.html
           rm -f /tmp/nasekadan-index-pinned.html
           REMOTE
 
@@ -62,15 +64,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sleep 4
-          q="${GITHUB_RUN_ID}-$(date +%s)"
-          home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q")"
-          grep -Fq "data-latest-article-href=\"$ARTICLE_REL\"" <<<"$home"
-          grep -Fq "<h1>$EXPECTED_H1</h1>" <<<"$home"
-          grep -Fq 'Nejnovější původní publikace' <<<"$home"
-          grep -Fq '/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html' <<<"$home"
-          grep -Fq '/pocasi.js' <<<"$home"
-          curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q" -o /tmp/home.html || true
+            if grep -Fq "data-latest-article-href=\"$ARTICLE_REL\"" /tmp/home.html \
+              && grep -Fq "<h1>$EXPECTED_H1</h1>" /tmp/home.html \
+              && grep -Fq 'Nejnovější původní publikace' /tmp/home.html \
+              && grep -Fq '/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html' /tmp/home.html \
+              && grep -Fq '/pocasi.js' /tmp/home.html; then
+              ok=1
+              break
+            fi
+            echo "Titulka zatím není aktuální, pokus $attempt/6"
+            sleep $((attempt * 4))
+          done
+          test "$ok" = 1
+
+          weather_ok=0
+          for attempt in 1 2 3; do
+            q="${GITHUB_RUN_ID}-weather-$(date +%s)-$attempt"
+            code="$(curl -4 -kfsS -L --max-time 35 -w '%{http_code}' -o /tmp/weather.json "https://nasekadan.cz/api/pocasi-predpoved.json?v=$q" || true)"
+            echo "Počasí HTTP: $code, bajtů: $(wc -c </tmp/weather.json 2>/dev/null || echo 0)"
+            if [ "$code" = 200 ] && python3 -m json.tool </tmp/weather.json >/dev/null 2>&1; then
+              weather_ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$weather_ok" = 1
 
       - name: Uzavřít požadavek
         if: success() && github.event_name == 'issues'
@@ -78,7 +100,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Připnutí titulního článku bylo obnoveno a veřejně ověřeno. Run ${context.runId}.`});
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Připnutí titulního článku bylo obnoveno a veřejně ověřeno včetně počasí. Run ${context.runId}.`});
             await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
 
       - name: Zapsat selhání
@@ -87,4 +109,4 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Obnovení připnutí selhalo. Run ${context.runId}.`});
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Obnovení připnutí nebo veřejná kontrola selhaly. Run ${context.runId}.`});
