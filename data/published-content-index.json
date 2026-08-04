@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T12:35:17.381979+00:00",
+  "generated_at": "2026-08-04T13:18:05.664649+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "b90b2f3768b29340081d84b06d7318408e21291e",
@@ -28,7 +28,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
     "public_audit_at": "2026-08-04T12:35:17.381979+00:00",
-    "repair_pending_public_verification": false,
+    "repair_pending_public_verification": true,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -46,24 +46,12 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "published_article_missing_from_rss",
-      "reason": "Článek o Josefu Suchém byl veřejný, v archivu, sitemapách a registru, ale chyběl v RSS.",
-      "affected_url": "https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html",
-      "method": "insert-missing-rss-item-deploy-and-publicly-verify",
-      "status": "success",
-      "completed_at": "2026-08-04T12:35:17.381979+00:00",
-      "public_verification": {
-        "homepage": true,
-        "archive": true,
-        "rss": true,
-        "sitemap": true,
-        "news_sitemap": true,
-        "registry": true,
-        "deployment_health": true,
-        "blood_article_h1": true,
-        "josef_article_h1": true,
-        "stadium_article_h1": true
-      }
+      "classification": "news_sitemap_invalid_xml_undeclared_image_namespace",
+      "reason": "news-sitemap.xml používala prvky image:image bez deklarace xmlns:image, takže dokument nebyl XML well-formed.",
+      "affected_file": "news-sitemap.xml",
+      "method": "declare-google-image-sitemap-namespace-validate-deploy-and-publicly-verify",
+      "status": "pending_public_verification",
+      "started_at": "2026-08-04T13:18:05.664649+00:00"
     }
   },
   "articles": [
