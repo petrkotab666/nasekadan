@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T17:02:00Z",
-  "last_quick_check_at": "2026-08-04T17:02:00Z",
+  "updated_at": "2026-08-04T18:55:23Z",
+  "last_quick_check_at": "2026-08-04T18:55:23Z",
   "last_deep_check_at": "2026-08-04T13:58:19Z",
   "canonical_registry": {
     "paths": [
@@ -35,7 +35,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "757e80820ddfe245ae6ae85ec02e0928b6949cc0"
+    "main_sha_observed": "55a87620c303927c525251597712ae2dddcddc57"
   },
   "production": {
     "homepage_checked": true,
@@ -48,22 +48,23 @@
     "latest_public_article_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
     "latest_public_article_title": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
     "latest_public_article_published_at": "2026-08-04T18:46:00+02:00",
+    "homepage_editorial_pin_url": "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html",
     "homepage_and_archive_consistent": true,
     "discovery_surfaces_contain_latest_article": true,
-    "public_audit_at": "2026-08-04T16:59:11.737805+00:00",
-    "public_audit_evidence": "Publikační workflow veřejně ověřil článek, titulní stranu, archiv, RSS, sitemap, news-sitemap, deployment-health, sociální grafiku a počasí. Kanonický registr potvrdil 48 článků, bez duplicitních URL a fingerprintů.",
+    "public_audit_at": "2026-08-04T18:52:38Z",
+    "public_audit_evidence": "Veřejná kontrola issue #629 potvrdila dočasné připnutí článku o zimním stadionu pouze v hlavním bloku, volební článek jako první v bočním bloku, archivu a RSS, původní datum stadionového článku a 88 bodů předpovědi počasí.",
     "public_article_count": 48,
-    "deployment_source_commit": "37eeba6e01f734c0628098f6d5444093de5a6ac2",
-    "public_check_attempt_at": "2026-08-04T16:59:11.737805+00:00",
+    "deployment_source_commit": "55a87620c303927c525251597712ae2dddcddc57",
+    "public_check_attempt_at": "2026-08-04T18:52:38Z",
     "public_check_attempt_status": "success",
     "repair_attempted": false
   },
   "quick_check": {
     "extraordinary_events": "no_new_verified_threshold_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
-    "institutions_and_documents": "one_new_verified_election_deadline_development",
+    "institutions_and_documents": "no_new_verified_threshold_development_since_election_deadline_alert",
     "petition": "no_reliably_verified_threshold_event_since_previous_run",
-    "technical": "latest_article_publicly_verified_and_article_visibility_guard_active"
+    "technical": "public_home_archive_rss_chronology_and_weather_verified_successfully"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -72,18 +73,15 @@
     "night-train-outages-kadan-klasterec-august-2026",
     "josef-suchy-klasterec-u18-kanada-hlinka-20260804",
     "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804",
-    "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804"
-  ],
-  "new_significant_fingerprints": [
+    "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804",
     "komunalni-volby-kadan-kandidaty-lhuta-20260804"
   ],
+  "new_significant_fingerprints": [],
   "notes": [
     "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Rychlá kontrola mimořádných, dopravních, policejních, hasičských, síťových a soudních zdrojů neodhalila jinou novou ověřenou událost s dostatečným významem pro samostatné upozornění.",
-    "Novým významným zjištěním je ukončení lhůty pro podání kandidátních listin do komunálních voleb dne 4. srpna 2026 v 16:00 a první ověřený průběžný obraz hlavních kadaňských uskupení.",
-    "Úplný úřední seznam ještě není konečný; o registraci kandidátních listin se rozhoduje nejpozději 22. srpna 2026.",
-    "Téma bylo po kontrole duplicity spojeno s článkem https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html, který byl veřejně ověřen ve všech hlavních publikačních kanálech.",
-    "Byl vytvořen GitHub Issue #602 a pending JSON monitoring-alerts/pending/komunalni-volby-kadan-kandidaty-lhuta-20260804.json.",
+    "Rychlá kontrola mimořádných, dopravních, policejních, hasičských, síťových, meteorologických a soudních zdrojů neodhalila po předchozím volebním upozornění žádnou další novou ověřenou událost s dostatečným významem pro samostatné oznámení.",
+    "Vyhledané dopravní uzavírky, výluky a vodárenské události byly starší, již známé nebo mimo aktuální časové okno; nebyl vytvořen nový redakční alert.",
+    "Veřejná technická kontrola byla ve 20:52 místního času úspěšná: hlavní blok obsahuje dočasně připnutý článek o zimním stadionu, skutečně nejnovější volební článek je první v bočním bloku, archivu a RSS a počasí vrací 88 bodů.",
     "Data/city-news.json byla naposledy generována 4. srpna 2026 ve 14:41 UTC a eviduje 101 unikátních zdrojů. Třináct chybujících zdrojů zůstává povinných a musí být dál obsluhováno náhradními kanály."
   ]
 }
