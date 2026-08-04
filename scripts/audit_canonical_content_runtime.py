@@ -23,7 +23,7 @@ def fetch(path: str) -> str:
     sep = "&" if "?" in path else "?"
     url = f"{BASE}{path}{sep}audit={int(time.time() * 1000)}"
     # HTTP hlavičky se v Pythonu serializují přes latin-1. User-Agent proto
-    # musí zůstat čistě ASCII; diakritika zde dříve shazovala celý audit až
+    # musí zůat čistě ASCII; diakritika zde dříve shazovala celý audit až
     # po úspěšném nasazení webu a vytvářela falešný incident.
     req = Request(
         url,
@@ -163,7 +163,12 @@ def main() -> int:
     missing_archive = sorted(expected_set - archive_found)
     missing_rss = sorted(expected_set - rss_found)
     missing_sitemap = sorted(expected_set - sitemap_found)
-    missing_llms = sorted(expected_set - llms_found)
+
+    # llms.txt je záměrně stručný výběr nejnovějších článků, nikoli úplný
+    # kanonický archiv. Kontrolujeme proto jen jeho dostupnost a neprázdnost;
+    # úplnost vyžadujeme u archivu, RSS a sitemap podle redakčních pravidel.
+    if not llms_text.strip() or not llms_found:
+        raise RuntimeError("llms.txt je prázdný nebo neobsahuje žádný článek.")
 
     # News sitemap má podle pravidel vyhledávačů obsahovat jen čerstvé články,
     # proto zde vyžadujeme aktuální dvoudenní okno, ne celou historii.
@@ -179,11 +184,11 @@ def main() -> int:
     }
     missing_news = sorted(expected_news - news_found)
 
-    if missing_archive or missing_rss or missing_sitemap or missing_llms or missing_news:
+    if missing_archive or missing_rss or missing_sitemap or missing_news:
         raise RuntimeError(
             "Kanonické kanály nejsou úplné: "
             f"archiv={missing_archive}, rss={missing_rss}, sitemap={missing_sitemap}, "
-            f"llms={missing_llms}, news={missing_news}"
+            f"news={missing_news}"
         )
 
     # Ověření prvních článků přímo zabraňuje stavu, kdy jsou odkazy přítomné,
