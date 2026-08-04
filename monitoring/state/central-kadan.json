@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T07:24:44Z",
-  "last_quick_check_at": "2026-08-04T07:24:44Z",
-  "last_deep_check_at": "2026-08-04T01:04:24Z",
+  "updated_at": "2026-08-04T07:57:20Z",
+  "last_quick_check_at": "2026-08-04T07:57:20Z",
+  "last_deep_check_at": "2026-08-04T07:57:20Z",
   "canonical_registry": {
     "paths": [
       "data/organizations.json",
@@ -30,28 +30,28 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    "main_sha_observed": "41ba76d8a7db8e4465965c53097342153f4057d6"
   },
   "production": {
     "homepage_checked": true,
     "archive_checked": true,
-    "latest_public_article_url": "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html",
-    "latest_public_article_title": "Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?",
-    "latest_public_article_published_at": "2026-08-03T22:05:00+02:00",
+    "latest_public_article_url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+    "latest_public_article_title": "Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti",
+    "latest_public_article_published_at": "2026-08-04T05:50:00+02:00",
     "homepage_and_archive_consistent": true,
     "sitemap_direct_fetch_available": true,
     "rss_direct_fetch_available": true,
     "deployment_health_direct_fetch_available": true,
-    "public_audit_at": "2026-08-04T03:18:13.145620+00:00",
-    "public_article_count": 44,
+    "public_audit_at": "2026-08-04T07:52:41+00:00",
+    "public_article_count": 45,
     "repair_attempted": false
   },
   "quick_check": {
     "extraordinary_events": "no_new_significant_verified_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
-    "petition": "17_confirmed_2_unconfirmed; small_growth_only; no_handover_or_text_change_verified",
-    "technical": "direct_cache_busting_verification_transiently_unavailable; prior_canonical_audit_current; no_repair_attempted"
+    "petition": "no_verified_threshold_event; no_handover_or_text_change_verified",
+    "technical": "canonical_45_article_audit_current; live_homepage_and_archive_consistent; no_repair_needed"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -60,14 +60,15 @@
   ],
   "new_significant_fingerprints": [],
   "notes": [
-    "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json; byly zaznamenány jejich nové blob SHA.",
-    "Rychlá kontrola oficiálních městských, policejních, hasičských, dopravních, síťových a veřejných oznamovacích zdrojů neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro čtenáře z Kadaně.",
-    "Policejní zpráva z 3. srpna 2026 o čtrnáctileté dívce s 3,1 promile uvádí pouze Chomutovsko bez přesné obce; bez přímé vazby na Kadaň a bez nového praktického dopadu nebyla vyhodnocena jako samostatný alert.",
-    "Ve veřejně indexovaných soudních a institucionálních zdrojích nebyl nalezen nový procesní pohyb ani dokument, který by měnil stav sledovaných dlouhodobých kauz.",
-    "Soukromá petice zůstává pod prahem upozornění: poslední ověřený stav je 17 potvrzených a dvě nepotvrzené podpory bez změny textu, ukončení nebo předání městu.",
-    "Data/city-news.json nadále evidují 98 unikátních zdrojů a 19 přímých chyb; blokované či nefunkční kanály zůstávají povinné a vyžadují náhradní primární nebo důvěryhodné cesty.",
-    "Hlavní větev se posunula na 61b754b3b5cf9fd946fd0a1773f6f2a429be6455 kvůli technickým úpravám patičky a registrů; změny nepředstavují nový redakční nález.",
-    "Přímé živé cache-busting ověření bylo v tomto běhu přechodně nedostupné kvůli síťovému rozlišení. Posledním potvrzeným zdrojem technického stavu zůstává kanonický audit z 4. srpna 2026 v 03:18 UTC; opravný deploy nebyl bez důkazu zastaralé produkce proveden.",
+    "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json; jejich blob SHA zůstaly aktuální.",
+    "Regionální discoveryStatus eviduje úplné dohledání oficiálních URL dne 4. srpna 2026 v 07:04 UTC a nulový počet nevyřešených položek discoverOfficialUrl.",
+    "Rychlá i hlubší kontrola oficiálních městských, policejních, hasičských, dopravních, síťových, smluvních a veřejných oznamovacích zdrojů neodhalila od předchozího běhu novou ověřenou událost nebo dokument s dostatečným významem pro samostatné upozornění čtenářům z Kadaně.",
+    "Kontrola dlouhodobých priorit a známých soudních spisů neodhalila nový veřejně indexovaný procesní pohyb, rozhodnutí nebo dokument měnící dosavadní stav kauz Nemocnice Kadaň, Slovan, lávka u Shellu ani Alžbětinský klášter.",
+    "Ve veřejných smluvních přehledech nebyl od předchozího běhu nalezen nový významný kadaňský záznam; nejnovější relevantní položky zůstávají již evidované a redakčně zpracované.",
+    "Petice nemocnice nevykazuje ověřenou změnu textu, uzavření, předání zastupitelstvu ani jiný prahový stav pro upozornění; rozdílné počty v indexech vyhledávačů nebyly považovány za spolehlivý aktuální údaj.",
+    "Kanonická evidence publikovaného obsahu byla 4. srpna 2026 v 07:52 UTC obnovena na 45 článků; potvrzuje 14 článků na titulce, 45 v archivu, RSS a sitemapě, osm v news-sitemapě a nulové duplicity URL i fingerprintů.",
+    "Živá titulní stránka a archiv byly znovu ověřeny a shodně uvádějí jako nejnovější článek Císařský den v Kadani publikovaný 4. srpna 2026 v 05:50; opravný deploy nebyl potřebný.",
+    "Data/city-news.json nadále evidují 98 unikátních zdrojů a 19 přímých chyb. Nefunkční zdroje zůstávají povinné a mají být dále obsluhovány náhradními oficiálními nebo důvěryhodnými kanály.",
     "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
 }
