@@ -3,6 +3,10 @@ name: Dokončit kanonický registr přes bezpečný PR spouštěč
 on:
   pull_request_target:
     types: [opened, reopened, edited, synchronize]
+  push:
+    branches: [main]
+    paths:
+      - '.github/canonical-finalize-trigger.txt'
 
 permissions:
   contents: write
@@ -14,7 +18,7 @@ concurrency:
 
 jobs:
   finalize:
-    if: startsWith(github.event.pull_request.head.ref, 'canonical-finalize-')
+    if: github.event_name == 'push' || startsWith(github.event.pull_request.head.ref, 'canonical-finalize-')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -196,6 +200,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add data/published-content-index.json .github/canonical-content-audit-status.json
+          git rm -f .github/canonical-finalize-trigger.txt || true
           git rm -f .github/workflows/pr-finalize-canonical-registry.yml
           if [ -f .github/workflows/verify-canonical-registry-20260804.yml ]; then git rm -f .github/workflows/verify-canonical-registry-20260804.yml; fi
           if [ -f .github/workflows/repair-canonical-archive-20260804.yml ]; then git rm -f .github/workflows/repair-canonical-archive-20260804.yml; fi
