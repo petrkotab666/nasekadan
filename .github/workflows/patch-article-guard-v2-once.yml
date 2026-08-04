@@ -1,0 +1,54 @@
+name: Jednorázově doladit pojistku všech článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-article-guard-v2-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zrušit frontu starých běhů a nevyžadovat trvalé místo článku na titulce
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – oprava pojistky'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/article-visibility-guard-v2.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '  cancel-in-progress: false\n'
+          if text.count(old) != 1:
+              raise SystemExit('Neočekávaná konfigurace souběhu pojistky.')
+          text = text.replace(old, '  cancel-in-progress: true\n', 1)
+          home_check = '              && grep -Fq "$BLOOD_REL" <<<"$home" \\\n'
+          if text.count(home_check) != 1:
+              raise SystemExit('Nenalezena právě jedna dočasná podmínka titulky.')
+          text = text.replace(home_check, '', 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+            git diff --check
+            git add .github/workflows/article-visibility-guard-v2.yml
+            git commit -m 'Doladit trvalou pojistku všech článků'
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 4))
+          done
+          exit 1
