@@ -248,7 +248,7 @@ def update_registry() -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     articles = [a for a in data.get("articles", []) if a.get("url") != URL]
     fingerprint = sha256((TITLE + "|" + URL).encode("utf-8")).hexdigest()[:24]
-    articles.insert(0, {
+    new_article = {
         "title": TITLE,
         "h1": TITLE,
         "url": URL,
@@ -264,7 +264,9 @@ def update_registry() -> None:
         "source_path": f"clanky/{SLUG}.html",
         "publication_status": "published",
         "source_commit": ARTICLE_SOURCE_COMMIT,
-    })
+    }
+    articles.append(new_article)
+    articles.sort(key=lambda item: item.get("published_at", ""), reverse=True)
     data["articles"] = articles
     data["article_count"] = len(articles)
     data["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -298,7 +300,7 @@ def update_manifest() -> None:
     data = json.loads(path.read_text(encoding="utf-8"))
     items = [x for x in data.get("articles", []) if x.get("url") != URL]
     content = ARTICLE.read_bytes()
-    items.insert(0, {
+    new_item = {
         "path": f"clanky/{SLUG}.html",
         "href": REL,
         "url": URL,
@@ -306,7 +308,9 @@ def update_manifest() -> None:
         "published_at": PUBLISHED,
         "sha256": sha256(content).hexdigest(),
         "bytes": len(content),
-    })
+    }
+    items.append(new_item)
+    items.sort(key=lambda item: item.get("published_at", ""), reverse=True)
     data["articles"] = items
     data["article_count"] = len(items)
     data["generated_at"] = datetime.now(timezone.utc).isoformat()
@@ -327,7 +331,7 @@ def validate() -> None:
     assert SOCIAL.exists() and SOCIAL.stat().st_size > 10000
     registry = json.loads((ROOT / "data" / "published-content-index.json").read_text(encoding="utf-8"))
     assert registry["article_count"] == len(registry["articles"])
-    assert registry["articles"][0]["url"] == URL
+    assert any(item.get("url") == URL for item in registry["articles"])
     assert registry["validation"]["rss_count"] == registry["article_count"]
     assert not any(x in article for x in ("Náhled článku", "nepublikováno", "pracovní HTML náhled"))
 
