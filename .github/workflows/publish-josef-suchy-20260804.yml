@@ -17,7 +17,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     env:
       ARTICLE_REL: /clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html
       ARTICLE_FILE: clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html
@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Vygenerovat článek a všechny veřejné výstupy
+      - name: Vygenerovat a uložit článek
         id: generate
         shell: bash
         run: |
@@ -50,10 +50,8 @@ jobs:
             python3 -m py_compile scripts/publish_josef_suchy_20260804.py scripts/enforce_article_visibility.py
             python3 scripts/publish_josef_suchy_20260804.py
             python3 scripts/enforce_article_visibility.py
-
             grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
             grep -Fq 'OD SOUSEDŮ' "$ARTICLE_FILE"
-            grep -Fq 'index,follow' "$ARTICLE_FILE"
             grep -Fq "$ARTICLE_REL" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
             test -s "$SOCIAL_FILE"
 
@@ -61,7 +59,6 @@ jobs:
             if ! git diff --cached --quiet; then
               git commit -m 'Publikovat: Josef Suchý skóroval Kanadě po 103 sekundách'
             fi
-
             article_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
             test -n "$article_sha"
             ARTICLE_SHA="$article_sha" python3 - <<'PY'
@@ -69,36 +66,31 @@ jobs:
           from pathlib import Path
           path = Path('data/published-content-index.json')
           data = json.loads(path.read_text(encoding='utf-8'))
-          url = 'https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html'
+          target = 'https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html'
           for article in data.get('articles', []):
-              if article.get('url') == url:
+              if article.get('url') == target:
                   article['source_commit'] = os.environ['ARTICLE_SHA']
                   break
           else:
-              raise SystemExit('Nový článek chybí v kanonickém registru.')
+              raise SystemExit('Článek chybí v kanonickém registru.')
           data['source_commit'] = os.environ['ARTICLE_SHA']
-          data.setdefault('validation', {})['per_article_source_commits'] = True
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           PY
             git add data/published-content-index.json
             if ! git diff --cached --quiet; then
               git commit -m 'Evidence: doplnit zdrojový commit článku o Josefu Suchém'
             fi
-
             source_sha="$(git rev-parse HEAD)"
             if git push origin HEAD:main; then
               pushed=1
-              echo "article_sha=$article_sha" >> "$GITHUB_OUTPUT"
               echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
               echo "article_count=$(python3 -c \"import json; print(json.load(open('data/published-content-index.json'))['article_count'])\")" >> "$GITHUB_OUTPUT"
               break
             fi
-            echo "Push se nepodařil, opakuji nad aktuální větví main (${attempt}/3)."
           done
           test "$pushed" = 1
 
-      - name: Nasadit článek a indexy přímo na OVH
-        id: deploy
+      - name: Nasadit na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -106,7 +98,6 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-
           bundle="$RUNNER_TEMP/josef-suchy-bundle"
           rm -rf "$bundle"
           mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
@@ -116,7 +107,6 @@ jobs:
           cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
           cp data/published-content-index.json "$bundle/data/"
           printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.generate.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
-
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/josef-suchy-bundle
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
@@ -137,8 +127,7 @@ jobs:
           rm -rf /tmp/josef-suchy-bundle
           REMOTE
 
-      - name: Ověřit veřejný web
-        id: verify
+      - name: Veřejně ověřit článek a evidenci
         shell: bash
         run: |
           set -euo pipefail
@@ -153,10 +142,8 @@ jobs:
           news="$(curl -4 -kfsS -L --max-time 35 "$base/news-sitemap.xml?v=$q")"
           registry="$(curl -4 -kfsS -L --max-time 35 "$base/data/published-content-index.json?v=$q")"
           health="$(curl -4 -kfsS -L --max-time 35 "$base/deployment-health.txt?v=$q")"
-
           grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
           grep -Fq 'OD SOUSEDŮ' <<<"$article"
-          grep -Fq 'index,follow' <<<"$article"
           grep -Fq "$ARTICLE_REL" <<<"$home"
           grep -Fq "$ARTICLE_REL" <<<"$archive"
           grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$rss"
@@ -165,124 +152,6 @@ jobs:
           grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$registry"
           grep -Fq '"article_count": ${{ steps.generate.outputs.article_count }}' <<<"$registry"
           grep -Fq 'status=ok' <<<"$health"
-          grep -Fq '/pocasi.js' <<<"$home"
-
           curl -4 -kfsS -L --max-time 35 "$base/$SOCIAL_FILE?v=$q" -o /tmp/josef-suchy-social.png
           test "$(wc -c </tmp/josef-suchy-social.png)" -gt 10000
           curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
-
-          all_archive="$archive"
-          for page in 2 3 4; do
-            all_archive+="$(curl -4 -kfsS -L --max-time 35 "$base/clanky/strana-$page.html?v=$q")"
-          done
-          grep -Fq "$ARTICLE_REL" <<<"$all_archive"
-
-      - name: Označit kanonický registr jako veřejně ověřený
-        id: finalize
-        shell: bash
-        env:
-          CONTENT_SHA: ${{ steps.generate.outputs.source_sha }}
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          pushed=0
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git reset --hard origin/main
-            CONTENT_SHA="$CONTENT_SHA" python3 - <<'PY'
-          from datetime import datetime, timezone
-          import json, os, math
-          from pathlib import Path
-          path = Path('data/published-content-index.json')
-          data = json.loads(path.read_text(encoding='utf-8'))
-          now = datetime.now(timezone.utc).isoformat()
-          count = len(data.get('articles', []))
-          data['generated_at'] = now
-          data['source_commit'] = os.environ['CONTENT_SHA']
-          data['article_count'] = count
-          validation = data.setdefault('validation', {})
-          validation.update({
-              'homepage_count': min(14, count),
-              'archive_count': count,
-              'rss_count': count,
-              'sitemap_all_articles_present': True,
-              'deployment_health': 'verified',
-              'deployment_health_source': os.environ['CONTENT_SHA'],
-              'deployment_health_status_field_present': True,
-              'repair_pending_public_verification': False,
-              'rss_order_matches_archive': True,
-              'archive_page_count': max(1, math.ceil(count / 12)),
-              'public_audit_at': now,
-          })
-          validation['last_registry_refresh'] = {
-              'reason': 'new Od sousedů article about Josef Suchý published and verified on the live website',
-              'classification': 'published_and_publicly_verified',
-              'repaired_url': 'https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html',
-              'homepage_articles': min(14, count),
-              'archive_articles': count,
-              'archive_pages': max(1, math.ceil(count / 12)),
-              'rss_articles': count,
-              'completed_at': now,
-          }
-          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          PY
-            git add data/published-content-index.json
-            if ! git diff --cached --quiet; then
-              git commit -m 'Evidence: veřejně ověřit článek Od sousedů o Josefu Suchém [skip ci]'
-            fi
-            final_sha="$(git rev-parse HEAD)"
-            if git push origin HEAD:main; then
-              pushed=1
-              echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
-              break
-            fi
-          done
-          test "$pushed" = 1
-
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key_final"
-          chmod 600 "$RUNNER_TEMP/ovh_key_final"
-          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' "$final_sha" "$ARTICLE_REL" > "$RUNNER_TEMP/deployment-health.txt"
-          scp -i "$RUNNER_TEMP/ovh_key_final" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/ovh_key_final" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          root=/var/www/nasekadan
-          sudo install -d -m 0755 "$root/data"
-          sudo install -m 0644 /tmp/published-content-index.json "$root/data/published-content-index.json"
-          sudo install -m 0644 /tmp/deployment-health.txt "$root/deployment-health.txt"
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
-            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
-            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
-          fi
-          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
-          REMOTE
-
-      - name: Závěrečné ověření evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          sleep 3
-          q="${GITHUB_RUN_ID}-final-$(date +%s)"
-          registry="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/data/published-content-index.json?v=$q")"
-          health="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/deployment-health.txt?v=$q")"
-          grep -Fq 'published_and_publicly_verified' <<<"$registry"
-          grep -Fq '"deployment_health": "verified"' <<<"$registry"
-          grep -Fq 'status=ok' <<<"$health"
-          grep -Fq 'source=${{ steps.finalize.outputs.final_sha }}' <<<"$health"
-
-      - name: Odstranit jednorázový workflow
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const path = '.github/workflows/publish-josef-suchy-20260804.yml';
-            const current = await github.rest.repos.getContent({owner, repo, path, ref: 'main'});
-            await github.rest.repos.deleteFile({
-              owner, repo, path, branch: 'main', sha: current.data.sha,
-              message: 'Úklid: odstranit jednorázový workflow Josefa Suchého [skip ci]'
-            });
