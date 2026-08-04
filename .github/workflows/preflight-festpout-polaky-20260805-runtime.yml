@@ -31,6 +31,8 @@ jobs:
           install -D -m 0755 /tmp/festpout-unpack/publisher.py scripts/publish_festpout_polaky_20260805.py
           install -D -m 0755 /tmp/festpout-unpack/deploy.sh scripts/deploy_festpout_polaky_20260805.sh
           python3 scripts/retime_festpout_publication_20260809.py
+          mv scripts/publish_festpout_polaky_20260805.py scripts/publish_festpout_polaky_20260809.py
+          mv scripts/deploy_festpout_polaky_20260805.sh scripts/deploy_festpout_polaky_20260809.sh
 
       - uses: actions/setup-python@v5
         with:
@@ -55,10 +57,10 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --quiet Pillow
-          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py scripts/retime_festpout_publication_20260809.py
-          grep -Fq '2026, 8, 9, 8, 0' scripts/publish_festpout_polaky_20260805.py
-          bash -n scripts/deploy_festpout_polaky_20260805.sh
-          python3 scripts/publish_festpout_polaky_20260805.py --dry-run
+          python3 -m py_compile scripts/publish_festpout_polaky_20260809.py scripts/retime_festpout_publication_20260809.py
+          grep -Fq '2026, 8, 9, 8, 0' scripts/publish_festpout_polaky_20260809.py
+          bash -n scripts/deploy_festpout_polaky_20260809.sh
+          python3 scripts/publish_festpout_polaky_20260809.py --dry-run
           test -s clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
           test -s social/festpout-polaky-vlaky-kadan-20260809.png
           grep -Fq '<h1>Na Festpouť v Polákách pojedou zvláštní vlaky z Kadaně. Zahrají UDG, Pekař i Totální nasazení</h1>' clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
