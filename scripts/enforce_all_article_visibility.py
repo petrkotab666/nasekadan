@@ -48,19 +48,8 @@ def main() -> int:
             return None
         return item
 
-    # NK-STADIUM-PIN-POLICY-20260804
-    # Do stanoveného termínu je článek o zpřístupnění zimního stadionu
-    # redakčně připnutý pouze na titulce. Archiv a RSS zůstávají chronologické.
-    pin_href = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
-    pin_until = datetime.fromisoformat('2026-08-05T16:00:00+00:00')
-    pin_active = datetime.now(timezone.utc) <= pin_until
+    # Titulka i archiv se řadí výhradně podle prvního zveřejnění.
     engine.article_info = safe_article_info
-    if pin_active:
-        engine.HOMEPAGE_PIN_HREF = pin_href
-        engine.HOMEPAGE_PIN_UNTIL = pin_until
-    else:
-        engine.HOMEPAGE_PIN_HREF = ''
-        engine.HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)
     engine.main()
 
     articles = []
@@ -80,14 +69,10 @@ def main() -> int:
 
     home = (ROOT / "index.html").read_text(encoding="utf-8")
     latest = all_hrefs[0]
-    expected_hero = pin_href if pin_active else latest
+    expected_hero = latest
     hero = re.search(r'<section\b[^>]*class=["\'][^"\']*\bhero\b[^"\']*["\'][^>]*\bid=["\']clanky["\'][^>]*>.*?</section>', home, re.I | re.S)
     if not hero or f'data-latest-article-href="{expected_hero}"' not in hero.group(0):
         raise RuntimeError(f"Titulka nemá očekávaný hlavní článek: {expected_hero}")
-    if pin_active:
-        aside = re.search(r'<aside\b[^>]*class=["\'][^"\']*current-aside[^"\']*["\'][^>]*>.*?</aside>', hero.group(0), re.I | re.S)
-        if not aside or latest not in aside.group(0):
-            raise RuntimeError(f"Boční blok nemá skutečně nejnovější článek: {latest}")
 
     expected_home = all_hrefs[: min(engine.HOME_TOTAL, len(all_hrefs))]
     home_article_area = home.split('<section class="wrap section home-articles">', 1)[-1].split('<section class="wrap promo-wrap"', 1)[0]
