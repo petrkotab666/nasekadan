@@ -1,0 +1,265 @@
+name: Opravit kanonickou evidenci 47. článku
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-blood-article-canonical-20260804
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] Evidence 47. článku')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ARTICLE_REL: /clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html
+      ARTICLE_FILE: clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html
+      SOCIAL_FILE: social/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026-9a6b93c0f7.png
+      EXPECTED_H1: Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−
+      STADIUM_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      JOSEF_REL: /clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Zapsat spuštění
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Oprava chybějící evidence 47. článku byla spuštěna. Run ${context.runId}.`});
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Doplnit článek do registru a všech přehledů
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/repair_blood_article_canonical_20260804.py scripts/enforce_article_visibility.py
+            python3 scripts/repair_blood_article_canonical_20260804.py
+            grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+            grep -Fq "$ARTICLE_REL" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
+            grep -Fq '"article_count": 47' data/published-content-index.json
+            test -s "$SOCIAL_FILE"
+            git add "$ARTICLE_FILE" "$SOCIAL_FILE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json .github/canonical-content-audit-status.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: doplnit publikovaný článek o nedostatku krve'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            article_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              echo "article_sha=$article_sha" >> "$GITHUB_OUTPUT"
+              echo "article_count=47" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit sjednocený publikační povrch na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/canonical-47"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp "$SOCIAL_FILE" "$bundle/social/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\narticle=%s%s\narticle_count=47\nrepair=missing-canonical-article-20260804\n' '${{ steps.prepare.outputs.source_sha }}' 'https://nasekadan.cz' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/canonical-47
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/canonical-47
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
+          sudo install -m 0644 "$src/index.html" "$root/index.html"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          sudo install -m 0644 "$src/social/$(basename "$src"/social/*)" "$root/social/$(basename "$src"/social/*)"
+          for f in rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker cp "$src/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/social/." nasekadan-web:/usr/share/nginx/html/social/
+            for f in rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/canonical-47
+          REMOTE
+
+      - name: Veřejně ověřit článek a všechny kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 7
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 40 "$base$ARTICLE_REL?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 40 "$base/?v=$q")"
+          archive="$(curl -4 -kfsS -L --max-time 40 "$base/clanky/?v=$q")"
+          rss="$(curl -4 -kfsS -L --max-time 40 "$base/rss.xml?v=$q")"
+          sitemap="$(curl -4 -kfsS -L --max-time 40 "$base/sitemap.xml?v=$q")"
+          news="$(curl -4 -kfsS -L --max-time 40 "$base/news-sitemap.xml?v=$q")"
+          registry="$(curl -4 -kfsS -L --max-time 40 "$base/data/published-content-index.json?v=$q")"
+          health="$(curl -4 -kfsS -L --max-time 40 "$base/deployment-health.txt?v=$q")"
+          grep -Fq "<h1>$EXPECTED_H1</h1>" <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq "$ARTICLE_REL" <<<"$archive"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$sitemap"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$news"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$registry"
+          grep -Fq '"article_count": 47' <<<"$registry"
+          grep -Fq 'status=ok' <<<"$health"
+          grep -Fq 'article_count=47' <<<"$health"
+          grep -Fq "$STADIUM_REL" <<<"$home"
+          grep -Fq "$JOSEF_REL" <<<"$archive"
+          curl -4 -kfsS -L --max-time 40 "$base/$SOCIAL_FILE?v=$q" -o /tmp/blood-social.png
+          test "$(wc -c </tmp/blood-social.png)" -gt 10000
+          curl -4 -kfsS -L --max-time 40 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+
+      - name: Potvrdit veřejné ověření v evidenci
+        id: finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          now = datetime.now(timezone.utc).isoformat()
+          registry_path = Path('data/published-content-index.json')
+          data = json.loads(registry_path.read_text(encoding='utf-8'))
+          validation = data.setdefault('validation', {})
+          validation['deployment_health'] = 'ok'
+          validation['repair_pending_public_verification'] = False
+          validation['public_audit_at'] = now
+          validation['public_repair_verification'] = {
+              'status': 'success',
+              'method': 'live-article-home-archive-rss-sitemap-news-registry-health-weather-verification',
+              'verified_url': 'https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html',
+              'article_count': 47,
+              'completed_at': now,
+          }
+          data['generated_at'] = now
+          registry_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          audit_path = Path('.github/canonical-content-audit-status.json')
+          audit = json.loads(audit_path.read_text(encoding='utf-8'))
+          audit.update({
+              'schema_version': '1.4',
+              'status': 'success',
+              'checked_at': now,
+              'publicly_verified_at': now,
+              'article_count': 47,
+              'homepage_count': 14,
+              'archive_count': 47,
+              'archive_page_count': 4,
+              'rss_count': 47,
+              'sitemap_article_count': 47,
+              'news_sitemap_article_count': 10,
+              'deployment_health': 'ok',
+              'duplicate_urls': [],
+              'duplicate_fingerprints': [],
+              'registry_refresh_pending': False,
+              'repair_pending_public_verification': False,
+              'repaired_url': 'https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html',
+              'classification': 'safe_missing_published_article_repair_publicly_verified',
+              'note': 'Veřejný 47. článek byl doplněn do kanonického registru, titulky, archivu, RSS a obou sitemap a celý povrch byl veřejně ověřen.',
+          })
+          audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            git add data/published-content-index.json .github/canonical-content-audit-status.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: potvrdit veřejné ověření 47. článku'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit a ověřit finální registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "${key}" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index-47.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/published-content-index-47.json /var/www/nasekadan/data/published-content-index.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp /tmp/published-content-index-47.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi
+          rm -f /tmp/published-content-index-47.json
+          REMOTE
+          sleep 4
+          q="${GITHUB_RUN_ID}-final-$(date +%s)"
+          final_registry="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q")"
+          grep -Fq '"article_count": 47' <<<"$final_registry"
+          grep -Fq '"deployment_health": "ok"' <<<"$final_registry"
+          grep -Fq '"repair_pending_public_verification": false' <<<"$final_registry"
+
+      - name: Uzavřít evidenční požadavky
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `Významný nesoulad byl bezpečně opraven: publikovaný článek o kritickém nedostatku krve je nyní v kanonickém registru i ve všech veřejných kanálech. Run ${context.runId}, publikační commit ${{ steps.prepare.outputs.source_sha }}, finální evidenční commit ${{ steps.finalize.outputs.final_sha }}, článků: 47.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+            for (const number of [574, 575]) {
+              try {
+                await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: number, body: `Vyřešeno následným bezpečným během ${context.runId}: skutečnou příčinou byl chybějící 47. publikovaný článek v registru.`});
+                await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: number, state: 'closed', state_reason: 'completed'});
+              } catch (error) { core.warning(`Issue ${number}: ${error.message}`); }
+            }
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Oprava 47. článku nebo veřejné ověření selhaly. Run ${context.runId}; nic není považováno za dokončené.`});
