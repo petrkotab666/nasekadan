@@ -49,6 +49,92 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cat > "$RUNNER_TEMP/patch_pin.py" <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('scripts/enforce_article_visibility.py')
+          text = path.read_text(encoding='utf-8')
+          href = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          until = '2026-08-05T18:00:00+02:00'
+
+          if 'HOMEPAGE_PIN_HREF' in text:
+              text, href_count = re.subn(
+                  r"HOMEPAGE_PIN_HREF\s*=\s*'[^']+'",
+                  f"HOMEPAGE_PIN_HREF = '{href}'",
+                  text,
+                  count=1,
+              )
+              text, until_count = re.subn(
+                  r"HOMEPAGE_PIN_UNTIL\s*=\s*datetime\.fromisoformat\('[^']+'\)",
+                  f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('{until}')",
+                  text,
+                  count=1,
+              )
+              if href_count != 1 or until_count != 1:
+                  raise SystemExit('Nelze opravit konfiguraci připnutí.')
+          else:
+              anchor = 'PAGE_SIZE = 12\n'
+              if anchor not in text:
+                  raise SystemExit('Chybí bod pro konfiguraci připnutí.')
+              text = text.replace(
+                  anchor,
+                  anchor
+                  + '# HOMEPAGE-PIN-STADIUM-20260804\n'
+                  + f"HOMEPAGE_PIN_HREF = '{href}'\n"
+                  + f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('{until}')\n",
+                  1,
+              )
+
+          text = text.replace('# HOMEPAGE-PIN-EXPIRED-BY-NEW-PUBLICATION-20260804\n', '')
+
+          if 'homepage_order = list(articles)' not in text:
+              old = (
+                  "    homepage_articles = articles[:HOME_TOTAL]\n"
+                  "    home_cards = '\\n'.join(card(article) for article in homepage_articles[2:])\n"
+              )
+              new = (
+                  "    homepage_order = list(articles)\n"
+                  "    if datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL.astimezone(timezone.utc):\n"
+                  "        pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)\n"
+                  "        if pinned is None:\n"
+                  "            raise RuntimeError('Připínaný článek nebyl nalezen.')\n"
+                  "        homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]\n"
+                  "    homepage_articles = homepage_order[:HOME_TOTAL]\n"
+                  "    home_cards = '\\n'.join(card(article) for article in homepage_articles[2:])\n"
+              )
+              if old not in text:
+                  raise SystemExit('Nelze doplnit pořadí titulky.')
+              text = text.replace(old, new, 1)
+              old_hero = 'hero(articles[0], articles[1] if len(articles) > 1 else None)'
+              if old_hero not in text:
+                  raise SystemExit('Nelze doplnit připnutý hlavní blok.')
+              text = text.replace(
+                  old_hero,
+                  'hero(homepage_order[0], homepage_order[1] if len(homepage_order) > 1 else None)',
+                  1,
+              )
+
+          compile(text, str(path), 'exec')
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+
+          cat > "$RUNNER_TEMP/validate_pin.py" <<'PY'
+          from pathlib import Path
+          import re
+
+          pin = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          text = Path('index.html').read_text(encoding='utf-8')
+          hero = re.search(r'<section class="wrap hero" id="clanky".*?</section>', text, re.S)
+          if not hero or f'data-latest-article-href="{pin}"' not in hero.group(0):
+              raise SystemExit('Připnutí se nevytvořilo.')
+          aside = re.search(r'<aside class="current-aside">.*?</aside>', hero.group(0), re.S)
+          if not aside or pin in aside.group(0):
+              raise SystemExit('Boční blok není správný.')
+          if '/pocasi.js' not in text:
+              raise SystemExit('Na titulce chybí počasí.')
+          PY
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           pushed=0
@@ -57,72 +143,7 @@ jobs:
             git reset --hard origin/main
             archive_sha="$(git hash-object clanky/index.html)"
             rss_sha="$(git hash-object rss.xml)"
-            python3 - <<'PY'
-            from pathlib import Path
-            import re
-
-            path = Path('scripts/enforce_article_visibility.py')
-            text = path.read_text(encoding='utf-8')
-            href = "/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html"
-            until = "2026-08-05T18:00:00+02:00"
-
-            if 'HOMEPAGE_PIN_HREF' in text:
-                text, href_count = re.subn(
-                    r"HOMEPAGE_PIN_HREF\s*=\s*'[^']+'",
-                    f"HOMEPAGE_PIN_HREF = '{href}'",
-                    text,
-                    count=1,
-                )
-                text, until_count = re.subn(
-                    r"HOMEPAGE_PIN_UNTIL\s*=\s*datetime\.fromisoformat\('[^']+'\)",
-                    f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('{until}')",
-                    text,
-                    count=1,
-                )
-                if href_count != 1 or until_count != 1:
-                    raise SystemExit('Nelze opravit konfiguraci připnutí.')
-            else:
-                anchor = 'PAGE_SIZE = 12\n'
-                if anchor not in text:
-                    raise SystemExit('Chybí bod pro konfiguraci připnutí.')
-                text = text.replace(
-                    anchor,
-                    anchor
-                    + '# HOMEPAGE-PIN-STADIUM-20260804\n'
-                    + f"HOMEPAGE_PIN_HREF = '{href}'\n"
-                    + f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('{until}')\n",
-                    1,
-                )
-
-            text = text.replace('# HOMEPAGE-PIN-EXPIRED-BY-NEW-PUBLICATION-20260804\n', '')
-
-            if 'homepage_order = list(articles)' not in text:
-                old = (
-                    "    homepage_articles = articles[:HOME_TOTAL]\n"
-                    "    home_cards = '\\n'.join(card(article) for article in homepage_articles[2:])\n"
-                )
-                new = (
-                    "    homepage_order = list(articles)\n"
-                    "    if datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL.astimezone(timezone.utc):\n"
-                    "        pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)\n"
-                    "        if pinned is None:\n"
-                    "            raise RuntimeError('Připínaný článek nebyl nalezen.')\n"
-                    "        homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]\n"
-                    "    homepage_articles = homepage_order[:HOME_TOTAL]\n"
-                    "    home_cards = '\\n'.join(card(article) for article in homepage_articles[2:])\n"
-                )
-                if old not in text:
-                    raise SystemExit('Nelze doplnit pořadí titulky.')
-                text = text.replace(old, new, 1)
-                text = text.replace(
-                    'hero(articles[0], articles[1] if len(articles) > 1 else None)',
-                    'hero(homepage_order[0], homepage_order[1] if len(homepage_order) > 1 else None)',
-                    1,
-                )
-
-            compile(text, str(path), 'exec')
-            path.write_text(text, encoding='utf-8', newline='\n')
-            PY
+            python3 "$RUNNER_TEMP/patch_pin.py"
             python3 scripts/enforce_article_visibility.py
             git restore --source=HEAD --worktree -- clanky/index.html sitemap.xml
             git restore --source=HEAD --worktree -- clanky/strana-*.html 2>/dev/null || true
@@ -130,20 +151,7 @@ jobs:
             git restore --source=HEAD --worktree -- clanky/strana-*.html 2>/dev/null || true
             test "$(git hash-object clanky/index.html)" = "$archive_sha"
             test "$(git hash-object rss.xml)" = "$rss_sha"
-            python3 - <<'PY'
-            from pathlib import Path
-            import re
-            pin = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
-            text = Path('index.html').read_text(encoding='utf-8')
-            hero = re.search(r'<section class="wrap hero" id="clanky".*?</section>', text, re.S)
-            if not hero or f'data-latest-article-href="{pin}"' not in hero.group(0):
-                raise SystemExit('Připnutí se nevytvořilo.')
-            aside = re.search(r'<aside class="current-aside">.*?</aside>', hero.group(0), re.S)
-            if not aside or pin in aside.group(0):
-                raise SystemExit('Boční blok není správný.')
-            if '/pocasi.js' not in text:
-                raise SystemExit('Na titulce chybí počasí.')
-            PY
+            python3 "$RUNNER_TEMP/validate_pin.py"
             git add index.html scripts/enforce_article_visibility.py
             changed="$(git diff --cached --name-only)"
             if [ -n "$changed" ]; then
@@ -159,6 +167,7 @@ jobs:
           test "$pushed" = 1
           git fetch origin main
           git reset --hard origin/main
+          python3 "$RUNNER_TEMP/validate_pin.py"
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Nasadit pouze titulní stránku na OVH
@@ -183,9 +192,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_latest="$(python3 - <<'PY'
+          cat > "$RUNNER_TEMP/latest_non_pin.py" <<'PY'
           from pathlib import Path
           from scripts.enforce_article_visibility import article_info
+
           pin = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
           items = []
           for path in Path('clanky').glob('*.html'):
@@ -199,17 +209,22 @@ jobs:
               raise SystemExit('Nenalezen nejnovější nepřipnutý článek.')
           print(items[0]['href'])
           PY
-          )"
+          expected_latest="$(python3 "$RUNNER_TEMP/latest_non_pin.py")"
+          test -n "$expected_latest"
           for attempt in $(seq 1 10); do
             q="${GITHUB_RUN_ID}-$(date +%s)-${attempt}"
             home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?pin=$q" || true)"
             aside="$(sed -n '/<aside class="current-aside">/,/<\/aside>/p' <<<"$home")"
+            weather_ok=0
+            if curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/api/pocasi-predpoved.json?pin=$q" | python3 -m json.tool >/dev/null; then
+              weather_ok=1
+            fi
             if grep -Fq "data-latest-article-href=\"$PIN_REL\"" <<<"$home" \
               && grep -Fq 'Kadaň otevřela zimní stadion lidem před vedrem' <<<"$home" \
               && grep -Fq "$expected_latest" <<<"$aside" \
               && ! grep -Fq "$PIN_REL" <<<"$aside" \
               && grep -Fq '/pocasi.js' <<<"$home" \
-              && curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/api/pocasi-predpoved.json?pin=$q" | python3 -m json.tool >/dev/null; then
+              && [ "$weather_ok" = 1 ]; then
               exit 0
             fi
             sleep 6
