@@ -43,6 +43,8 @@ jobs:
           install -D -m 0755 /tmp/festpout-unpack/publisher.py scripts/publish_festpout_polaky_20260805.py
           install -D -m 0755 /tmp/festpout-unpack/deploy.sh scripts/deploy_festpout_polaky_20260805.sh
           python3 scripts/retime_festpout_publication_20260809.py
+          mv scripts/publish_festpout_polaky_20260805.py scripts/publish_festpout_polaky_20260809.py
+          mv scripts/deploy_festpout_polaky_20260805.sh scripts/deploy_festpout_polaky_20260809.sh
 
       - uses: actions/setup-python@v5
         with:
@@ -53,19 +55,19 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --quiet Pillow
-          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py scripts/retime_festpout_publication_20260809.py
-          bash -n scripts/deploy_festpout_polaky_20260805.sh
+          python3 -m py_compile scripts/publish_festpout_polaky_20260809.py scripts/retime_festpout_publication_20260809.py
+          bash -n scripts/deploy_festpout_polaky_20260809.sh
           test -s .github/drafts/festpout-polaky-2026.html
           test -s .github/publication/festpout-polaky-2026/release-manifest.json
           grep -Fq 'NEVEŘEJNÝ REDAKČNÍ DRAFT' .github/drafts/festpout-polaky-2026.html
-          grep -Fq '2026, 8, 9, 8, 0' scripts/publish_festpout_polaky_20260805.py
+          grep -Fq '2026, 8, 9, 8, 0' scripts/publish_festpout_polaky_20260809.py
           grep -Fq '2026-08-09T08:00:00+02:00' .github/publication/festpout-polaky-2026/release-manifest.json
           grep -Fq '19:41' .github/drafts/festpout-polaky-2026.html
           grep -Fq '00:30' .github/drafts/festpout-polaky-2026.html
 
       - name: Publikovat, nasadit a veřejně ověřit
         shell: bash
-        run: bash scripts/deploy_festpout_polaky_20260805.sh
+        run: bash scripts/deploy_festpout_polaky_20260809.sh
 
       - name: Zapsat incident při neúspěchu
         if: failure()
