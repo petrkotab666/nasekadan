@@ -1,0 +1,32 @@
+name: Spustit publikaci Císařského dne přes redakční požadavek
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  actions: write
+  issues: write
+
+jobs:
+  dispatch:
+    if: github.event.issue.title == '[publish] Cisarsky den 2026'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Spustit publikační workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'publish-cisarsky-den-kadan-now-20260804.yml',
+              ref: 'main'
+            });
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'Publikační workflow článku o Císařském dni bylo spuštěno.'
+            });
