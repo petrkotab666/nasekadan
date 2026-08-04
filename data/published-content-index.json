@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T14:35:04.457987+00:00",
+  "generated_at": "2026-08-04T14:46:00.268136+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
@@ -46,25 +46,32 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "one_published_article_missing_from_rss_after_live_sync",
-      "reason": "Kanonický audit po synchronizaci živého webu zjistil právě jednu veřejnou URL chybějící v RSS.",
-      "affected_file": "rss.xml",
-      "repaired_url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
-      "repaired_title": "Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti",
-      "method": "insert-single-canonical-rss-item-validate-deploy-and-publicly-verify",
+      "classification": "stale_registry_h1_after_published_article_update",
+      "reason": "Veřejný článek a main měly aktualizovaný H1, ale kanonický registr stále obsahoval původní titulek.",
+      "updated_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
+      "old_h1": "Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−",
+      "new_h1": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
+      "source_commit": "7aee4b9b4da0e8e3767d3b04f18a8be4f6e9e8bf",
+      "changed_surfaces": [
+        "clanky/index.html",
+        "rss.xml",
+        "news-sitemap.xml",
+        "llms.txt"
+      ],
+      "method": "verify-live-h1-update-registry-normalize-surfaces-deploy-and-full-public-audit",
       "status": "pending",
-      "started_at": "2026-08-04T14:35:04.457987+00:00"
+      "started_at": "2026-08-04T14:46:00.268136+00:00"
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true
   },
   "articles": [
     {
-      "title": "Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−",
-      "h1": "Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−",
+      "title": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
+      "h1": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
       "url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
       "published_at": "2026-08-04T14:10:00+02:00",
-      "modified_at": "2026-08-04T14:10:00+02:00",
+      "modified_at": "2026-08-04T14:34:00+02:00",
       "persons": [],
       "organizations": [
         "Nemocnice Kadaň",
@@ -94,7 +101,7 @@
       },
       "source_path": "clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
       "publication_status": "published",
-      "source_commit": "b8d06fc74146a20c67f0e2a2779d08944b5b6eae"
+      "source_commit": "7aee4b9b4da0e8e3767d3b04f18a8be4f6e9e8bf"
     },
     {
       "title": "Klášterecký Josef Suchý skóroval Kanadě už po 103 sekundách",
