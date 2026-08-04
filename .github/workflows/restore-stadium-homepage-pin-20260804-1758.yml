@@ -1,14 +1,13 @@
 name: Obnovit připnutí článku o zimním stadionu
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/restore-stadium-homepage-pin-20260804-1758.yml'
+  issues:
+    types: [opened]
   workflow_dispatch:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: restore-stadium-homepage-pin-20260804
@@ -16,13 +15,26 @@ concurrency:
 
 jobs:
   restore:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] Připnout zimní stadion na titulku')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       PIN_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
-      PIN_UNTIL: '2026-08-05T18:00:00+02:00'
     steps:
+      - name: Zapsat spuštění
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Obnova připnutí byla spuštěna. GitHub Actions run: ${context.runId}`
+            });
+
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -39,72 +51,7 @@ jobs:
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path('scripts/enforce_article_visibility.py')
-          s = p.read_text(encoding='utf-8')
-          marker = 'HOMEPAGE-PIN-STADIUM-20260804'
-
-          if marker not in s:
-              anchor = "PAGE_SIZE = 12\n"
-              insert = """PAGE_SIZE = 12
-          # HOMEPAGE-PIN-STADIUM-20260804
-          HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
-          HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T18:00:00+02:00')
-          """
-              if anchor not in s:
-                  raise SystemExit('Nelze vložit konfiguraci připnutí.')
-              s = s.replace(anchor, insert, 1)
-
-              old = """    homepage_articles = articles[:HOME_TOTAL]
-              home_cards = '\\n'.join(card(article) for article in homepage_articles[2:])
-              """
-              new = """    homepage_order = list(articles)
-              if datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL.astimezone(timezone.utc):
-                  pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)
-                  if pinned is None:
-                      raise RuntimeError('Připínaný článek nebyl nalezen.')
-                  homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]
-              homepage_articles = homepage_order[:HOME_TOTAL]
-              home_cards = '\\n'.join(card(article) for article in homepage_articles[2:])
-              """
-              if old not in s:
-                  raise SystemExit('Nelze upravit pořadí článků na titulce.')
-              s = s.replace(old, new, 1)
-
-              old_hero = "hero(articles[0], articles[1] if len(articles) > 1 else None)"
-              new_hero = "hero(homepage_order[0], homepage_order[1] if len(homepage_order) > 1 else None)"
-              if old_hero not in s:
-                  raise SystemExit('Nelze upravit hlavní blok titulky.')
-              s = s.replace(old_hero, new_hero, 1)
-              p.write_text(s, encoding='utf-8', newline='\\n')
-
-          compile(s, str(p), 'exec')
-          PY
-
-          python3 scripts/enforce_article_visibility.py
-          git restore --source=HEAD --worktree -- clanky/index.html sitemap.xml
-          git restore --source=HEAD --worktree -- 'clanky/strana-*.html' 2>/dev/null || true
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          text = Path('index.html').read_text(encoding='utf-8')
-          pin = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
-          hero = re.search(r'<section class="wrap hero" id="clanky".*?</section>', text, re.S)
-          if not hero or f'data-latest-article-href="{pin}"' not in hero.group(0):
-              raise SystemExit('Připnutí se nevytvořilo.')
-          aside = re.search(r'<aside class="current-aside">.*?</aside>', hero.group(0), re.S)
-          if not aside or pin in aside.group(0):
-              raise SystemExit('Boční blok není zachován správně.')
-          if '/pocasi.js' not in text:
-              raise SystemExit('Na titulce chybí počasí.')
-          m = re.search(r'<aside class="current-aside">.*?href="([^"]+)"', hero.group(0), re.S)
-          print('Boční článek:', m.group(1) if m else 'nenalezen')
-          PY
-
+          python3 scripts/apply_stadium_homepage_pin.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add index.html scripts/enforce_article_visibility.py
@@ -146,3 +93,36 @@ jobs:
           grep -Fq '/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html' <<<"$hero"
           grep -Fq '/pocasi.js' <<<"$home"
           curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+
+      - name: Uzavřít požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Připnutí bylo obnoveno a veřejně ověřeno. Run ${context.runId}, zdrojový commit ${{ steps.patch.outputs.source_sha }}.`
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Obnova připnutí selhala. GitHub Actions run: ${context.runId}.`
+            });
