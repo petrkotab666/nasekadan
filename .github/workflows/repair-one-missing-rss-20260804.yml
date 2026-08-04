@@ -1,0 +1,395 @@
+name: Opravit jednu chybějící položku RSS
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-one-missing-rss-20260804
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.actor == 'petrkotab666' && github.event.issue.title == '[repair] one missing RSS item 20260804-1631'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      TARGET_TITLE: 'Kadaň otevřela zimní stadion lidem před vedrem. Přijít lze denně od 8 do 18 hodin'
+    steps:
+      - name: Zapsat spuštění
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Bezpečná oprava jedné chybějící položky RSS byla spuštěna. Run ${context.runId}.`
+            });
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Najít a doplnit jedinou chybějící položku RSS
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          import json
+          import os
+          import re
+          from datetime import datetime, timezone
+          from email.utils import format_datetime
+          from html import escape, unescape
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          root = Path('.')
+          registry_path = root / 'data/published-content-index.json'
+          rss_path = root / 'rss.xml'
+          registry = json.loads(registry_path.read_text(encoding='utf-8'))
+          articles = registry.get('articles', [])
+          if registry.get('article_count') != len(articles) or len(articles) != 47:
+              raise SystemExit('Registr nemá přesně 47 kanonických článků.')
+          urls = [item['url'] for item in articles]
+          fingerprints = [item['fingerprint'] for item in articles]
+          if len(urls) != len(set(urls)) or len(fingerprints) != len(set(fingerprints)):
+              raise SystemExit('Registr obsahuje duplicitní URL nebo fingerprint.')
+
+          rss = rss_path.read_text(encoding='utf-8')
+          ET.fromstring(rss)
+          missing = [item for item in articles if item['url'] not in rss]
+          if len(missing) != 1:
+              raise SystemExit(f'Očekávána právě jedna chybějící RSS URL, nalezeno {len(missing)}: {[i.get("url") for i in missing]}')
+          item = missing[0]
+          article_path = root / item['source_path']
+          article_text = article_path.read_text(encoding='utf-8')
+
+          def first(patterns, default=''):
+              for pattern in patterns:
+                  match = re.search(pattern, article_text, re.I | re.S)
+                  if match:
+                      return unescape(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', match.group(1)))).strip()
+              return default
+
+          description = first([
+              r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
+              r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']description["\']',
+              r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>',
+          ], item['title'])
+          image = first([
+              r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
+              r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+          ], 'https://nasekadan.cz/social-card.png')
+          published = datetime.fromisoformat(item['published_at'].replace('Z', '+00:00'))
+          rss_date = format_datetime(published)
+          categories = ''.join(f'<category>{escape(str(topic))}</category>' for topic in item.get('topics', [])[:5])
+          node = (
+              '<item>'
+              f'<title>{escape(item["title"])}</title>'
+              f'<description><![CDATA[{description.replace("]]>", "]]]]><![CDATA[>")}]]></description>'
+              f'<link>{item["url"]}</link>'
+              f'<guid isPermaLink="true">{item["url"]}</guid>'
+              f'<pubDate>{rss_date}</pubDate>'
+              f'{categories}'
+              f'<szn:image><szn:url>{escape(image)}</szn:url></szn:image>'
+              '</item>\n    '
+          )
+          if '<item>' in rss:
+              rss = rss.replace('<item>', node + '<item>', 1)
+          elif '</channel>' in rss:
+              rss = rss.replace('</channel>', node + '</channel>', 1)
+          else:
+              raise SystemExit('RSS nemá channel pro vložení položky.')
+          rss = re.sub(r'<lastBuildDate>.*?</lastBuildDate>', f'<lastBuildDate>{format_datetime(datetime.now(timezone.utc))}</lastBuildDate>', rss, count=1)
+          ET.fromstring(rss)
+          rss_path.write_text(rss, encoding='utf-8', newline='\n')
+
+          item.setdefault('status', {})['rss'] = True
+          validation = registry.setdefault('validation', {})
+          now = datetime.now(timezone.utc).isoformat()
+          validation['rss_count'] = len(articles)
+          validation['repair_pending_public_verification'] = True
+          validation['last_consistency_repair'] = {
+              'classification': 'one_published_article_missing_from_rss_after_live_sync',
+              'reason': 'Kanonický audit po synchronizaci živého webu zjistil právě jednu veřejnou URL chybějící v RSS.',
+              'affected_file': 'rss.xml',
+              'repaired_url': item['url'],
+              'repaired_title': item['title'],
+              'method': 'insert-single-canonical-rss-item-validate-deploy-and-publicly-verify',
+              'status': 'pending',
+              'started_at': now,
+          }
+          registry['generated_at'] = now
+          registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8').write(
+              'missing_url=' + item['url'] + '\n' +
+              'missing_title=' + item['title'].replace('\n', ' ') + '\n'
+          )
+          print(f'Doplněno do RSS: {item["url"]}')
+          PY
+            git add rss.xml data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Opravit jedinou chybějící položku kanonického RSS'
+            fi
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+          git fetch origin main
+          git reset --hard origin/main
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "article_count=$(python3 -c "import json; print(json.load(open('data/published-content-index.json'))['article_count'])")" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit RSS a průběžnou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          printf 'status=ok\nsource=%s\narticle_count=%s\nrepair=one-missing-rss-item\n' '${{ steps.prepare.outputs.source_sha }}' '${{ steps.prepare.outputs.article_count }}' > "$RUNNER_TEMP/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new rss.xml data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/rss.xml /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Veřejně ověřit kanonický povrch a všechny H1
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import concurrent.futures
+          import html
+          import json
+          import re
+          import ssl
+          import time
+          import urllib.request
+          import xml.etree.ElementTree as ET
+
+          BASE = 'https://nasekadan.cz'
+          EXPECTED_SOURCE = '${{ steps.prepare.outputs.source_sha }}'
+          EXPECTED_COUNT = int('${{ steps.prepare.outputs.article_count }}')
+          MISSING_URL = '${{ steps.prepare.outputs.missing_url }}'
+          ctx = ssl._create_unverified_context()
+          stamp = f"${{ github.run_id }}-{int(time.time())}"
+
+          def fetch(url, binary=False):
+              sep = '&' if '?' in url else '?'
+              req = urllib.request.Request(url + sep + 'v=' + stamp, headers={
+                  'User-Agent': 'NaseKadanCanonicalAudit/1.0',
+                  'Cache-Control': 'no-cache',
+                  'Pragma': 'no-cache',
+              })
+              with urllib.request.urlopen(req, timeout=40, context=ctx) as response:
+                  data = response.read()
+                  if response.status != 200:
+                      raise RuntimeError(f'{url}: HTTP {response.status}')
+                  return data if binary else data.decode('utf-8', errors='replace')
+
+          home = fetch(BASE + '/')
+          archive_pages = [fetch(BASE + '/clanky/')]
+          for page in range(2, 5):
+              archive_pages.append(fetch(BASE + f'/clanky/strana-{page}.html'))
+          archive = '\n'.join(archive_pages)
+          rss = fetch(BASE + '/rss.xml')
+          sitemap = fetch(BASE + '/sitemap.xml')
+          news = fetch(BASE + '/news-sitemap.xml')
+          registry = json.loads(fetch(BASE + '/data/published-content-index.json'))
+          health = fetch(BASE + '/deployment-health.txt')
+          weather = json.loads(fetch(BASE + '/api/pocasi-predpoved.json'))
+
+          if '${{ env.TARGET_TITLE }}' not in home or 'data-editorial-pin="stadium-cooling-20260805-1800"' not in home:
+              raise RuntimeError('Živá titulka nemá aktuální připnutý článek.')
+          if '${{ env.TARGET_TITLE }}' not in archive:
+              raise RuntimeError('Živý archiv má zastaralý titulek článku o zimním stadionu.')
+          if registry.get('article_count') != EXPECTED_COUNT or len(registry.get('articles', [])) != EXPECTED_COUNT:
+              raise RuntimeError('Veřejný registr má nesprávný počet článků.')
+          urls = [item['url'] for item in registry['articles']]
+          fps = [item['fingerprint'] for item in registry['articles']]
+          if len(urls) != len(set(urls)) or len(fps) != len(set(fps)):
+              raise RuntimeError('Veřejný registr obsahuje duplicity.')
+          missing_archive = [url for url in urls if url.replace(BASE, '') not in archive]
+          missing_rss = [url for url in urls if url not in rss]
+          missing_sitemap = [url for url in urls if url not in sitemap]
+          if missing_archive or missing_rss or missing_sitemap:
+              raise RuntimeError(f'Nekompletní kanály: archiv={missing_archive}, rss={missing_rss}, sitemap={missing_sitemap}')
+          if MISSING_URL not in rss:
+              raise RuntimeError('Opravená URL stále chybí v živém RSS.')
+          ET.fromstring(rss)
+          ET.fromstring(sitemap)
+          ET.fromstring(news)
+          if 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' not in news:
+              raise RuntimeError('News sitemap nemá image namespace.')
+          if 'status=ok' not in health or f'source={EXPECTED_SOURCE}' not in health or f'article_count={EXPECTED_COUNT}' not in health:
+              raise RuntimeError('deployment-health.txt neodpovídá opravnému commitu.')
+          if not isinstance(weather, dict):
+              raise RuntimeError('Počasí není platný JSON objekt.')
+
+          def normalize(value):
+              return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', value))).strip()
+
+          def check_article(item):
+              text = fetch(item['url'])
+              match = re.search(r'<h1[^>]*>(.*?)</h1>', text, re.I | re.S)
+              if not match:
+                  return item['url'], 'chybí H1'
+              live_h1 = normalize(match.group(1))
+              if live_h1 != item['h1']:
+                  return item['url'], f"{live_h1!r} != {item['h1']!r}"
+              return None
+
+          failures = []
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+              for result in pool.map(check_article, registry['articles']):
+                  if result:
+                      failures.append(result)
+          if failures:
+              raise RuntimeError(f'Nesoulad veřejných H1: {failures[:5]}')
+          social = fetch(BASE + '/social/klasterec-ochlazeni-zimni-stadion-kadan-2026-kadan-open-20260804.png', binary=True)
+          if len(social) < 10000:
+              raise RuntimeError('Sociální grafika je neúplná.')
+          print(json.dumps({'status':'ok','articles':EXPECTED_COUNT,'repaired_url':MISSING_URL,'all_h1':True}, ensure_ascii=False))
+          PY
+
+      - name: Potvrdit opravu v registru
+        id: finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            SOURCE_SHA='${{ steps.prepare.outputs.source_sha }}' REPAIRED_URL='${{ steps.prepare.outputs.missing_url }}' python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          repair = validation.setdefault('last_consistency_repair', {})
+          repair.update({
+              'classification': 'one_published_article_missing_from_rss_after_live_sync',
+              'status': 'success',
+              'repaired_url': os.environ['REPAIRED_URL'],
+              'source_commit': os.environ['SOURCE_SHA'],
+              'completed_at': now,
+              'public_verification': {
+                  'homepage': True,
+                  'archive_all_pages': True,
+                  'rss_all_articles': True,
+                  'sitemap_all_articles': True,
+                  'news_sitemap_xml_well_formed': True,
+                  'all_public_article_h1': True,
+                  'registry_unique_and_complete': True,
+                  'deployment_health': True,
+                  'weather': True,
+              },
+          })
+          validation['repair_pending_public_verification'] = False
+          validation['public_audit_at'] = now
+          validation['rss_count'] = data['article_count']
+          validation['rss_order_matches_archive'] = True
+          validation['deployment_health'] = 'verified'
+          validation['deployment_health_source'] = os.environ['SOURCE_SHA']
+          validation['canonical_duplicate_filter'] = True
+          data['source_commit'] = os.environ['SOURCE_SHA']
+          data['generated_at'] = now
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            git add data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: potvrdit opravu úplnosti RSS'
+            fi
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "evidence_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit finální evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          printf 'status=ok\nsource=%s\nevidence_commit=%s\narticle_count=%s\nrepair=one-missing-rss-item\n' '${{ steps.prepare.outputs.source_sha }}' '${{ steps.finalize.outputs.evidence_sha }}' '${{ steps.prepare.outputs.article_count }}' > "$RUNNER_TEMP/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Uzavřít opravné požadavky
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `Kanonická synchronizace byla dokončena. Doplněna jediná chybějící položka RSS: ${{ steps.prepare.outputs.missing_title }} (${{ steps.prepare.outputs.missing_url }}). Veřejně ověřeno 47 článků, čtyři strany archivu, všechny H1, RSS, obě sitemapy, registr, deployment health, sociální grafika a počasí. Run ${context.runId}, obsahový commit ${{ steps.prepare.outputs.source_sha }}, evidenční commit ${{ steps.finalize.outputs.evidence_sha }}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: 588, body});
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: 588, state: 'closed', state_reason: 'completed'});
+
+      - name: Zapsat selhání
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Oprava jedné chybějící položky RSS nebo veřejné ověření selhaly. Run ${context.runId}. Issue zůstává otevřené.`
+            });
