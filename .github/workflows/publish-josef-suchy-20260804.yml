@@ -1,14 +1,13 @@
 name: Publikovat článek Od sousedů o Josefu Suchém
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/publish-josef-suchy-20260804.yml'
+  issues:
+    types: [opened, reopened]
   workflow_dispatch:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: publish-josef-suchy-20260804
@@ -16,8 +15,9 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[publish] Josef Suchý – Od sousedů')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       ARTICLE_REL: /clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html
       ARTICLE_FILE: clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html
@@ -26,6 +26,19 @@ jobs:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
+      - name: Zapsat číslo běhu
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Publikace byla spuštěna. GitHub Actions run: ${context.runId}`
+            });
+
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -35,21 +48,22 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Vygenerovat a uložit článek
-        id: generate
+      - name: Vytvořit článek a veřejné přehledy
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --quiet Pillow
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'Naše Kadaň – publikace'
+          git config user.email 'info@nasekadan.cz'
           pushed=0
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4; do
             git fetch origin main
             git reset --hard origin/main
             python3 -m py_compile scripts/publish_josef_suchy_20260804.py scripts/enforce_article_visibility.py
             python3 scripts/publish_josef_suchy_20260804.py
             python3 scripts/enforce_article_visibility.py
+
             grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
             grep -Fq 'OD SOUSEDŮ' "$ARTICLE_FILE"
             grep -Fq "$ARTICLE_REL" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
@@ -60,7 +74,6 @@ jobs:
               git commit -m 'Publikovat: Josef Suchý skóroval Kanadě po 103 sekundách'
             fi
             article_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
-            test -n "$article_sha"
             ARTICLE_SHA="$article_sha" python3 - <<'PY'
           import json, os
           from pathlib import Path
@@ -74,19 +87,22 @@ jobs:
           else:
               raise SystemExit('Článek chybí v kanonickém registru.')
           data['source_commit'] = os.environ['ARTICLE_SHA']
+          data.setdefault('validation', {})['per_article_source_commits'] = True
           path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           PY
             git add data/published-content-index.json
             if ! git diff --cached --quiet; then
               git commit -m 'Evidence: doplnit zdrojový commit článku o Josefu Suchém'
             fi
-            source_sha="$(git rev-parse HEAD)"
+            final_sha="$(git rev-parse HEAD)"
             if git push origin HEAD:main; then
               pushed=1
-              echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
               echo "article_count=$(python3 -c \"import json; print(json.load(open('data/published-content-index.json'))['article_count'])\")" >> "$GITHUB_OUTPUT"
               break
             fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
           done
           test "$pushed" = 1
 
@@ -106,7 +122,7 @@ jobs:
           cp "$SOCIAL_FILE" "$bundle/social/"
           cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
           cp data/published-content-index.json "$bundle/data/"
-          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.generate.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.prepare.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/josef-suchy-bundle
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
@@ -127,11 +143,11 @@ jobs:
           rm -rf /tmp/josef-suchy-bundle
           REMOTE
 
-      - name: Veřejně ověřit článek a evidenci
+      - name: Veřejně ověřit všechny kanály
         shell: bash
         run: |
           set -euo pipefail
-          sleep 6
+          sleep 5
           base=https://nasekadan.cz
           q="${GITHUB_RUN_ID}-$(date +%s)"
           article="$(curl -4 -kfsS -L --max-time 35 "$base$ARTICLE_REL?v=$q")"
@@ -150,8 +166,35 @@ jobs:
           grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$sitemap"
           grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$news"
           grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$registry"
-          grep -Fq '"article_count": ${{ steps.generate.outputs.article_count }}' <<<"$registry"
+          grep -Fq '"article_count": ${{ steps.prepare.outputs.article_count }}' <<<"$registry"
           grep -Fq 'status=ok' <<<"$health"
           curl -4 -kfsS -L --max-time 35 "$base/$SOCIAL_FILE?v=$q" -o /tmp/josef-suchy-social.png
           test "$(wc -c </tmp/josef-suchy-social.png)" -gt 10000
           curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+
+      - name: Uzavřít redakční požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Publikováno a veřejně ověřeno. Run ${context.runId}, zdrojový commit ${{ steps.prepare.outputs.source_sha }}, článků v registru: ${{ steps.prepare.outputs.article_count }}.`
+            });
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Publikace selhala. GitHub Actions run: ${context.runId}. Issue zůstává otevřené pro opravu.`
+            });
