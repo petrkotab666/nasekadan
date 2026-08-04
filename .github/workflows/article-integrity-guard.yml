@@ -1,4 +1,4 @@
-name: Kanonická ochrana všech článků Naše Kadaň
+name: Kanonická ochrana pořadí článků Naše Kadaň
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: nasekadan-canonical-article-integrity
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   guard:
@@ -33,20 +33,190 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Obnovit, nasadit a veřejně ověřit celý článekový povrch
-        shell: bash
-        run: bash scripts/run_article_integrity_guard.sh
-
-      - name: Založit nebo doplnit incident při skutečném selhání
-        if: failure()
+      - name: Odstranit všechny zdroje připínání a obnovit chronologii
         shell: bash
         run: |
           set -euo pipefail
-          title='[incident] Viditelnost článků Naše Kadaň'
-          body="Kanonická obnova nebo veřejný audit článků selhaly.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nSpouštěcí commit: ${GITHUB_SHA}"
-          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
+          git fetch origin main
+          git reset --hard origin/main
+          git config user.name 'Naše Kadaň – pojistka chronologie'
+          git config user.email 'info@nasekadan.cz'
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          current = Path('.github/workflows/article-integrity-guard.yml')
+          removed=[]
+          for base in (Path('.github/workflows'), Path('scripts')):
+              if not base.exists():
+                  continue
+              for path in list(base.iterdir()):
+                  if not path.is_file() or path == current:
+                      continue
+                  name=path.name.lower()
+                  text=path.read_text(encoding='utf-8', errors='ignore')
+                  bad=(
+                      ('stadium' in name and 'pin' in name)
+                      or ('pin' in name and 'stadium' in name)
+                      or 'NK-TEMP-STADIUM-PIN' in text
+                      or 'HOMEPAGE_PIN_HREF' in text
+                      or 'dočasné připnutí zimního stadionu' in text.lower()
+                      or 'restore the temporary homepage pin' in text.lower()
+                  )
+                  if bad:
+                      path.unlink()
+                      removed.append(str(path))
+
+          for extra in (
+              Path('.github/workflows/emergency-deploy-current-main-20260804.yml'),
+              Path('.github/workflows/fix-strict-article-chronology-20260804.yml'),
+              Path('.github/workflows/fix-strict-article-chronology-issue-20260804.yml'),
+              Path('.github/workflows/final-repair-article-order-20260804.yml'),
+              Path('.github/workflows/issue-final-article-order-cleanup-20260804.yml'),
+          ):
+              if extra.exists() and extra != current:
+                  extra.unlink()
+                  removed.append(str(extra))
+
+          engine_path=Path('scripts/enforce_article_visibility.py')
+          engine=engine_path.read_text(encoding='utf-8')
+          engine=re.sub(r'^HOMEPAGE_PIN_HREF\s*=.*\n?', '', engine, flags=re.M)
+          engine=re.sub(r'^HOMEPAGE_PIN_UNTIL\s*=.*\n?', '', engine, flags=re.M)
+          engine=re.sub(r'^HOMEPAGE_PIN_MARKER\s*=.*\n?', '', engine, flags=re.M)
+          engine, n=re.subn(
+              r"    homepage_order = list\(articles\)\n.*?    homepage_articles = homepage_order\[:HOME_TOTAL\]",
+              "    homepage_order = list(articles)\n    homepage_articles = homepage_order[:HOME_TOTAL]",
+              engine,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1 or 'HOMEPAGE_PIN_' in engine or 'pin_active' in engine:
+              raise SystemExit('Generátor titulky stále obsahuje připínání.')
+          compile(engine, str(engine_path), 'exec')
+          engine_path.write_text(engine, encoding='utf-8', newline='\n')
+
+          all_path=Path('scripts/enforce_all_article_visibility.py')
+          all_text=all_path.read_text(encoding='utf-8')
+          all_text, n1=re.subn(
+              r"    # NK-TEMP-STADIUM-PIN-20260804:.*?    engine\.main\(\)\n",
+              "    # Jediné pořadí: article:published_time sestupně.\n    engine.article_info = safe_article_info\n    engine.main()\n",
+              all_text,
+              count=1,
+              flags=re.S,
+          )
+          all_text, n2=re.subn(r"    expected_hero = .*", "    expected_hero = latest", all_text, count=1)
+          all_text=re.sub(
+              r"\n    if pin_active:\n.*?\n    expected_home",
+              "\n\n    expected_home",
+              all_text,
+              count=1,
+              flags=re.S,
+          )
+          if n1 != 1 or n2 != 1:
+              raise SystemExit(f'Pojistku se nepodařilo jednoznačně očistit: {n1}, {n2}')
+          for token in ('HOMEPAGE_PIN_', 'pin_active', 'pin_href', 'NK-TEMP-STADIUM-PIN'):
+              if token in all_text:
+                  raise SystemExit(f'V pojistce zůstal zakázaný token: {token}')
+          compile(all_text, str(all_path), 'exec')
+          all_path.write_text(all_text, encoding='utf-8', newline='\n')
+
+          Path('data/article-order-policy.json').write_text(
+              '{\n  "rule": "article:published_time descending",\n  "manualPinsAllowed": false,\n  "updatesChangeOrder": false,\n  "appliesTo": ["homepage", "archive", "rss"]\n}\n',
+              encoding='utf-8'
+          )
+          print('Odstraněno:', *sorted(set(removed)), sep='\n')
+          PY
+
+          python3 -m py_compile scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+          python3 scripts/enforce_all_article_visibility.py
+          git diff --check
+
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'Automaticky odstranit připínání a obnovit chronologii článků'
+            for attempt in 1 2 3 4 5; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 5
+              git fetch origin main
+              git rebase origin/main
+            done
           fi
+
+      - name: Nasadit titulku a archiv na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          tar --exclude='.git' --exclude='.github' --exclude='scripts' -czf "$RUNNER_TEMP/article-order.tgz" index.html clanky rss.xml sitemap.xml data/article-order-policy.json
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/article-order.tgz" ubuntu@57.129.43.215:/tmp/article-order.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/article-order
+          mkdir -p /tmp/article-order
+          tar -xzf /tmp/article-order.tgz -C /tmp/article-order
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo cp -a /tmp/article-order/. /var/www/nasekadan/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/article-order/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf /tmp/article-order /tmp/article-order.tgz
+          REMOTE
+
+      - name: Veřejně ověřit stejné pořadí titulky a archivu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import importlib.util, re, time
+          spec=importlib.util.spec_from_file_location('v', Path('scripts/enforce_article_visibility.py'))
+          v=importlib.util.module_from_spec(spec); spec.loader.exec_module(v)
+          items=[]
+          for p in Path('clanky').glob('*.html'):
+              if p.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', p.name): continue
+              x=v.article_info(p)
+              if x: items.append(x)
+          items.sort(key=lambda x:x['dt'], reverse=True)
+          expected=[x['href'] for x in items]
+          def get(url):
+              with urlopen(Request(url,headers={'User-Agent':'NK article order guard','Cache-Control':'no-cache'}),timeout=40) as r:
+                  return r.read().decode('utf-8','replace')
+          last=''
+          for attempt in range(15):
+              q=f'{int(time.time())}-{attempt}'
+              try:
+                  home=get(f'https://nasekadan.cz/?orderguard={q}')
+                  archive=get(f'https://nasekadan.cz/clanky/?orderguard={q}')
+                  hero=re.search(r'<section\b[^>]*class="[^"]*\bhero\b[^"]*"[^>]*id="clanky"[^>]*>.*?</section>',home,re.S|re.I)
+                  if not hero or f'data-latest-article-href="{expected[0]}"' not in hero.group(0): raise RuntimeError('hero')
+                  aside=re.search(r'<aside\b[^>]*class="[^"]*current-aside[^"]*"[^>]*>.*?</aside>',hero.group(0),re.S|re.I)
+                  if not aside or expected[1] not in aside.group(0): raise RuntimeError('aside')
+                  cards=re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="(/clanky/[^"]+\.html)".*?</article>',home,re.S|re.I)
+                  arch=re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="(/clanky/[^"]+\.html)".*?</article>',archive,re.S|re.I)
+                  if cards[:5] != expected[2:7]: raise RuntimeError(f'homepage {cards[:5]}')
+                  if arch[:12] != expected[:12]: raise RuntimeError(f'archive {arch[:12]}')
+                  print('Pořadí ověřeno:', expected[:7])
+                  break
+              except Exception as exc:
+                  last=str(exc); time.sleep(8)
+          else:
+              raise SystemExit('Veřejná kontrola neprošla: '+last)
+          PY
+
+      - name: Založit incident při selhání
+        if: failure()
+        shell: bash
+        run: |
+          title='[incident] Pořadí článků Naše Kadaň'
+          body="Oprava nebo veřejná kontrola pořadí selhala. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then gh issue comment "$issue" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
