@@ -53,7 +53,7 @@ PY
             re.escape(START) + r'.*?(?=' + re.escape(END) + r')',
             re.S,
         )
-    text, count = pattern.subn(block, text, count=1)
+    text, count = pattern.subn(lambda _match: block, text, count=1)
     if count != 1:
         raise RuntimeError(f'Blok kanonické pojistky nebyl jednoznačně nalezen: {count}')
     PATH.write_text(text, encoding='utf-8', newline='\n')
