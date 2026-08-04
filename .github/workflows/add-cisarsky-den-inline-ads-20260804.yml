@@ -1,0 +1,143 @@
+name: Doplnit reklamy do článku o Císařském dni
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-cisarsky-den-inline-ads-20260804.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: add-cisarsky-den-inline-ads-20260804
+  cancel-in-progress: false
+
+jobs:
+  patch-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE_FILE: clanky/cisarsky-den-kadan-historie-2026.html
+      DRAFT_FILE: .github/drafts/cisarsky-den-kadan-historie-2026.html
+      PUBLISHER_FILE: scripts/publish_cisarsky_den_kadan_20260804.py
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vložit reklamy do článku a zdrojové šablony
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          article_path = Path('clanky/cisarsky-den-kadan-historie-2026.html')
+          draft_path = Path('.github/drafts/cisarsky-den-kadan-historie-2026.html')
+          publisher_path = Path('scripts/publish_cisarsky_den_kadan_20260804.py')
+
+          anchor = '  <section data-actual-editions="31-held">'
+          static_ad = '''  <section class="article-ad article-ad-auto" data-cisarsky-inline-ad="1" data-promos data-context="local" data-layout="banner" data-count="1" aria-label="Reklama"></section>\n\n'''
+          long_ads = '<script src="/long-article-ads.js?v=20260731-long-article-ads-2"></script>'
+          script_anchor = '<script src="/site.js" defer></script>'
+
+          def add_static_ad(path: Path) -> None:
+              text = path.read_text(encoding='utf-8')
+              if 'data-cisarsky-inline-ad="1"' not in text:
+                  if anchor not in text:
+                      raise SystemExit(f'Nenalezen bod pro vložení reklamy v {path}.')
+                  text = text.replace(anchor, static_ad + anchor, 1)
+              path.write_text(text, encoding='utf-8', newline='\n')
+
+          add_static_ad(article_path)
+          add_static_ad(draft_path)
+
+          article = article_path.read_text(encoding='utf-8')
+          if long_ads not in article:
+              if script_anchor not in article:
+                  raise SystemExit('Nenalezen bod pro skript dlouhých článků ve veřejném článku.')
+              article = article.replace(script_anchor, long_ads + script_anchor, 1)
+          article = re.sub(
+              r'(<meta property="article:modified_time" content=")[^"]+("[ ]*/?>)',
+              r'\g<1>2026-08-04T06:35:00+02:00\2',
+              article,
+              count=1,
+          )
+          article = article.replace('"dateModified":"2026-08-04T05:50:00+02:00"', '"dateModified":"2026-08-04T06:35:00+02:00"', 1)
+          article_path.write_text(article, encoding='utf-8', newline='\n')
+
+          publisher = publisher_path.read_text(encoding='utf-8')
+          if long_ads not in publisher:
+              if script_anchor not in publisher:
+                  raise SystemExit('Nenalezen bod pro skript dlouhých článků v publikační šabloně.')
+              publisher = publisher.replace(script_anchor, long_ads + script_anchor, 1)
+          publisher_path.write_text(publisher, encoding='utf-8', newline='\n')
+
+          final = article_path.read_text(encoding='utf-8')
+          assert 'data-cisarsky-inline-ad="1"' in final
+          assert long_ads in final
+          assert final.index('data-cisarsky-inline-ad="1"') < final.index('data-actual-editions="31-held"')
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$ARTICLE_FILE" "$DRAFT_FILE" "$PUBLISHER_FILE"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit reklamy přímo do článku o Císařském dni [skip ci]'
+            git push origin HEAD:main
+          fi
+
+      - name: Nasadit upravený článek na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/cisarsky-den-ads"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp long-article-ads.js reklamy.js ad-spacing-guard.js reklamy-oprava-obrazku.js "$bundle/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/cisarsky-den-ads
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/cisarsky-den-ads
+          root=/var/www/nasekadan
+          article=cisarsky-den-kadan-historie-2026.html
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 "$src/clanky/$article" "$root/clanky/$article"
+          for f in long-article-ads.js reklamy.js ad-spacing-guard.js reklamy-oprava-obrazku.js; do
+            sudo install -m 0644 "$src/$f" "$root/$f"
+          done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$src/clanky/$article" "nasekadan-web:/usr/share/nginx/html/clanky/$article"
+            for f in long-article-ads.js reklamy.js ad-spacing-guard.js reklamy-oprava-obrazku.js; do
+              sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+          fi
+          rm -rf /tmp/cisarsky-den-ads
+          REMOTE
+
+      - name: Ověřit reklamy na veřejném článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 35 "$base/clanky/cisarsky-den-kadan-historie-2026.html?v=$q" -o /tmp/article.html
+          curl -4 -kfsS -L --max-time 35 "$base/long-article-ads.js?v=$q" -o /tmp/long-article-ads.js
+          grep -Fq 'data-cisarsky-inline-ad="1"' /tmp/article.html
+          grep -Fq 'data-promos data-context="local"' /tmp/article.html
+          grep -Fq '/long-article-ads.js?v=20260731-long-article-ads-2' /tmp/article.html
+          grep -Fq 'desiredSlots' /tmp/long-article-ads.js
+          grep -Fq 'renderPromos' /tmp/long-article-ads.js
