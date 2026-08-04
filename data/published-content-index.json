@@ -1,9 +1,9 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T13:18:05.664649+00:00",
+  "generated_at": "2026-08-04T13:18:16.773660+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
-  "source_commit": "b90b2f3768b29340081d84b06d7318408e21291e",
+  "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
   "article_count": 47,
   "validation": {
     "homepage_count": 14,
@@ -15,7 +15,7 @@
     "rss_order_matches_archive": true,
     "deployment_health": "verified",
     "deployment_health_status_field_present": true,
-    "deployment_health_source": "50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a",
+    "deployment_health_source": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
     "required_fields_complete": true,
     "duplicate_urls": [],
     "duplicate_fingerprints": [],
@@ -28,7 +28,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
     "public_audit_at": "2026-08-04T12:35:17.381979+00:00",
-    "repair_pending_public_verification": true,
+    "repair_pending_public_verification": false,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -50,9 +50,23 @@
       "reason": "news-sitemap.xml používala prvky image:image bez deklarace xmlns:image, takže dokument nebyl XML well-formed.",
       "affected_file": "news-sitemap.xml",
       "method": "declare-google-image-sitemap-namespace-validate-deploy-and-publicly-verify",
-      "status": "pending_public_verification",
-      "started_at": "2026-08-04T13:18:05.664649+00:00"
-    }
+      "status": "success",
+      "started_at": "2026-08-04T13:18:05.664649+00:00",
+      "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
+      "completed_at": "2026-08-04T13:18:16.773660+00:00",
+      "public_verification": {
+        "homepage": true,
+        "archive": true,
+        "rss": true,
+        "sitemap": true,
+        "news_sitemap_xml_well_formed": true,
+        "image_namespace_declared": true,
+        "registry": true,
+        "deployment_health": true
+      }
+    },
+    "news_sitemap_xml_well_formed": true,
+    "news_sitemap_image_namespace_declared": true
   },
   "articles": [
     {
