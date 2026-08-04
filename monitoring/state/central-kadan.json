@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T13:58:19Z",
-  "last_quick_check_at": "2026-08-04T13:58:19Z",
+  "updated_at": "2026-08-04T15:10:30Z",
+  "last_quick_check_at": "2026-08-04T15:10:30Z",
   "last_deep_check_at": "2026-08-04T13:58:19Z",
   "canonical_registry": {
     "paths": [
@@ -27,15 +27,15 @@
   },
   "city_news": {
     "path": "data/city-news.json",
-    "generated_at": "2026-08-04T09:10:22.162533+00:00",
+    "generated_at": "2026-08-04T14:41:06.101384+00:00",
     "total_unique_sources": 101,
-    "known_failed_sources": 21,
-    "error_records": 22,
+    "known_failed_sources": 13,
+    "error_records": 13,
     "failed_sources_require_fallback": true
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "37c4f9efa9c024a9460e07bb0d4d4c4af86e2e51"
+    "main_sha_observed": "977125c325fd7fac7eb61fff61aba72f480d2db5"
   },
   "production": {
     "homepage_checked": true,
@@ -51,19 +51,19 @@
     "homepage_and_archive_consistent": true,
     "discovery_surfaces_contain_latest_article": true,
     "public_audit_at": "2026-08-04T13:18:16.773660+00:00",
-    "public_audit_evidence": "Kanonický registr publikovaného obsahu potvrzuje živou opravu XML news sitemapy a veřejnou kontrolu titulky, archivu, RSS, sitemap, news-sitemap, registru a deployment-health.",
+    "public_audit_evidence": "Kanonický živý audit předchozího běhu potvrdil titulku, archiv, RSS, sitemap, news-sitemap, registr a deployment-health. Aktualizace článku o zimním stadionu je zapsaná v main a v kanonických publikačních plochách; přímá cache-busting DNS kontrola z tohoto runtime nebyla dostupná.",
     "public_article_count": 47,
     "deployment_source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
-    "public_check_attempt_at": "2026-08-04T13:58:19Z",
-    "public_check_attempt_status": "Přímé cache-busting DNS připojení z aktuálního runtime nebylo dostupné. Webové vyhledávací náhledy byly cacheované a nebyly použity jako důkaz zastaralé produkce. Poslední kanonický živý audit z 13:18:16 UTC je úspěšný a aktuální repozitářové plochy obsahují nejnovější článek.",
+    "public_check_attempt_at": "2026-08-04T15:10:30Z",
+    "public_check_attempt_status": "Veřejná titulka a archiv byly dostupné přes HTTPS, ale webové načtení může používat mezivrstvu cache. Přímé DNS připojení z běhového prostředí nebylo dostupné; bez spolehlivého důkazu zastaralé produkce nebyl spuštěn další deploy.",
     "repair_attempted": false
   },
   "quick_check": {
-    "extraordinary_events": "no_new_significant_verified_event",
+    "extraordinary_events": "one_new_verified_practical_update",
     "courts_and_cases": "no_new_publicly_indexed_movement",
-    "institutions_and_documents": "official_updates_and_priority_topics_reviewed; no_new_threshold_document",
+    "institutions_and_documents": "official city announcement confirmed stadium cooling access",
     "petition": "no_reliably_verified_threshold_event_since_previous_run",
-    "technical": "canonical live audit successful at 13:18 UTC; no evidence justifying repair"
+    "technical": "no evidence justifying another deploy"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -73,18 +73,15 @@
     "josef-suchy-klasterec-u18-kanada-hlinka-20260804",
     "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804"
   ],
-  "new_significant_fingerprints": [],
+  "new_significant_fingerprints": [
+    "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804"
+  ],
   "notes": [
     "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Regionální registr nadále eviduje úplné dohledání oficiálních URL dne 4. srpna 2026 a nulový počet nevyřešených položek discoverOfficialUrl.",
-    "Proběhl hluboký průchod Kadani, nejbližšímu okolí, prioritním institucím, mimořádným zdrojům, dopravě, sítím, soudním stopám a dlouhodobým kauzám.",
-    "Rychlá kontrola policejních, hasičských, krizových, dopravních, síťových, městských a regionálních zdrojů neodhalila od předchozího běhu novou ověřenou mimořádnou událost s dostatečným významem pro samostatné upozornění čtenářům z Kadaně.",
-    "Vyhledání známých soudních spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 nepřineslo nový veřejně indexovaný procesní pohyb nebo rozhodnutí.",
-    "Kontrola priorit Nemocnice Kadaň, Slovan, lávka u Shellu, alžbětinský klášter, koupaliště Niagara a optická trasa nepřinesla nový primární dokument, který by měnil dosavadní redakční závěry.",
-    "Veřejně indexované údaje o soukromé online petici nebyly dostatečně čerstvé a vzájemně konzistentní pro potvrzení významného posunu; nebylo proto vytvořeno upozornění.",
-    "Kanonický registr publikovaného obsahu eviduje 47 článků, nulové duplicitní URL a fingerprinty a úspěšnou živou opravu XML news sitemapy dokončenou 4. srpna 2026 ve 13:18:16 UTC.",
-    "Přímá cache-busting kontrola nasekadan.cz z aktuálního běhového prostředí selhala na DNS. Bez důkazu zastaralé produkce nebyl spuštěn opravný deploy.",
-    "Data/city-news.json nadále eviduje 101 unikátních zdrojů a 21 unikátních selhávajících zdrojů ve 22 chybových záznamech. Zdroje zůstávají povinné a musí být dále obsluhovány náhradními oficiálními nebo důvěryhodnými kanály.",
-    "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
+    "Rychlá kontrola mimořádných, dopravních, policejních, hasičských, síťových a soudních zdrojů neodhalila jinou novou ověřenou událost s dostatečným významem pro samostatné upozornění.",
+    "Novým významným zjištěním je oficiální potvrzení Města Kadaň, že zimní stadion lze během horkých dnů využít k ochlazení každý den od 8:00 do 18:00.",
+    "Nález byl po kontrole duplicity zařazen jako aktualizace existujícího článku https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html, nikoli jako nový článek.",
+    "Byl vytvořen GitHub Issue #593 a pending JSON monitoring-alerts/pending/kadan-zimni-stadion-ochlazeni-potvrzeno-20260804.json.",
+    "Data/city-news.json byla naposledy generována 4. srpna 2026 ve 14:41 UTC a eviduje 101 unikátních zdrojů. Blokované a chybující zdroje zůstávají povinné a musí být dál obsluhovány náhradními kanály."
   ]
 }
