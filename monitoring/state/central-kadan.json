@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T01:04:24Z",
-  "last_quick_check_at": "2026-08-04T01:04:24Z",
+  "updated_at": "2026-08-04T02:58:46Z",
+  "last_quick_check_at": "2026-08-04T02:58:46Z",
   "last_deep_check_at": "2026-08-04T01:04:24Z",
   "canonical_registry": {
     "paths": [
@@ -30,7 +30,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "bdd34e6ba423d1ed5ba9c679c7d2abd9bc3ad956"
+    "main_sha_observed": "1cb13d0e3b673fc0a4d9b9a03da1c7ef8deba272"
   },
   "production": {
     "homepage_checked": true,
@@ -42,7 +42,7 @@
     "sitemap_direct_fetch_available": true,
     "rss_direct_fetch_available": true,
     "deployment_health_direct_fetch_available": true,
-    "public_audit_at": "2026-08-04T00:25:02.441903+00:00",
+    "public_audit_at": "2026-08-04T02:17:05.715447+00:00",
     "public_article_count": 44,
     "repair_attempted": false
   },
@@ -50,7 +50,7 @@
     "extraordinary_events": "no_new_significant_verified_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
-    "petition": "no_significant_verified_change",
+    "petition": "17_confirmed_2_unconfirmed; small_growth_only; no_handover_or_text_change_verified",
     "technical": "public_homepage_archive_rss_sitemap_and_deployment_health_current; no_deploy_needed"
   },
   "duplicate_fingerprints_suppressed": [
@@ -60,12 +60,13 @@
   ],
   "new_significant_fingerprints": [],
   "notes": [
-    "Při běhu byly načteny všechny tři kanonické registry organizací, městských zdrojů a širokého regionálního monitoringu.",
-    "U osmi dosud nevyřešených obcí jádrového okolí byly ověřeny a do data/regional-sources.json doplněny aktuální oficiální weby: Perštejn, Rokle, Domašín, Okounov, Místo, Výsluní, Kovářská a Kryštofovy Hamry.",
-    "Rychlá i hlubší kontrola mimořádných událostí, dopravy, krizových zdrojů, institucí, soudních stop, dlouhodobých kauz a veřejných oznámení neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro samostatné upozornění čtenářům z Kadaně.",
-    "Kanonický veřejný audit z 4. srpna 2026 v 00:25 UTC ověřil 44 článků, shodu archivu, RSS a sitemap, neprázdný deployment-health a nulové duplicity URL i fingerprintů.",
-    "Veřejná titulní strana a archiv jsou aktuální a shodně uvádějí článek o ochlazení na zimním stadionu z 3. srpna 2026 ve 22:05 jako nejnovější.",
-    "Data/city-news.json nadále evidují 98 unikátních zdrojů a 13 přímých chyb; blokované nebo nefunkční kanály zůstávají povinné a vyžadují náhradní primární či důvěryhodné kanály.",
+    "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
+    "Rychlá kontrola Portálu krizového řízení, Policie ČR, dopravních, síťových a veřejných oznamovacích zdrojů neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro čtenáře z Kadaně.",
+    "Nejnovější zobrazené zásahy v okrese Chomutov zůstávají planý poplach v Chomutově z 4. srpna 2026 v 00:10, transport pacienta v Březně z 3. srpna ve 22:40 a technická pomoc ve Vejprtech ve 21:40; všechny předcházejí poslednímu hlubokému běhu a nejsou kandidátem na samostatné upozornění.",
+    "Soukromá petice za zachování Nemocnice Kadaň má veřejně 17 potvrzených a dvě nepotvrzené podpory. Oproti poslední zveřejněné evidenci jde o drobný nárůst; text, adresát, ukončení ani předání městu se prokazatelně nezměnily, proto nebyl vytvořen alert.",
+    "U známých soudních spisů a dlouhodobých kauz nebyl nalezen nový veřejně indexovaný procesní pohyb, který by měnil dosavadní stav nebo vyžadoval okamžité upozornění.",
+    "Živá titulní strana a archiv jsou aktuální a shodně uvádějí článek o ochlazení na zimním stadionu z 3. srpna 2026 ve 22:05 jako nejnovější. Kanonický audit dokončený 4. srpna 2026 v 02:17 UTC ověřil 44 článků, RSS, sitemap, news-sitemap, deployment-health a nulové duplicity.",
+    "Data/city-news.json nadále evidují 98 unikátních zdrojů a 13 přímých chyb. Nefunkční kanály zůstávají povinné a budou řešeny náhradními primárními nebo důvěryhodnými cestami při hlubokém průchodu.",
     "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
 }
