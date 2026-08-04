@@ -1,0 +1,66 @@
+name: Ověřit reklamy v článku o Císařském dni
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-cisarsky-den-inline-ads-20260804.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ověřit veřejný článek a reklamní skripty
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 35 "$base/clanky/cisarsky-den-kadan-historie-2026.html?v=$q" -o /tmp/article.html
+          curl -4 -kfsS -L --max-time 35 "$base/long-article-ads.js?v=$q" -o /tmp/long-article-ads.js
+          curl -4 -kfsS -L --max-time 35 "$base/reklamy.js?v=$q" -o /tmp/reklamy.js
+          grep -Fq 'data-cisarsky-inline-ad="1"' /tmp/article.html
+          grep -Fq 'data-promos data-context="local"' /tmp/article.html
+          grep -Fq '/long-article-ads.js?v=20260731-long-article-ads-2' /tmp/article.html
+          grep -Fq 'desiredSlots' /tmp/long-article-ads.js
+          grep -Fq 'renderPromos' /tmp/long-article-ads.js
+          grep -Fq 'function renderPromos' /tmp/reklamy.js
+
+      - name: Zapsat výsledek kontroly
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          VERIFY: ${{ steps.live.outcome }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const ok = process.env.VERIFY === 'success';
+            const payload = {
+              status: ok ? 'success' : 'failure',
+              checked_at: new Date().toISOString(),
+              article: 'https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html',
+              inline_ad_container: ok,
+              long_article_ad_script: ok,
+              promo_renderer: ok,
+              run_id: String(context.runId)
+            };
+            const path = '.github/cisarsky-den-inline-ads-status.json';
+            let sha;
+            try {
+              sha = (await github.rest.repos.getContent({owner, repo, path, ref: 'main'})).data.sha;
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner, repo, path, branch: 'main', sha,
+              message: `Zapsat kontrolu reklam Císařského dne: ${payload.status} [skip ci]`,
+              content: Buffer.from(JSON.stringify(payload, null, 2) + '\n').toString('base64')
+            });
