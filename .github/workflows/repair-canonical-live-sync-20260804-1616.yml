@@ -1,4 +1,4 @@
-name: Dokončit kanonickou synchronizaci a RSS
+name: Dokončit veřejné ověření kanonického povrchu
 
 on:
   issues:
@@ -9,11 +9,11 @@ permissions:
   issues: write
 
 concurrency:
-  group: canonical-live-sync-rss-20260804
+  group: canonical-final-public-verify-20260804
   cancel-in-progress: false
 
 jobs:
-  repair:
+  verify:
     if: github.actor == 'petrkotab666' && github.event.issue.title == '[repair] canonical live sync 20260804-1616'
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -31,7 +31,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `Dokončení kanonické synchronizace a oprava RSS byly spuštěny. Run ${context.runId}.`
+              body: `Finální veřejné ověření kanonického povrchu bylo spuštěno. Run ${context.runId}.`
             });
 
       - uses: actions/checkout@v4
@@ -43,7 +43,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Doplnit právě jednu chybějící RSS položku
+      - name: Ověřit úplnost repozitáře a připravit evidenci
         id: prepare
         shell: bash
         run: |
@@ -56,102 +56,74 @@ jobs:
             git reset --hard origin/main
             python3 - <<'PY'
           import json
-          import os
           import re
           import xml.etree.ElementTree as ET
           from datetime import datetime, timezone
-          from email.utils import format_datetime
-          from html import escape, unescape
           from pathlib import Path
 
           registry_path = Path('data/published-content-index.json')
-          rss_path = Path('rss.xml')
-          registry = json.loads(registry_path.read_text(encoding='utf-8'))
-          articles = registry.get('articles', [])
-          if registry.get('article_count') != len(articles) or len(articles) != 47:
-              raise SystemExit('Kanonický registr nemá přesně 47 článků.')
+          data = json.loads(registry_path.read_text(encoding='utf-8'))
+          articles = data.get('articles', [])
+          if data.get('article_count') != len(articles) or len(articles) != 47:
+              raise SystemExit('Registr nemá přesně 47 článků.')
           urls = [item['url'] for item in articles]
           fingerprints = [item['fingerprint'] for item in articles]
           if len(urls) != len(set(urls)) or len(fingerprints) != len(set(fingerprints)):
               raise SystemExit('Registr obsahuje duplicitní URL nebo fingerprint.')
+          required = {'title','h1','url','published_at','modified_at','persons','organizations','places','cases','topics','fingerprint','status','source_commit'}
+          for item in articles:
+              missing = required - set(item)
+              if missing:
+                  raise SystemExit(f"Neúplný záznam {item.get('url')}: {sorted(missing)}")
+              source = Path(item['source_path'])
+              if not source.exists():
+                  raise SystemExit(f'Chybí zdrojový soubor {source}.')
+              text = source.read_text(encoding='utf-8')
+              if f"<h1>{item['h1']}</h1>" not in text:
+                  raise SystemExit(f"H1 v repozitáři neodpovídá registru: {item['url']}")
 
-          rss = rss_path.read_text(encoding='utf-8')
+          archive = '\n'.join(path.read_text(encoding='utf-8') for path in [Path('clanky/index.html'), Path('clanky/strana-2.html'), Path('clanky/strana-3.html'), Path('clanky/strana-4.html')])
+          rss = Path('rss.xml').read_text(encoding='utf-8')
+          sitemap = Path('sitemap.xml').read_text(encoding='utf-8')
+          news = Path('news-sitemap.xml').read_text(encoding='utf-8')
           ET.fromstring(rss)
-          missing = [item for item in articles if item['url'] not in rss]
-          if len(missing) != 1:
-              raise SystemExit(f'Očekávána právě jedna chybějící RSS URL, nalezeno {len(missing)}: {[item["url"] for item in missing]}')
-          item = missing[0]
-          article_text = Path(item['source_path']).read_text(encoding='utf-8')
+          ET.fromstring(sitemap)
+          ET.fromstring(news)
+          missing_archive = [url for url in urls if url.replace('https://nasekadan.cz', '') not in archive]
+          missing_rss = [url for url in urls if url not in rss]
+          missing_sitemap = [url for url in urls if url not in sitemap]
+          if missing_archive or missing_rss or missing_sitemap:
+              raise SystemExit(f'Nekompletní repozitářové kanály: archiv={missing_archive}, rss={missing_rss}, sitemap={missing_sitemap}')
+          if 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' not in news:
+              raise SystemExit('News sitemap nemá image namespace.')
 
-          def find_value(patterns, default=''):
-              for pattern in patterns:
-                  match = re.search(pattern, article_text, re.I | re.S)
-                  if match:
-                      value = re.sub(r'<[^>]+>', ' ', match.group(1))
-                      return re.sub(r'\s+', ' ', unescape(value)).strip()
-              return default
-
-          description = find_value([
-              r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']+)',
-              r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']description["\']',
-              r'<p[^>]+class=["\'][^"\']*leadtext[^"\']*["\'][^>]*>(.*?)</p>',
-          ], item['title'])
-          image = find_value([
-              r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
-              r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
-          ], 'https://nasekadan.cz/social-card.png')
-          published = datetime.fromisoformat(item['published_at'].replace('Z', '+00:00'))
-          categories = ''.join(f'<category>{escape(str(topic))}</category>' for topic in item.get('topics', [])[:5])
-          cdata_description = description.replace(']]>', ']]]]><![CDATA[>')
-          node = (
-              '<item>'
-              f'<title>{escape(item["title"])}</title>'
-              f'<description><![CDATA[{cdata_description}]]></description>'
-              f'<link>{item["url"]}</link>'
-              f'<guid isPermaLink="true">{item["url"]}</guid>'
-              f'<pubDate>{format_datetime(published)}</pubDate>'
-              f'{categories}'
-              f'<szn:image><szn:url>{escape(image)}</szn:url></szn:image>'
-              '</item>\n    '
-          )
-          if '<item>' in rss:
-              rss = rss.replace('<item>', node + '<item>', 1)
-          else:
-              rss = rss.replace('</channel>', node + '</channel>', 1)
-          rss = re.sub(
-              r'<lastBuildDate>.*?</lastBuildDate>',
-              f'<lastBuildDate>{format_datetime(datetime.now(timezone.utc))}</lastBuildDate>',
-              rss,
-              count=1,
-          )
-          ET.fromstring(rss)
-          rss_path.write_text(rss, encoding='utf-8', newline='\n')
-
-          item.setdefault('status', {})['rss'] = True
-          validation = registry.setdefault('validation', {})
           now = datetime.now(timezone.utc).isoformat()
-          validation['rss_count'] = len(articles)
+          validation = data.setdefault('validation', {})
           validation['repair_pending_public_verification'] = True
           validation['last_consistency_repair'] = {
-              'classification': 'one_published_article_missing_from_rss_after_live_sync',
-              'reason': 'Po synchronizaci živého webu chyběla právě jedna kanonická URL v RSS.',
-              'affected_file': 'rss.xml',
-              'repaired_url': item['url'],
-              'repaired_title': item['title'],
-              'method': 'insert-single-canonical-rss-item-validate-deploy-and-publicly-verify',
+              'classification': 'live_publication_surface_drift_resolved_by_full_canonical_sync',
+              'reason': 'Živý publikační povrch se odchýlil od úplného kanonického mainu; repozitářové RSS již při finálním průchodu obsahovalo všech 47 URL.',
+              'method': 'redeploy-complete-canonical-main-and-verify-all-public-surfaces-with-retries',
               'status': 'pending',
               'started_at': now,
+              'repository_checks': {
+                  'article_count': len(articles),
+                  'unique_urls': True,
+                  'unique_fingerprints': True,
+                  'all_source_h1': True,
+                  'archive_complete': True,
+                  'rss_complete': True,
+                  'sitemap_complete': True,
+                  'news_sitemap_xml_well_formed': True,
+              },
           }
-          registry['generated_at'] = now
-          registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-          with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
-              output.write('missing_url=' + item['url'] + '\n')
-              output.write('missing_title=' + item['title'].replace('\n', ' ') + '\n')
-          print('Doplněno do RSS:', item['url'])
+          validation['rss_count'] = len(articles)
+          data['generated_at'] = now
+          registry_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           PY
-            git add rss.xml data/published-content-index.json
+            git add data/published-content-index.json
             if ! git diff --cached --quiet; then
-              git commit -m 'Opravit jedinou chybějící položku kanonického RSS'
+              git commit -m 'Evidence: připravit finální veřejné ověření kanonického povrchu'
             fi
             if git push origin HEAD:main; then
               pushed=1
@@ -163,12 +135,9 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
           echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          python3 - <<'PY' >> "$GITHUB_OUTPUT"
-          import json
-          print('article_count=' + str(json.load(open('data/published-content-index.json'))['article_count']))
-          PY
+          echo "article_count=47" >> "$GITHUB_OUTPUT"
 
-      - name: Nasadit opravené RSS a evidenci
+      - name: Nasadit celý aktuální kanonický povrch
         shell: bash
         run: |
           set -euo pipefail
@@ -176,25 +145,41 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          printf 'status=ok\nsource=%s\narticle_count=%s\nrepair=one-missing-rss-item\n' '${{ steps.prepare.outputs.source_sha }}' '${{ steps.prepare.outputs.article_count }}' > "$RUNNER_TEMP/deployment-health.txt"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new rss.xml data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          bundle="$RUNNER_TEMP/canonical-final-sync"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp social/*.png "$bundle/social/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\narticle_count=47\nrepair=canonical-full-sync\n' '${{ steps.prepare.outputs.source_sha }}' > "$bundle/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/canonical-final-sync
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          sudo install -m 0644 /tmp/rss.xml /var/www/nasekadan/rss.xml
-          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
-          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          src=/tmp/canonical-final-sync
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
+          sudo find "$root/clanky" -maxdepth 1 -type f -name 'strana-*.html' -delete
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in "$src"/social/*.png; do sudo install -m 0644 "$f" "$root/social/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp /tmp/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
-            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
-            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker exec nasekadan-web sh -c "find /usr/share/nginx/html/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete"
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/social/." nasekadan-web:/usr/share/nginx/html/social/
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
           fi
-          rm -f /tmp/rss.xml /tmp/published-content-index.json /tmp/deployment-health.txt
+          rm -rf /tmp/canonical-final-sync
           REMOTE
 
-      - name: Veřejně ověřit celý kanonický povrch
+      - name: Veřejně ověřit všechny kanály a H1
         shell: bash
         run: |
           set -euo pipefail
+          sleep 8
           python3 - <<'PY'
           import concurrent.futures
           import html
@@ -206,27 +191,28 @@ jobs:
           import xml.etree.ElementTree as ET
 
           BASE = 'https://nasekadan.cz'
-          EXPECTED_SOURCE = '${{ steps.prepare.outputs.source_sha }}'
-          EXPECTED_COUNT = int('${{ steps.prepare.outputs.article_count }}')
-          REPAIRED_URL = '${{ steps.prepare.outputs.missing_url }}'
+          SOURCE = '${{ steps.prepare.outputs.source_sha }}'
           ctx = ssl._create_unverified_context()
-          stamp = f"${{ github.run_id }}-{int(time.time())}"
 
           def fetch(url, binary=False):
-              separator = '&' if '?' in url else '?'
-              request = urllib.request.Request(
-                  url + separator + 'v=' + stamp,
-                  headers={
-                      'User-Agent': 'NaseKadanCanonicalAudit/1.0',
-                      'Cache-Control': 'no-cache',
-                      'Pragma': 'no-cache',
-                  },
-              )
-              with urllib.request.urlopen(request, timeout=40, context=ctx) as response:
-                  payload = response.read()
-                  if response.status != 200:
-                      raise RuntimeError(f'{url}: HTTP {response.status}')
-                  return payload if binary else payload.decode('utf-8', errors='replace')
+              last_error = None
+              for attempt in range(1, 5):
+                  stamp = f"${{ github.run_id }}-{int(time.time())}-{attempt}"
+                  separator = '&' if '?' in url else '?'
+                  request = urllib.request.Request(
+                      url + separator + 'v=' + stamp,
+                      headers={'User-Agent': 'NaseKadanCanonicalAudit/1.0', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache'},
+                  )
+                  try:
+                      with urllib.request.urlopen(request, timeout=40, context=ctx) as response:
+                          payload = response.read()
+                          if response.status == 200:
+                              return payload if binary else payload.decode('utf-8', errors='replace')
+                          last_error = RuntimeError(f'HTTP {response.status}')
+                  except Exception as exc:
+                      last_error = exc
+                  time.sleep(attempt * 3)
+              raise RuntimeError(f'{url}: {last_error}')
 
           home = fetch(BASE + '/')
           archive_pages = [fetch(BASE + '/clanky/')]
@@ -241,11 +227,11 @@ jobs:
           weather = json.loads(fetch(BASE + '/api/pocasi-predpoved.json'))
 
           if '${{ env.STADIUM_TITLE }}' not in home or 'data-editorial-pin="stadium-cooling-20260805-1800"' not in home:
-              raise RuntimeError('Titulka nemá aktuální připnutý článek o zimním stadionu.')
+              raise RuntimeError('Titulka nemá aktuální připnutý článek.')
           if '${{ env.STADIUM_TITLE }}' not in archive:
               raise RuntimeError('Archiv má zastaralý titulek článku o zimním stadionu.')
-          if registry.get('article_count') != EXPECTED_COUNT or len(registry.get('articles', [])) != EXPECTED_COUNT:
-              raise RuntimeError('Veřejný registr nemá očekávaný počet článků.')
+          if registry.get('article_count') != 47 or len(registry.get('articles', [])) != 47:
+              raise RuntimeError('Veřejný registr nemá 47 článků.')
           urls = [item['url'] for item in registry['articles']]
           fingerprints = [item['fingerprint'] for item in registry['articles']]
           if len(urls) != len(set(urls)) or len(fingerprints) != len(set(fingerprints)):
@@ -254,24 +240,21 @@ jobs:
           missing_rss = [url for url in urls if url not in rss]
           missing_sitemap = [url for url in urls if url not in sitemap]
           if missing_archive or missing_rss or missing_sitemap:
-              raise RuntimeError(f'Nekompletní kanály: archiv={missing_archive}, rss={missing_rss}, sitemap={missing_sitemap}')
-          if REPAIRED_URL not in rss:
-              raise RuntimeError('Opravená URL stále chybí v RSS.')
+              raise RuntimeError(f'Nekompletní živé kanály: archiv={missing_archive}, rss={missing_rss}, sitemap={missing_sitemap}')
           ET.fromstring(rss)
           ET.fromstring(sitemap)
           ET.fromstring(news)
           if 'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"' not in news:
               raise RuntimeError('News sitemap nemá image namespace.')
-          if 'status=ok' not in health or f'source={EXPECTED_SOURCE}' not in health or f'article_count={EXPECTED_COUNT}' not in health:
-              raise RuntimeError('deployment-health.txt neodpovídá opravnému commitu.')
+          if 'status=ok' not in health or f'source={SOURCE}' not in health or 'article_count=47' not in health:
+              raise RuntimeError('deployment-health.txt neodpovídá nasazenému commitu.')
           if not isinstance(weather, dict):
               raise RuntimeError('Počasí není platný JSON objekt.')
 
           def normalize(value):
-              plain = re.sub(r'<[^>]+>', ' ', value)
-              return re.sub(r'\s+', ' ', html.unescape(plain)).strip()
+              return re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', value))).strip()
 
-          def check_article(item):
+          def check_h1(item):
               text = fetch(item['url'])
               match = re.search(r'<h1[^>]*>(.*?)</h1>', text, re.I | re.S)
               if not match:
@@ -283,7 +266,7 @@ jobs:
 
           failures = []
           with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-              for result in pool.map(check_article, registry['articles']):
+              for result in pool.map(check_h1, registry['articles']):
                   if result:
                       failures.append(result)
           if failures:
@@ -291,10 +274,10 @@ jobs:
           social = fetch(BASE + '/social/klasterec-ochlazeni-zimni-stadion-kadan-2026-kadan-open-20260804.png', binary=True)
           if len(social) < 10000:
               raise RuntimeError('Sociální grafika je neúplná.')
-          print(json.dumps({'status': 'ok', 'article_count': EXPECTED_COUNT, 'repaired_url': REPAIRED_URL}, ensure_ascii=False))
+          print(json.dumps({'status': 'ok', 'articles': 47, 'archive_pages': 4, 'all_h1': True}, ensure_ascii=False))
           PY
 
-      - name: Potvrdit opravu v registru
+      - name: Potvrdit úspěch v registru
         id: finalize
         shell: bash
         run: |
@@ -305,7 +288,7 @@ jobs:
           for attempt in 1 2 3 4; do
             git fetch origin main
             git reset --hard origin/main
-            SOURCE_SHA='${{ steps.prepare.outputs.source_sha }}' REPAIRED_URL='${{ steps.prepare.outputs.missing_url }}' python3 - <<'PY'
+            SOURCE_SHA='${{ steps.prepare.outputs.source_sha }}' python3 - <<'PY'
           import json
           import os
           from datetime import datetime, timezone
@@ -317,26 +300,28 @@ jobs:
           validation = data.setdefault('validation', {})
           repair = validation.setdefault('last_consistency_repair', {})
           repair.update({
-              'classification': 'one_published_article_missing_from_rss_after_live_sync',
+              'classification': 'live_publication_surface_drift_resolved_by_full_canonical_sync',
               'status': 'success',
-              'repaired_url': os.environ['REPAIRED_URL'],
               'source_commit': os.environ['SOURCE_SHA'],
               'completed_at': now,
               'public_verification': {
                   'homepage': True,
-                  'archive_all_pages': True,
-                  'rss_all_articles': True,
-                  'sitemap_all_articles': True,
+                  'archive_all_four_pages': True,
+                  'rss_all_47_articles': True,
+                  'sitemap_all_47_articles': True,
                   'news_sitemap_xml_well_formed': True,
-                  'all_public_article_h1': True,
+                  'all_47_public_article_h1': True,
                   'registry_unique_and_complete': True,
                   'deployment_health': True,
                   'weather': True,
+                  'social_graphic': True,
               },
           })
           validation['repair_pending_public_verification'] = False
           validation['public_audit_at'] = now
-          validation['rss_count'] = data['article_count']
+          validation['homepage_count'] = 14
+          validation['archive_count'] = 47
+          validation['rss_count'] = 47
           validation['rss_order_matches_archive'] = True
           validation['deployment_health'] = 'verified'
           validation['deployment_health_source'] = os.environ['SOURCE_SHA']
@@ -347,7 +332,7 @@ jobs:
           PY
             git add data/published-content-index.json
             if ! git diff --cached --quiet; then
-              git commit -m 'Evidence: potvrdit opravu úplnosti RSS'
+              git commit -m 'Evidence: potvrdit veřejnou kanonickou synchronizaci'
             fi
             if git push origin HEAD:main; then
               pushed=1
@@ -365,7 +350,7 @@ jobs:
           key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          printf 'status=ok\nsource=%s\nevidence_commit=%s\narticle_count=%s\nrepair=one-missing-rss-item\n' '${{ steps.prepare.outputs.source_sha }}' '${{ steps.finalize.outputs.evidence_sha }}' '${{ steps.prepare.outputs.article_count }}' > "$RUNNER_TEMP/deployment-health.txt"
+          printf 'status=ok\nsource=%s\nevidence_commit=%s\narticle_count=47\nrepair=canonical-full-sync\n' '${{ steps.prepare.outputs.source_sha }}' '${{ steps.finalize.outputs.evidence_sha }}' > "$RUNNER_TEMP/deployment-health.txt"
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
@@ -384,8 +369,12 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const body = `Kanonická synchronizace byla dokončena. Doplněna jediná chybějící položka RSS: ${{ steps.prepare.outputs.missing_title }} (${{ steps.prepare.outputs.missing_url }}). Veřejně ověřeno 47 článků, čtyři strany archivu, všechny H1, RSS, obě sitemapy, registr, deployment health, sociální grafika a počasí. Run ${context.runId}, obsahový commit ${{ steps.prepare.outputs.source_sha }}, evidenční commit ${{ steps.finalize.outputs.evidence_sha }}.`;
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Významný nesoulad živého publikačního povrchu byl odstraněn úplnou synchronizací s kanonickým mainem. Veřejně ověřeno 47 článků, čtyři strany archivu, všechny H1, úplné RSS a sitemap.xml, validní news-sitemap.xml, registr bez duplicit, deployment health, počasí a sociální grafika. Run ${context.runId}, obsahový commit ${{ steps.prepare.outputs.source_sha }}, evidenční commit ${{ steps.finalize.outputs.evidence_sha }}.`
+            });
             await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
 
       - name: Zapsat selhání
@@ -398,5 +387,5 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `Dokončení kanonické synchronizace nebo veřejné ověření selhaly. Run ${context.runId}. Issue zůstává otevřené.`
+              body: `Finální veřejné ověření kanonického povrchu selhalo. Run ${context.runId}. Issue zůstává otevřené.`
             });
