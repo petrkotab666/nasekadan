@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T15:10:30Z",
-  "last_quick_check_at": "2026-08-04T15:10:30Z",
+  "updated_at": "2026-08-04T17:02:00Z",
+  "last_quick_check_at": "2026-08-04T17:02:00Z",
   "last_deep_check_at": "2026-08-04T13:58:19Z",
   "canonical_registry": {
     "paths": [
@@ -35,7 +35,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "977125c325fd7fac7eb61fff61aba72f480d2db5"
+    "main_sha_observed": "757e80820ddfe245ae6ae85ec02e0928b6949cc0"
   },
   "production": {
     "homepage_checked": true,
@@ -45,25 +45,25 @@
     "news_sitemap_checked": true,
     "llms_checked": true,
     "deployment_health_checked": true,
-    "latest_public_article_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
-    "latest_public_article_title": "Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−",
-    "latest_public_article_published_at": "2026-08-04T14:10:00+02:00",
+    "latest_public_article_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
+    "latest_public_article_title": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
+    "latest_public_article_published_at": "2026-08-04T18:46:00+02:00",
     "homepage_and_archive_consistent": true,
     "discovery_surfaces_contain_latest_article": true,
-    "public_audit_at": "2026-08-04T13:18:16.773660+00:00",
-    "public_audit_evidence": "Kanonický živý audit předchozího běhu potvrdil titulku, archiv, RSS, sitemap, news-sitemap, registr a deployment-health. Aktualizace článku o zimním stadionu je zapsaná v main a v kanonických publikačních plochách; přímá cache-busting DNS kontrola z tohoto runtime nebyla dostupná.",
-    "public_article_count": 47,
-    "deployment_source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
-    "public_check_attempt_at": "2026-08-04T15:10:30Z",
-    "public_check_attempt_status": "Veřejná titulka a archiv byly dostupné přes HTTPS, ale webové načtení může používat mezivrstvu cache. Přímé DNS připojení z běhového prostředí nebylo dostupné; bez spolehlivého důkazu zastaralé produkce nebyl spuštěn další deploy.",
+    "public_audit_at": "2026-08-04T16:59:11.737805+00:00",
+    "public_audit_evidence": "Publikační workflow veřejně ověřil článek, titulní stranu, archiv, RSS, sitemap, news-sitemap, deployment-health, sociální grafiku a počasí. Kanonický registr potvrdil 48 článků, bez duplicitních URL a fingerprintů.",
+    "public_article_count": 48,
+    "deployment_source_commit": "37eeba6e01f734c0628098f6d5444093de5a6ac2",
+    "public_check_attempt_at": "2026-08-04T16:59:11.737805+00:00",
+    "public_check_attempt_status": "success",
     "repair_attempted": false
   },
   "quick_check": {
-    "extraordinary_events": "one_new_verified_practical_update",
+    "extraordinary_events": "no_new_verified_threshold_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
-    "institutions_and_documents": "official city announcement confirmed stadium cooling access",
+    "institutions_and_documents": "one_new_verified_election_deadline_development",
     "petition": "no_reliably_verified_threshold_event_since_previous_run",
-    "technical": "no evidence justifying another deploy"
+    "technical": "latest_article_publicly_verified_and_article_visibility_guard_active"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -71,17 +71,19 @@
     "zimni-stadion-ochlazeni-klasterec-kadan-20260803",
     "night-train-outages-kadan-klasterec-august-2026",
     "josef-suchy-klasterec-u18-kanada-hlinka-20260804",
-    "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804"
+    "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804",
+    "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804"
   ],
   "new_significant_fingerprints": [
-    "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804"
+    "komunalni-volby-kadan-kandidaty-lhuta-20260804"
   ],
   "notes": [
     "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
     "Rychlá kontrola mimořádných, dopravních, policejních, hasičských, síťových a soudních zdrojů neodhalila jinou novou ověřenou událost s dostatečným významem pro samostatné upozornění.",
-    "Novým významným zjištěním je oficiální potvrzení Města Kadaň, že zimní stadion lze během horkých dnů využít k ochlazení každý den od 8:00 do 18:00.",
-    "Nález byl po kontrole duplicity zařazen jako aktualizace existujícího článku https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html, nikoli jako nový článek.",
-    "Byl vytvořen GitHub Issue #593 a pending JSON monitoring-alerts/pending/kadan-zimni-stadion-ochlazeni-potvrzeno-20260804.json.",
-    "Data/city-news.json byla naposledy generována 4. srpna 2026 ve 14:41 UTC a eviduje 101 unikátních zdrojů. Blokované a chybující zdroje zůstávají povinné a musí být dál obsluhovány náhradními kanály."
+    "Novým významným zjištěním je ukončení lhůty pro podání kandidátních listin do komunálních voleb dne 4. srpna 2026 v 16:00 a první ověřený průběžný obraz hlavních kadaňských uskupení.",
+    "Úplný úřední seznam ještě není konečný; o registraci kandidátních listin se rozhoduje nejpozději 22. srpna 2026.",
+    "Téma bylo po kontrole duplicity spojeno s článkem https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html, který byl veřejně ověřen ve všech hlavních publikačních kanálech.",
+    "Byl vytvořen GitHub Issue #602 a pending JSON monitoring-alerts/pending/komunalni-volby-kadan-kandidaty-lhuta-20260804.json.",
+    "Data/city-news.json byla naposledy generována 4. srpna 2026 ve 14:41 UTC a eviduje 101 unikátních zdrojů. Třináct chybujících zdrojů zůstává povinných a musí být dál obsluhováno náhradními kanály."
   ]
 }
