@@ -14,6 +14,9 @@ ARCHIVE = ROOT / 'clanky' / 'index.html'
 SITEMAP = ROOT / 'sitemap.xml'
 HOME_TOTAL = 14
 PAGE_SIZE = 12
+# HOMEPAGE-PIN-STADIUM-20260804
+HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T18:00:00+02:00')
 CARD_FIX_MARKER = 'CARD-PREVIEW-FIX-20260803'
 PAGINATION_MARKER = 'ARTICLE-PAGINATION-20260803'
 MONTHS = (
@@ -288,12 +291,18 @@ def main() -> None:
         raise SystemExit('Nenalezen žádný publikovaný článek.')
 
     total_pages = max(1, math.ceil(len(articles) / PAGE_SIZE))
-    homepage_articles = articles[:HOME_TOTAL]
+    homepage_order = list(articles)
+    if datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL.astimezone(timezone.utc):
+        pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)
+        if pinned is None:
+            raise RuntimeError('Připínaný článek nebyl nalezen.')
+        homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]
+    homepage_articles = homepage_order[:HOME_TOTAL]
     home_cards = '\n'.join(card(article) for article in homepage_articles[2:])
     home_replacement = home_cards + '\n    </div>\n' + pagination(1, total_pages, homepage=True)
 
     home = HOME.read_text(encoding='utf-8')
-    home = re.sub(r'  <section class="wrap hero" id="clanky".*?</section>', hero(articles[0], articles[1] if len(articles) > 1 else None), home, count=1, flags=re.S)
+    home = re.sub(r'  <section class="wrap hero" id="clanky".*?</section>', hero(homepage_order[0], homepage_order[1] if len(homepage_order) > 1 else None), home, count=1, flags=re.S)
     home = replace_between(home, '<div class="article-list">', '<p class="archive-note">', home_replacement)
     home = ensure_css(home, archive_page=False)
     home = re.sub(
