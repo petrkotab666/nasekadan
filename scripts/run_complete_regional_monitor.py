@@ -13,6 +13,12 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import monitor_all_kadansko as monitor
 
 
+MANDATORY_REGIONAL_SUPPLEMENTS = {
+    "Pětipsy": "https://www.petipsy.cz/",
+    "Loučná pod Klínovcem": "https://www.loucna.eu/",
+}
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -50,7 +56,7 @@ def build_complete_config(
     regional = read_json(regional_path)
 
     municipalities = [
-        item for item in regional.get("municipalities", []) if isinstance(item, dict)
+        dict(item) for item in regional.get("municipalities", []) if isinstance(item, dict)
     ]
     institutions = [
         item
@@ -63,6 +69,27 @@ def build_complete_config(
         )
         or []
     )
+
+    # Kritická pojistka: původní ORP registr nesmí při rozšiřování regionu ztratit
+    # žádnou dříve sledovanou obec. Tyto dvě položky v širokém registru chyběly.
+    existing_names = {
+        str(item.get("name") or "").strip().casefold() for item in municipalities
+    }
+    supplemented_municipalities: list[str] = []
+    for name, official_url in MANDATORY_REGIONAL_SUPPLEMENTS.items():
+        if name.casefold() in existing_names:
+            continue
+        municipalities.append(
+            {
+                "name": name,
+                "priority": "core",
+                "officialUrl": official_url,
+                "monitoringSource": "mandatory-orp-supplement",
+                "officialUrlVerifiedAt": "2026-08-04",
+            }
+        )
+        existing_names.add(name.casefold())
+        supplemented_municipalities.append(name)
 
     if len(municipalities) < 57:
         raise SystemExit(
@@ -175,6 +202,8 @@ def build_complete_config(
         "regionalRegistryComplete": not unresolved,
         "regionalSourceEntries": len(sources),
         "regionalLocalTerms": len(local_terms),
+        "supplementedMunicipalities": supplemented_municipalities,
+        "mandatoryRegionalSupplements": sorted(MANDATORY_REGIONAL_SUPPLEMENTS),
     }
     config = {
         "version": 3,
@@ -239,6 +268,7 @@ def main() -> int:
         "primarySchedule": "hourly",
         "selfHealingWatchdog": True,
         "automaticFailedRunRetry": True,
+        "emergencyIssueTrigger": True,
     }
 
     source_count = int(status.get("sourceCount") or 0)
@@ -273,6 +303,7 @@ def main() -> int:
                 "municipalities": coverage.get("regionalMunicipalities"),
                 "institutions": coverage.get("regionalNamedInstitutions"),
                 "alerts": status.get("newAlerts"),
+                "supplements": coverage.get("supplementedMunicipalities"),
             },
             ensure_ascii=False,
         )
