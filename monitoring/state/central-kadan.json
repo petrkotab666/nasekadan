@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-03T22:59:44Z",
-  "last_quick_check_at": "2026-08-03T22:59:44Z",
-  "last_deep_check_at": "2026-08-03T16:00:50Z",
+  "updated_at": "2026-08-04T01:04:24Z",
+  "last_quick_check_at": "2026-08-04T01:04:24Z",
+  "last_deep_check_at": "2026-08-04T01:04:24Z",
   "canonical_registry": {
     "paths": [
       "data/organizations.json",
@@ -18,7 +18,7 @@
     "registry_shas": {
       "organizations": "131a573482229f11b57224e56623c1e26fd1dcb2",
       "city_sources": "e76ed5c513effbf7ef79b0d844da461d71b65f87",
-      "regional_sources": "c2baf56b8a4fa63fd8064ab6649c0c039fc4d7a3"
+      "regional_sources": "2b015c3c3e0b2be760fc5555cb0c0f64685a36f8"
     }
   },
   "city_news": {
@@ -30,7 +30,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "83b5d2b8c0e8248133e21a8cd22f507b43fab5c4"
+    "main_sha_observed": "bdd34e6ba423d1ed5ba9c679c7d2abd9bc3ad956"
   },
   "production": {
     "homepage_checked": true,
@@ -39,9 +39,11 @@
     "latest_public_article_title": "Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?",
     "latest_public_article_published_at": "2026-08-03T22:05:00+02:00",
     "homepage_and_archive_consistent": true,
-    "sitemap_direct_fetch_available": false,
-    "rss_direct_fetch_available": false,
-    "deployment_health_direct_fetch_available": false,
+    "sitemap_direct_fetch_available": true,
+    "rss_direct_fetch_available": true,
+    "deployment_health_direct_fetch_available": true,
+    "public_audit_at": "2026-08-04T00:25:02.441903+00:00",
+    "public_article_count": 44,
     "repair_attempted": false
   },
   "quick_check": {
@@ -49,7 +51,7 @@
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
     "petition": "no_significant_verified_change",
-    "technical": "public_homepage_and_archive_current; no_deploy_needed"
+    "technical": "public_homepage_archive_rss_sitemap_and_deployment_health_current; no_deploy_needed"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -59,11 +61,11 @@
   "new_significant_fingerprints": [],
   "notes": [
     "Při běhu byly načteny všechny tři kanonické registry organizací, městských zdrojů a širokého regionálního monitoringu.",
-    "Rychlá kontrola mimořádných událostí, dopravy, krizových zdrojů a veřejných oznámení neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro čtenáře z Kadaně.",
-    "Byla zachycena dříve zveřejněná informace o prodloužené výluce R25 Blatno u Jesenice–Žatec a náhradní autobusové dopravě Žatec–Chomutov od 4. do 13. srpna; nejde o nový nález od posledního běhu ani o přímou kadaňskou mimořádnost, proto nebyl vytvořen alert.",
+    "U osmi dosud nevyřešených obcí jádrového okolí byly ověřeny a do data/regional-sources.json doplněny aktuální oficiální weby: Perštejn, Rokle, Domašín, Okounov, Místo, Výsluní, Kovářská a Kryštofovy Hamry.",
+    "Rychlá i hlubší kontrola mimořádných událostí, dopravy, krizových zdrojů, institucí, soudních stop, dlouhodobých kauz a veřejných oznámení neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro samostatné upozornění čtenářům z Kadaně.",
+    "Kanonický veřejný audit z 4. srpna 2026 v 00:25 UTC ověřil 44 článků, shodu archivu, RSS a sitemap, neprázdný deployment-health a nulové duplicity URL i fingerprintů.",
     "Veřejná titulní strana a archiv jsou aktuální a shodně uvádějí článek o ochlazení na zimním stadionu z 3. srpna 2026 ve 22:05 jako nejnovější.",
-    "Přímá kontrola RSS skončila na nepodporovaném text/xml a dostupný nástroj neumožnil samostatně načíst sitemap.xml ani deployment-health.txt s cache-busting parametrem; titulka a archiv neposkytují důkaz zastaralé produkce, proto nebyl spuštěn opravný deploy.",
-    "U známých dlouhodobých kauz, soudních spisů a soukromé petice Nemocnice Kadaň nebyla nalezena nová spolehlivě ověřená významná změna.",
+    "Data/city-news.json nadále evidují 98 unikátních zdrojů a 13 přímých chyb; blokované nebo nefunkční kanály zůstávají povinné a vyžadují náhradní primární či důvěryhodné kanály.",
     "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
 }
