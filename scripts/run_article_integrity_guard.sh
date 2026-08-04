@@ -34,11 +34,11 @@ text = path.read_text(encoding='utf-8')
 pin_href = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
 pin_until = datetime.fromisoformat('2026-08-05T16:00:00+00:00')
 active = datetime.now(timezone.utc) <= pin_until
-href_value = f'HOMEPAGE_PIN_HREF = {pin_href!r}' if active else "HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'"
+href_value = f'HOMEPAGE_PIN_HREF = {pin_href!r}' if active else "HOMEPAGE_PIN_HREF = ''"
 until_value = (
-    f'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')'
+    f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')"
     if active else
-    'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')'
+    'HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)'
 )
 text, href_count = re.subn(r'^HOMEPAGE_PIN_HREF\s*=.*$', href_value, text, count=1, flags=re.M)
 text, until_count = re.subn(r'^HOMEPAGE_PIN_UNTIL\s*=.*$', until_value, text, count=1, flags=re.M)
