@@ -1,0 +1,99 @@
+name: Kancelářské přílohy kolem rady 26.9.2024
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-kadan-office-formats-near-3895222.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq antiword unzip
+          python3 -m pip install --quiet requests lxml openpyxl python-pptx
+      - name: Prověřit kancelářské soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p result-office/{files,text}
+          cat > /tmp/office.py <<'PY'
+          import concurrent.futures,hashlib,json,re,subprocess,urllib.parse,zipfile
+          from pathlib import Path
+          import requests
+          from lxml import etree
+          from openpyxl import load_workbook
+          from pptx import Presentation
+          OUT=Path('result-office'); S=requests.Session(); S.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadan public-document research; +https://nasekadan.cz/)'
+          exts=['doc','docx','odt','rtf','xls','xlsx','ppt','pptx','txt']
+          terms=['hossner','nemocnice kadaň','nemocnice kadan','dodatek č. 1','dodatek c. 1','pracovní smlouv','pracovni smlouv','kritéria hodnocení','kriteria hodnoceni','270 000','140 000','pobídková','pobidkova','11.11.2016','11. 11. 2016']
+          def fetch(pair):
+              fid,ext=pair; u=f'https://www.mesto-kadan.cz/filemanager/files/{fid}.{ext}'
+              try:
+                  r=S.get(u,timeout=20,allow_redirects=True)
+                  data=r.content; ct=(r.headers.get('content-type') or '').lower()
+                  if r.status_code==200 and len(data)>100 and 'text/html' not in ct and not data.lstrip().startswith(b'<!DOCTYPE'):
+                      return fid,ext,u,r.url,data,ct,r.headers.get('content-disposition','')
+              except Exception: pass
+              return None
+          pairs=[(fid,ext) for fid in range(3895000,3895451) for ext in exts]
+          rows=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
+              for z in ex.map(fetch,pairs,chunksize=20):
+                  if z: rows.append(z)
+          findings=[]; meta=[]
+          def extract(p,ext):
+              try:
+                  if ext=='docx':
+                      with zipfile.ZipFile(p) as z: root=etree.fromstring(z.read('word/document.xml'))
+                      return '\n'.join(root.itertext())
+                  if ext=='odt':
+                      with zipfile.ZipFile(p) as z: root=etree.fromstring(z.read('content.xml'))
+                      return '\n'.join(root.itertext())
+                  if ext=='doc':
+                      return subprocess.run(['antiword',str(p)],capture_output=True,text=True,timeout=60).stdout
+                  if ext in ('txt','rtf'):
+                      return p.read_text('utf-8',errors='replace')
+                  if ext=='xlsx':
+                      wb=load_workbook(p,read_only=True,data_only=True); parts=[]
+                      for ws in wb.worksheets:
+                          parts.append('SHEET '+ws.title)
+                          for row in ws.iter_rows(values_only=True): parts.append('\t'.join('' if v is None else str(v) for v in row))
+                      return '\n'.join(parts)
+                  if ext=='pptx':
+                      prs=Presentation(str(p)); parts=[]
+                      for sl in prs.slides:
+                          for sh in sl.shapes:
+                              if hasattr(sh,'text'): parts.append(sh.text)
+                      return '\n'.join(parts)
+              except Exception as e: return f'EXTRACT_ERROR {e!r}'
+              return ''
+          for fid,ext,u,final,data,ct,disp in rows:
+              sha=hashlib.sha256(data).hexdigest(); p=OUT/'files'/f'{fid}.{ext}'; p.write_bytes(data)
+              text=extract(p,ext); (OUT/'text'/f'{fid}.{ext}.txt').write_text(text,encoding='utf-8',errors='replace')
+              low=text.lower(); found=[t for t in terms if t in low]
+              rec={'id':fid,'ext':ext,'url':u,'final_url':final,'bytes':len(data),'content_type':ct,'content_disposition':disp,'sha256':sha,'chars':len(text),'terms':found}
+              meta.append(rec)
+              if found:
+                  snippets=[]
+                  for t in found:
+                      i=low.find(t); snippets.append(re.sub(r'\s+',' ',text[max(0,i-600):i+1800]).strip())
+                  findings.append({**rec,'snippets':snippets})
+          (OUT/'meta.json').write_text(json.dumps(meta,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('VALID_FILES',len(meta)); print('FINDINGS',json.dumps(findings,ensure_ascii=False,indent=2))
+          PY
+          python3 /tmp/office.py | tee result-office/output.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kadan-office-near-3895222
+          path: result-office
+          retention-days: 2
