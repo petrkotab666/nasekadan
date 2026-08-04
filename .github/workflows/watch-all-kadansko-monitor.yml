@@ -1,94 +1,208 @@
-name: Dohled úplného monitoringu Kadaňska
+name: Samoléčicí dohled kompletního monitoringu
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '43 */2 * * *'
+    - cron: '23,38,53 * * * *'
   push:
     branches: [main]
     paths:
       - '.github/workflows/watch-all-kadansko-monitor.yml'
+      - '.github/workflows/monitor-complete-region-hourly.yml'
+      - 'scripts/run_complete_regional_monitor.py'
 
 permissions:
   contents: read
   issues: write
+  actions: write
+
+concurrency:
+  group: complete-region-self-healing-watchdog
+  cancel-in-progress: true
 
 jobs:
   watchdog:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 18
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Načíst aktuální hlavní větev
+        uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 0
 
-      - name: Ověřit čerstvost a rozsah úplného monitoringu
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Prověřit stav a při problému spustit náhradní průchod
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, subprocess, tempfile
+
+          check_status() {
+            local path="$1"
+            python3 - "$path" <<'PY'
+          import json
+          import sys
           from datetime import datetime, timezone
           from pathlib import Path
 
-          path=Path('data/all-kadansko-monitoring-status.json')
-          now=datetime.now(timezone.utc)
-          status={}
+          path=Path(sys.argv[1])
           problems=[]
-          age_minutes=None
+          status={}
+          age=None
           if not path.exists():
-              problems.append('Stavový soubor úplného monitoringu neexistuje.')
+              problems.append('Stavový soubor kompletního monitoringu neexistuje.')
           else:
               try:
                   status=json.loads(path.read_text(encoding='utf-8'))
                   checked=datetime.fromisoformat(str(status.get('checkedAt') or '').replace('Z','+00:00'))
                   if checked.tzinfo is None:
                       checked=checked.replace(tzinfo=timezone.utc)
-                  age_minutes=int((now-checked.astimezone(timezone.utc)).total_seconds()//60)
-                  if age_minutes>95:
-                      problems.append(f'Poslední úplná kontrola je stará {age_minutes} minut.')
-                  if int(status.get('sourceCount') or 0)<100:
-                      problems.append(f'Registr obsahuje jen {status.get("sourceCount")} zdrojů.')
-                  if int(status.get('checkedSources') or 0)<75:
-                      problems.append(f'Dostupných bylo jen {status.get("checkedSources")} zdrojů.')
+                  age=(datetime.now(timezone.utc)-checked.astimezone(timezone.utc)).total_seconds()/60
+                  if age>65:
+                      problems.append(f'Poslední kompletní průchod je starý {age:.0f} minut.')
+                  source_count=int(status.get('sourceCount') or 0)
+                  checked_sources=int(status.get('checkedSources') or 0)
+                  if source_count<140:
+                      problems.append(f'Registr obsahuje jen {source_count} zdrojů.')
+                  minimum=max(75,int(source_count*0.65))
+                  if checked_sources<minimum:
+                      problems.append(f'Dostupných bylo jen {checked_sources}/{source_count} zdrojů.')
                   coverage=status.get('coverage') or {}
-                  if int(coverage.get('monitoredDirectoryOrganizations') or 0)!=int(coverage.get('directoryOrganizations') or 0):
-                      problems.append('Některá kadaňská organizace z adresáře není napojena.')
-                  if len(coverage.get('scopeMunicipalities') or [])!=19:
-                      problems.append('Územní rozsah neobsahuje všech 19 obcí ORP Kadaň.')
+                  if int(coverage.get('regionalMunicipalities') or 0)<57:
+                      problems.append('Stav nepotvrzuje všech 57 obcí a měst širokého registru.')
+                  if not coverage.get('regionalRegistryComplete'):
+                      problems.append('Regionální registr není označen jako úplný.')
+                  if not coverage.get('completeHourlyMonitoring'):
+                      problems.append('Stav nepochází z nového kompletního hodinového workflow.')
               except Exception as exc:
                   problems.append(f'Stav nelze přečíst: {type(exc).__name__}: {exc}')
-
-          healthy=not problems
-          lines=[
-              '## Nezávislý dohled úplného monitoringu Kadaňska','',
-              f'- Kontrola watchdogu: `{now.isoformat()}`',
-              f'- Poslední úplný běh: `{status.get("checkedAt","neuvedeno")}`',
-              f'- Stáří běhu: **{age_minutes if age_minutes is not None else "neznámé"} minut**',
-              f'- Zdroje: **{status.get("checkedSources","?")}/{status.get("sourceCount","?")}**',''
-          ]
-          if problems:
-              lines += ['### Zjištěné problémy'] + [f'- {item}' for item in problems]
-          else:
-              lines += ['Úplný monitoring běží v požadovaném rozsahu a intervalu.']
-          lines += ['', '_Watchdog běží odděleně od hlavního monitoru._']
-          with tempfile.NamedTemporaryFile('w',encoding='utf-8',delete=False,suffix='.md') as handle:
-              handle.write('\n'.join(lines)+'\n'); body=handle.name
-          try:
-              command=[
-                  'python3','scripts/upsert_github_issue.py',
-                  '--fingerprint','all-kadansko-monitor-stale',
-                  '--title','[MONITORING KADAŇSKO] Úplný monitoring neběží správně [all-kadansko-monitor-stale]',
-                  '--body-file',body,
-                  '--assignee','petrkotab666',
-              ]
-              if healthy:
-                  command += ['--close','--comment-existing']
-              subprocess.run(command,check=True)
-          finally:
-              Path(body).unlink(missing_ok=True)
-          if not healthy:
-              raise SystemExit('; '.join(problems))
+          print(json.dumps({
+              'healthy':not problems,
+              'problems':problems,
+              'checkedAt':status.get('checkedAt','neuvedeno'),
+              'ageMinutes':age,
+              'checkedSources':status.get('checkedSources','?'),
+              'sourceCount':status.get('sourceCount','?'),
+              'municipalities':(status.get('coverage') or {}).get('regionalMunicipalities','?'),
+          },ensure_ascii=False))
+          raise SystemExit(0 if not problems else 1)
           PY
+          }
+
+          if check_status data/all-kadansko-monitoring-status.json > "$RUNNER_TEMP/initial.json"; then
+            healthy=1
+          else
+            healthy=0
+          fi
+          cat "$RUNNER_TEMP/initial.json"
+
+          if [ "$healthy" -eq 0 ]; then
+            echo 'Stav není zdravý; spouštím nezávislý náhradní kompletní průchod.'
+            curl -L --fail --silent --show-error \
+              --retry 3 --retry-all-errors \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/monitor-complete-region-hourly.yml/dispatches" \
+              -d '{"ref":"main"}'
+
+            healed=0
+            for attempt in $(seq 1 24); do
+              sleep 30
+              git fetch --quiet origin main || true
+              if git show origin/main:data/all-kadansko-monitoring-status.json \
+                  > "$RUNNER_TEMP/current-status.json" 2>/dev/null \
+                 && check_status "$RUNNER_TEMP/current-status.json" \
+                  > "$RUNNER_TEMP/current-check.json"; then
+                cat "$RUNNER_TEMP/current-check.json"
+                healed=1
+                break
+              fi
+              echo "Čekám na samoléčicí průchod (${attempt}/24)."
+            done
+
+            if [ "$healed" -ne 1 ]; then
+              cp "$RUNNER_TEMP/initial.json" "$RUNNER_TEMP/final.json"
+              python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path(__import__('os').environ['RUNNER_TEMP']+'/final.json').read_text(encoding='utf-8'))
+          lines=[
+              '## Nezávislý samoléčicí dohled kompletního monitoringu','',
+              f'- Kontrola watchdogu: `{__import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()}`',
+              f'- Poslední průchod: `{data.get("checkedAt")}`',
+              f'- Stáří: **{data.get("ageMinutes")} minut**',
+              f'- Zdroje: **{data.get("checkedSources")}/{data.get("sourceCount")}**',
+              f'- Obce a města širokého registru: **{data.get("municipalities")}**','',
+              '### Zjištěné problémy',
+              *[f'- {item}' for item in data.get('problems') or []],'',
+              'Automatický náhradní průchod byl vyvolán, ale v kontrolním okně neobnovil zdravý stav.','',
+              '_Watchdog běží nezávisle několikrát za hodinu._'
+          ]
+          Path(__import__('os').environ['RUNNER_TEMP']+'/watchdog-body.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
+              python3 scripts/upsert_github_issue.py \
+                --fingerprint all-kadansko-monitor-stale \
+                --title '[MONITORING KADAŇSKO] Úplný monitoring neběží správně [all-kadansko-monitor-stale]' \
+                --body-file "$RUNNER_TEMP/watchdog-body.md" \
+                --assignee petrkotab666 \
+                --comment-existing
+              exit 1
+            fi
+          fi
+
+          if [ -f "$RUNNER_TEMP/current-check.json" ]; then
+            cp "$RUNNER_TEMP/current-check.json" "$RUNNER_TEMP/final.json"
+            recovery='Ano – náhradní průchod obnovil zdravý stav.'
+          else
+            cp "$RUNNER_TEMP/initial.json" "$RUNNER_TEMP/final.json"
+            recovery='Nebyl potřeba.'
+          fi
+          export RECOVERY="$recovery"
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          data=json.loads(Path(os.environ['RUNNER_TEMP']+'/final.json').read_text(encoding='utf-8'))
+          lines=[
+              '## Nezávislý samoléčicí dohled kompletního monitoringu','',
+              f'- Kontrola watchdogu: `{datetime.now(timezone.utc).isoformat()}`',
+              f'- Poslední kompletní průchod: `{data.get("checkedAt")}`',
+              f'- Stáří průchodu: **{data.get("ageMinutes")} minut**',
+              f'- Zdroje: **{data.get("checkedSources")}/{data.get("sourceCount")}**',
+              f'- Obce a města širokého registru: **{data.get("municipalities")}**',
+              f'- Samoléčení: **{os.environ.get("RECOVERY")}**','',
+              'Kompletní monitoring běží v požadovaném rozsahu a intervalu.','',
+              '_Primární hodinový běh doplňují tři nezávislé kontroly za hodinu._'
+          ]
+          Path(os.environ['RUNNER_TEMP']+'/watchdog-ok.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          PY
+          python3 scripts/upsert_github_issue.py \
+            --fingerprint all-kadansko-monitor-stale \
+            --title '[MONITORING KADAŇSKO] Úplný monitoring neběží správně [all-kadansko-monitor-stale]' \
+            --body-file "$RUNNER_TEMP/watchdog-ok.md" \
+            --close --comment-existing
+
+      - name: Zapsat selhání samotného watchdogu
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/watchdog-runtime-failed.md" <<EOF
+          ## Selhal i samoléčicí watchdog kompletního monitoringu
+
+          - běh: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          - čas UTC: $(date -u +%FT%TZ)
+
+          Watchdog se nepodařilo dokončit. Primární hodinový workflow a automatická záchrana selhaných běhů zůstávají aktivní.
+          EOF
+          python3 scripts/upsert_github_issue.py \
+            --fingerprint all-kadansko-monitor-stale \
+            --title '[MONITORING KADAŇSKO] Úplný monitoring neběží správně [all-kadansko-monitor-stale]' \
+            --body-file "$RUNNER_TEMP/watchdog-runtime-failed.md" \
+            --assignee petrkotab666 \
+            --comment-existing
