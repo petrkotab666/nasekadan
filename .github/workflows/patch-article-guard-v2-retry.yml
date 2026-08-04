@@ -1,0 +1,64 @@
+name: Opravit frontu pojistky článků – opakování
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/patch-article-guard-v2-retry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Upravit pojistku robustně podle řádků
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – oprava pojistky'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/article-visibility-guard-v2.yml')
+          text = path.read_text(encoding='utf-8')
+          text, count = text.replace('  cancel-in-progress: false\n', '  cancel-in-progress: true\n', 1), text.count('  cancel-in-progress: false\n')
+          if count not in (0, 1):
+              raise SystemExit(f'Neočekávaný počet voleb souběhu: {count}')
+          lines = text.splitlines(keepends=True)
+          removed = 0
+          kept = []
+          for line in lines:
+              if 'grep -Fq "$BLOOD_REL" <<<"$home"' in line:
+                  removed += 1
+                  continue
+              kept.append(line)
+          if removed not in (0, 1):
+              raise SystemExit(f'Neočekávaný počet dočasných kontrol titulky: {removed}')
+          result = ''.join(kept)
+          if '  cancel-in-progress: true\n' not in result:
+              raise SystemExit('Souběh pojistky nebyl přepnut na nejnovější běh.')
+          path.write_text(result, encoding='utf-8', newline='\n')
+          PY
+            git diff --check
+            git add .github/workflows/article-visibility-guard-v2.yml
+            if ! git diff --cached --quiet; then
+              git commit -m 'Doladit trvalou pojistku všech článků'
+            fi
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 4))
+          done
+          exit 1
