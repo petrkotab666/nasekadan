@@ -30,14 +30,14 @@ path = Path('scripts/enforce_article_visibility.py')
 text = path.read_text(encoding='utf-8')
 text, href_count = re.subn(
     r'^HOMEPAGE_PIN_HREF\s*=.*$',
-    "HOMEPAGE_PIN_HREF = ''",
+    "HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'",
     text,
     count=1,
     flags=re.M,
 )
 text, until_count = re.subn(
     r'^HOMEPAGE_PIN_UNTIL\s*=.*$',
-    'HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)',
+    'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')',
     text,
     count=1,
     flags=re.M,

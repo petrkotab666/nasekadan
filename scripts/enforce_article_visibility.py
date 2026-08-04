@@ -15,8 +15,8 @@ SITEMAP = ROOT / 'sitemap.xml'
 HOME_TOTAL = 14
 PAGE_SIZE = 12
 # HOMEPAGE-PIN-STADIUM-20260804
-HOMEPAGE_PIN_HREF = ''
-HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)
+HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')
 CARD_FIX_MARKER = 'CARD-PREVIEW-FIX-20260803'
 PAGINATION_MARKER = 'ARTICLE-PAGINATION-20260803'
 MONTHS = (
