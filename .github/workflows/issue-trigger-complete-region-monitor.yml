@@ -1,0 +1,51 @@
+name: Nouzové spuštění kompletního monitoringu přes issue
+
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  dispatch:
+    if: contains(github.event.issue.title, '[RUN COMPLETE REGION MONITOR]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Vyvolat kompletní regionální monitoring
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --silent --show-error \
+            --retry 5 --retry-all-errors \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/monitor-complete-region-hourly.yml/dispatches" \
+            -d '{"ref":"main"}'
+
+      - name: Uzavřít spouštěcí issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'Nouzové spuštění kompletního regionálního monitoringu bylo předáno hlavnímu workflow.'
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
