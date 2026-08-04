@@ -1,0 +1,35 @@
+name: Jednorázově spustit obnovu dopravního článku
+
+on:
+  schedule:
+    - cron: '34 5 4 8 *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  dispatch-and-remove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Spustit hlavní obnovovací workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run restore-zatec-kadan-closure-article-20260804.yml --ref main --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Odstranit jednorázový spouštěč
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/dispatch-restore-zatec-kadan-20260804.yml
+          git commit -m 'Odstranit jednorázový spouštěč obnovy dopravního článku [skip ci]'
+          git push origin HEAD:main
