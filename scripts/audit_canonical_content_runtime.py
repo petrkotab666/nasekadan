@@ -68,6 +68,23 @@ def registry_entries() -> list[dict]:
     return entries
 
 
+def publication_status(entry: dict) -> str:
+    """Return editorial publication state without confusing it with channel flags.
+
+    In schema 1.5, ``status`` is a mapping such as homepage/archive/RSS flags,
+    while the actual publication state is stored in ``publication_status``.
+    Older registry schemas used a string directly in ``status``. Supporting
+    both forms prevents a TypeError and keeps drafts/removed items excluded.
+    """
+    value = entry.get("publication_status")
+    if isinstance(value, str) and value:
+        return value
+    legacy = entry.get("status")
+    if isinstance(legacy, str) and legacy:
+        return legacy
+    return "published"
+
+
 def parse_published(entry: dict) -> datetime:
     value = (
         entry.get("published_at")
@@ -89,7 +106,7 @@ def current_registry_urls(entries: list[dict]) -> list[str]:
         url = entry.get("canonical_url") or entry.get("url")
         if not url or "/clanky/" not in url:
             continue
-        if entry.get("status") in {"draft", "scheduled", "removed"}:
+        if publication_status(entry) in {"draft", "scheduled", "removed"}:
             continue
         published = parse_published(entry)
         if published <= now:
@@ -150,14 +167,15 @@ def main() -> int:
 
     # News sitemap má podle pravidel vyhledávačů obsahovat jen čerstvé články,
     # proto zde vyžadujeme aktuální dvoudenní okno, ne celou historii.
-    two_days_ago = datetime.now(timezone.utc).timestamp() - 2 * 86400
+    now = datetime.now(timezone.utc)
+    two_days_ago = now.timestamp() - 2 * 86400
     expected_news = {
         (entry.get("canonical_url") or entry.get("url"))
         for entry in entries
         if (entry.get("canonical_url") or entry.get("url"))
-        and entry.get("status") not in {"draft", "scheduled", "removed"}
+        and publication_status(entry) not in {"draft", "scheduled", "removed"}
         and parse_published(entry).timestamp() >= two_days_ago
-        and parse_published(entry) <= datetime.now(timezone.utc)
+        and parse_published(entry) <= now
     }
     missing_news = sorted(expected_news - news_found)
 
