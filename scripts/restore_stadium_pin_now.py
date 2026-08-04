@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 import importlib.util
 import re
@@ -74,6 +75,24 @@ def load_articles() -> list[dict]:
     return articles
 
 
+def validate_rss_order(path: Path) -> None:
+    root = ET.parse(path).getroot()
+    items = root.findall('./channel/item')
+    if not items:
+        raise RuntimeError('RSS neobsahuje žádné položky.')
+    links = [item.findtext('link') or '' for item in items]
+    dates = []
+    for item in items:
+        value = item.findtext('pubDate')
+        if not value:
+            raise RuntimeError('Položka RSS nemá datum publikace.')
+        dates.append(parsedate_to_datetime(value))
+    if dates != sorted(dates, reverse=True):
+        raise RuntimeError('RSS není v chronologickém pořadí.')
+    if links[0] == 'https://nasekadan.cz' + PIN_HREF:
+        raise RuntimeError('Připínaný článek byl nesprávně přesunut na začátek RSS.')
+
+
 def validate() -> str:
     article_path = ROOT / PIN_HREF.lstrip('/')
     article = article_path.read_text(encoding='utf-8')
@@ -104,10 +123,7 @@ def validate() -> str:
     if not first_archive or first_archive.group(1) != latest:
         raise RuntimeError('Archiv není v chronologickém pořadí.')
 
-    rss_root = ET.parse(ROOT / 'rss.xml').getroot()
-    first_rss = rss_root.findtext('./channel/item/link')
-    if first_rss != 'https://nasekadan.cz' + latest:
-        raise RuntimeError('RSS není v chronologickém pořadí.')
+    validate_rss_order(ROOT / 'rss.xml')
     return latest
 
 
