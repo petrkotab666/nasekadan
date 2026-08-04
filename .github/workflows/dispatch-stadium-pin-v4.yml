@@ -1,0 +1,33 @@
+name: Spustit konečnou obnovu připnutí zimního stadionu
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  actions: write
+  issues: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: github.event.issue.title == '[pin-v4] Obnovit zimní stadion na titulce'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Spustit konečné workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue='${{ github.event.issue.number }}'
+          gh workflow run restore-stadium-pin-v4.yml --repo "$GITHUB_REPOSITORY" --ref main -f issue_number="$issue"
+          run_id=''
+          for attempt in $(seq 1 20); do
+            run_id="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow restore-stadium-pin-v4.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+            [[ -n "$run_id" ]] && break
+            sleep 3
+          done
+          test -n "$run_id"
+          gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "Konečná obnova připnutí byla spuštěna. GitHub Actions run: ${run_id}"
