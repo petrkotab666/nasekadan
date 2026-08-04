@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T02:58:46Z",
-  "last_quick_check_at": "2026-08-04T02:58:46Z",
+  "updated_at": "2026-08-04T03:56:21Z",
+  "last_quick_check_at": "2026-08-04T03:56:21Z",
   "last_deep_check_at": "2026-08-04T01:04:24Z",
   "canonical_registry": {
     "paths": [
@@ -23,14 +23,14 @@
   },
   "city_news": {
     "path": "data/city-news.json",
-    "generated_at": "2026-08-03T19:58:39.010442+00:00",
+    "generated_at": "2026-08-04T03:39:25.436115+00:00",
     "total_unique_sources": 98,
-    "known_failed_sources": 13,
+    "known_failed_sources": 19,
     "failed_sources_require_fallback": true
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "1cb13d0e3b673fc0a4d9b9a03da1c7ef8deba272"
+    "main_sha_observed": "efd76d67feb53c0c5d0933de8321f28f992fb1e4"
   },
   "production": {
     "homepage_checked": true,
@@ -42,7 +42,7 @@
     "sitemap_direct_fetch_available": true,
     "rss_direct_fetch_available": true,
     "deployment_health_direct_fetch_available": true,
-    "public_audit_at": "2026-08-04T02:17:05.715447+00:00",
+    "public_audit_at": "2026-08-04T03:18:13.145620+00:00",
     "public_article_count": 44,
     "repair_attempted": false
   },
@@ -51,7 +51,7 @@
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_significant_verified_document_since_previous_run",
     "petition": "17_confirmed_2_unconfirmed; small_growth_only; no_handover_or_text_change_verified",
-    "technical": "public_homepage_archive_rss_sitemap_and_deployment_health_current; no_deploy_needed"
+    "technical": "latest_canonical_public_audit_current; no_deploy_needed"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -61,12 +61,12 @@
   "new_significant_fingerprints": [],
   "notes": [
     "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Rychlá kontrola Portálu krizového řízení, Policie ČR, dopravních, síťových a veřejných oznamovacích zdrojů neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro čtenáře z Kadaně.",
-    "Nejnovější zobrazené zásahy v okrese Chomutov zůstávají planý poplach v Chomutově z 4. srpna 2026 v 00:10, transport pacienta v Březně z 3. srpna ve 22:40 a technická pomoc ve Vejprtech ve 21:40; všechny předcházejí poslednímu hlubokému běhu a nejsou kandidátem na samostatné upozornění.",
-    "Soukromá petice za zachování Nemocnice Kadaň má veřejně 17 potvrzených a dvě nepotvrzené podpory. Oproti poslední zveřejněné evidenci jde o drobný nárůst; text, adresát, ukončení ani předání městu se prokazatelně nezměnily, proto nebyl vytvořen alert.",
-    "U známých soudních spisů a dlouhodobých kauz nebyl nalezen nový veřejně indexovaný procesní pohyb, který by měnil dosavadní stav nebo vyžadoval okamžité upozornění.",
-    "Živá titulní strana a archiv jsou aktuální a shodně uvádějí článek o ochlazení na zimním stadionu z 3. srpna 2026 ve 22:05 jako nejnovější. Kanonický audit dokončený 4. srpna 2026 v 02:17 UTC ověřil 44 článků, RSS, sitemap, news-sitemap, deployment-health a nulové duplicity.",
-    "Data/city-news.json nadále evidují 98 unikátních zdrojů a 13 přímých chyb. Nefunkční kanály zůstávají povinné a budou řešeny náhradními primárními nebo důvěryhodnými cestami při hlubokém průchodu.",
+    "Rychlá kontrola mimořádných událostí, Policie ČR, HZS, dopravy, síťových omezení a veřejných oznámení neodhalila od předchozího běhu novou ověřenou událost s dostatečným významem pro čtenáře z Kadaně.",
+    "Ve veřejně indexovaných soudních a institucionálních zdrojích nebyl nalezen nový procesní pohyb ani dokument, který by měnil stav sledovaných dlouhodobých kauz.",
+    "Soukromá petice zůstává pod prahem upozornění: poslední ověřený stav je 17 potvrzených a dvě nepotvrzené podpory bez změny textu, ukončení nebo předání městu.",
+    "Kanonický veřejný audit dokončený 4. srpna 2026 v 03:18 UTC ověřil 44 článků, titulku, čtyřstránkový archiv, RSS, sitemap, news-sitemap, neprázdný deployment-health a nulové duplicity URL i fingerprintů.",
+    "Novější commity hlavní větve připravují plánovanou publikaci Císařského dne a nemění dosud potvrzený veřejný obsah; nebyl proveden opravný deploy.",
+    "Data/city-news.json byla obnovena v 03:39 UTC. Blokované či nefunkční kanály zůstávají povinné a budou dále řešeny náhradními primárními nebo důvěryhodnými cestami.",
     "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
 }
