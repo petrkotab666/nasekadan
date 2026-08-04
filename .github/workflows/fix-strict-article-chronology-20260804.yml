@@ -1,0 +1,333 @@
+name: Opravit pevnou chronologii článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/strict-chronology-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-canonical-article-integrity
+  cancel-in-progress: true
+
+jobs:
+  fix-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Odstranit připnutí a obnovit chronologii
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          engine_path = Path('scripts/enforce_article_visibility.py')
+          engine = engine_path.read_text(encoding='utf-8')
+          engine, n1 = re.subn(
+              r"\n# HOMEPAGE-PIN-STADIUM-20260804\nHOMEPAGE_PIN_HREF\s*=.*\nHOMEPAGE_PIN_UNTIL\s*=.*\n",
+              "\n",
+              engine,
+              count=1,
+          )
+          old_order = '''    homepage_order = list(articles)
+              if datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL.astimezone(timezone.utc):
+                  pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)
+                  if pinned is None:
+                      raise RuntimeError('Připínaný článek nebyl nalezen.')
+                  homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]
+          '''
+          # Přesná náhrada bez závislosti na odsazení vloženého v YAML.
+          engine, n2 = re.subn(
+              r"    homepage_order = list\(articles\)\n    if datetime\.now\(timezone\.utc\) <= HOMEPAGE_PIN_UNTIL\.astimezone\(timezone\.utc\):\n        pinned = next\(\(item for item in articles if item\['href'\] == HOMEPAGE_PIN_HREF\), None\)\n        if pinned is None:\n            raise RuntimeError\('Připínaný článek nebyl nalezen\.'\)\n        homepage_order = \[pinned\] \+ \[item for item in articles if item\['href'\] != HOMEPAGE_PIN_HREF\]\n",
+              "    homepage_order = list(articles)\n",
+              engine,
+              count=1,
+          )
+          if n1 != 1 or n2 != 1 or 'HOMEPAGE_PIN_' in engine:
+              raise SystemExit(f'Nepodařilo se jednoznačně odstranit připnutí z generátoru: constants={n1}, order={n2}')
+          compile(engine, str(engine_path), 'exec')
+          engine_path.write_text(engine, encoding='utf-8', newline='\n')
+
+          all_path = Path('scripts/enforce_all_article_visibility.py')
+          all_text = all_path.read_text(encoding='utf-8')
+          all_text, n3 = re.subn(
+              r"    # NK-STADIUM-PIN-POLICY-20260804.*?    engine\.main\(\)\n",
+              "    # Titulka i archiv se řadí výhradně podle prvního zveřejnění.\n    engine.article_info = safe_article_info\n    engine.main()\n",
+              all_text,
+              count=1,
+              flags=re.S,
+          )
+          all_text, n4 = re.subn(
+              r"    expected_hero = pin_href if pin_active else latest",
+              "    expected_hero = latest",
+              all_text,
+              count=1,
+          )
+          all_text, n5 = re.subn(
+              r"\n    if pin_active:\n        aside = .*?\n\n    expected_home",
+              "\n\n    expected_home",
+              all_text,
+              count=1,
+              flags=re.S,
+          )
+          forbidden = ('pin_active', 'pin_href', 'NK-STADIUM-PIN-POLICY', 'HOMEPAGE_PIN_')
+          if n3 != 1 or n4 != 1 or n5 != 1 or any(token in all_text for token in forbidden):
+              raise SystemExit(f'Nepodařilo se odstranit politiku připnutí z úplné pojistky: {n3}, {n4}, {n5}')
+          compile(all_text, str(all_path), 'exec')
+          all_path.write_text(all_text, encoding='utf-8', newline='\n')
+
+          guard_path = Path('scripts/run_article_integrity_guard.sh')
+          guard = guard_path.read_text(encoding='utf-8')
+          guard, n6 = re.subn(
+              r"  # NK-STADIUM-PIN-GUARD-20260804.*?\nPY\n\n  # Odstraň pouze",
+              "  # Pořadí je vždy čistě chronologické podle article:published_time.\n  # Aktualizace staršího článku jej dopředu neposune.\n\n  # Odstraň pouze",
+              guard,
+              count=1,
+              flags=re.S,
+          )
+          if n6 != 1 or 'NK-STADIUM-PIN-GUARD' in guard or 'HOMEPAGE_PIN_' in guard:
+              raise SystemExit(f'Nepodařilo se odstranit vracení připnutí z desetiminutové pojistky: {n6}')
+          guard_path.write_text(guard, encoding='utf-8', newline='\n')
+          PY
+
+          rm -f \
+            .github/workflows/fix-stadium-pin-guard-20260804.yml \
+            scripts/restore_stadium_pin_now.py \
+            scripts/fix_stadium_pin_guard.py \
+            scripts/patch_article_visibility_pin_policy.py \
+            scripts/verify_stadium_pin_live.py \
+            .github/stadium-pin-latest.txt
+
+          python3 -m py_compile scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+          bash -n scripts/run_article_integrity_guard.sh
+          python3 scripts/enforce_all_article_visibility.py
+          git diff --check
+
+          read -r latest second third < <(python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util, re
+          spec = importlib.util.spec_from_file_location('visibility', Path('scripts/enforce_article_visibility.py'))
+          module = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          spec.loader.exec_module(module)
+          items = []
+          for path in Path('clanky').glob('*.html'):
+              if path.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', path.name):
+                  continue
+              item = module.article_info(path)
+              if item:
+                  items.append(item)
+          items.sort(key=lambda item: item['dt'], reverse=True)
+          if len(items) < 3:
+              raise SystemExit('Pro kontrolu chronologie chybějí alespoň tři články.')
+          print(items[0]['href'], items[1]['href'], items[2]['href'])
+          PY
+          )
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "second=$second" >> "$GITHUB_OUTPUT"
+          echo "third=$third" >> "$GITHUB_OUTPUT"
+
+          git config user.name 'Naše Kadaň – chronologie článků'
+          git config user.email 'info@nasekadan.cz'
+          git add -A \
+            scripts/enforce_article_visibility.py \
+            scripts/enforce_all_article_visibility.py \
+            scripts/run_article_integrity_guard.sh \
+            .github/workflows/fix-stadium-pin-guard-20260804.yml \
+            scripts/restore_stadium_pin_now.py \
+            scripts/fix_stadium_pin_guard.py \
+            scripts/patch_article_visibility_pin_policy.py \
+            scripts/verify_stadium_pin_live.py \
+            .github/stadium-pin-latest.txt \
+            index.html clanky/index.html sitemap.xml
+          find clanky -maxdepth 1 -type f -name 'strana-*.html' -print0 | xargs -0 -r git add --
+          if ! git diff --cached --quiet; then
+            git commit -m 'Obnovit pevné pořadí článků podle zveřejnění'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 4
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit chronologickou titulku a archiv
+        id: deploy
+        shell: bash
+        env:
+          LATEST: ${{ steps.patch.outputs.latest }}
+          SECOND: ${{ steps.patch.outputs.second }}
+          THIRD: ${{ steps.patch.outputs.third }}
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/strict-chronology"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky"
+          cp index.html sitemap.xml "$bundle/"
+          cp clanky/index.html "$bundle/clanky/"
+          find clanky -maxdepth 1 -type f -name 'strana-*.html' -exec cp {} "$bundle/clanky/" \;
+          cat > "$bundle/deployment-health.txt" <<EOF
+          status=ok
+          source=${{ steps.patch.outputs.source_sha }}
+          chronology=strict-published-time
+          latest=${LATEST}
+          second=${SECOND}
+          third=${THIRD}
+          deployed_at=$(date -u +%FT%TZ)
+          EOF
+          tar -C "$bundle" -czf "$RUNNER_TEMP/strict-chronology.tgz" .
+          remote="/tmp/strict-chronology-${GITHUB_RUN_ID}"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/strict-chronology.tgz" "ubuntu@57.129.43.215:${remote}.tgz"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 "RUN_ID='${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          src="/tmp/strict-chronology-${RUN_ID}"
+          rm -rf "$src"
+          mkdir -p "$src"
+          tar -xzf "${src}.tgz" -C "$src"
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 "$src/index.html" "$root/index.html"
+          sudo install -m 0644 "$src/sitemap.xml" "$root/sitemap.xml"
+          sudo install -m 0644 "$src/deployment-health.txt" "$root/deployment-health.txt"
+          sudo find "$root/clanky" -maxdepth 1 -type f -name 'strana-*.html' -delete
+          for f in "$src"/clanky/*.html; do
+            sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"
+          done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp "$src/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp "$src/sitemap.xml" nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp "$src/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker exec nasekadan-web sh -c "find /usr/share/nginx/html/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete"
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+          fi
+          rm -rf "$src" "${src}.tgz"
+          REMOTE
+
+      - name: Ověřit skutečné pořadí zvenku
+        id: verify
+        shell: bash
+        env:
+          LATEST: ${{ steps.patch.outputs.latest }}
+          SECOND: ${{ steps.patch.outputs.second }}
+          THIRD: ${{ steps.patch.outputs.third }}
+          SOURCE_SHA: ${{ steps.patch.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, time
+          from urllib.request import Request, urlopen
+
+          latest = os.environ['LATEST']
+          second = os.environ['SECOND']
+          third = os.environ['THIRD']
+          source = os.environ['SOURCE_SHA']
+
+          def get(url):
+              req = Request(url, headers={'User-Agent': 'Naše Kadaň chronology audit/1.0'})
+              with urlopen(req, timeout=40) as response:
+                  return response.read().decode('utf-8', 'replace')
+
+          error = None
+          for attempt in range(12):
+              q = f'{int(time.time())}-{attempt}'
+              try:
+                  home = get(f'https://nasekadan.cz/?chronology={q}')
+                  archive = get(f'https://nasekadan.cz/clanky/?chronology={q}')
+                  health = get(f'https://nasekadan.cz/deployment-health.txt?chronology={q}')
+                  hero = re.search(r'<section\b[^>]*class="[^"]*\bhero\b[^"]*"[^>]*\bid="clanky"[^>]*>.*?</section>', home, re.S | re.I)
+                  if not hero:
+                      raise RuntimeError('Na titulce chybí hlavní blok.')
+                  if f'data-latest-article-href="{latest}"' not in hero.group(0):
+                      raise RuntimeError(f'Hlavní článek není nejnovější: {latest}')
+                  aside = re.search(r'<aside\b[^>]*class="[^"]*current-aside[^"]*"[^>]*>.*?</aside>', hero.group(0), re.S | re.I)
+                  if not aside or second not in aside.group(0):
+                      raise RuntimeError(f'Boční článek není druhý: {second}')
+                  home_cards = re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="(/clanky/[^"]+\.html)".*?</article>', home, re.S | re.I)
+                  if not home_cards or home_cards[0] != third:
+                      raise RuntimeError(f'První karta není třetí článek: {home_cards[:3]}')
+                  archive_cards = re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="(/clanky/[^"]+\.html)".*?</article>', archive, re.S | re.I)
+                  if archive_cards[:3] != [latest, second, third]:
+                      raise RuntimeError(f'Archiv není chronologický: {archive_cards[:5]}')
+                  if f'source={source}' not in health or 'chronology=strict-published-time' not in health:
+                      raise RuntimeError('Deployment health nepatří této opravě.')
+                  print('Chronologie veřejně ověřena:', latest, second, third)
+                  break
+              except Exception as exc:
+                  error = exc
+                  time.sleep(8)
+          else:
+              raise SystemExit(f'Veřejná kontrola chronologie selhala: {error}')
+          PY
+
+      - name: Zapsat výsledek opravy
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.patch.outputs.source_sha }}
+          LATEST: ${{ steps.patch.outputs.latest }}
+          SECOND: ${{ steps.patch.outputs.second }}
+          THIRD: ${{ steps.patch.outputs.third }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const deploy=process.env.DEPLOY_OUTCOME||'skipped';
+            const verify=process.env.VERIFY_OUTCOME||'skipped';
+            const status=deploy==='success'&&verify==='success'?'success':'failure';
+            const payload={
+              status,
+              run_id:String(context.runId),
+              source_sha:process.env.SOURCE_SHA||'',
+              checked_at:new Date().toISOString(),
+              deploy,
+              external_verify:verify,
+              ordering_rule:'article:published_time descending',
+              updates_do_not_reorder:true,
+              manual_pins_removed:true,
+              latest:process.env.LATEST||'',
+              second:process.env.SECOND||'',
+              third:process.env.THIRD||''
+            };
+            let sha;
+            try {
+              const old=await github.rest.repos.getContent({owner,repo,path:'.github/strict-chronology-live-status.json',ref:'main'});
+              sha=old.data.sha;
+            } catch(e) { if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,repo,path:'.github/strict-chronology-live-status.json',branch:'main',sha,
+              message:`Zapsat stav pevné chronologie: ${status} [skip ci]`,
+              content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')
+            });
