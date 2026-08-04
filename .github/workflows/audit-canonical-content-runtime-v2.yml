@@ -51,7 +51,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
-            result="$(python3 scripts/run_canonical_audit_runtime_v2.py --write)"
+            result="$(python3 scripts/run_canonical_audit_runtime_v2.py --write-status)"
             echo "$result"
             git add data/published-content-index.json .github/canonical-content-audit-status.json
             if ! git diff --cached --quiet; then
