@@ -1,0 +1,327 @@
+name: Publikovat článek o uzávěrce kandidátek v Kadani
+# trigger-version: 2026-08-04-1848
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-kadan-election-deadline-now-20260804.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-kadan-election-deadline-20260804
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ARTICLE_REL: /clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_FILE: clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      SOCIAL_FILE: social/komunalni-volby-kadan-kandidaty-lhuta-2026.png
+      EXPECTED_H1: 'Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vygenerovat ověřený článek a všechny publikační plochy
+        id: generate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/publish_kadan_election_deadline_20260804.py
+            python3 scripts/publish_kadan_election_deadline_20260804.py
+
+            grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+            grep -Fq 'index,follow' "$ARTICLE_FILE"
+            grep -Fq 'kadaňský zastupitel, radní města a lékárník' "$ARTICLE_FILE"
+            ! grep -Fq 'bývalý kadaňský místostarosta' "$ARTICLE_FILE"
+            grep -Fq "$ARTICLE_REL" index.html
+            grep -Fq "$ARTICLE_URL" rss.xml sitemap.xml news-sitemap.xml
+            grep -Fq '/pocasi.js' index.html
+            test -s "$SOCIAL_FILE"
+
+            git add "$ARTICLE_FILE" "$SOCIAL_FILE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            if git diff --cached --quiet; then
+              echo 'Publikační obsah už je v repozitáři zapsán.'
+              pushed=1
+              break
+            fi
+            git commit -m 'Publikovat: uzávěrka kandidátek v Kadani 2026'
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            echo "Push se nepodařil, opakuji nad aktuální větví main (${attempt}/3)."
+          done
+          test "$pushed" = 1
+          publish_sha="$(git rev-parse HEAD)"
+          echo "publish_sha=$publish_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Doplnit zdrojový commit a stav nasazení do evidence
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          publish_sha='${{ steps.generate.outputs.publish_sha }}'
+
+          saved=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            PUBLISH_SHA="$publish_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          url = os.environ['ARTICLE_URL']
+          publish_sha = os.environ['PUBLISH_SHA']
+          article = next((x for x in data.get('articles', []) if isinstance(x, dict) and x.get('url') == url), None)
+          if article is None:
+              raise SystemExit('Nový článek chybí v kanonickém registru.')
+          article['source_commit'] = publish_sha
+          data['source_commit'] = publish_sha
+          validation = data.setdefault('validation', {})
+          validation['repair_pending_public_verification'] = True
+          validation['last_consistency_audit'] = {
+              'status': 'pending_public_verification',
+              'checked_at': datetime.now(timezone.utc).isoformat(),
+              'article_count': len(data.get('articles', [])),
+              'updated_url': url,
+              'source_commit': publish_sha,
+          }
+          data['generated_at'] = datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\n' "$publish_sha" "$ARTICLE_URL" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if git diff --cached --quiet; then
+              saved=1
+              break
+            fi
+            git commit -m 'Evidence: zapsat zdroj publikace volebního článku'
+            if git push origin HEAD:main; then
+              saved=1
+              break
+            fi
+            echo "Evidenční push se nepodařil, opakuji (${attempt}/3)."
+          done
+          test "$saved" = 1
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit článek a kanonické plochy na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/kadan-election-deadline-bundle"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp "$SOCIAL_FILE" "$bundle/social/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/kadan-election-deadline-bundle
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/kadan-election-deadline-bundle
+          root=/var/www/nasekadan
+          article=komunalni-volby-kadan-kandidaty-lhuta-2026.html
+          social=komunalni-volby-kadan-kandidaty-lhuta-2026.png
+
+          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
+          sudo install -m 0644 "$src/clanky/$article" "$root/clanky/$article"
+          sudo install -m 0644 "$src/social/$social" "$root/social/$social"
+          sudo rm -f "$root"/clanky/strana-*.html
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker exec nasekadan-web sh -lc 'rm -f /usr/share/nginx/html/clanky/strana-*.html'
+            for f in "$src"/clanky/*.html; do sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")"; done
+            sudo docker cp "$src/social/$social" "nasekadan-web:/usr/share/nginx/html/social/$social"
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/kadan-election-deadline-bundle
+          REMOTE
+
+      - name: Veřejně ověřit článek, registry a všechny kanály
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+
+          article="$(curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 40 "$base/?v=$q")"
+          rss="$(curl -4 -kfsS -L --max-time 40 "$base/rss.xml?v=$q")"
+          sitemap="$(curl -4 -kfsS -L --max-time 40 "$base/sitemap.xml?v=$q")"
+          news="$(curl -4 -kfsS -L --max-time 40 "$base/news-sitemap.xml?v=$q")"
+          health="$(curl -4 -kfsS -L --max-time 40 "$base/deployment-health.txt?v=$q")"
+
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
+          grep -Fq 'index,follow' <<<"$article"
+          grep -Fq 'kadaňský zastupitel, radní města a lékárník' <<<"$article"
+          ! grep -Fq 'bývalý kadaňský místostarosta' <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq '/pocasi.js' <<<"$home"
+          grep -Fq "$ARTICLE_URL" <<<"$rss"
+          grep -Fq "$ARTICLE_URL" <<<"$sitemap"
+          grep -Fq "$ARTICLE_URL" <<<"$news"
+          grep -Fq 'status=ok' <<<"$health"
+
+          found=0
+          for page in 1 2 3 4; do
+            if [ "$page" = 1 ]; then url="$base/clanky/?v=$q"; else url="$base/clanky/strana-$page.html?v=$q"; fi
+            body="$(curl -4 -kfsS -L --max-time 40 "$url")"
+            if grep -Fq "$ARTICLE_REL" <<<"$body"; then found=1; fi
+          done
+          test "$found" = 1
+
+          curl -4 -kfsS -L --max-time 40 "$base/$SOCIAL_FILE?v=$q" -o /tmp/election-social.png
+          test "$(wc -c </tmp/election-social.png)" -gt 10000
+          curl -4 -kfsS -L --max-time 40 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+
+          printf '%s' "$news" > /tmp/news.xml
+          printf '%s' "$(curl -4 -kfsS -L --max-time 40 "$base/data/published-content-index.json?v=$q")" > /tmp/registry.json
+          ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          registry = json.loads(Path('/tmp/registry.json').read_text(encoding='utf-8'))
+          assert registry.get('article_count') == 48, registry.get('article_count')
+          validation = registry.get('validation', {})
+          assert validation.get('duplicate_urls') == []
+          assert validation.get('duplicate_fingerprints') == []
+          article = next(x for x in registry['articles'] if x.get('url') == os.environ['ARTICLE_URL'])
+          assert article.get('source_commit') and article.get('source_commit') != 'pending-publication-commit'
+          status = article.get('status', {})
+          assert status.get('archive') and status.get('rss') and status.get('sitemap') and status.get('news_sitemap')
+
+          root = ET.parse('/tmp/news.xml').getroot()
+          urls = [child for child in root if child.tag.endswith('url')]
+          assert len(urls) == 10, len(urls)
+          PY
+
+      - name: Zapsat úspěšné veřejné ověření do kanonického registru
+        if: steps.verify.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          source_sha='${{ steps.generate.outputs.publish_sha }}'
+
+          saved=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            SOURCE_SHA="$source_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          validation['repair_pending_public_verification'] = False
+          validation['deployment_health'] = 'ok'
+          validation['deployment_health_source'] = os.environ['SOURCE_SHA']
+          validation['public_audit_at'] = now
+          validation['last_consistency_audit'] = {
+              'status': 'success',
+              'checked_at': now,
+              'article_count': len(data.get('articles', [])),
+              'homepage_count': validation.get('homepage_count'),
+              'archive_count': validation.get('archive_count'),
+              'archive_page_count': validation.get('archive_page_count'),
+              'rss_count': validation.get('rss_count'),
+              'news_sitemap_count': validation.get('news_sitemap_recent_count'),
+              'deployment_health': 'ok',
+              'verified_url': os.environ['ARTICLE_URL'],
+              'source_commit': os.environ['SOURCE_SHA'],
+          }
+          data['generated_at'] = now
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            git add data/published-content-index.json
+            if git diff --cached --quiet; then saved=1; break; fi
+            git commit -m 'Evidence: potvrdit veřejnou publikaci volebního článku'
+            if git push origin HEAD:main; then saved=1; break; fi
+            echo "Zápis ověření se nepodařil, opakuji (${attempt}/3)."
+          done
+          test "$saved" = 1
+
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json && if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi; rm -f /tmp/published-content-index.json'
+
+      - name: Zapsat stav workflow do issue
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          GENERATE: ${{ steps.generate.outcome }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const status = process.env.GENERATE === 'success' && process.env.DEPLOY === 'success' && process.env.VERIFY === 'success' ? 'success' : 'failure';
+            const title = `[publish] Uzávěrka kandidátek v Kadani – ${status}`;
+            const body = [
+              `Workflow: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              `Článek: https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html`,
+              `Generování: ${process.env.GENERATE || 'skipped'}`,
+              `Nasazení: ${process.env.DEPLOY || 'skipped'}`,
+              `Veřejné ověření: ${process.env.VERIFY || 'skipped'}`
+            ].join('\n\n');
+            const created = await github.rest.issues.create({owner, repo, title, body});
+            if (status === 'success') {
+              await github.rest.issues.update({owner, repo, issue_number: created.data.number, state: 'closed', state_reason: 'completed'});
+            }
