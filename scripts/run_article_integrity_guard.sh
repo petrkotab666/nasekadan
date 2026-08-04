@@ -21,27 +21,27 @@ for attempt in 1 2 3 4 5; do
   git fetch origin main
   git reset --hard origin/main
 
-  # Každý běh znovu ruší historické připnutí titulky. Tím se opraví i
-  # případný pozdější návrat starého jednorázového workflow.
+  # NK-STADIUM-PIN-GUARD-20260804
+  # Do 5. srpna 2026 18:00 SELČ respektuj redakční připnutí pouze na titulce.
+  # Poté se zdrojová konfigurace sama vrátí k běžnému pořadí.
   python3 - <<'PY'
+from datetime import datetime, timezone
 from pathlib import Path
 import re
+
 path = Path('scripts/enforce_article_visibility.py')
 text = path.read_text(encoding='utf-8')
-text, href_count = re.subn(
-    r'^HOMEPAGE_PIN_HREF\s*=.*$',
-    "HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'",
-    text,
-    count=1,
-    flags=re.M,
+pin_href = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+pin_until = datetime.fromisoformat('2026-08-05T16:00:00+00:00')
+active = datetime.now(timezone.utc) <= pin_until
+href_value = f'HOMEPAGE_PIN_HREF = {pin_href!r}' if active else "HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'"
+until_value = (
+    f'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')'
+    if active else
+    'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')'
 )
-text, until_count = re.subn(
-    r'^HOMEPAGE_PIN_UNTIL\s*=.*$',
-    'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')',
-    text,
-    count=1,
-    flags=re.M,
-)
+text, href_count = re.subn(r'^HOMEPAGE_PIN_HREF\s*=.*$', href_value, text, count=1, flags=re.M)
+text, until_count = re.subn(r'^HOMEPAGE_PIN_UNTIL\s*=.*$', until_value, text, count=1, flags=re.M)
 if href_count != 1 or until_count != 1:
     raise SystemExit(f'Chybí jednoznačná konfigurace titulky: href={href_count}, until={until_count}')
 compile(text, str(path), 'exec')
