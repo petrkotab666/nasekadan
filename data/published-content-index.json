@@ -1,9 +1,9 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T14:46:00.268136+00:00",
+  "generated_at": "2026-08-04T14:47:48.999460+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
-  "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
+  "source_commit": "626488252e36c584cfa42613fb1d873d708e31e5",
   "article_count": 47,
   "validation": {
     "homepage_count": 14,
@@ -15,7 +15,7 @@
     "rss_order_matches_archive": true,
     "deployment_health": "verified",
     "deployment_health_status_field_present": true,
-    "deployment_health_source": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
+    "deployment_health_source": "626488252e36c584cfa42613fb1d873d708e31e5",
     "required_fields_complete": true,
     "duplicate_urls": [],
     "duplicate_fingerprints": [],
@@ -27,8 +27,8 @@
       "https://nasekadan.cz/clanky/parts/slovan-04.html",
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
-    "public_audit_at": "2026-08-04T12:35:17.381979+00:00",
-    "repair_pending_public_verification": true,
+    "public_audit_at": "2026-08-04T14:47:48.999460+00:00",
+    "repair_pending_public_verification": false,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -51,7 +51,7 @@
       "updated_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
       "old_h1": "Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−",
       "new_h1": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
-      "source_commit": "7aee4b9b4da0e8e3767d3b04f18a8be4f6e9e8bf",
+      "source_commit": "626488252e36c584cfa42613fb1d873d708e31e5",
       "changed_surfaces": [
         "clanky/index.html",
         "rss.xml",
@@ -59,8 +59,21 @@
         "llms.txt"
       ],
       "method": "verify-live-h1-update-registry-normalize-surfaces-deploy-and-full-public-audit",
-      "status": "pending",
-      "started_at": "2026-08-04T14:46:00.268136+00:00"
+      "status": "success",
+      "started_at": "2026-08-04T14:46:00.268136+00:00",
+      "completed_at": "2026-08-04T14:47:48.999460+00:00",
+      "public_verification": {
+        "homepage": true,
+        "archive_all_four_pages": true,
+        "rss_all_47_articles": true,
+        "sitemap_all_47_articles": true,
+        "news_sitemap_xml_well_formed": true,
+        "all_47_public_article_h1": true,
+        "registry_unique_and_complete": true,
+        "deployment_health": true,
+        "weather": true,
+        "social_graphic": true
+      }
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true
