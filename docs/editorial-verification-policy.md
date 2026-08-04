@@ -11,6 +11,7 @@ Tato pravidla jsou závazná pro každý návrh, monitoring, článek, aktualiza
 7. Před publikací musí proběhnout kontrola kanonického registru proti duplicitám a kontrola všech jmen, rolí, čísel, dat, citací a odkazů.
 8. Není-li důležitý údaj spolehlivě ověřen, článek jej uvede jako nepotvrzený, připíše jej zdroji, nebo jej vynechá.
 9. Zjištěná chyba se opraví na všech dotčených veřejných plochách a v kanonickém registru; následně se provede veřejná kontrola.
+10. **Do článků se nevkládají boxy ani vsuvky typu „Upřesnění redakce“, „Oprava redakce“ nebo vysvětlování interního postupu.** Správný údaj se zapracuje přímo do běžného textu. Samostatné veřejné upozornění se použije jen tehdy, když je nezbytné kvůli zásadní opravě, právní férovosti nebo transparentnosti vůči čtenářům.
 
 ## Povinný kontrolní příklad
 
