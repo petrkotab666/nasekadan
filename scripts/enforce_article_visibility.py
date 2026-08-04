@@ -14,6 +14,9 @@ ARCHIVE = ROOT / 'clanky' / 'index.html'
 SITEMAP = ROOT / 'sitemap.xml'
 HOME_TOTAL = 14
 PAGE_SIZE = 12
+HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T16:00:00+00:00')
+HOMEPAGE_PIN_MARKER = 'NK-TEMP-STADIUM-PIN-20260804'
 CARD_FIX_MARKER = 'CARD-PREVIEW-FIX-20260803'
 PAGINATION_MARKER = 'ARTICLE-PAGINATION-20260803'
 MONTHS = (
@@ -289,6 +292,12 @@ def main() -> None:
 
     total_pages = max(1, math.ceil(len(articles) / PAGE_SIZE))
     homepage_order = list(articles)
+    pin_active = bool(HOMEPAGE_PIN_HREF) and datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL
+    if pin_active:
+        pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)
+        if pinned is None:
+            raise RuntimeError(f'Připínaný článek nebyl nalezen: {HOMEPAGE_PIN_HREF}')
+        homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]
     homepage_articles = homepage_order[:HOME_TOTAL]
     home_cards = '\n'.join(card(article) for article in homepage_articles[2:])
     home_replacement = home_cards + '\n    </div>\n' + pagination(1, total_pages, homepage=True)
