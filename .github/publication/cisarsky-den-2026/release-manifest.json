@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "title": "Kadaň znovu vítá císaře: Co přinese Císařský den 2026 a jak celý příběh začal",
+  "slug": "cisarsky-den-kadan-historie-2026",
+  "planned_publication": "2026-08-04T18:00:00+02:00",
+  "article_url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+  "game_launch": "2026-08-12T18:00:00+02:00",
+  "safeguards": [
+    "draft_pull_request_only",
+    "no_auto_merge",
+    "source_draft_noindex",
+    "manual_exact_confirmation",
+    "release_time_gate",
+    "dry_run_on_pull_request",
+    "allowed_changed_files_gate",
+    "social_image_1200x630_check",
+    "no_unverified_free_admission_claim",
+    "game_link_disabled_until_launch",
+    "post_merge_live_verification_required"
+  ],
+  "post_merge_checks": [
+    "HTTP 200 and exact H1",
+    "homepage card",
+    "article archive",
+    "RSS",
+    "sitemap.xml",
+    "news-sitemap.xml",
+    "canonical and NewsArticle JSON-LD",
+    "Open Graph image 1200x630",
+    "deployment-health source equals main"
+  ]
+}
