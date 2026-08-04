@@ -1,0 +1,98 @@
+name: Emergency publish blood article
+on:
+  push:
+    paths:
+      - '.github/workflows/emergency-publish-blood-20260804.yml'
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch homepage, archive and feeds
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          import re
+
+          root = Path('.')
+          slug = 'nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026'
+          rel = f'/clanky/{slug}.html'
+          url = f'https://nasekadan.cz{rel}'
+          title = 'Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−'
+          desc = 'Zásoby krevní skupiny 0 Rh− jsou na kritické úrovni. Nemocnice uvítá také dárce všech ostatních krevních skupin.'
+          card = f'''    <article class="article-card hospital" data-auto-article="{slug}">
+              <div class="visual" role="img" aria-label="{title}" style="background:linear-gradient(135deg,#8d1520,#c4313f 55%,#f0b4ba)"></div>
+              <div class="article-body"><span class="meta">4. 8. 2026 · 14:10 · KADAŇ · ZDRAVÍ · AKTUÁLNĚ</span><h3>{title}</h3><p>{desc}</p><a class="read-more" href="{rel}">Přečíst článek →</a></div>
+            </article>\n'''
+
+          def write(p, s):
+              Path(p).write_text(s, encoding='utf-8', newline='\n')
+
+          # Titulní strana: krev jako nejnovější článek, zimák i Císařský den musí zůstat.
+          p = root/'index.html'
+          s = p.read_text(encoding='utf-8')
+          if f'data-auto-article="{slug}"' not in s:
+              s = s.replace('<div class="article-list">', '<div class="article-list">\n' + card, 1)
+          # Přepiš hero na krev, ale ostatní karty nemaž.
+          hero_pat = re.compile(r'<section class="wrap hero" id="clanky".*?</section>', re.S)
+          old = hero_pat.search(s)
+          if old:
+              block = old.group(0)
+              block = re.sub(r'data-latest-article-href="[^"]+"', f'data-latest-article-href="{rel}"', block, count=1)
+              block = re.sub(r'<small>.*?</small>', '<small>KADAŇ · ZDRAVÍ · AKTUÁLNĚ · 4. SRPNA 2026 · 14:10</small>', block, count=1, flags=re.S)
+              block = re.sub(r'<h1>.*?</h1>', f'<h1>{title}</h1>', block, count=1, flags=re.S)
+              block = re.sub(r'<div class="copy">(.*?)<p>.*?</p>', lambda m: '<div class="copy">'+m.group(1)+f'<p>{desc}</p>', block, count=1, flags=re.S)
+              block = re.sub(r'<a class="btn" href="[^"]+">.*?</a>', f'<a class="btn" href="{rel}">Přečíst nejnovější článek →</a>', block, count=1, flags=re.S)
+              s = s[:old.start()] + block + s[old.end():]
+          # tvrdá kontrola, že zimák a Císařský den zůstaly v titulce
+          assert 'klasterec-ochlazeni-zimni-stadion-kadan-2026' in s
+          assert 'cisarsky-den-kadan-historie-2026' in s
+          write(p, s)
+
+          # Archiv článků
+          p = root/'clanky/index.html'
+          s = p.read_text(encoding='utf-8')
+          if f'data-auto-article="{slug}"' not in s:
+              marker = '<section class="archive-list" aria-label="Chronologický přehled článků">'
+              s = s.replace(marker, marker+'\n'+card, 1)
+          write(p, s)
+
+          # Sitemap
+          p = root/'sitemap.xml'
+          s = p.read_text(encoding='utf-8')
+          if url not in s:
+              entry = f'  <url><loc>{url}</loc><lastmod>2026-08-04</lastmod><changefreq>daily</changefreq><priority>0.9</priority></url>\n'
+              s = s.replace('</urlset>', entry+'</urlset>')
+          write(p, s)
+
+          # News sitemap
+          p = root/'news-sitemap.xml'
+          s = p.read_text(encoding='utf-8')
+          if url not in s:
+              entry = f'''  <url><loc>{url}</loc><news:news><news:publication><news:name>Naše Kadaň</news:name><news:language>cs</news:language></news:publication><news:publication_date>2026-08-04T14:10:00+02:00</news:publication_date><news:title>{title}</news:title></news:news></url>\n'''
+              s = s.replace('</urlset>', entry+'</urlset>')
+          write(p, s)
+
+          # RSS
+          p = root/'rss.xml'
+          s = p.read_text(encoding='utf-8')
+          if url not in s:
+              item = f'''<item><title>{title}</title><link>{url}</link><guid isPermaLink="true">{url}</guid><pubDate>Tue, 04 Aug 2026 12:10:00 GMT</pubDate><description>{desc}</description></item>\n'''
+              s = s.replace('<channel>', '<channel>\n'+item, 1)
+          write(p, s)
+
+          # Odstranit jednorázový workflow, aby se neopakoval.
+          Path('.github/workflows/emergency-publish-blood-20260804.yml').unlink()
+          PY
+      - name: Commit repaired publication
+        run: |
+          git config user.name "Naše Kadaň Bot"
+          git config user.email "bot@nasekadan.cz"
+          git add -A
+          git commit -m "Publikace: vrátit zimák a Císařský den, doplnit výzvu dárcům krve"
+          git push
