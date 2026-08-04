@@ -1,0 +1,168 @@
+name: Dokončit veřejný audit opraveného archivu 45 článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-canonical-45-20260804.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-published-index-sync
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Počkat na veřejný archiv a provést úplný audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import collections, datetime, hashlib, html, json, re, ssl, subprocess, time, urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          BASE='https://nasekadan.cz'
+          SLUG='cisarsky-den-kadan-historie-2026'
+          TARGET=f'{BASE}/clanky/{SLUG}.html'
+          REG=Path('data/published-content-index.json')
+          STATUS=Path('.github/canonical-published-index-status.json')
+          ctx=ssl._create_unverified_context()
+
+          def fetch(path):
+              url=path if path.startswith('http') else BASE+path
+              last=None
+              for retry in range(4):
+                  try:
+                      sep='&' if '?' in url else '?'
+                      req=urllib.request.Request(url+sep+'canonical_audit='+str(time.time_ns()),headers={'User-Agent':'NaseKadanCanonicalAudit/3.2','Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=40,context=ctx) as r:
+                          if r.status!=200: raise RuntimeError(f'{url}: HTTP {r.status}')
+                          return r.read().decode('utf-8','replace')
+                  except Exception as exc:
+                      last=exc; time.sleep(2+retry)
+              raise last
+
+          def unique(seq):
+              out=[]; seen=set()
+              for x in seq:
+                  if x and x not in seen: seen.add(x); out.append(x)
+              return out
+
+          def extract_h1(page):
+              m=re.search(r'<h1[^>]*>(.*?)</h1>',page,re.I|re.S)
+              return ' '.join(html.unescape(re.sub(r'<[^>]+>','',m.group(1))).split()) if m else ''
+
+          first=None
+          for attempt in range(75):
+              try:
+                  candidate=fetch('/clanky/')
+                  visible=f'data-auto-article="{SLUG}"' in candidate
+                  cards=len(re.findall(r'data-auto-article=',candidate))
+                  if visible and cards==12:
+                      first=candidate; break
+                  print(f'Čekám na nasazení: visible={visible}, cards={cards}, attempt={attempt+1}')
+              except Exception as exc:
+                  print(f'Čekám po chybě: {exc}')
+              time.sleep(8)
+          if first is None: raise AssertionError('Opravený viditelný archiv se veřejně neprojevil v kontrolním okně.')
+
+          home=fetch('/')
+          page_links=unique(re.findall(r'href=["\'](/clanky/strana-(\d+)\.html)["\']',first,re.I))
+          page_paths=['/clanky/']+[x[0] for x in sorted(page_links,key=lambda x:int(x[1]))]
+          pages=[first]+[fetch(p) for p in page_paths[1:]]
+          archive='\n'.join(pages)
+          rss=fetch('/rss.xml'); sitemap=fetch('/sitemap.xml'); news=fetch('/news-sitemap.xml'); health=fetch('/deployment-health.txt')
+          href=re.compile(r'href=["\'](/clanky/[^"\']+\.html)["\']',re.I)
+          home_urls=[BASE+p for p in unique(href.findall(home)) if '/parts/' not in p and '/strana-' not in p]
+          archive_urls=[BASE+p for p in unique(href.findall(archive)) if '/parts/' not in p and '/strana-' not in p]
+          rss_urls=unique([(n.findtext('link') or '').strip() for n in ET.fromstring(rss).findall('.//item') if (n.findtext('link') or '').strip()])
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          sitemap_urls=unique([(n.text or '').strip() for n in ET.fromstring(sitemap).findall('.//s:loc',ns) if '/clanky/' in (n.text or '') and (n.text or '').endswith('.html') and '/parts/' not in (n.text or '')])
+          news_urls=unique([(n.text or '').strip() for n in ET.fromstring(news).findall('.//s:loc',ns) if (n.text or '').strip()])
+
+          data=json.loads(REG.read_text(encoding='utf-8')); articles=data['articles']
+          registry_urls=[a['url'] for a in articles]; fps=[a['fingerprint'] for a in articles]
+          dup_urls=sorted(k for k,v in collections.Counter(registry_urls).items() if v>1)
+          dup_fps=sorted(k for k,v in collections.Counter(fps).items() if v>1)
+          assert len(articles)==45 and TARGET in registry_urls
+          assert not dup_urls and not dup_fps
+          assert set(registry_urls)==set(archive_urls), f'archive {len(archive_urls)} registry {len(registry_urls)}'
+          assert set(registry_urls)==set(rss_urls), f'rss {len(rss_urls)} registry {len(registry_urls)}'
+          assert set(registry_urls)==set(sitemap_urls), f'sitemap {len(sitemap_urls)} registry {len(registry_urls)}'
+          assert rss_urls==archive_urls, 'Pořadí RSS se liší od archivu.'
+          assert health.strip()
+
+          changed=[]
+          for article in articles:
+              page=fetch(article['url']); actual=extract_h1(page)
+              assert actual==article['h1'], f'H1 mismatch {article["url"]}: {actual!r} != {article["h1"]!r}'
+              article['status']={'homepage':article['url'] in home_urls,'archive':article['url'] in archive_urls,'rss':article['url'] in rss_urls,'sitemap':article['url'] in sitemap_urls,'news_sitemap':article['url'] in news_urls}
+              article['publication_status']='published'
+              source_path=article.get('source_path')
+              if source_path:
+                  latest=subprocess.check_output(['git','log','-1','--format=%H','--',source_path],text=True).strip()
+                  if latest and latest!=article.get('source_commit'):
+                      changed.append({'url':article['url'],'from':article.get('source_commit',''),'to':latest}); article['source_commit']=latest
+              m=re.search(r'<meta[^>]+property=["\']article:modified_time["\'][^>]+content=["\']([^"\']+)',page,re.I) or re.search(r'"dateModified"\s*:\s*"([^"]+)"',page)
+              if m: article['modified_at']=m.group(1)
+
+          now=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          source_match=re.search(r'^source=(.+)$',health,re.M); health_source=source_match.group(1).strip() if source_match else ''
+          head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          required=('title','h1','url','published_at','modified_at','persons','organizations','places','cases','topics','fingerprint','status','source_commit')
+          data['generated_at']=now; data['source_commit']=head; data['article_count']=45
+          validation=data.setdefault('validation',{})
+          validation.update({'homepage_count':len(home_urls),'archive_count':len(archive_urls),'archive_page_count':len(pages),'rss_count':len(rss_urls),'sitemap_all_articles_present':True,'news_sitemap_recent_count':len(news_urls),'deployment_health':'verified_nonempty','deployment_health_source':health_source,'deployment_health_status_field_present':'status=ok' in health,'required_fields_complete':all(all(k in a for k in required) for a in articles),'duplicate_urls':dup_urls,'duplicate_fingerprints':dup_fps,'per_article_source_commits':all(bool(a.get('source_commit')) for a in articles),'public_audit_at':now,'public_audit_sha256':hashlib.sha256((home+archive+rss+sitemap+news+health).encode()).hexdigest(),'repair_pending_public_verification':False,'rss_order_matches_archive':True,'public_repair_verification':{'method':'github-actions-live-canonical-audit-paginated-archive-v3.2','homepage_articles':len(home_urls),'archive_articles':len(archive_urls),'archive_pages':len(pages),'rss_articles':len(rss_urls),'sitemap_articles':len(sitemap_urls),'news_sitemap_articles':len(news_urls),'all_public_h1_checked':True,'deployment_health_nonempty':True,'deployment_health_source':health_source,'completed_at':now},'last_registry_refresh':{'reason':'repair visible archive omission of the Císařský den article and reverify all live publication channels','trigger_commit':'106ef514b7652e485586c235c284e2a3a5c4d293','repair_commit':'7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30','classification':'safe_repair','repaired_url':TARGET,'changed_source_commits':changed,'homepage_articles':len(home_urls),'archive_articles':len(archive_urls),'archive_pages':len(pages),'rss_articles':len(rss_urls),'sitemap_articles':len(sitemap_urls),'news_sitemap_articles':len(news_urls),'completed_at':now}})
+          REG.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          status={'status':'success','checked_at':now,'registry_publicly_verified':True,'article_count':45,'homepage_count':len(home_urls),'archive_count':len(archive_urls),'archive_page_count':len(pages),'rss_count':len(rss_urls),'sitemap_count':len(sitemap_urls),'news_sitemap_count':len(news_urls),'duplicate_urls':dup_urls,'duplicate_fingerprints':dup_fps,'rss_order_matches_archive':True,'all_public_h1_checked':True,'deployment_health_source':health_source,'deployment_health_raw':health,'changed_source_commits':changed,'safe_repair':{'type':'regenerate_paginated_archive','article':TARGET,'trigger_commit':'106ef514b7652e485586c235c284e2a3a5c4d293','repair_commit':'7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30'}}
+          STATUS.write_text(json.dumps(status,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(status,ensure_ascii=False))
+          PY
+      - name: Uložit veřejně ověřenou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json .github/canonical-published-index-status.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Zapsat veřejně ověřenou opravu archivu 45 článků [skip ci]'
+            for n in 1 2 3 4 5; do
+              git push origin HEAD:main && break
+              git pull --rebase origin main
+              test "$n" != 5
+              sleep $((n*4))
+            done
+          fi
+      - name: Odstranit jednorázový audit
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main && git reset --hard origin/main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -f .github/workflows/finalize-canonical-45-20260804.yml
+          git add -A .github/workflows/finalize-canonical-45-20260804.yml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Odstranit jednorázový audit opraveného archivu [skip ci]'
+            for n in 1 2 3 4 5; do
+              git push origin HEAD:main && break
+              git pull --rebase origin main
+              test "$n" != 5
+              sleep $((n*4))
+            done
+          fi
