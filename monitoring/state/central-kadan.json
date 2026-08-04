@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T10:55:18Z",
-  "last_quick_check_at": "2026-08-04T10:55:18Z",
+  "updated_at": "2026-08-04T11:59:42Z",
+  "last_quick_check_at": "2026-08-04T11:59:42Z",
   "last_deep_check_at": "2026-08-04T07:57:20Z",
   "canonical_registry": {
     "paths": [
@@ -35,7 +35,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "d8395bf64b7b519e6ddae2514c469c106fbb3c19"
+    "main_sha_observed": "cba49186c39d869e715f6ce3fa4005ce6e2a53b3"
   },
   "production": {
     "homepage_checked": true,
@@ -52,14 +52,16 @@
     "public_audit_evidence": "GitHub Actions run 30902418112; issue 568 closed after live verification",
     "public_article_count": 46,
     "deployment_source_commit": "a5fadd133839b481b7d9a15e3ffeee19b75116f9",
+    "public_check_attempt_at": "2026-08-04T11:59:42Z",
+    "public_check_attempt_status": "direct cache-busting connection unavailable from current runtime; last successful canonical live audit retained",
     "repair_attempted": false
   },
   "quick_check": {
     "extraordinary_events": "no_new_significant_verified_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "official_updates_reviewed; no_new_threshold_document",
-    "petition": "online count moved only by a small number; no text change, closure, handover or municipal response verified",
-    "technical": "newest approved article was live-verified across publication surfaces by the canonical workflow; no additional repair needed"
+    "petition": "no verified threshold event since previous run",
+    "technical": "no evidence of stale production; direct runtime connection unavailable and therefore no speculative repair was attempted"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -70,15 +72,13 @@
   ],
   "new_significant_fingerprints": [],
   "notes": [
-    "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json; jejich blob SHA zůstaly aktuální.",
+    "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
     "Regionální discoveryStatus nadále eviduje úplné dohledání oficiálních URL dne 4. srpna 2026 a nulový počet nevyřešených položek discoverOfficialUrl.",
     "Rychlá kontrola policejních, hasičských, krizových, dopravních, síťových, městských a regionálních zdrojů neodhalila od předchozího běhu novou ověřenou mimořádnou událost s dostatečným významem pro samostatné upozornění čtenářům z Kadaně.",
-    "Kontrola známých soudních spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 neodhalila nový veřejně indexovaný procesní pohyb nebo rozhodnutí.",
-    "Soukromá online petice nemocnice vykazuje pouze drobný nárůst potvrzených podpor; nebyla ověřena změna textu, uzavření, předání zastupitelstvu, vznik státní ePetice ani reakce města.",
-    "Úplná uzavírka silnice II/225 směrem ze Žatce na Kadaň od 4. do 11. srpna a srpnové noční vlakové výluky jsou již zpracované v existujících článcích a nebyly hlášeny duplicitně.",
-    "Článek o Josefu Suchém je již schválený a publikovaný obsah, nikoli nový monitoringový alert. Jednorázový záchranný workflow jej 4. srpna 2026 v 10:53 UTC veřejně ověřil na titulce, v archivu, RSS, sitemapách, registru, sociální grafice a deployment-health; issue 568 bylo uzavřeno jako dokončené.",
-    "Veřejný vyhledávací index ještě nový článek nemusí zobrazovat, což není důkaz chyby produkce; kanonický živý audit workflow je novější a použil přímé cache-busting kontroly.",
-    "Data/city-news.json eviduje 101 unikátních zdrojů a 21 unikátních selhávajících zdrojů ve 22 chybových záznamech. Zdroje zůstávají povinné a musí být dále obsluhovány náhradními oficiálními nebo důvěryhodnými kanály.",
+    "Vyhledání známých soudních spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 nepřineslo nový veřejně indexovaný procesní pohyb nebo rozhodnutí.",
+    "Dopravní a provozní nálezy dostupné v tomto běhu byly starší, již známé nebo lokální bez dostatečného nového dopadu; uzavírka II/225, noční železniční výluky a ochlazení na zimním stadionu zůstaly potlačeny jako zpracované duplicity.",
+    "Přímá cache-busting kontrola nasekadan.cz byla z aktuálního běhového prostředí blokována DNS a síťovým připojením. Poslední úspěšný kanonický živý audit z 4. srpna 2026 v 10:53 UTC zůstává platným důkazem; bez důkazu zastaralé produkce nebyl spuštěn opravný deploy.",
+    "Data/city-news.json nadále eviduje 101 unikátních zdrojů a 21 unikátních selhávajících zdrojů ve 22 chybových záznamech. Zdroje zůstávají povinné a musí být dále obsluhovány náhradními oficiálními nebo důvěryhodnými kanály.",
     "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
 }
