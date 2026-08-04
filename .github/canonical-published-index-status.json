@@ -1,67 +1,29 @@
 {
-  "status": "repair_pending_public_verification",
-  "checked_at": "2026-08-04T05:35:25.884119+00:00",
-  "registry_publicly_verified": false,
-  "article_count": 45,
+  "status": "success",
+  "checked_at": "2026-08-04T17:16:50.467340+00:00",
+  "registry_publicly_verified": true,
+  "registry_generated_at": "2026-08-04T17:42:23.461757+00:00",
+  "registry_source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e",
+  "deployment_health_source": "fff8a2a024e1e9d2a75b07c9fc24efb23fa8b078",
+  "article_count": 48,
   "homepage_count": 14,
-  "archive_count": 44,
+  "archive_count": 48,
   "archive_page_count": 4,
-  "rss_count": 45,
-  "sitemap_count": 45,
-  "news_sitemap_count": 8,
+  "rss_count": 48,
+  "sitemap_count": 48,
+  "news_sitemap_count": 10,
   "duplicate_urls": [],
   "duplicate_fingerprints": [],
-  "rss_order_matches_archive": false,
-  "all_public_h1_checked": false,
-  "changed_source_commits": [
-    {
-      "url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
-      "from": "6d96be685c3dbafff720c1b49fbf6b1b18b9e004",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
-      "from": "83b5d2b8c0e8248133e21a8cd22f507b43fab5c4",
-      "to": "f74ecb1a7c8cad5aec6c6cb8312e02d643bb8e93"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
-      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html",
-      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html",
-      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html",
-      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/petice-nemocnice-kadan.html",
-      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    },
-    {
-      "url": "https://nasekadan.cz/clanky/nemocnice-kadan.html",
-      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
-      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
-    }
-  ],
-  "significant_mismatch": {
-    "article": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
-    "homepage": true,
-    "archive": false,
-    "repository_archive_repaired": true,
-    "repair_trigger_commit": "106ef514b7652e485586c235c284e2a3a5c4d293",
-    "repair_commit": "7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30",
-    "production_deploy_state": "queued_or_pending"
+  "rss_order_matches_archive": true,
+  "all_public_h1_checked": true,
+  "sitemap_complete": true,
+  "deployment_health": "ok",
+  "source_of_truth": "https://nasekadan.cz/",
+  "status_source": "data/published-content-index.json",
+  "repair": {
+    "classification": "stale_status_record_safe_sync",
+    "reason": "Pomocný stavový soubor stále uváděl ranní neověřený stav 45 článků, přestože novější kanonický registr obsahoval úspěšný veřejný audit 48 článků.",
+    "previous_checked_at": "2026-08-04T05:35:25.884119+00:00",
+    "previous_status": "repair_pending_public_verification"
   }
 }
