@@ -1,0 +1,97 @@
+name: Automatická záchrana selhaného kompletního monitoringu
+
+on:
+  workflow_run:
+    workflows:
+      - Kompletní hodinový monitoring Kadaně a širokého regionu
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: complete-region-failed-run-rescue
+  cancel-in-progress: false
+
+jobs:
+  rescue:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Načíst hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Zopakovat selhaný běh
+        id: rerun
+        if: github.event_name == 'workflow_run' && github.event.workflow_run.run_attempt < 3
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --silent --show-error \
+            --retry 3 --retry-all-errors \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${{ github.event.workflow_run.id }}/rerun"
+
+      - name: Ručně vyvolat kompletní monitoring
+        id: manual
+        if: github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -L --fail --silent --show-error \
+            --retry 3 --retry-all-errors \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/monitor-complete-region-hourly.yml/dispatches" \
+            -d '{"ref":"main"}'
+
+      - name: Zapsat incident po vyčerpání automatických pokusů
+        if: >
+          (github.event_name == 'workflow_run' &&
+           (github.event.workflow_run.run_attempt >= 3 || steps.rerun.outcome != 'success')) ||
+          (github.event_name == 'workflow_dispatch' && steps.manual.outcome != 'success')
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            run_url="${{ github.event.workflow_run.html_url }}"
+            attempt="${{ github.event.workflow_run.run_attempt }}"
+            conclusion="${{ github.event.workflow_run.conclusion }}"
+          else
+            run_url="ruční záchranný běh ${GITHUB_RUN_ID}"
+            attempt="neuvedeno"
+            conclusion="dispatch selhal"
+          fi
+          cat > "$RUNNER_TEMP/rescue-failed.md" <<EOF
+          ## Automatická záchrana kompletního monitoringu nestačila
+
+          - původní běh: ${run_url}
+          - výsledek: ${conclusion}
+          - počet pokusů: ${attempt}
+          - záchranné workflow: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Primární workflow už využilo vlastní tři pokusy. Následná automatická záchrana byla vyčerpána nebo se nepodařilo vyvolat další běh. Samoléčicí watchdog bude nadále zkoušet nový průchod několikrát za hodinu.
+          EOF
+          python3 scripts/upsert_github_issue.py \
+            --fingerprint complete-region-monitor-failed \
+            --title '[MONITORING REGION] Kompletní monitoring selhal [complete-region-monitor-failed]' \
+            --body-file "$RUNNER_TEMP/rescue-failed.md" \
+            --assignee petrkotab666 \
+            --comment-existing
+          exit 1
