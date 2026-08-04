@@ -1,0 +1,95 @@
+name: Veřejně ověřit požární článek po nasazení
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/fire-public-verify-trigger.txt'
+      - '.github/workflows/verify-fire-public-pr-20260731.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fire-public-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify-public:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Diagnostikovat živý web přes HTTPS bez cache
+        shell: bash
+        run: |
+          set -u
+          slug='nebezpeci-pozaru-ustecky-kraj-kadan-2026'
+          fire_path="/clanky/${slug}.html"
+          pool_path='/clanky/koupaliste-kadan-pozemky-skluzavka-provoz-2026.html'
+          title='Ústecký kraj znovu omezil rozdělávání ohňů. Opatření platí i pro Kadaň do konce srpna'
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          rm -f /tmp/fire-{article,home,archive,rss,sitemap,news,health,image}
+
+          article_http=no; home_http=no; archive_http=no; rss_http=no; sitemap_http=no; news_http=no; health_http=no; image_http=no
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz${fire_path}?v=${stamp}" -o /tmp/fire-article && article_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/?v=${stamp}" -o /tmp/fire-home && home_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/clanky/?v=${stamp}" -o /tmp/fire-archive && archive_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/rss.xml?v=${stamp}" -o /tmp/fire-rss && rss_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/sitemap.xml?v=${stamp}" -o /tmp/fire-sitemap && sitemap_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/news-sitemap.xml?v=${stamp}" -o /tmp/fire-news && news_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/deployment-health.txt?v=${stamp}" -o /tmp/fire-health && health_http=yes || true
+          curl -4 -kfsS --max-time 30 "https://nasekadan.cz/social/${slug}.png?v=${stamp}" -o /tmp/fire-image && image_http=yes || true
+
+          article_h1=no; home_order=no; archive_has=no; rss_has=no; sitemap_has=no; news_has=no; health_matches=no; image_valid=no
+          if [[ "$article_http" == yes ]] && grep -Fq "<h1>${title}</h1>" /tmp/fire-article; then article_h1=yes; fi
+          if [[ "$home_http" == yes ]] && python3 - /tmp/fire-home "$fire_path" "$pool_path" <<'PY'
+          import sys
+          text=open(sys.argv[1],encoding='utf-8').read()
+          fire=text.find(sys.argv[2]); pool=text.find(sys.argv[3])
+          raise SystemExit(0 if fire >= 0 and pool >= 0 and fire < pool else 1)
+          PY
+          then home_order=yes; fi
+          if [[ "$archive_http" == yes ]] && grep -Fq "$fire_path" /tmp/fire-archive; then archive_has=yes; fi
+          if [[ "$rss_http" == yes ]] && grep -Fq "https://nasekadan.cz${fire_path}" /tmp/fire-rss; then rss_has=yes; fi
+          if [[ "$sitemap_http" == yes ]] && grep -Fq "https://nasekadan.cz${fire_path}" /tmp/fire-sitemap; then sitemap_has=yes; fi
+          if [[ "$news_http" == yes ]] && grep -Fq "https://nasekadan.cz${fire_path}" /tmp/fire-news; then news_has=yes; fi
+          if [[ "$health_http" == yes ]] && grep -Fq "source=${main_sha}" /tmp/fire-health; then health_matches=yes; fi
+          if [[ "$image_http" == yes ]] && python3 - /tmp/fire-image <<'PY'
+          import struct, sys
+          from pathlib import Path
+          data=Path(sys.argv[1]).read_bytes()
+          ok=(data.startswith(b'\x89PNG\r\n\x1a\n') and len(data)>10000 and struct.unpack('>II',data[16:24])==(1200,630))
+          raise SystemExit(0 if ok else 1)
+          PY
+          then image_valid=yes; fi
+
+          echo "main_sha=$main_sha"
+          echo "article_http=$article_http article_h1=$article_h1"
+          echo "home_http=$home_http home_order_fire_then_pool=$home_order"
+          echo "archive_http=$archive_http archive_has_fire=$archive_has"
+          echo "rss_http=$rss_http rss_has_fire=$rss_has"
+          echo "sitemap_http=$sitemap_http sitemap_has_fire=$sitemap_has"
+          echo "news_http=$news_http news_has_fire=$news_has"
+          echo "health_http=$health_http health_matches_main=$health_matches"
+          echo "image_http=$image_http image_1200x630=$image_valid"
+          echo 'deployment-health:'
+          cat /tmp/fire-health 2>/dev/null || true
+          echo 'public article H1:'
+          grep -o '<h1[^>]*>[^<]*</h1>' /tmp/fire-article 2>/dev/null | head -1 || true
+          echo 'public homepage latest href:'
+          grep -o 'data-latest-article-href="[^"]*"' /tmp/fire-home 2>/dev/null | head -1 || true
+
+          if [[ "$article_h1" == yes && "$home_order" == yes && "$archive_has" == yes \
+            && "$rss_has" == yes && "$sitemap_has" == yes && "$news_has" == yes \
+            && "$health_matches" == yes && "$image_valid" == yes ]]; then
+            echo 'HOTOVO: veřejná publikace je kompletně ověřená.'
+            exit 0
+          fi
+          echo 'NEHOTOVO: diagnostika výše ukazuje konkrétní rozpor.' >&2
+          exit 1
