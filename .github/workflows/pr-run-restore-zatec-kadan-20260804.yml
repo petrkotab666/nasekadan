@@ -1,0 +1,32 @@
+name: Přímá obnova dopravního článku z PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/zatec-kadan-restore-pr-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Obnovit, nasadit a veřejně ověřit článek
+        shell: bash
+        run: bash scripts/restore_zatec_kadan_article_20260804.sh
