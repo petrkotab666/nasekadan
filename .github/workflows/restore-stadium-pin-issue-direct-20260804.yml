@@ -1,0 +1,210 @@
+name: Přímá obnova připnutí zimního stadionu
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+jobs:
+  restore:
+    if: github.event.issue.title == '[pin-direct] Obnovit zimní stadion na titulce'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Zastavit konfliktní kanonické běhy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for id in $(gh run list --workflow article-integrity-guard.yml --limit 30 --json databaseId,status --jq '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId'); do
+            gh run cancel "$id" || true
+          done
+          sleep 8
+
+      - name: Obnovit pravidlo připnutí a titulní stránku
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – dočasné připnutí titulky'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          href = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          until = "datetime.fromisoformat('2026-08-05T16:00:00+00:00')"
+
+          path = Path('scripts/enforce_article_visibility.py')
+          text = path.read_text(encoding='utf-8')
+          text, n1 = re.subn(r'^HOMEPAGE_PIN_HREF\s*=.*$', f'HOMEPAGE_PIN_HREF = {href!r}', text, count=1, flags=re.M)
+          text, n2 = re.subn(r'^HOMEPAGE_PIN_UNTIL\s*=.*$', f'HOMEPAGE_PIN_UNTIL = {until}', text, count=1, flags=re.M)
+          if n1 != 1 or n2 != 1:
+              raise SystemExit(f'Konfigurace připnutí není jednoznačná: {n1}/{n2}')
+          compile(text, str(path), 'exec')
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          guard = Path('scripts/run_article_integrity_guard.sh')
+          g = guard.read_text(encoding='utf-8')
+          g = g.replace("HOMEPAGE_PIN_HREF = ''", f'HOMEPAGE_PIN_HREF = {href!r}')
+          g = g.replace('HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)', f'HOMEPAGE_PIN_UNTIL = {until}')
+          if f'HOMEPAGE_PIN_HREF = {href!r}' not in g or f'HOMEPAGE_PIN_UNTIL = {until}' not in g:
+              raise SystemExit('Kanonická pojistka nebyla přepnuta na aktivní připnutí.')
+          guard.write_text(g, encoding='utf-8', newline='\n')
+          PY
+
+            python3 -m py_compile scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+            python3 scripts/enforce_all_article_visibility.py
+            python3 scripts/ensure_weather_loader.py
+
+            python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util, re
+          from xml.etree import ElementTree as ET
+
+          pin = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          article = Path(pin.lstrip('/')).read_text(encoding='utf-8')
+          assert 'article:published_time" content="2026-08-03T22:05:00+02:00"' in article
+
+          spec = importlib.util.spec_from_file_location('v', Path('scripts/enforce_article_visibility.py'))
+          v = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          spec.loader.exec_module(v)
+          items=[]
+          for p in Path('clanky').glob('*.html'):
+              if p.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', p.name):
+                  continue
+              item=v.article_info(p)
+              if item: items.append(item)
+          items.sort(key=lambda x:x['dt'], reverse=True)
+          latest=items[0]['href']
+          assert latest != pin
+
+          home=Path('index.html').read_text(encoding='utf-8')
+          hero=re.search(r'<section class="wrap hero" id="clanky".*?</section>', home, re.S)
+          assert hero and f'data-latest-article-href="{pin}"' in hero.group(0)
+          aside=re.search(r'<aside class="current-aside">.*?</aside>', hero.group(0), re.S)
+          assert aside and f'href="{latest}"' in aside.group(0)
+          assert '/pocasi.js' in home
+
+          archive=Path('clanky/index.html').read_text(encoding='utf-8')
+          first=re.search(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="([^"]+)"', archive, re.S)
+          assert first and first.group(1) == latest
+          rss=ET.parse('rss.xml').getroot()
+          assert rss.findtext('./channel/item/link') == 'https://nasekadan.cz' + latest
+          print(latest)
+          PY
+
+            git diff --check
+            git add scripts/enforce_article_visibility.py scripts/run_article_integrity_guard.sh index.html clanky/index.html sitemap.xml
+            find clanky -maxdepth 1 -type f -name 'strana-*.html' -print0 | xargs -0 -r git add --
+            if ! git diff --cached --quiet; then
+              git commit -m 'Obnovit připnutí zimního stadionu do 5. srpna 18:00'
+            fi
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit titulní stránku na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 index.html ubuntu@57.129.43.215:/tmp/nasekadan-index-pin.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -m 0644 /tmp/nasekadan-index-pin.html /var/www/nasekadan/index.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nasekadan-index-pin.html nasekadan-web:/usr/share/nginx/html/index.html
+          fi
+          rm -f /tmp/nasekadan-index-pin.html
+          REMOTE
+
+      - name: Veřejně ověřit titulku, archiv, RSS a počasí
+        shell: bash
+        run: |
+          set -euo pipefail
+          pin='/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          latest="$(python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util,re
+          spec=importlib.util.spec_from_file_location('v',Path('scripts/enforce_article_visibility.py'))
+          v=importlib.util.module_from_spec(spec); spec.loader.exec_module(v)
+          items=[]
+          for p in Path('clanky').glob('*.html'):
+              if p.name=='index.html' or re.fullmatch(r'strana-\d+\.html',p.name): continue
+              x=v.article_info(p)
+              if x: items.append(x)
+          items.sort(key=lambda x:x['dt'],reverse=True)
+          print(items[0]['href'])
+          PY
+          )"
+          ok=0
+          for attempt in $(seq 1 15); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            home="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?pincheck=$q" || true)"
+            article="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz${pin}?pincheck=$q" || true)"
+            archive="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/?pincheck=$q" || true)"
+            rss="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?pincheck=$q" || true)"
+            forecast="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/api/pocasi-predpoved.json?pincheck=$q" || true)"
+            if PIN="$pin" LATEST="$latest" HOME_HTML="$home" ARTICLE_HTML="$article" ARCHIVE_HTML="$archive" RSS_XML="$rss" FORECAST_JSON="$forecast" python3 - <<'PY'
+          import json,os,re
+          from xml.etree import ElementTree as ET
+          pin=os.environ['PIN']; latest=os.environ['LATEST']
+          home=os.environ['HOME_HTML']; article=os.environ['ARTICLE_HTML']; archive=os.environ['ARCHIVE_HTML']; rss=os.environ['RSS_XML']; forecast=os.environ['FORECAST_JSON']
+          hero=re.search(r'<section class="wrap hero" id="clanky".*?</section>',home,re.S)
+          assert hero and f'data-latest-article-href="{pin}"' in hero.group(0)
+          aside=re.search(r'<aside class="current-aside">.*?</aside>',hero.group(0),re.S)
+          assert aside and f'href="{latest}"' in aside.group(0)
+          assert '/pocasi.js' in home
+          assert 'article:published_time" content="2026-08-03T22:05:00+02:00"' in article
+          first=re.search(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="([^"]+)"',archive,re.S)
+          assert first and first.group(1)==latest
+          root=ET.fromstring(rss)
+          assert root.findtext('./channel/item/link')=='https://nasekadan.cz'+latest
+          data=json.loads(forecast)
+          assert data.get('properties',{}).get('timeseries')
+          PY
+            then ok=1; break; fi
+            sleep 10
+          done
+          test "$ok" = 1
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Připnutí bylo obnoveno a veřejně ověřeno. Nejnovější původní článek zůstal v bočním bloku: ${latest}. Archiv, RSS, původní datum článku a počasí jsou v pořádku. Run ${GITHUB_RUN_ID}."
+          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason completed
+
+      - name: Zapsat chybu
+        if: failure()
+        shell: bash
+        run: gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Obnova připnutí selhala. Run ${GITHUB_RUN_ID}."
