@@ -1,0 +1,62 @@
+name: Opravit frontu produkčního nasazení
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/fix-production-deploy-queue-trigger.txt'
+      - '.github/workflows/fix-production-deploy-queue.yml'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ponechat pouze nejnovější produkční deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/deploy-ovh.yml')
+          text = path.read_text(encoding='utf-8')
+          old = '  cancel-in-progress: false'
+          new = '  cancel-in-progress: true'
+          if new in text:
+              print('Fronta už je nastavená správně.')
+          elif old in text:
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+              print('Fronta přepnuta na jediný nejnovější deploy.')
+          else:
+              raise SystemExit('Očekávané nastavení concurrency nebylo nalezeno.')
+          PY
+          git config user.name 'Naše Kadaň Deploy Guard'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/workflows/deploy-ovh.yml
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Ponechat pouze nejnovější produkční nasazení'
+          git push origin HEAD:main
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Produkční fronta byla zkontrolována. Výsledek workflow: **${{ job.status }}**. Nastavení ponechává pouze jediný nejnovější deploy z main.`
+            });
