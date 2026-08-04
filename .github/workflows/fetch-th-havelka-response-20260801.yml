@@ -1,0 +1,82 @@
+name: Stáhnout odpověď TH Kadaň Havelkovi
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/fetch-th-havelka-response-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stáhnout PDF přes veřejnou stahovací stránku
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests beautifulsoup4 lxml
+          mkdir -p result/{files,text,ocr}
+          cat > /tmp/fetch.py <<'PY'
+          import json,re,subprocess,urllib.parse
+          from pathlib import Path
+          import requests
+          from bs4 import BeautifulSoup
+          S=requests.Session(); S.headers['User-Agent']='Mozilla/5.0 (compatible; NaseKadan public document research; +https://nasekadan.cz/)'
+          page='https://www.thkadan.cz/inpage/odpoved-29-9-2025/'
+          r=S.get(page,timeout=60); r.raise_for_status()
+          soup=BeautifulSoup(r.text,'lxml')
+          links=[]
+          for a in soup.find_all('a',href=True):
+              u=urllib.parse.urljoin(r.url,a['href'])
+              if '/soubor/' in u or '.pdf' in u.lower(): links.append(u)
+          print('LINKS',links)
+          if not links: raise SystemExit('PDF link not found')
+          records=[]
+          for i,u in enumerate(dict.fromkeys(links),1):
+              rr=S.get(u,timeout=120,allow_redirects=True); rr.raise_for_status()
+              data=rr.content
+              print('DOWNLOAD',u,'->',rr.url,rr.status_code,rr.headers.get('content-type'),len(data))
+              # Some /soubor/ endpoints return the PDF, others HTML that redirects/embeds a file.
+              if not data.startswith(b'%PDF'):
+                  ss=BeautifulSoup(rr.text,'lxml')
+                  inner=[]
+                  for a in ss.find_all('a',href=True):
+                      v=urllib.parse.urljoin(rr.url,a['href'])
+                      if '.pdf' in v.lower() or '/download/' in v or '/soubor/' in v: inner.append(v)
+                  for v in inner:
+                      rrr=S.get(v,timeout=120,allow_redirects=True)
+                      if rrr.content.startswith(b'%PDF'):
+                          rr=rrr; data=rrr.content; u=v; break
+              if not data.startswith(b'%PDF'):
+                  records.append({'url':u,'final_url':rr.url,'error':'not PDF','content_type':rr.headers.get('content-type'),'bytes':len(data)})
+                  continue
+              p=Path('result/files')/f'th-havelka-{i}.pdf'; p.write_bytes(data)
+              q=subprocess.run(['pdftotext','-layout',str(p),'-'],capture_output=True,text=True)
+              text=q.stdout or ''
+              if len(re.sub(r'\s+','',text))<500:
+                  d=Path('result/ocr')/str(i); d.mkdir(exist_ok=True)
+                  subprocess.run(['pdftoppm','-r','160','-jpeg',str(p),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                  parts=[]
+                  for img in sorted(d.glob('p-*.jpg')):
+                      z=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],capture_output=True,text=True)
+                      parts.append(z.stdout)
+                  text='\n\n'.join(parts)
+              tp=Path('result/text')/f'th-havelka-{i}.txt'; tp.write_text(text,encoding='utf-8',errors='replace')
+              records.append({'url':u,'final_url':rr.url,'file':str(p),'text_file':str(tp),'bytes':len(data),'chars':len(text)})
+              print(text[:20000])
+          Path('result/records.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),encoding='utf-8')
+          PY
+          python3 /tmp/fetch.py | tee result/output.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: th-kadan-havelka-response
+          path: result
+          retention-days: 2
