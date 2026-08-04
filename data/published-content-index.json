@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T13:18:16.773660+00:00",
+  "generated_at": "2026-08-04T14:23:17.331805+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
@@ -28,7 +28,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
     "public_audit_at": "2026-08-04T12:35:17.381979+00:00",
-    "repair_pending_public_verification": false,
+    "repair_pending_public_verification": true,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -46,24 +46,22 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "news_sitemap_invalid_xml_undeclared_image_namespace",
-      "reason": "news-sitemap.xml používala prvky image:image bez deklarace xmlns:image, takže dokument nebyl XML well-formed.",
-      "affected_file": "news-sitemap.xml",
-      "method": "declare-google-image-sitemap-namespace-validate-deploy-and-publicly-verify",
-      "status": "success",
-      "started_at": "2026-08-04T13:18:05.664649+00:00",
-      "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
-      "completed_at": "2026-08-04T13:18:16.773660+00:00",
-      "public_verification": {
-        "homepage": true,
-        "archive": true,
-        "rss": true,
-        "sitemap": true,
-        "news_sitemap_xml_well_formed": true,
-        "image_namespace_declared": true,
-        "registry": true,
-        "deployment_health": true
-      }
+      "classification": "live_publication_surface_drift_from_canonical_main",
+      "reason": "Živá titulní stránka a archiv vracely zastaralý titulek článku o zimním stadionu a neodpovídaly aktuálnímu mainu ani kanonickému registru.",
+      "affected_files": [
+        "index.html",
+        "clanky/index.html",
+        "clanky/strana-2.html",
+        "clanky/strana-3.html",
+        "clanky/strana-4.html",
+        "rss.xml",
+        "sitemap.xml",
+        "news-sitemap.xml",
+        "data/published-content-index.json"
+      ],
+      "method": "deploy-current-canonical-main-surfaces-and-verify-all-public-articles",
+      "status": "pending",
+      "started_at": "2026-08-04T14:23:17.331805+00:00"
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true
