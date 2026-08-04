@@ -1,0 +1,122 @@
+name: Diagnostika kanonické evidence 2026-08-04 02:22
+
+on:
+  push:
+    paths:
+      - '.github/workflows/canonical-diagnostic-20260804-0222.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Zapsat výsledek diagnostiky
+        shell: bash
+        run: |
+          set -u
+          python3 <<'PY'
+          import collections, datetime, html, json, re, ssl, traceback, urllib.request, time
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          BASE='https://nasekadan.cz'
+          OUT=Path('data/canonical-audit-diagnostic-20260804-0222.json')
+          REG=Path('data/published-content-index.json')
+          ctx=ssl._create_unverified_context()
+          result={'started_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'status':'error'}
+
+          def fetch(path):
+              url=path if path.startswith('http') else BASE+path
+              last=None
+              for attempt in range(8):
+                  try:
+                      sep='&' if '?' in url else '?'
+                      req=urllib.request.Request(url+sep+'diag='+str(time.time_ns()), headers={'User-Agent':'NaseKadanCanonicalDiagnostic/1.0','Cache-Control':'no-cache, no-store','Pragma':'no-cache'})
+                      with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
+                          return r.read().decode('utf-8',errors='replace')
+                  except Exception as exc:
+                      last=exc; time.sleep(2+attempt)
+              raise RuntimeError(f'fetch failed {url}: {last}')
+
+          def unique(seq): return list(dict.fromkeys(seq))
+          def links(page):
+              paths=re.findall(r'href=["\'](/clanky/[^"\'#?]+\.html)["\']',page,re.I)
+              return unique([BASE+p for p in paths if '/parts/' not in p and not re.search(r'/strana-\d+\.html$',p)])
+          def h1(page):
+              m=re.search(r'<h1\b[^>]*>(.*?)</h1>',page,re.I|re.S)
+              return '' if not m else ' '.join(html.unescape(re.sub(r'<[^>]+>','',m.group(1))).split())
+
+          try:
+              home=fetch('/')
+              first=fetch('/clanky/')
+              nums=sorted({int(x) for x in re.findall(r'/clanky/strana-(\d+)\.html',first)})
+              pages=['/clanky/']+[f'/clanky/strana-{n}.html' for n in nums]
+              archive='\n'.join([first]+[fetch(p) for p in pages[1:]])
+              rss=fetch('/rss.xml'); sitemap=fetch('/sitemap.xml'); news=fetch('/news-sitemap.xml'); health=fetch('/deployment-health.txt')
+              home_urls=links(home); archive_urls=links(archive)
+              rr=ET.fromstring(rss)
+              rss_urls=unique([(i.findtext('link') or '').strip() for i in rr.findall('.//item') if (i.findtext('link') or '').strip()])
+              ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+              sr=ET.fromstring(sitemap)
+              sitemap_urls=unique([(n.text or '').strip() for n in sr.findall('.//s:loc',ns) if '/clanky/' in (n.text or '') and (n.text or '').endswith('.html') and '/parts/' not in (n.text or '') and not re.search(r'/strana-\d+\.html$',(n.text or ''))])
+              nr=ET.fromstring(news)
+              news_urls=unique([(n.text or '').strip() for n in nr.findall('.//s:loc',ns) if (n.text or '').strip()])
+              data=json.loads(REG.read_text(encoding='utf-8')); articles=data['articles']; registry_urls=[a['url'] for a in articles]
+              h1_mismatches=[]
+              for a in articles:
+                  actual=h1(fetch(a['url']))
+                  if actual!=a['h1']: h1_mismatches.append({'url':a['url'],'expected':a['h1'],'actual':actual})
+              result.update({
+                'status':'ok', 'homepage_count':len(home_urls), 'archive_count':len(archive_urls), 'archive_pages':len(pages),
+                'rss_count':len(rss_urls), 'sitemap_article_count':len(sitemap_urls), 'news_sitemap_count':len(news_urls),
+                'registry_count':len(registry_urls), 'rss_order_matches_archive':rss_urls==archive_urls,
+                'missing_in_registry':sorted(set(archive_urls)-set(registry_urls)), 'missing_in_archive':sorted(set(registry_urls)-set(archive_urls)),
+                'missing_in_rss':sorted(set(registry_urls)-set(rss_urls)), 'extra_in_rss':sorted(set(rss_urls)-set(registry_urls)),
+                'missing_in_sitemap':sorted(set(registry_urls)-set(sitemap_urls)), 'extra_in_sitemap':sorted(set(sitemap_urls)-set(registry_urls)),
+                'duplicate_registry_urls':sorted([u for u,n in collections.Counter(registry_urls).items() if n>1]),
+                'duplicate_fingerprints':sorted([f for f,n in collections.Counter([a['fingerprint'] for a in articles]).items() if n>1]),
+                'h1_mismatches':h1_mismatches, 'deployment_health':health.strip()[:2000],
+                'deployment_health_has_status_ok':'status=ok' in health,
+              })
+          except Exception as exc:
+              result['error']=str(exc); result['traceback']=traceback.format_exc()
+          result['completed_at']=datetime.datetime.now(datetime.timezone.utc).isoformat()
+          OUT.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/canonical-audit-diagnostic-20260804-0222.json
+          git commit -m 'Zapsat diagnostiku kanonické evidence [skip ci]'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            git pull --rebase origin main
+            if [ "$attempt" = 4 ]; then exit 1; fi
+          done
+      - name: Odstranit diagnostický workflow
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main
+          rm -f .github/workflows/canonical-diagnostic-20260804-0222.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet; then
+            git add .github/workflows/canonical-diagnostic-20260804-0222.yml
+            git commit -m 'Odstranit diagnostický workflow [skip ci]'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              if [ "$attempt" = 4 ]; then exit 1; fi
+            done
+          fi
