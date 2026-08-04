@@ -1,0 +1,22 @@
+name: Spustit obnovu dopravního článku z PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/zatec-kadan-restore-pr-trigger.txt'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Spustit obnovovací workflow nad main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run restore-zatec-kadan-closure-article-20260804.yml --ref main --repo "$GITHUB_REPOSITORY"
