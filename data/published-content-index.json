@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T12:31:28.102976+00:00",
+  "generated_at": "2026-08-04T12:35:17.381979+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "b90b2f3768b29340081d84b06d7318408e21291e",
@@ -13,7 +13,7 @@
     "sitemap_all_articles_present": true,
     "news_sitemap_recent_count": 10,
     "rss_order_matches_archive": true,
-    "deployment_health": "ok",
+    "deployment_health": "verified",
     "deployment_health_status_field_present": true,
     "deployment_health_source": "50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a",
     "required_fields_complete": true,
@@ -27,7 +27,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-04.html",
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
-    "public_audit_at": "2026-08-04T12:31:28.102976+00:00",
+    "public_audit_at": "2026-08-04T12:35:17.381979+00:00",
     "repair_pending_public_verification": false,
     "public_repair_verification": {
       "status": "success",
@@ -46,16 +46,24 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "reason": "Živá titulka a archiv zobrazovaly starý stav článku o ochlazení a chyběl nejnovější článek o Josefu Suchém, zatímco repozitář a registr už obsahovaly nový stav.",
-      "classification": "significant_live_repository_mismatch",
-      "affected_urls": [
-        "https://nasekadan.cz/",
-        "https://nasekadan.cz/clanky/",
-        "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html",
-        "https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html"
-      ],
-      "started_at": "2026-08-04T12:21:43.031598+00:00",
-      "method": "deploy-current-canonical-main-and-publicly-verify"
+      "classification": "published_article_missing_from_rss",
+      "reason": "Článek o Josefu Suchém byl veřejný, v archivu, sitemapách a registru, ale chyběl v RSS.",
+      "affected_url": "https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html",
+      "method": "insert-missing-rss-item-deploy-and-publicly-verify",
+      "status": "success",
+      "completed_at": "2026-08-04T12:35:17.381979+00:00",
+      "public_verification": {
+        "homepage": true,
+        "archive": true,
+        "rss": true,
+        "sitemap": true,
+        "news_sitemap": true,
+        "registry": true,
+        "deployment_health": true,
+        "blood_article_h1": true,
+        "josef_article_h1": true,
+        "stadium_article_h1": true
+      }
     }
   },
   "articles": [
