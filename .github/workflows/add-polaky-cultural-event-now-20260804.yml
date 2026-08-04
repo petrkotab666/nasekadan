@@ -1,0 +1,138 @@
+name: Doplnit pohádkové prohlídky zámku Poláky do kulturního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/polaky-cultural-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: polaky-cultural-event-20260804
+  cancel-in-progress: false
+
+jobs:
+  update-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_REL: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      EVENT_ID: zamek-polaky-pohadkove-prohlidky-20260808
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit akci a monitoring zámku Poláky
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/add_polaky_fairytale_event_20260804.py
+          grep -Fq "data-event-id=\"${EVENT_ID}\"" "$ARTICLE"
+          grep -Fq 'Pohádkové prohlídky zámku Poláky' "$ARTICLE"
+          grep -Fq 'https://www.facebook.com/zamekpolakycz/' data/regional-sources.json
+          grep -Fq 'https://www.instagram.com/zamekpolaky/' data/regional-sources.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$ARTICLE" data/regional-sources.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit pohádkové prohlídky zámku Poláky do kulturního přehledu'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 3
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit přehled a regionální monitoring
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/polaky-cultural-bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE" "$bundle/clanky/"
+          cp data/regional-sources.json "$bundle/data/"
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'rm -rf "$HOME/polaky-cultural-bundle" && mkdir -p "$HOME/polaky-cultural-bundle" && tar -xzf - -C "$HOME/polaky-cultural-bundle"'
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "EVENT_ID='$EVENT_ID' ARTICLE_REL='$ARTICLE_REL' bash -s" <<'REMOTE'
+          set -euo pipefail
+          src="$HOME/polaky-cultural-bundle"
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          sudo install -m 0644 "$src/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html" "$root/clanky/"
+          sudo install -m 0644 "$src/data/regional-sources.json" "$root/data/regional-sources.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/data/regional-sources.json" nasekadan-web:/usr/share/nginx/html/data/regional-sources.json
+          fi
+          article="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${ARTICLE_REL}?polaky=$(date +%s)")"
+          sources="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/data/regional-sources.json?polaky=$(date +%s)")"
+          grep -Fq "data-event-id=\"${EVENT_ID}\"" <<<"$article"
+          grep -Fq 'SOBOTA 8. 8. · 10:00–17:00' <<<"$article"
+          grep -Fq 'Pohádkové prohlídky zámku Poláky' <<<"$article"
+          grep -Fq 'https://www.facebook.com/zamekpolakycz/' <<<"$sources"
+          grep -Fq 'https://www.instagram.com/zamekpolaky/' <<<"$sources"
+          rm -rf "$HOME/polaky-cultural-bundle"
+          REMOTE
+
+      - name: Ověřit web zvenku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          article="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz${ARTICLE_REL}?external-polaky=${GITHUB_RUN_ID}")"
+          sources="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/data/regional-sources.json?external-polaky=${GITHUB_RUN_ID}")"
+          grep -Fq "data-event-id=\"${EVENT_ID}\"" <<<"$article"
+          grep -Fq 'Prohlídky začínají každou celou hodinu' <<<"$article"
+          grep -Fq 'Pohádkové prohlídky zámku Poláky' <<<"$article"
+          grep -Fq 'Zámek Poláky' <<<"$sources"
+          grep -Fq 'https://www.facebook.com/zamekpolakycz/' <<<"$sources"
+          grep -Fq 'https://www.instagram.com/zamekpolaky/' <<<"$sources"
+
+      - name: Zapsat stav aktualizace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.patch.outputs.source_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const deploy=process.env.DEPLOY_OUTCOME||'skipped';
+            const verify=process.env.VERIFY_OUTCOME||'skipped';
+            const status=deploy==='success'&&verify==='success'?'success':'failure';
+            const payload={
+              status,
+              run_id:String(context.runId),
+              source_sha:process.env.SOURCE_SHA||'',
+              checked_at:new Date().toISOString(),
+              deploy,
+              external_verify:verify,
+              article_updated:status==='success',
+              event:{name:'Pohádkové prohlídky zámku Poláky',starts_at:'2026-08-08T10:00:00+02:00',ends_at:'2026-08-08T17:00:00+02:00'},
+              monitoring_added:status==='success'
+            };
+            let sha;
+            try { const old=await github.rest.repos.getContent({owner,repo,path:'.github/polaky-cultural-live-status.json',ref:'main'}); sha=old.data.sha; }
+            catch(e){ if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:'.github/polaky-cultural-live-status.json',branch:'main',message:`Zapsat stav doplnění zámku Poláky: ${status} [skip ci]`,sha,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
