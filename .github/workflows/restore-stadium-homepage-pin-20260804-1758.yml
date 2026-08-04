@@ -87,10 +87,10 @@ jobs:
           base=https://nasekadan.cz
           q="${GITHUB_RUN_ID}-$(date +%s)"
           home="$(curl -4 -kfsS -L --max-time 35 "$base/?v=$q")"
-          hero="$(python3 -c 'import re,sys; t=sys.stdin.read(); m=re.search(r"<section class=\\"wrap hero\\" id=\\"clanky\\".*?</section>",t,re.S); print(m.group(0) if m else "")' <<<"$home")"
-          grep -Fq "data-latest-article-href=\"$PIN_REL\"" <<<"$hero"
-          grep -Fq 'Kadaň otevřela zimní stadion lidem před vedrem' <<<"$hero"
-          grep -Fq '/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html' <<<"$hero"
+          grep -Fq "<section class=\"wrap hero\" id=\"clanky\" data-auto-latest-hero=\"1\" data-latest-article-href=\"$PIN_REL\">" <<<"$home"
+          aside="$(sed -n '/<aside class="current-aside">/,/<\/aside>/p' <<<"$home")"
+          grep -Fq 'Kadaň otevřela zimní stadion lidem před vedrem' <<<"$home"
+          grep -Fq '/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html' <<<"$aside"
           grep -Fq '/pocasi.js' <<<"$home"
           curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
 
