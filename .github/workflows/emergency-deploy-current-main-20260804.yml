@@ -57,3 +57,5 @@ jobs:
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" | grep -Fq "source=$(git rev-parse HEAD)"
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html?v=$q" | grep -Fq 'Kriticky chybí skupina 0 Rh−'
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?v=$q" | grep -Fq 'zimní stadion'
+
+# Redeploy requested 2026-08-04 20:55 Europe/Prague to restore the temporary homepage pin.
