@@ -1,59 +1,18 @@
-name: Publikovat článek Slovan podruhé
+name: ZABLOKOVÁNO – starý publikační běh Slovanu
 
-on:
+"on":
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: publish-slovan-manual
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  publish:
+  blocked:
     runs-on: ubuntu-latest
     steps:
-      - name: Stáhnout hlavní větev
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Zveřejnit článek s aktuálním datem a časem
+      - name: Zastavit zastaralý publikační postup
         shell: bash
         run: |
-          set -euo pipefail
-          python3 scripts/publish_slovan_article.py
-          python3 scripts/finalize_launch.py
-
-      - name: Ověřit výsledek
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s clanky/slovan-druhy-pokus.html
-          grep -q '/clanky/slovan-druhy-pokus.html' index.html
-          grep -q '/clanky/slovan-druhy-pokus.html' clanky/index.html
-          grep -q 'slovan-druhy-pokus.html' rss.xml
-          grep -q 'slovan-druhy-pokus.html' sitemap.xml
-          if grep -q 'noindex,nofollow' clanky/slovan-druhy-pokus.html; then
-            echo 'Veřejný článek stále obsahuje noindex.' >&2
-            exit 1
-          fi
-
-      - name: Uložit veřejnou verzi
-        shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet && git diff --cached --quiet; then
-            echo 'Žádné změny k uložení – článek už může být zveřejněný.'
-            exit 0
-          fi
-          git config user.name 'Naše Kadaň automat'
-          git config user.email 'info@nasekadan.cz'
-          git add -A
-          git commit -m 'Publikovat: Slovan podruhé'
-          git push origin main
-
-      - name: Potvrdit publikaci
-        run: echo 'Článek Slovan podruhé byl zveřejněn s aktuálním datem a časem.'
+          echo 'Tento starý workflow je záměrně zablokovaný, protože používal zastaralý článek, aktuální čas a neúplné publikační plochy.' >&2
+          echo 'Platný je pouze .github/workflows/publish-slovan-20260805.yml s časem 5. 8. 2026 ve 04:00 a vícevrstvým ověřením.' >&2
+          exit 1
