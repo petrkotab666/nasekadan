@@ -1,0 +1,258 @@
+name: Nezávisle opravit chronologii článků
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+concurrency:
+  group: nasekadan-strict-chronology-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.event.issue.title == '[chronology] Obnovit pořadí článků podle zveřejnění'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Zastavit konfliktní pojistku
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run list --workflow article-integrity-guard.yml --limit 40 --json databaseId,status --jq '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId' | while read -r id; do
+            [[ -n "$id" ]] && gh run cancel "$id" || true
+          done
+          sleep 8
+
+      - name: Trvale odstranit připnutí a přegenerovat pořadí
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          engine_path = Path('scripts/enforce_article_visibility.py')
+          engine = engine_path.read_text(encoding='utf-8')
+          engine, n1 = re.subn(
+              r"\n# HOMEPAGE-PIN-STADIUM-20260804\nHOMEPAGE_PIN_HREF\s*=.*\nHOMEPAGE_PIN_UNTIL\s*=.*\n",
+              "\n",
+              engine,
+              count=1,
+          )
+          engine, n2 = re.subn(
+              r"    homepage_order = list\(articles\)\n    if datetime\.now\(timezone\.utc\) <= HOMEPAGE_PIN_UNTIL\.astimezone\(timezone\.utc\):\n        pinned = next\(\(item for item in articles if item\['href'\] == HOMEPAGE_PIN_HREF\), None\)\n        if pinned is None:\n            raise RuntimeError\('Připínaný článek nebyl nalezen\.'\)\n        homepage_order = \[pinned\] \+ \[item for item in articles if item\['href'\] != HOMEPAGE_PIN_HREF\]\n",
+              "    homepage_order = list(articles)\n",
+              engine,
+              count=1,
+          )
+          if n1 != 1 or n2 != 1 or 'HOMEPAGE_PIN_' in engine:
+              raise SystemExit(f'Generátor nelze bezpečně opravit: constants={n1}, order={n2}')
+          compile(engine, str(engine_path), 'exec')
+          engine_path.write_text(engine, encoding='utf-8', newline='\n')
+
+          all_path = Path('scripts/enforce_all_article_visibility.py')
+          all_text = all_path.read_text(encoding='utf-8')
+          all_text, n3 = re.subn(
+              r"    # NK-STADIUM-PIN-POLICY-20260804.*?    engine\.main\(\)\n",
+              "    # Titulka i archiv se řadí výhradně podle prvního zveřejnění.\n    engine.article_info = safe_article_info\n    engine.main()\n",
+              all_text,
+              count=1,
+              flags=re.S,
+          )
+          all_text, n4 = re.subn(
+              r"    expected_hero = pin_href if pin_active else latest",
+              "    expected_hero = latest",
+              all_text,
+              count=1,
+          )
+          all_text, n5 = re.subn(
+              r"\n    if pin_active:\n        aside = .*?\n\n    expected_home",
+              "\n\n    expected_home",
+              all_text,
+              count=1,
+              flags=re.S,
+          )
+          if n3 != 1 or n4 != 1 or n5 != 1 or any(x in all_text for x in ('pin_active','pin_href','HOMEPAGE_PIN_','NK-STADIUM-PIN-POLICY')):
+              raise SystemExit(f'Úplnou pojistku nelze bezpečně opravit: {n3}, {n4}, {n5}')
+          compile(all_text, str(all_path), 'exec')
+          all_path.write_text(all_text, encoding='utf-8', newline='\n')
+
+          guard_path = Path('scripts/run_article_integrity_guard.sh')
+          guard = guard_path.read_text(encoding='utf-8')
+          guard, n6 = re.subn(
+              r"  # NK-STADIUM-PIN-GUARD-20260804.*?\nPY\n\n  # Odstraň pouze",
+              "  # Pořadí je vždy čistě chronologické podle article:published_time.\n  # Aktualizace staršího článku jej dopředu neposune.\n\n  # Odstraň pouze",
+              guard,
+              count=1,
+              flags=re.S,
+          )
+          if n6 != 1 or 'NK-STADIUM-PIN-GUARD' in guard or 'HOMEPAGE_PIN_' in guard:
+              raise SystemExit(f'Desetiminutovou pojistku nelze bezpečně opravit: {n6}')
+          guard_path.write_text(guard, encoding='utf-8', newline='\n')
+          PY
+
+          rm -f \
+            .github/workflows/fix-stadium-pin-guard-20260804.yml \
+            scripts/restore_stadium_pin_now.py \
+            scripts/fix_stadium_pin_guard.py \
+            scripts/patch_article_visibility_pin_policy.py \
+            scripts/verify_stadium_pin_live.py \
+            .github/stadium-pin-latest.txt
+
+          python3 -m py_compile scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+          bash -n scripts/run_article_integrity_guard.sh
+          python3 scripts/enforce_all_article_visibility.py
+          git diff --check
+
+          read -r latest second third < <(python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util, re
+          spec = importlib.util.spec_from_file_location('visibility', Path('scripts/enforce_article_visibility.py'))
+          module = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          spec.loader.exec_module(module)
+          items=[]
+          for path in Path('clanky').glob('*.html'):
+              if path.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', path.name):
+                  continue
+              item=module.article_info(path)
+              if item: items.append(item)
+          items.sort(key=lambda item:item['dt'], reverse=True)
+          print(items[0]['href'], items[1]['href'], items[2]['href'])
+          PY
+          )
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "second=$second" >> "$GITHUB_OUTPUT"
+          echo "third=$third" >> "$GITHUB_OUTPUT"
+
+          git config user.name 'Naše Kadaň – chronologie článků'
+          git config user.email 'info@nasekadan.cz'
+          git add -A
+          git reset -- .github/strict-chronology-trigger.txt .github/workflows/fix-strict-article-chronology-20260804.yml || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Trvale řadit články podle prvního zveřejnění'
+            pushed=0
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then pushed=1; break; fi
+              git fetch origin main
+              git rebase origin/main
+              sleep $((attempt * 3))
+            done
+            test "$pushed" = 1
+          fi
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Zastavit nově spuštěnou pojistku a nasadit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run list --workflow article-integrity-guard.yml --limit 40 --json databaseId,status --jq '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId' | while read -r id; do
+            [[ -n "$id" ]] && gh run cancel "$id" || true
+          done
+          sleep 5
+          git fetch origin main
+          git reset --hard origin/main
+          bash scripts/run_article_integrity_guard.sh
+
+      - name: Veřejně ověřit první tři články
+        id: verify
+        shell: bash
+        env:
+          LATEST: ${{ steps.patch.outputs.latest }}
+          SECOND: ${{ steps.patch.outputs.second }}
+          THIRD: ${{ steps.patch.outputs.third }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re,time
+          from urllib.request import Request,urlopen
+          expected=[os.environ['LATEST'],os.environ['SECOND'],os.environ['THIRD']]
+          def get(url):
+              req=Request(url,headers={'User-Agent':'Naše Kadaň strict chronology audit'})
+              with urlopen(req,timeout=40) as r: return r.read().decode('utf-8','replace')
+          last=None
+          for attempt in range(12):
+              try:
+                  q=f'{int(time.time())}-{attempt}'
+                  home=get(f'https://nasekadan.cz/?strict-order={q}')
+                  archive=get(f'https://nasekadan.cz/clanky/?strict-order={q}')
+                  hero=re.search(r'<section\b[^>]*class="[^"]*\bhero\b[^"]*"[^>]*\bid="clanky"[^>]*>.*?</section>',home,re.I|re.S)
+                  if not hero or f'data-latest-article-href="{expected[0]}"' not in hero.group(0):
+                      raise RuntimeError('Hlavní článek není první podle zveřejnění.')
+                  aside=re.search(r'<aside\b[^>]*class="[^"]*current-aside[^"]*"[^>]*>.*?</aside>',hero.group(0),re.I|re.S)
+                  if not aside or expected[1] not in aside.group(0):
+                      raise RuntimeError('Boční článek není druhý podle zveřejnění.')
+                  cards=re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="(/clanky/[^"]+\.html)".*?</article>',home,re.I|re.S)
+                  archive_cards=re.findall(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="(/clanky/[^"]+\.html)".*?</article>',archive,re.I|re.S)
+                  if not cards or cards[0] != expected[2] or archive_cards[:3] != expected:
+                      raise RuntimeError(f'Karty nejsou ve správném pořadí: home={cards[:3]}, archive={archive_cards[:5]}')
+                  print('Veřejná chronologie je správná:',expected)
+                  break
+              except Exception as exc:
+                  last=exc
+                  time.sleep(8)
+          else:
+              raise SystemExit(f'Veřejná kontrola selhala: {last}')
+          PY
+
+      - name: Zapsat úspěch a uzavřít incident
+        shell: bash
+        env:
+          LATEST: ${{ steps.patch.outputs.latest }}
+          SECOND: ${{ steps.patch.outputs.second }}
+          THIRD: ${{ steps.patch.outputs.third }}
+          SOURCE_SHA: ${{ steps.patch.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/status.json <<EOF
+          {
+            "status": "success",
+            "run_id": "${GITHUB_RUN_ID}",
+            "source_sha": "${SOURCE_SHA}",
+            "checked_at": "$(date -u +%FT%TZ)",
+            "ordering_rule": "article:published_time descending",
+            "updates_do_not_reorder": true,
+            "manual_pins_removed": true,
+            "latest": "${LATEST}",
+            "second": "${SECOND}",
+            "third": "${THIRD}"
+          }
+          EOF
+          content="$(base64 -w0 /tmp/status.json)"
+          sha="$(gh api repos/${GITHUB_REPOSITORY}/contents/.github/strict-chronology-live-status.json --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT repos/${GITHUB_REPOSITORY}/contents/.github/strict-chronology-live-status.json \
+              -f message='Zapsat úspěšnou opravu chronologie [skip ci]' -f branch=main -f sha="$sha" -f content="$content" >/dev/null
+          else
+            gh api --method PUT repos/${GITHUB_REPOSITORY}/contents/.github/strict-chronology-live-status.json \
+              -f message='Zapsat úspěšnou opravu chronologie [skip ci]' -f branch=main -f content="$content" >/dev/null
+          fi
+          gh issue comment "$ISSUE_NUMBER" --body "Pořadí titulky i archivu bylo opraveno a veřejně ověřeno. Články se nyní řadí výhradně podle prvního zveřejnění; aktualizace ani ruční připnutí pořadí nemění. Run ${GITHUB_RUN_ID}."
+          gh issue close "$ISSUE_NUMBER" --reason completed
+
+      - name: Zapsat chybu
+        if: failure()
+        shell: bash
+        run: gh issue comment "$ISSUE_NUMBER" --body "Oprava chronologie selhala. Run ${GITHUB_RUN_ID}."
