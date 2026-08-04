@@ -1,0 +1,52 @@
+name: Kanonická ochrana všech článků Naše Kadaň
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-canonical-article-integrity
+  cancel-in-progress: true
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Obnovit, nasadit a veřejně ověřit celý článekový povrch
+        shell: bash
+        run: bash scripts/run_article_integrity_guard.sh
+
+      - name: Založit nebo doplnit incident při skutečném selhání
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[incident] Viditelnost článků Naše Kadaň'
+          body="Kanonická obnova nebo veřejný audit článků selhaly.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nSpouštěcí commit: ${GITHUB_SHA}"
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
