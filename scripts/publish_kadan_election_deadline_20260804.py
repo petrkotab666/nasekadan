@@ -24,6 +24,7 @@ DESC = (
     "zveřejnily celé sestavy, ANO oznámilo podání a Piráti představují své kandidáty."
 )
 PUBLISHED = "2026-08-04T18:46:00+02:00"
+MODIFIED = "2026-08-04T19:06:00+02:00"
 DATE_SHORT = "4. 8. 2026"
 TAG = "KOMUNÁLNÍ VOLBY 2026 · KADAŇ"
 
@@ -85,7 +86,7 @@ def article_page() -> str:
         "headline": TITLE,
         "description": DESC,
         "datePublished": PUBLISHED,
-        "dateModified": PUBLISHED,
+        "dateModified": MODIFIED,
         "author": {"@type": "Organization", "@id": "https://nasekadan.cz/#organization", "name": "Naše Kadaň", "url": "https://nasekadan.cz/o-webu/"},
         "publisher": {"@id": "https://nasekadan.cz/#organization"},
         "mainEntityOfPage": {"@type": "WebPage", "@id": URL},
@@ -119,7 +120,7 @@ def article_page() -> str:
 <link rel="canonical" href="{URL}"><link rel="stylesheet" href="../style.css"><link rel="stylesheet" href="/footer.css?v=20260726-event-hotfix-2">
 <meta property="og:locale" content="cs_CZ"><meta property="og:type" content="article"><meta property="og:site_name" content="Naše Kadaň"><meta property="og:title" content="{escape(TITLE, quote=True)}"><meta property="og:description" content="{escape(DESC, quote=True)}"><meta property="og:url" content="{URL}"><meta property="og:image" content="{SOCIAL_URL}"><meta property="og:image:type" content="image/png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="{escape(TITLE, quote=True)}"><meta name="twitter:description" content="{escape(DESC, quote=True)}"><meta name="twitter:image" content="{SOCIAL_URL}">
-<meta property="article:published_time" content="{PUBLISHED}"><meta property="article:modified_time" content="{PUBLISHED}">
+<meta property="article:published_time" content="{PUBLISHED}"><meta property="article:modified_time" content="{MODIFIED}">
 <link data-nasekadan-discovery="1" rel="alternate" type="application/rss+xml" title="Naše Kadaň – zprávy z Kadaně" href="https://nasekadan.cz/rss.xml"><link rel="alternate" type="text/plain" title="Naše Kadaň pro AI" href="https://nasekadan.cz/llms.txt">
 <link data-nasekadan-favicon="primary" rel="icon" href="/favicon.svg?v=20260801-2" type="image/svg+xml" sizes="any"><meta name="theme-color" content="#9f2626">
 <script type="application/ld+json">{json.dumps(schema, ensure_ascii=False, separators=(',', ':'))}</script>
@@ -151,8 +152,9 @@ def article_page() -> str:
 <p>Za Oswaldem následují Marcela Trejbal Vlčková, Michal Vyčichlo, Jan Hudák a Soňa Pusztakürti. Na celé 27členné sestavě jsou také lidé ze zdravotnictví a sociálních služeb a několik osob, které v minulosti kandidovaly za ODS. Bývalý starosta Jiří Kulhánek uskupení veřejně podporuje, sám však podle zveřejněné sestavy nekandiduje.</p>
 <div class="callout"><strong>Nejde o „celou bývalou ODS“</strong><p>Přesné je mluvit o nové skupině kolem části někdejších kandidátů a politických partnerů ODS. Řada jejích kandidátů s ODS dříve spojena nebyla.</p></div>
 <h2>ANO oznámilo podání, úplnou sestavu zatím nemáme</h2>
-<p>Veřejný profil <strong>ANO, tohle je Kadaň</strong> zveřejnil v den uzávěrky krátké video, kterým oznámil podání kandidátky. Kopii videa má redakce k dispozici. Z veřejně zachyceného příspěvku však zatím nelze bezpečně sestavit úplné pořadí kandidátů ani potvrdit letošního lídra.</p>
+<p>Veřejný profil <strong>ANO, tohle je Kadaň</strong> zveřejnil krátké video už několik dní před uzávěrkou, nikoli 4. srpna. Kopii videa má redakce k dispozici. Facebook u příspěvku v době redakční kontroly zobrazoval údaj „před 4 dny“. Z veřejně zachyceného příspěvku však zatím nelze bezpečně sestavit úplné pořadí kandidátů ani potvrdit letošního lídra.</p>
 <p>ANO přitom nelze považovat za vedlejšího soupeře. V komunálních volbách 2022 získalo 33,36 procenta hlasů a deset mandátů. Za vítěznou ODS zaostalo pouze o dva mandáty. Rozdělení části někdejšího týmu ODS proto může otevřít prostor právě hnutí ANO.</p>
+<div class="update-box" data-correction="ano-video-timing"><strong>Upřesnění redakce</strong><p>Po zveřejnění článku jsme opravili časové zařazení videa ANO. Facebook u něj zobrazoval údaj „před 4 dny“; nebylo tedy zveřejněno 4. srpna v den uzávěrky.</p></div>
 <h2>Piráti ukazují jména, úřední potvrzení teprve přijde</h2>
 <p>Kadaňský pirátský web veřejně uvádí Janu Hladovou a další kandidáty. Mezi představenými jmény jsou například Pavel Miltner, Hana Vodrážková, Miloslava Karfilátová a Jiří Kopica. Redakce ale zatím nemá úředně potvrzeno, zda zveřejněný přehled odpovídá konečné podané listině včetně pořadí všech kandidátů.</p>
 <p>Piráti v roce 2022 získali 4,90 procenta hlasů a do zastupitelstva se těsně nedostali.</p>
@@ -169,7 +171,7 @@ def article_page() -> str:
 <li><a href="https://www.presskadan.cz/zastupitelstvo.html" target="_blank" rel="noopener noreferrer">PressKadaň – ustavující zastupitelstvo 2022</a>, zvolení starosty, místostarosty a členů rady.</li>
 <li><a href="https://www.seznamzpravy.cz/p/vysledky-voleb/2022/komunalni-volby/obec/563102-kadan" target="_blank" rel="noopener noreferrer">Výsledky komunálních voleb 2022 v Kadani</a>.</li>
 <li><a href="https://kadan.pirati.cz/programy/" target="_blank" rel="noopener noreferrer">Piráti Kadaň – veřejně uvedení kandidáti</a>.</li>
-<li>Veřejné video profilu „ANO, tohle je Kadaň“ ze 4. srpna 2026; obrazový záznam poskytl redakci čtenář.</li>
+<li>Veřejné video profilu „ANO, tohle je Kadaň“ zveřejněné několik dní před 4. srpnem 2026; obrazový záznam poskytl redakci čtenář.</li>
 </ul><p><small>U každé osoby rozlišujeme doloženou veřejnou funkci, kandidaturu a pouhou politickou podporu. Podané kandidátky neoznačujeme za zaregistrované před rozhodnutím registračního úřadu.</small></p></div>
 <div data-promos data-context="article-end"></div>
 </article><aside class="sticky"><div class="sidebox"><h3>Co bude následovat</h3><ul><li>do 12. srpna výzvy k opravám</li><li>do 17. srpna odstranění závad</li><li>do 22. srpna rozhodnutí o registraci</li><li>9. a 10. října volby</li></ul></div><div class="sidebox"><h3>Pošlete nám tip</h3><p>Máte veřejné oznámení další kandidátky nebo úplnou sestavu? Pošlete odkaz či snímek na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>.</p></div><div data-promos data-context="sidebar"></div></aside></main>
@@ -247,7 +249,7 @@ def update_registry() -> None:
             "h1": TITLE,
             "url": URL,
             "published_at": PUBLISHED,
-            "modified_at": PUBLISHED,
+            "modified_at": MODIFIED,
             "persons": ["Jan Losenický", "Radek Oswald", "Alena Benešová", "Jan Perout", "Michal Voltr", "Jan Vaic", "Marcela Trejbal Vlčková", "Michal Vyčichlo", "Jan Hudák", "Soňa Pusztakürti", "Jana Hladová", "Jiří Kulhánek"],
             "organizations": ["ODS Kadaň", "Dáme Kadani novou šanci", "ANO 2011", "Piráti Kadaň", "Městský úřad Kadaň", "Ministerstvo vnitra"],
             "places": ["Kadaň"],
@@ -261,7 +263,7 @@ def update_registry() -> None:
         }
         articles.insert(0, item)
     else:
-        item.update({"title": TITLE, "h1": TITLE, "modified_at": PUBLISHED, "publication_status": "published"})
+        item.update({"title": TITLE, "h1": TITLE, "modified_at": MODIFIED, "publication_status": "published"})
 
     home = (ROOT / "index.html").read_text(encoding="utf-8", errors="replace")
     archive_text = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in sorted((ROOT / "clanky").glob("strana-*.html"))) + "\n" + (ROOT / "clanky/index.html").read_text(encoding="utf-8", errors="replace")

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T16:59:11.737805+00:00",
+  "generated_at": "2026-08-04T17:10:14.921620+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "37eeba6e01f734c0628098f6d5444093de5a6ac2",
@@ -46,34 +46,13 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "stale_registry_h1_after_published_article_update",
-      "reason": "Veřejný článek a main měly aktualizovaný H1, ale kanonický registr stále obsahoval původní titulek.",
-      "updated_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
-      "old_h1": "Nemocnice Kadaň akutně hledá dárce krve. Kriticky chybí skupina 0 Rh−",
-      "new_h1": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
-      "source_commit": "626488252e36c584cfa42613fb1d873d708e31e5",
-      "changed_surfaces": [
-        "clanky/index.html",
-        "rss.xml",
-        "news-sitemap.xml",
-        "llms.txt"
-      ],
-      "method": "verify-live-h1-update-registry-normalize-surfaces-deploy-and-full-public-audit",
-      "status": "success",
-      "started_at": "2026-08-04T14:46:00.268136+00:00",
-      "completed_at": "2026-08-04T14:47:48.999460+00:00",
-      "public_verification": {
-        "homepage": true,
-        "archive_all_four_pages": true,
-        "rss_all_47_articles": true,
-        "sitemap_all_47_articles": true,
-        "news_sitemap_xml_well_formed": true,
-        "all_47_public_article_h1": true,
-        "registry_unique_and_complete": true,
-        "deployment_health": true,
-        "weather": true,
-        "social_graphic": true
-      }
+      "classification": "incorrect_source_publication_timing",
+      "reason": "Video ANO bylo původně nesprávně popsáno jako zveřejněné v den uzávěrky; snímek Facebooku ukazuje údaj před 4 dny.",
+      "updated_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
+      "old_claim": "Video bylo zveřejněno v den uzávěrky 4. srpna 2026.",
+      "new_claim": "Video bylo zveřejněno několik dní před uzávěrkou; Facebook zobrazoval údaj před 4 dny.",
+      "status": "pending_public_verification",
+      "started_at": "2026-08-04T17:10:14.921609+00:00"
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true,
@@ -97,7 +76,7 @@
       "h1": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
       "url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
       "published_at": "2026-08-04T18:46:00+02:00",
-      "modified_at": "2026-08-04T18:46:00+02:00",
+      "modified_at": "2026-08-04T19:06:00+02:00",
       "persons": [
         "Jan Losenický",
         "Radek Oswald",
