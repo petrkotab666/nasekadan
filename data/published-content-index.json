@@ -1,9 +1,9 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T17:16:50.467340+00:00",
+  "generated_at": "2026-08-04T17:42:23.461757+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
-  "source_commit": "37eeba6e01f734c0628098f6d5444093de5a6ac2",
+  "source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e",
   "article_count": 48,
   "validation": {
     "homepage_count": 14,
@@ -46,13 +46,17 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "incorrect_source_publication_timing",
-      "reason": "Video ANO bylo původně nesprávně popsáno jako zveřejněné v den uzávěrky; snímek Facebooku ukazuje údaj před 4 dny.",
+      "classification": "remove_unnecessary_editorial_correction_box",
+      "reason": "Správný údaj o stáří videa ANO je zapracován přímo v textu; samostatný box Upřesnění redakce byl zbytečný.",
       "updated_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
-      "old_claim": "Video bylo zveřejněno v den uzávěrky 4. srpna 2026.",
-      "new_claim": "Video bylo zveřejněno několik dní před uzávěrkou; Facebook zobrazoval údaj před 4 dny.",
-      "status": "pending_public_verification",
-      "started_at": "2026-08-04T17:10:14.921609+00:00"
+      "source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e",
+      "status": "success",
+      "completed_at": "2026-08-04T17:42:23.461770+00:00",
+      "public_verification": {
+        "article_h1": true,
+        "correct_timing_in_body": true,
+        "editorial_correction_box_absent": true
+      }
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true,
@@ -75,7 +79,7 @@
       "h1": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
       "url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
       "published_at": "2026-08-04T18:46:00+02:00",
-      "modified_at": "2026-08-04T19:06:00+02:00",
+      "modified_at": "2026-08-04T19:38:00+02:00",
       "persons": [
         "Jan Losenický",
         "Radek Oswald",
@@ -123,7 +127,7 @@
       },
       "source_path": "clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
       "publication_status": "published",
-      "source_commit": "37eeba6e01f734c0628098f6d5444093de5a6ac2"
+      "source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e"
     },
     {
       "title": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
