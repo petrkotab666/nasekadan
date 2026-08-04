@@ -1,0 +1,170 @@
+name: Opravit kanonický RSS a registr 2026-08-04 19:11
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-canonical-rss-registry-20260804-1911.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-canonical-rss-registry-20260804-1911
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Doplnit chybějící RSS položky
+        id: repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická oprava'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/ensure_recent_rss_entries.py
+            python3 scripts/ensure_recent_rss_entries.py
+            python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          rss = Path('rss.xml').read_text(encoding='utf-8')
+          registry = json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          links = re.findall(r'<link>\s*(https://nasekadan\.cz/clanky/[^<]+\.html)\s*</link>', rss)
+          expected = {item['url'] for item in registry['articles'] if item.get('publication_status') == 'published'}
+          assert len(links) == len(set(links)), 'RSS obsahuje duplicitní URL'
+          assert set(links) == expected, f'RSS neodpovídá registru: RSS={len(set(links))}, registr={len(expected)}, chybí={sorted(expected-set(links))}'
+          print(f'RSS ověřeno: {len(links)} unikátních publikovaných článků.')
+          PY
+            git add rss.xml
+            if git diff --cached --quiet; then
+              final_sha="$(git rev-parse HEAD)"
+              pushed=1
+              echo "rss_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            git commit -m 'Opravit chybějící položky kanonického RSS'
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "rss_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit RSS na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 rss.xml ubuntu@57.129.43.215:/tmp/nasekadan-rss.xml
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/nasekadan-rss.xml /var/www/nasekadan/rss.xml
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nasekadan-rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+          fi
+          rm -f /tmp/nasekadan-rss.xml
+          REMOTE
+
+      - name: Aktualizovat kanonický registr podle živého webu
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/run_canonical_audit_runtime_v2.py --write
+            git add data/published-content-index.json .github/canonical-content-audit-status.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: potvrdit úplnost RSS a kanonického registru'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "audit_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit aktualizovaný registr a deployment health
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha='${{ steps.audit.outputs.audit_sha }}'
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html\n' "$source_sha" > deployment-health.txt
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json deployment-health.txt ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Veřejně ověřit povinné kanály bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          for path in / /clanky/ /rss.xml /sitemap.xml /news-sitemap.xml /deployment-health.txt /data/published-content-index.json; do
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz${path}?v=$q" -o "/tmp/$(echo "$path" | tr '/.' '__')"
+          done
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+          rss = Path('/tmp/_rss_xml').read_text(encoding='utf-8')
+          registry = json.loads(Path('/tmp/_data_published-content-index_json').read_text(encoding='utf-8'))
+          links = re.findall(r'<link>\s*(https://nasekadan\.cz/clanky/[^<]+\.html)\s*</link>', rss)
+          expected = {item['url'] for item in registry['articles'] if item.get('publication_status') == 'published'}
+          assert len(links) == len(set(links))
+          assert set(links) == expected
+          assert registry['validation']['duplicate_urls'] == []
+          assert registry['validation']['duplicate_fingerprints'] == []
+          assert registry['validation']['rss_count'] == registry['article_count']
+          assert registry['validation']['archive_count'] == registry['article_count']
+          assert registry['validation']['sitemap_all_articles_present'] is True
+          home = Path('/tmp/__').read_text(encoding='utf-8')
+          archive = Path('/tmp/_clanky_').read_text(encoding='utf-8')
+          latest = '/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html'
+          assert latest in home and latest in archive
+          health = Path('/tmp/_deployment-health_txt').read_text(encoding='utf-8')
+          assert 'status=ok' in health
+          print(f'Veřejně ověřeno {len(expected)} článků bez duplicit a s úplným RSS.')
+          PY
