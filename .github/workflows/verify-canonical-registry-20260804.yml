@@ -1,4 +1,4 @@
-name: Veřejně ověřit kanonickou evidenci 45 článků
+name: Dokončit veřejné ověření kanonické evidence
 
 on:
   push:
@@ -26,242 +26,156 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Načíst a ověřit celý živý publikační povrch
+      - name: Ověřit živý web a aktualizovat registr
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from concurrent.futures import ThreadPoolExecutor
           from datetime import datetime, timezone
           from html import unescape
           from pathlib import Path
-          import hashlib, json, re, ssl, time, urllib.request
+          import hashlib,json,re,ssl,subprocess,time,urllib.request
           import xml.etree.ElementTree as ET
 
           base='https://nasekadan.cz'
           ctx=ssl._create_unverified_context()
           stamp=str(int(time.time()))
-
-          def fetch(url, attempts=5):
-              sep='&' if '?' in url else '?'
+          def get(url):
               last=None
-              for i in range(attempts):
+              for i in range(6):
                   try:
-                      req=urllib.request.Request(f'{url}{sep}canonical_audit={stamp}-{i}',headers={'User-Agent':'NaseKadanCanonicalAudit/1.0','Cache-Control':'no-cache'})
-                      with urllib.request.urlopen(req,timeout=40,context=ctx) as r:
-                          data=r.read()
-                          if r.status==200 and data:
-                              return data
-                  except Exception as e:
-                      last=e
-                      time.sleep(3+i)
-              raise RuntimeError(f'fetch failed {url}: {last}')
+                      sep='&' if '?' in url else '?'
+                      req=urllib.request.Request(url+sep+'audit='+stamp+'-'+str(i),headers={'User-Agent':'NaseKadanCanonicalAudit/1.1','Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=45,context=ctx) as r:
+                          b=r.read()
+                          if r.status==200 and b:return b
+                  except Exception as e:last=e
+                  time.sleep(3+i)
+              raise RuntimeError(f'{url}: {last}')
 
-          endpoints={
-              'home':f'{base}/',
-              'a1':f'{base}/clanky/',
-              'a2':f'{base}/clanky/strana-2.html',
-              'a3':f'{base}/clanky/strana-3.html',
-              'a4':f'{base}/clanky/strana-4.html',
-              'rss':f'{base}/rss.xml',
-              'sitemap':f'{base}/sitemap.xml',
-              'news':f'{base}/news-sitemap.xml',
-              'health':f'{base}/deployment-health.txt',
-          }
-          live={k:fetch(v) for k,v in endpoints.items()}
-          text={k:v.decode('utf-8','replace') for k,v in live.items()}
+          urls={
+            'home':base+'/', 'a1':base+'/clanky/',
+            'a2':base+'/clanky/strana-2.html','a3':base+'/clanky/strana-3.html','a4':base+'/clanky/strana-4.html',
+            'rss':base+'/rss.xml','sitemap':base+'/sitemap.xml','news':base+'/news-sitemap.xml','health':base+'/deployment-health.txt'}
+          live={k:get(v) for k,v in urls.items()}
+          txt={k:v.decode('utf-8','replace') for k,v in live.items()}
+          pat=re.compile(r'<article\b[^>]*\bdata-auto-article="([^"]+)"',re.I)
+          home=pat.findall(txt['home'])
+          archive=sum((pat.findall(txt[k]) for k in ('a1','a2','a3','a4')),[])
+          assert len(home)==len(set(home))==14
+          assert len(archive)==len(set(archive))==45
+          assert archive[0]=='cisarsky-den-kadan-historie-2026'
+          archive_urls=[base+'/clanky/'+s+'.html' for s in archive]
 
-          slug_re=re.compile(r'<article\b[^>]*\bdata-auto-article="([^"]+)"',re.I)
-          home_slugs=slug_re.findall(text['home'])
-          archive_slugs=[]
-          for k in ('a1','a2','a3','a4'):
-              archive_slugs.extend(slug_re.findall(text[k]))
-          assert len(home_slugs)==14, len(home_slugs)
-          assert len(set(home_slugs))==14
-          assert len(archive_slugs)==45, len(archive_slugs)
-          assert len(set(archive_slugs))==45
-          assert archive_slugs[0]=='cisarsky-den-kadan-historie-2026'
+          rss=[(x.findtext('link') or '').strip() for x in ET.fromstring(live['rss']).findall('.//item')]
+          assert len(rss)==45 and rss==archive_urls
+          sm=[x.text.strip() for x in ET.fromstring(live['sitemap']).iter() if x.tag.endswith('loc') and x.text]
+          sm=[u for u in sm if '/clanky/' in u and u.endswith('.html')]
+          assert len(set(sm))==45 and set(sm)==set(archive_urls)
+          news=[x.text.strip() for x in ET.fromstring(live['news']).iter() if x.tag.endswith('loc') and x.text]
+          news=[u for u in news if '/clanky/' in u and u.endswith('.html')]
+          assert len(set(news))==8 and set(news).issubset(set(archive_urls))
 
-          rss_root=ET.fromstring(live['rss'])
-          rss_links=[(x.findtext('link') or '').strip() for x in rss_root.findall('.//item')]
-          assert len(rss_links)==45, len(rss_links)
-          archive_urls=[f'{base}/clanky/{s}.html' for s in archive_slugs]
-          assert rss_links==archive_urls, 'RSS order differs from archive'
+          p=Path('data/published-content-index.json')
+          d=json.loads(p.read_text(encoding='utf-8'))
+          assert d['article_count']==len(d['articles'])==45
+          assert len({a['url'] for a in d['articles']})==45
+          assert len({a['fingerprint'] for a in d['articles']})==45
+          assert {a['url'] for a in d['articles']}==set(archive_urls)
 
-          sm_root=ET.fromstring(live['sitemap'])
-          sm_urls=[x.text.strip() for x in sm_root.iter() if x.tag.endswith('loc') and x.text]
-          sm_articles=[u for u in sm_urls if '/clanky/' in u and u.endswith('.html')]
-          assert len(set(sm_articles))==45, len(set(sm_articles))
-          assert set(sm_articles)==set(archive_urls)
-
-          news_root=ET.fromstring(live['news'])
-          news_urls=[x.text.strip() for x in news_root.iter() if x.tag.endswith('loc') and x.text]
-          news_articles=[u for u in news_urls if '/clanky/' in u and u.endswith('.html')]
-          assert len(set(news_articles))==8, len(set(news_articles))
-          assert set(news_articles).issubset(set(archive_urls))
-
-          registry_path=Path('data/published-content-index.json')
-          reg=json.loads(registry_path.read_text(encoding='utf-8'))
-          assert reg['article_count']==45 and len(reg['articles'])==45
-          urls=[a['url'] for a in reg['articles']]
-          fps=[a['fingerprint'] for a in reg['articles']]
-          assert len(urls)==len(set(urls))==45
-          assert len(fps)==len(set(fps))==45
-          assert set(urls)==set(archive_urls)
-
-          def norm(s):
-              return re.sub(r'\s+',' ',unescape(re.sub(r'<[^>]+>',' ',s))).strip()
-          def check_article(a):
-              body=fetch(a['url']).decode('utf-8','replace')
+          def norm(s):return re.sub(r'\s+',' ',unescape(re.sub(r'<[^>]+>',' ',s))).strip()
+          def h1ok(a):
+              body=get(a['url']).decode('utf-8','replace')
               m=re.search(r'<h1\b[^>]*>(.*?)</h1>',body,re.I|re.S)
-              if not m:
-                  raise AssertionError(f'missing H1 {a["url"]}')
-              got=norm(m.group(1))
-              exp=norm(a['h1'])
-              if got!=exp:
-                  raise AssertionError(f'H1 mismatch {a["url"]}: {got!r} != {exp!r}')
-              return a['url']
-
-          with ThreadPoolExecutor(max_workers=8) as pool:
-              futs=[pool.submit(check_article,a) for a in reg['articles']]
-              for f in as_completed(futs):
-                  f.result()
+              assert m and norm(m.group(1))==norm(a['h1']),a['url']
+          with ThreadPoolExecutor(max_workers=8) as ex:list(ex.map(h1ok,d['articles']))
 
           now=datetime.now(timezone.utc).isoformat()
-          source_commit=__import__('subprocess').check_output(['git','rev-parse','HEAD'],text=True).strip()
-          v=reg['validation']
-          reg['generated_at']=now
-          reg['source_commit']=source_commit
-          v['homepage_count']=14
-          v['archive_count']=45
-          v['archive_page_count']=4
-          v['rss_count']=45
-          v['sitemap_all_articles_present']=True
-          v['news_sitemap_recent_count']=8
-          v['rss_order_matches_archive']=True
-          v['required_fields_complete']=True
-          v['duplicate_urls']=[]
-          v['duplicate_fingerprints']=[]
-          v['deployment_health']='verified_live_nonempty_before_refresh'
-          v['deployment_health_status_field_present']='status=ok' in text['health']
-          v['public_audit_at']=now
-          v['public_audit_sha256']=hashlib.sha256(b'\n'.join(live.values())).hexdigest()
-          v['repair_pending_public_verification']=False
-          v['public_repair_verification']={
-              'status':'success',
-              'method':'complete-live-web-audit-home-archive-rss-sitemaps-health-and-all-h1',
-              'homepage_articles':14,
-              'archive_articles':45,
-              'archive_pages':4,
-              'rss_articles':45,
-              'sitemap_articles':45,
-              'news_sitemap_articles':8,
-              'verified_article_h1':45,
-              'target_visible_on_homepage':True,
-              'target_visible_in_archive':True,
-              'repository_archive_repaired':True,
-              'production_deploy_state':'verified',
-              'completed_at':now,
-          }
-          v['last_registry_refresh']={
-              'reason':'the repaired public archive now visibly contains all 45 articles and matches homepage, RSS, both sitemaps and every public H1',
-              'classification':'safe_repair_publicly_verified',
-              'repaired_url':f'{base}/clanky/cisarsky-den-kadan-historie-2026.html',
-              'homepage_articles':14,
-              'archive_articles':45,
-              'archive_pages':4,
-              'rss_articles':45,
-              'sitemap_articles':45,
-              'news_sitemap_articles':8,
-              'verified_article_h1':45,
-              'completed_at':now,
-          }
-          for a in reg['articles']:
-              a['status']['homepage']=a['url'] in {f'{base}/clanky/{s}.html' for s in home_slugs}
-              a['status']['archive']=a['url'] in set(archive_urls)
-              a['status']['rss']=a['url'] in set(rss_links)
-              a['status']['sitemap']=a['url'] in set(sm_articles)
-              a['status']['news_sitemap']=a['url'] in set(news_articles)
+          v=d['validation']; d['generated_at']=now; d['source_commit']=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          v.update({'homepage_count':14,'archive_count':45,'archive_page_count':4,'rss_count':45,
+                    'sitemap_all_articles_present':True,'news_sitemap_recent_count':8,'rss_order_matches_archive':True,
+                    'required_fields_complete':True,'duplicate_urls':[],'duplicate_fingerprints':[],
+                    'deployment_health':'verified_live','deployment_health_status_field_present':'status=ok' in txt['health'],
+                    'public_audit_at':now,'public_audit_sha256':hashlib.sha256(b'\n'.join(live.values())).hexdigest(),
+                    'repair_pending_public_verification':False})
+          v['public_repair_verification']={'status':'success','method':'complete-live-audit','homepage_articles':14,
+             'archive_articles':45,'archive_pages':4,'rss_articles':45,'sitemap_articles':45,'news_sitemap_articles':8,
+             'verified_article_h1':45,'target_visible_on_homepage':True,'target_visible_in_archive':True,
+             'repository_archive_repaired':True,'production_deploy_state':'verified','completed_at':now}
+          v['last_registry_refresh']={'reason':'repaired public archive now contains all 45 visible cards and matches homepage, RSS, both sitemaps and all public H1',
+             'classification':'safe_repair_publicly_verified','repaired_url':base+'/clanky/cisarsky-den-kadan-historie-2026.html',
+             'homepage_articles':14,'archive_articles':45,'archive_pages':4,'rss_articles':45,'sitemap_articles':45,
+             'news_sitemap_articles':8,'verified_article_h1':45,'completed_at':now}
+          home_set={base+'/clanky/'+s+'.html' for s in home}; ar=set(archive_urls); rs=set(rss); ss=set(sm); ns=set(news)
+          for a in d['articles']:
+              a['status'].update({'homepage':a['url'] in home_set,'archive':a['url'] in ar,'rss':a['url'] in rs,
+                                  'sitemap':a['url'] in ss,'news_sitemap':a['url'] in ns})
               a['publication_status']='published'
-          registry_path.write_text(json.dumps(reg,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          status={
-              'status':'success','checked_at':now,'article_count':45,
-              'homepage_count':14,'archive_count':45,'archive_page_count':4,
-              'rss_count':45,'sitemap_article_count':45,'news_sitemap_article_count':8,
-              'verified_article_h1':45,'duplicate_urls':[],'duplicate_fingerprints':[],
-              'repaired_url':f'{base}/clanky/cisarsky-den-kadan-historie-2026.html',
-              'audit_sha256':v['public_audit_sha256'],
-          }
+          p.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          status={'status':'success','checked_at':now,'article_count':45,'homepage_count':14,'archive_count':45,
+                  'archive_page_count':4,'rss_count':45,'sitemap_article_count':45,'news_sitemap_article_count':8,
+                  'verified_article_h1':45,'duplicate_urls':[],'duplicate_fingerprints':[],
+                  'repaired_url':base+'/clanky/cisarsky-den-kadan-historie-2026.html','audit_sha256':v['public_audit_sha256']}
           Path('.github/canonical-content-audit-status.json').write_text(json.dumps(status,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           print(json.dumps(status,ensure_ascii=False))
           PY
 
-      - name: Zapsat potvrzený veřejný stav do repozitáře
+      - name: Zapsat potvrzený stav
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json .github/canonical-content-audit-status.json
+          if ! git diff --cached --quiet; then git commit -m 'Potvrdit úplnou veřejnou evidenci 45 článků [skip ci]'; fi
           for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            base=$(git rev-parse origin/main)
-            git rebase origin/main || { git rebase --abort || true; git reset --hard origin/main; }
-            git add data/published-content-index.json .github/canonical-content-audit-status.json
-            if git diff --cached --quiet; then
-              break
-            fi
-            git commit -m 'Potvrdit úplnou veřejnou evidenci 45 článků [skip ci]'
             if git push origin HEAD:main; then break; fi
-            git reset --soft "$base"
+            git fetch origin main
+            git rebase -X theirs origin/main
             [[ "$attempt" == 5 ]] && exit 1
             sleep $((attempt*4))
           done
 
-      - name: Nasadit potvrzený registr a deployment health
+      - name: Nasadit registr a zdravotní soubor
         shell: bash
         run: |
           set -euo pipefail
-          git fetch origin main
-          git reset --hard origin/main
+          git fetch origin main && git reset --hard origin/main
           sha=$(git rev-parse HEAD)
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
-          test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-          printf 'status=ok\nsource=%s\ndeployer=canonical-content-audit\narticle_count=45\narchive_count=45\nrss_count=45\nsitemap_count=45\nnews_sitemap_count=8\n' "$sha" > "$RUNNER_TEMP/deployment-health.txt"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"; test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+          printf 'status=ok\nsource=%s\ndeployer=canonical-content-audit\narticle_count=45\narchive_count=45\nrss_count=45\nsitemap_count=45\nnews_sitemap_count=8\n' "$sha" > "$RUNNER_TEMP/health"
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json "$RUNNER_TEMP/health" ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           sudo install -d -m 0755 /var/www/nasekadan/data
           sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
-          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          sudo install -m 0644 /tmp/health /var/www/nasekadan/deployment-health.txt
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
             sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
-            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker cp /tmp/health nasekadan-web:/usr/share/nginx/html/deployment-health.txt
           fi
-          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          rm -f /tmp/published-content-index.json /tmp/health
           REMOTE
 
-      - name: Znovu veřejně ověřit nasazený registr a health
+      - name: Ověřit nasazenou evidenci
         shell: bash
         run: |
           set -euo pipefail
           stamp=$(date +%s)
-          for attempt in $(seq 1 12); do
-            curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$stamp-$attempt" -o "$RUNNER_TEMP/live-registry" || true
-            curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$attempt" -o "$RUNNER_TEMP/live-health" || true
-            if python3 - "$RUNNER_TEMP/live-registry" "$RUNNER_TEMP/live-health" <<'PY'
+          for i in $(seq 1 12); do
+            curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$stamp-$i" -o "$RUNNER_TEMP/r" || true
+            curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$stamp-$i" -o "$RUNNER_TEMP/h" || true
+            if python3 - "$RUNNER_TEMP/r" "$RUNNER_TEMP/h" <<'PY'
           import json,sys
-          r=json.load(open(sys.argv[1],encoding='utf-8'))
-          h=open(sys.argv[2],encoding='utf-8').read()
-          assert r['article_count']==45
-          assert r['validation']['archive_count']==45
+          r=json.load(open(sys.argv[1],encoding='utf-8')); h=open(sys.argv[2],encoding='utf-8').read()
+          assert r['article_count']==45 and r['validation']['archive_count']==45
           assert r['validation']['repair_pending_public_verification'] is False
           assert r['validation']['public_repair_verification']['status']=='success'
           assert 'status=ok' in h and 'article_count=45' in h and 'archive_count=45' in h
@@ -271,17 +185,14 @@ jobs:
           done
           exit 1
 
-      - name: Odstranit jednorázový ověřovací workflow
+      - name: Uklidit jednorázové workflow
         if: success()
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            git rm .github/workflows/verify-canonical-registry-20260804.yml
-            git commit -m 'Odstranit jednorázové ověření kanonické evidence [skip ci]'
-            if git push origin HEAD:main; then break; fi
-            [[ "$attempt" == 5 ]] && exit 1
-            sleep $((attempt*4))
-          done
+          git fetch origin main && git reset --hard origin/main
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -f .github/workflows/verify-canonical-registry-20260804.yml
+          if [ -f .github/workflows/repair-canonical-archive-20260804.yml ]; then git rm -f .github/workflows/repair-canonical-archive-20260804.yml; fi
+          git commit -m 'Odstranit jednorázové workflow kanonické evidence [skip ci]'
+          for i in 1 2 3 4 5; do git push origin HEAD:main && break; git fetch origin main; git rebase -X theirs origin/main; [[ "$i" == 5 ]] && exit 1; sleep $((i*4)); done
