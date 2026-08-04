@@ -1,0 +1,119 @@
+name: Opravit časové zařazení videa ANO v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/correct-ano-video-timing-now-20260804-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: correct-ano-video-timing-20260804-v2
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ARTICLE_REL: /clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_FILE: clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Opravit článek odolně proti souběžným změnám
+        id: correct
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/correct_ano_video_timing_20260804.py
+            python3 scripts/correct_ano_video_timing_20260804.py
+            grep -Fq 'Facebook u příspěvku v době redakční kontroly zobrazoval údaj „před 4 dny“' "$ARTICLE_FILE"
+            ! grep -Fq 'zveřejnil v den uzávěrky' "$ARTICLE_FILE"
+            ! grep -Fq 'ze 4. srpna 2026' "$ARTICLE_FILE"
+            git add "$ARTICLE_FILE" scripts/publish_kadan_election_deadline_20260804.py data/published-content-index.json
+            if git diff --cached --quiet; then
+              pushed=1
+              break
+            fi
+            git commit -m 'Opravit: video ANO bylo zveřejněno několik dní před uzávěrkou'
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            echo "Souběžná změna mainu, opakuji (${attempt}/5)."
+            sleep 2
+          done
+          test "$pushed" = 1
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit opravený článek na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/ano-video-timing-v2"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\n' '${{ steps.correct.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/ano-video-timing-v2
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/ano-video-timing-v2
+          root=/var/www/nasekadan
+          article=komunalni-volby-kadan-kandidaty-lhuta-2026.html
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          sudo install -m 0644 "$src/clanky/$article" "$root/clanky/$article"
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          sudo install -m 0644 "$src/deployment-health.txt" "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/$article" "nasekadan-web:/usr/share/nginx/html/clanky/$article"
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp "$src/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -rf /tmp/ano-video-timing-v2
+          REMOTE
+
+      - name: Veřejně ověřit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 35 "$base$ARTICLE_REL?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 35 "$base/?v=$q")"
+          archive="$(curl -4 -kfsS -L --max-time 35 "$base/clanky/?v=$q")"
+          registry="$(curl -4 -kfsS -L --max-time 35 "$base/data/published-content-index.json?v=$q")"
+          grep -Fq 'Facebook u příspěvku v době redakční kontroly zobrazoval údaj „před 4 dny“' <<<"$article"
+          grep -Fq 'zveřejnil krátké video už několik dní před uzávěrkou' <<<"$article"
+          ! grep -Fq 'zveřejnil v den uzávěrky' <<<"$article"
+          ! grep -Fq 'ze 4. srpna 2026' <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq "$ARTICLE_REL" <<<"$archive"
+          grep -Fq 'incorrect_source_publication_timing' <<<"$registry"
+          curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
