@@ -1,0 +1,71 @@
+name: Diagnostika živého připnutí zimního stadionu – issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diagnose:
+    if: github.event.issue.title == '[diag] stadium pin turn7'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Načíst živé kanály a zapsat hodnoty
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pin='/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          home="$(curl -4 -kfsSL --retry 4 --retry-delay 3 --max-time 45 "https://nasekadan.cz/?diag=$q")"
+          article="$(curl -4 -kfsSL --retry 4 --retry-delay 3 --max-time 45 "https://nasekadan.cz${pin}?diag=$q")"
+          archive="$(curl -4 -kfsSL --retry 4 --retry-delay 3 --max-time 45 "https://nasekadan.cz/clanky/?diag=$q")"
+          rss="$(curl -4 -kfsSL --retry 4 --retry-delay 3 --max-time 45 "https://nasekadan.cz/rss.xml?diag=$q")"
+          forecast="$(curl -4 -kfsSL --retry 4 --retry-delay 3 --max-time 45 "https://nasekadan.cz/api/pocasi-predpoved.json?diag=$q")"
+          report="$(PIN="$pin" HOME_HTML="$home" ARTICLE_HTML="$article" ARCHIVE_HTML="$archive" RSS_XML="$rss" FORECAST_JSON="$forecast" python3 - <<'PY'
+          import json, os, re
+          from xml.etree import ElementTree as ET
+          pin=os.environ['PIN']; home=os.environ['HOME_HTML']; article=os.environ['ARTICLE_HTML']
+          archive=os.environ['ARCHIVE_HTML']; rss=os.environ['RSS_XML']; forecast=os.environ['FORECAST_JSON']
+          hero=re.search(r'<section class="wrap hero" id="clanky".*?</section>', home, re.S)
+          hero_href=''
+          aside_href=''
+          if hero:
+              m=re.search(r'data-latest-article-href="([^"]+)"', hero.group(0)); hero_href=m.group(1) if m else ''
+              a=re.search(r'<aside class="current-aside">.*?</aside>', hero.group(0), re.S)
+              if a:
+                  links=re.findall(r'href="(/clanky/[^"]+\.html)"',a.group(0)); aside_href=links[0] if links else ''
+          first_archive=re.search(r'<article\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="([^"]+)"', archive, re.S)
+          archive_first=first_archive.group(1) if first_archive else ''
+          try:
+              rss_first=ET.fromstring(rss).findtext('./channel/item/link') or ''
+          except Exception as exc:
+              rss_first='PARSE_ERROR:'+str(exc)
+          try:
+              weather=json.loads(forecast); ts=weather.get('properties',{}).get('timeseries'); weather_points=len(ts) if isinstance(ts,list) else -1
+          except Exception:
+              weather_points=-2
+          result={
+              'hero_href':hero_href,
+              'pin_ok':hero_href==pin,
+              'aside_href':aside_href,
+              'archive_first':archive_first,
+              'aside_matches_archive':aside_href==archive_first,
+              'rss_first':rss_first,
+              'rss_matches_archive':rss_first=='https://nasekadan.cz'+archive_first,
+              'published_time_preserved':'article:published_time" content="2026-08-03T22:05:00+02:00"' in article,
+              'weather_loader':'/pocasi.js' in home,
+              'weather_points':weather_points
+          }
+          print(json.dumps(result,ensure_ascii=False))
+          PY
+          )"
+          gh issue comment "$ISSUE_NUMBER" --repo petrkotab666/nasekadan --body "DIAG run=$RUN_ID $report"
+          gh issue close "$ISSUE_NUMBER" --repo petrkotab666/nasekadan --reason completed
