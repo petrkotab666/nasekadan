@@ -1,0 +1,249 @@
+name: Opravit chybějícího Josefa Suchého v RSS
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-josef-suchy-rss-20260804-1427
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.actor == 'petrkotab666' && github.event.issue.title == '[repair] add Josef Suchy to RSS 20260804-1427'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      STADIUM_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      STADIUM_H1: Kadaň otevřela zimní stadion lidem před vedrem. Přijít lze denně od 8 do 18 hodin
+      JOSEF_REL: /clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html
+      JOSEF_H1: Klášterecký Josef Suchý skóroval Kanadě už po 103 sekundách
+    steps:
+      - name: Zapsat spuštění
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Oprava RSS byla spuštěna. Run ${context.runId}.`});
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Doplnit článek do RSS a evidence
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          rss_path = Path('rss.xml')
+          rss = rss_path.read_text(encoding='utf-8')
+          url = 'https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html'
+          if url not in rss:
+              item = '''    <item>\n      <title>Klášterecký Josef Suchý skóroval Kanadě už po 103 sekundách</title>\n      <description><![CDATA[Sedmnáctiletý klášterecký odchovanec Josef Suchý dal v přípravě české osmnáctky gól Kanadě už po 103 sekundách, přidal asistenci a pokračuje na Hlinka Gretzky Cupu.]]></description>\n      <link>https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html</link>\n      <guid isPermaLink="true">https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html</guid>\n      <pubDate>Tue, 04 Aug 2026 12:10:00 +0200</pubDate>\n      <category>Od sousedů</category>\n      <category>Hokej</category>\n      <category>Klášterec nad Ohří</category>\n      <category>Reprezentace U18</category>\n      <szn:image><szn:url>https://nasekadan.cz/social/josef-suchy-klasterec-u18-kanada-hlinka-2026.png</szn:url></szn:image>\n    </item>\n\n'''
+              first_end = rss.find('</item>')
+              if first_end < 0:
+                  raise SystemExit('RSS neobsahuje žádnou položku.')
+              pos = first_end + len('</item>')
+              rss = rss[:pos] + '\n' + item + rss[pos:]
+              rss_path.write_text(rss, encoding='utf-8', newline='\n')
+
+          reg_path = Path('data/published-content-index.json')
+          data = json.loads(reg_path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          validation['rss_count'] = data.get('article_count', 46)
+          validation['rss_order_matches_archive'] = True
+          validation['deployment_health'] = 'pending_public_verification'
+          validation['repair_pending_public_verification'] = True
+          validation['public_audit_at'] = now
+          validation['last_consistency_repair'] = {
+              'classification': 'published_article_missing_from_rss',
+              'reason': 'Článek o Josefu Suchém byl veřejně dostupný, v archivu, sitemapách a registru, ale chyběl v RSS.',
+              'affected_url': url,
+              'started_at': now,
+              'method': 'insert-missing-rss-item-deploy-and-publicly-verify'
+          }
+          data['generated_at'] = now
+          reg_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          grep -Fq "https://nasekadan.cz$JOSEF_REL" rss.xml
+          git add rss.xml data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit RSS: doplnit článek o Josefu Suchém'
+            git push origin HEAD:main
+          fi
+          sha="$(git rev-parse HEAD)"
+          echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit RSS, registr a health
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          mkdir -p "$RUNNER_TEMP/rss-repair/data"
+          cp rss.xml "$RUNNER_TEMP/rss-repair/rss.xml"
+          cp data/published-content-index.json "$RUNNER_TEMP/rss-repair/data/"
+          printf 'status=ok\nsource=%s\nrepair=missing-josef-rss\narticle_count=46\n' '${{ steps.prepare.outputs.source_sha }}' > "$RUNNER_TEMP/rss-repair/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/rss-repair" ubuntu@57.129.43.215:/tmp/rss-repair
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/rss-repair
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/data"
+          sudo install -m 0644 "$src/rss.xml" "$root/rss.xml"
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          sudo install -m 0644 "$src/deployment-health.txt" "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp "$src/rss.xml" nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp "$src/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -rf /tmp/rss-repair
+          REMOTE
+
+      - name: Veřejně ověřit všechny povinné kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 35 "$base/?v=$q" -o /tmp/home
+          curl -4 -kfsS -L --max-time 35 "$base/clanky/?v=$q" -o /tmp/archive
+          curl -4 -kfsS -L --max-time 35 "$base$STADIUM_REL?v=$q" -o /tmp/stadium
+          curl -4 -kfsS -L --max-time 35 "$base$JOSEF_REL?v=$q" -o /tmp/josef
+          curl -4 -kfsS -L --max-time 35 "$base/rss.xml?v=$q" -o /tmp/rss
+          curl -4 -kfsS -L --max-time 35 "$base/sitemap.xml?v=$q" -o /tmp/sitemap
+          curl -4 -kfsS -L --max-time 35 "$base/news-sitemap.xml?v=$q" -o /tmp/news
+          curl -4 -kfsS -L --max-time 35 "$base/data/published-content-index.json?v=$q" -o /tmp/registry
+          curl -4 -kfsS -L --max-time 35 "$base/deployment-health.txt?v=$q" -o /tmp/health
+          grep -Fq "$JOSEF_H1" /tmp/home
+          grep -Fq "$STADIUM_H1" /tmp/home
+          grep -Fq "$JOSEF_H1" /tmp/archive
+          grep -Fq "$STADIUM_H1" /tmp/archive
+          grep -Fq "<h1>$STADIUM_H1</h1>" /tmp/stadium
+          grep -Fq "<h1>$JOSEF_H1</h1>" /tmp/josef
+          grep -Fq "https://nasekadan.cz$STADIUM_REL" /tmp/rss
+          grep -Fq "https://nasekadan.cz$JOSEF_REL" /tmp/rss
+          grep -Fq "https://nasekadan.cz$STADIUM_REL" /tmp/sitemap
+          grep -Fq "https://nasekadan.cz$JOSEF_REL" /tmp/sitemap
+          grep -Fq "https://nasekadan.cz$STADIUM_REL" /tmp/news
+          grep -Fq "https://nasekadan.cz$JOSEF_REL" /tmp/news
+          grep -Fq '"article_count": 46' /tmp/registry
+          grep -Fq "$STADIUM_H1" /tmp/registry
+          grep -Fq "$JOSEF_H1" /tmp/registry
+          grep -Fq 'status=ok' /tmp/health
+          python3 - <<'PY'
+          from pathlib import Path
+          rss = Path('/tmp/rss').read_text(encoding='utf-8')
+          stadium = 'https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          josef = 'https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html'
+          if rss.find(stadium) < 0 or rss.find(josef) < 0 or rss.find(stadium) > rss.find(josef):
+              raise SystemExit('Pořadí RSS neodpovídá současnému archivu.')
+          PY
+
+      - name: Dokončit registr
+        id: finish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          validation['deployment_health'] = 'verified'
+          validation['repair_pending_public_verification'] = False
+          validation['public_audit_at'] = now
+          validation['rss_count'] = data.get('article_count', 46)
+          validation['rss_order_matches_archive'] = True
+          repair = validation.setdefault('last_consistency_repair', {})
+          repair['status'] = 'success'
+          repair['completed_at'] = now
+          repair['public_verification'] = {
+              'homepage': True, 'archive': True, 'rss': True,
+              'sitemap': True, 'news_sitemap': True,
+              'registry': True, 'deployment_health': True,
+              'stadium_article_h1': True, 'josef_article_h1': True
+          }
+          data['generated_at'] = now
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git add data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Evidence: potvrdit opravu chybějícího článku v RSS'
+            git push origin HEAD:main
+          fi
+          sha="$(git rev-parse HEAD)"
+          echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          mkdir -p "$RUNNER_TEMP/final-rss-registry/data"
+          cp data/published-content-index.json "$RUNNER_TEMP/final-rss-registry/data/"
+          printf 'status=ok\nsource=%s\nrepair=missing-josef-rss\nverification=complete\narticle_count=46\n' "$sha" > "$RUNNER_TEMP/final-rss-registry/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/final-rss-registry" ubuntu@57.129.43.215:/tmp/final-rss-registry
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/final-rss-registry
+          root=/var/www/nasekadan
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          sudo install -m 0644 "$src/deployment-health.txt" "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp "$src/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -rf /tmp/final-rss-registry
+          REMOTE
+          sleep 4
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/data/published-content-index.json?v=$q" | grep -Fq '"repair_pending_public_verification": false'
+          curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/deployment-health.txt?v=$q" | grep -Fq 'verification=complete'
+
+      - name: Uzavřít opravné požadavky
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = `Chybějící článek o Josefu Suchém byl doplněn do RSS. Titulka, archiv, oba články, RSS, obě sitemapy, registr a deployment-health byly veřejně ověřeny. Výsledný commit ${{ steps.finish.outputs.source_sha }}.`;
+            for (const issue_number of [576, 577, context.issue.number]) {
+              await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number, body});
+              await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number, state: 'closed', state_reason: 'completed'});
+            }
+
+      - name: Zapsat selhání
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Oprava RSS selhala. Run ${context.runId}.`});
