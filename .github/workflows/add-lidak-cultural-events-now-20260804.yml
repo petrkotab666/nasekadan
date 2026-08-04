@@ -1,0 +1,151 @@
+name: Doplnit víkendové akce Liďáku do kulturního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/lidak-cultural-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lidak-cultural-events-20260804
+  cancel-in-progress: false
+
+jobs:
+  update-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_REL: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      EVENT_FRIDAY: lidak-dj-phantom-20260807
+      EVENT_SATURDAY: lidak-golf-20260808
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit akce a monitorovací zdroje
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/add_lidak_events_and_monitoring_20260804.py
+          grep -Fq "data-event-id=\"${EVENT_FRIDAY}\"" "$ARTICLE"
+          grep -Fq "data-event-id=\"${EVENT_SATURDAY}\"" "$ARTICLE"
+          grep -Fq 'Šest veřejných akcí v Kadani' "$ARTICLE"
+          grep -Fq 'Liďák Kadaň' data/organizations.json
+          grep -Fq 'Liďák Kadaň – Facebook' data/city-sources.json
+          grep -Fq 'Liďák Kadaň – Instagram' data/city-sources.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$ARTICLE" data/organizations.json data/city-sources.json data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Doplnit víkendové akce Liďáku do kulturního přehledu'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 3
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit aktualizovaný přehled a registry
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$OVH_KEY"
+          printf '%s\n' "$OVH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/lidak-cultural-bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE" "$bundle/clanky/"
+          cp data/organizations.json data/city-sources.json data/published-content-index.json "$bundle/data/"
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/ovh_key" \
+            -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'rm -rf /tmp/lidak-cultural-bundle && mkdir -p /tmp/lidak-cultural-bundle && tar -xzf - -C /tmp/lidak-cultural-bundle'
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "EVENT_FRIDAY='$EVENT_FRIDAY' EVENT_SATURDAY='$EVENT_SATURDAY' ARTICLE_REL='$ARTICLE_REL' bash -s" <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/lidak-cultural-bundle
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          sudo install -m 0644 "$src/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html" "$root/clanky/"
+          sudo install -m 0644 "$src/data/organizations.json" "$root/data/organizations.json"
+          sudo install -m 0644 "$src/data/city-sources.json" "$root/data/city-sources.json"
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/data/organizations.json" nasekadan-web:/usr/share/nginx/html/data/organizations.json
+            sudo docker cp "$src/data/city-sources.json" nasekadan-web:/usr/share/nginx/html/data/city-sources.json
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          article="$(curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${ARTICLE_REL}?lidak=$(date +%s)")"
+          grep -Fq "data-event-id=\"${EVENT_FRIDAY}\"" <<<"$article"
+          grep -Fq "data-event-id=\"${EVENT_SATURDAY}\"" <<<"$article"
+          grep -Fq 'Šest veřejných akcí v Kadani' <<<"$article"
+          grep -Fq 'DJ Phantom' <<<"$article"
+          grep -Fq 'kapelou GOLF' <<<"$article"
+          rm -rf /tmp/lidak-cultural-bundle
+          REMOTE
+
+      - name: Ověřit web zvenku
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 3
+          article="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz${ARTICLE_REL}?external-lidak=${GITHUB_RUN_ID}")"
+          organizations="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/data/organizations.json?external-lidak=${GITHUB_RUN_ID}")"
+          sources="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/data/city-sources.json?external-lidak=${GITHUB_RUN_ID}")"
+          grep -Fq "data-event-id=\"${EVENT_FRIDAY}\"" <<<"$article"
+          grep -Fq "data-event-id=\"${EVENT_SATURDAY}\"" <<<"$article"
+          grep -Fq 'PÁTEK 7. 8. · 17:00–22:00' <<<"$article"
+          grep -Fq 'SOBOTA 8. 8. · 17:00–22:00' <<<"$article"
+          grep -Fq 'Šest veřejných akcí v Kadani' <<<"$article"
+          grep -Fq 'Liďák Kadaň' <<<"$organizations"
+          grep -Fq 'Liďák Kadaň – Facebook' <<<"$sources"
+          grep -Fq 'Liďák Kadaň – Instagram' <<<"$sources"
+
+      - name: Zapsat stav aktualizace
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.patch.outputs.source_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const deploy=process.env.DEPLOY_OUTCOME||'skipped';
+            const verify=process.env.VERIFY_OUTCOME||'skipped';
+            const status=deploy==='success'&&verify==='success'?'success':'failure';
+            const payload={
+              status,
+              run_id:String(context.runId),
+              source_sha:process.env.SOURCE_SHA||'',
+              checked_at:new Date().toISOString(),
+              deploy,
+              external_verify:verify,
+              article_updated:status==='success',
+              events:[
+                {name:'The Best of Rock, Metal & Punk s DJ Phantomem',starts_at:'2026-08-07T17:00:00+02:00'},
+                {name:'Hudební srpnové léto s kapelou GOLF',starts_at:'2026-08-08T17:00:00+02:00'}
+              ],
+              venue:'Liďák Kadaň',
+              cultural_monitoring_added:status==='success'
+            };
+            let sha;
+            try { const old=await github.rest.repos.getContent({owner,repo,path:'.github/lidak-cultural-live-status.json',ref:'main'}); sha=old.data.sha; }
+            catch(e){ if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path:'.github/lidak-cultural-live-status.json',branch:'main',message:`Zapsat stav doplnění akcí Liďáku: ${status} [skip ci]`,sha,content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')});
