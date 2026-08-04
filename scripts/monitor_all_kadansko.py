@@ -39,6 +39,26 @@ LOCAL_TERMS = {
     "hradiste u kadane", "klasterec nad ohri", "elektrarna prunerov",
     "elektrarna tusimice", "doly nastup", "nemocnice kadan",
 }
+# Některé názvy obcí jsou zároveň běžná česká slova. U těchto názvů se
+# nesmí použít prostá podřetězcová shoda, jinak vznikají falešné nálezy typu
+# „na místo vyjeli hasiči“ nebo „oprava mostu“.
+AMBIGUOUS_LOCAL_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
+    "misto": (
+        re.compile(r"\bobec\s+misto\b"),
+        re.compile(r"\bmisto\s+u\s+chomutova\b"),
+        re.compile(r"\bmisto\s+na\s+chomutovsku\b"),
+        re.compile(r"\bv\s+obci\s+misto\b"),
+    ),
+    "most": (
+        re.compile(r"\bmosteck\w*\b"),
+        re.compile(r"\bmesto\s+most\b"),
+        re.compile(r"\bokres\s+most\b"),
+        re.compile(r"\bv\s+moste\b"),
+        re.compile(r"\bz\s+mostu\b"),
+        re.compile(r"\bdo\s+mostu\b"),
+        re.compile(r"\bu\s+mostu\b"),
+    ),
+}
 HIGH_SIGNAL_TERMS = {
     "pozar", "nehoda", "havarie", "evakuace", "vybuch", "zasah hasicu",
     "policie", "patrani", "pohresovan", "uzavirka", "neprujezd", "vyluka",
@@ -145,7 +165,19 @@ def local_matches(item: dict[str, Any]) -> list[str]:
         str(item.get("description") or ""),
         str(item.get("url") or ""),
     ]))
-    return sorted(term for term in LOCAL_TERMS if term in haystack)
+    matches: list[str] = []
+    for term in sorted(LOCAL_TERMS):
+        ambiguous_patterns = AMBIGUOUS_LOCAL_PATTERNS.get(term)
+        if ambiguous_patterns is not None:
+            if any(pattern.search(haystack) for pattern in ambiguous_patterns):
+                matches.append(term)
+            continue
+        # Běžné místní názvy hledáme na hranici slova; dovolujeme české
+        # skloňování a odvozeniny, ale ne náhodný výskyt uvnitř jiného slova.
+        escaped = re.escape(term).replace(r"\ ", r"\s+")
+        if re.search(rf"(?<!\w){escaped}\w*", haystack):
+            matches.append(term)
+    return matches
 
 
 def signal_level(item: dict[str, Any], tier: str) -> str:
@@ -238,6 +270,7 @@ def main() -> int:
         "notEditoriallySignificant": 0,
         "notFreshOrUndated": 0,
         "duplicate": 0,
+        "deferredByCap": 0,
     }
 
     for source, items, error in collected:
@@ -312,6 +345,11 @@ def main() -> int:
                 suppressed["notFreshOrUndated"] += 1
             elif len(alerts) < MAX_ALERTS_PER_RUN:
                 alerts.append(item)
+            else:
+                # Přebytek není zahozen ani označen jako přečtený. Zůstane
+                # nezařazený v deduplikační paměti a vrátí se v dalším běhu.
+                suppressed["deferredByCap"] += 1
+                continue
         previous = seen.get(fp) if isinstance(seen.get(fp), dict) else {}
         seen[fp] = {
             "title": item.get("title"),
@@ -332,7 +370,7 @@ def main() -> int:
 
     failed = [item for item in source_status if item.get("status") == "failed"]
     status = {
-        "version": 2,
+        "version": 3,
         "checkedAt": now.isoformat(),
         "bootstrap": bootstrap,
         "sourceCount": len(sources),
@@ -341,12 +379,12 @@ def main() -> int:
         "itemsParsed": parsed_total,
         "uniqueItems": len(candidates),
         "newAlerts": len(alerts),
-        "alertsCapped": len(alerts) >= MAX_ALERTS_PER_RUN,
+        "alertsCapped": suppressed["deferredByCap"] > 0,
         "suppressed": suppressed,
         "coverage": coverage,
         "sourceStatus": source_status,
     }
-    write_json(state_path, {"version": 2, "lastRunAt": now.isoformat(), "seen": seen})
+    write_json(state_path, {"version": 3, "lastRunAt": now.isoformat(), "seen": seen})
     write_json(status_path, status)
     write_json(output_path, {"alerts": alerts, "status": status})
     print(json.dumps({
@@ -355,6 +393,7 @@ def main() -> int:
         "parsed": parsed_total,
         "unique": len(candidates),
         "alerts": len(alerts),
+        "deferred": suppressed["deferredByCap"],
         "suppressed": suppressed,
         "bootstrap": bootstrap,
         "organizations": coverage.get("monitoredDirectoryOrganizations"),
