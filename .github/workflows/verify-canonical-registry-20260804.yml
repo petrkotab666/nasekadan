@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/verify-canonical-registry-20260804.yml'
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
