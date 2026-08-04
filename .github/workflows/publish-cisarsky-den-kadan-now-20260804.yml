@@ -1,5 +1,5 @@
 name: Publikovat článek o Císařském dni v Kadani
-# trigger-version: 2026-08-04-0600
+# trigger-version: 2026-08-04-0619
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
       ARTICLE_REL: /clanky/cisarsky-den-kadan-historie-2026.html
       ARTICLE_FILE: clanky/cisarsky-den-kadan-historie-2026.html
       SOCIAL_FILE: social/cisarsky-den-kadan-historie-2026.png
-      EXPECTED_H1: Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti
+      EXPECTED_H1: 'Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti'
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
