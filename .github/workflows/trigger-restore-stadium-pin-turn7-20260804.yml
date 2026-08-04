@@ -18,3 +18,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run restore-stadium-pin-active-20260804-2000.yml --repo petrkotab666/nasekadan --ref main
+
+# Druhý commit aktivuje push trigger po založení workflow.
