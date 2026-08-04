@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T14:28:25.903028+00:00",
+  "generated_at": "2026-08-04T14:35:04.457987+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "dc3f416968d3ee9a94e78bfcd314229a55f78091",
@@ -46,22 +46,14 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "live_publication_surface_drift_from_canonical_main",
-      "reason": "Živá titulní stránka a archiv vracely zastaralý titulek článku o zimním stadionu a neodpovídaly aktuálnímu mainu ani kanonickému registru.",
-      "affected_files": [
-        "index.html",
-        "clanky/index.html",
-        "clanky/strana-2.html",
-        "clanky/strana-3.html",
-        "clanky/strana-4.html",
-        "rss.xml",
-        "sitemap.xml",
-        "news-sitemap.xml",
-        "data/published-content-index.json"
-      ],
-      "method": "deploy-current-canonical-main-surfaces-and-verify-all-public-articles",
+      "classification": "one_published_article_missing_from_rss_after_live_sync",
+      "reason": "Kanonický audit po synchronizaci živého webu zjistil právě jednu veřejnou URL chybějící v RSS.",
+      "affected_file": "rss.xml",
+      "repaired_url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+      "repaired_title": "Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti",
+      "method": "insert-single-canonical-rss-item-validate-deploy-and-publicly-verify",
       "status": "pending",
-      "started_at": "2026-08-04T14:28:25.903028+00:00"
+      "started_at": "2026-08-04T14:35:04.457987+00:00"
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true
