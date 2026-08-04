@@ -1,0 +1,40 @@
+name: Spustit opravu kanonického archivu
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: dispatch-canonical-repair-20260804
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Spustit hlavní opravu
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run repair-canonical-archive-20260804.yml --ref main --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Odstranit jednorázový spouštěč
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git reset --hard origin/main
+          git rm .github/workflows/dispatch-canonical-repair-20260804.yml
+          git commit -m 'Odstranit spouštěč opravy kanonického archivu [skip ci]'
+          git push origin HEAD:main
