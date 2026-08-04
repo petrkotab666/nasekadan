@@ -1,16 +1,16 @@
 {
-  "schema_version": "1.2",
-  "status": "success",
-  "checked_at": "2026-08-04T07:52:41+00:00",
+  "schema_version": "1.4",
+  "status": "repair_pending_public_verification",
+  "checked_at": "2026-08-04T12:29:53.651134+00:00",
   "publicly_verified_at": "2026-08-04T07:09:00+00:00",
   "canonical_source": "https://nasekadan.cz/",
-  "article_count": 45,
+  "article_count": 47,
   "homepage_count": 14,
-  "archive_count": 45,
+  "archive_count": 47,
   "archive_page_count": 4,
-  "rss_count": 45,
-  "sitemap_article_count": 45,
-  "news_sitemap_article_count": 8,
+  "rss_count": 47,
+  "sitemap_article_count": 47,
+  "news_sitemap_article_count": 10,
   "rss_order_matches_archive": true,
   "deployment_health": "verified_nonempty",
   "deployment_health_status_field_present": false,
@@ -18,20 +18,38 @@
   "duplicate_urls": [],
   "duplicate_fingerprints": [],
   "registry_refresh_pending": false,
-  "repair_pending_public_verification": false,
-  "repaired_url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+  "repair_pending_public_verification": true,
+  "repaired_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
   "public_archive_target_visible": true,
   "public_archive_target_position": 1,
   "archive_repair_commit": "7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30",
   "registry_repair_commit": "2103e4a01e4f60b0aa0f294256b6f42fe8230623",
   "source_commit_changes": [
-    {"url":"https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html","to":"61b754b3b5cf9fd946fd0a1773f6f2a429be6455"},
-    {"url":"https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html","to":"61b754b3b5cf9fd946fd0a1773f6f2a429be6455"},
-    {"url":"https://nasekadan.cz/clanky/avies-nemocnice-kadan.html","to":"61b754b3b5cf9fd946fd0a1773f6f2a429be6455"},
-    {"url":"https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html","to":"61b754b3b5cf9fd946fd0a1773f6f2a429be6455"},
-    {"url":"https://nasekadan.cz/clanky/petice-nemocnice-kadan.html","to":"61b754b3b5cf9fd946fd0a1773f6f2a429be6455"},
-    {"url":"https://nasekadan.cz/clanky/nemocnice-kadan.html","to":"61b754b3b5cf9fd946fd0a1773f6f2a429be6455"}
+    {
+      "url": "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
+      "to": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html",
+      "to": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html",
+      "to": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html",
+      "to": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/petice-nemocnice-kadan.html",
+      "to": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/nemocnice-kadan.html",
+      "to": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+    }
   ],
-  "classification": "safe_registry_repair_after_public_verification",
-  "note": "The repaired live archive visibly contains all 45 articles, including Císařský den at position one. The stale 44-article pending state was corrected and the later source commits for the six hospital-series articles were recorded."
+  "classification": "missing_published_article_safe_registration",
+  "note": "47. článek byl nalezen jako indexovatelný publikovaný text v repozitáři, ale chyběl v kanonickém registru a veřejných přehledech. Připraveno k veřejnému ověření."
 }
