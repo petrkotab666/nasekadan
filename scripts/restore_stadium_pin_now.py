@@ -36,22 +36,6 @@ def patch_source_rules() -> None:
     compile(text, str(visibility), 'exec')
     visibility.write_text(text, encoding='utf-8', newline='\n')
 
-    guard = ROOT / 'scripts' / 'run_article_integrity_guard.sh'
-    guard_text = guard.read_text(encoding='utf-8')
-    guard_text = guard_text.replace(
-        "HOMEPAGE_PIN_HREF = ''",
-        f'HOMEPAGE_PIN_HREF = {PIN_HREF!r}',
-    )
-    guard_text = guard_text.replace(
-        'HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)',
-        f'HOMEPAGE_PIN_UNTIL = {PIN_UNTIL_EXPR}',
-    )
-    expected_href = f'HOMEPAGE_PIN_HREF = {PIN_HREF!r}'
-    expected_until = f'HOMEPAGE_PIN_UNTIL = {PIN_UNTIL_EXPR}'
-    if expected_href not in guard_text or expected_until not in guard_text:
-        raise RuntimeError('Kanonická pojistka nebyla přepnuta na aktivní připnutí.')
-    guard.write_text(guard_text, encoding='utf-8', newline='\n')
-
 
 def load_articles() -> list[dict]:
     module_path = ROOT / 'scripts' / 'enforce_article_visibility.py'
