@@ -10,12 +10,23 @@ GENERATOR = ROOT / "scripts" / "enforce_article_visibility.py"
 HOME = ROOT / "index.html"
 PIN_HREF = "/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html"
 MARKER = "HOMEPAGE-PIN-STADIUM-20260804"
+PIN_UNTIL = "2026-08-05T18:00:00+02:00"
 
 
 def patch_generator() -> None:
     text = GENERATOR.read_text(encoding="utf-8")
     if MARKER in text:
+        text, count = re.subn(
+            r"HOMEPAGE_PIN_UNTIL\s*=\s*datetime\.fromisoformat\('[^']+'\)",
+            f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('{PIN_UNTIL}')",
+            text,
+            count=1,
+        )
+        if count != 1:
+            raise RuntimeError("Nelze opravit konec připnutí.")
+        text = text.replace("# HOMEPAGE-PIN-EXPIRED-BY-NEW-PUBLICATION-20260804\n", "")
         compile(text, str(GENERATOR), "exec")
+        GENERATOR.write_text(text, encoding="utf-8", newline="\n")
         return
 
     anchor = "PAGE_SIZE = 12\n"
@@ -23,7 +34,7 @@ def patch_generator() -> None:
         "PAGE_SIZE = 12\n"
         "# HOMEPAGE-PIN-STADIUM-20260804\n"
         "HOMEPAGE_PIN_HREF = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'\n"
-        "HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('2026-08-05T18:00:00+02:00')\n"
+        f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat('{PIN_UNTIL}')\n"
     )
     if anchor not in text:
         raise RuntimeError("Nelze vložit konfiguraci připnutí.")
