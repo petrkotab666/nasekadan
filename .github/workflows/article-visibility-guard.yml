@@ -1,94 +1,222 @@
-name: Trvalá viditelnost článků Naše Kadaň
+name: Trvalá viditelnost všech článků Naše Kadaň
 
 on:
   push:
     branches: [main]
   schedule:
-    - cron: '7 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
-  group: nasekadan-article-visibility
-  cancel-in-progress: true
+  group: nasekadan-canonical-article-integrity
+  cancel-in-progress: false
 
 jobs:
   guard:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      BLOOD_REL: /clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html
+      STEM_REL: /clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Vynutit skutečně nejnovější hlavní článek
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Obnovit titulku, celý archiv a sitemapu z článků
+        id: prepare
+        shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/enforce_latest_homepage_hero.py
-          git config user.name 'Naše Kadaň pojistka článků'
+          git config user.name 'Naše Kadaň – pojistka všech článků'
           git config user.email 'info@nasekadan.cz'
-          git add index.html
-          git commit -m 'Automaticky zachovat nejnovější článek na titulní straně' || true
-          git pull --rebase origin main
-          git push origin HEAD:main
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile \
+              scripts/enforce_article_visibility.py \
+              scripts/enforce_all_article_visibility.py \
+              scripts/audit_canonical_content_runtime.py
+            python3 scripts/enforce_all_article_visibility.py
+            git diff --check
+            git add index.html clanky/index.html sitemap.xml
+            find clanky -maxdepth 1 -type f -name 'strana-*.html' -print0 | xargs -0 -r git add --
+            if ! git diff --cached --quiet; then
+              git commit -m 'Automaticky obnovit viditelnost všech článků'
+            fi
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+          git fetch origin main
+          git reset --hard origin/main
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          python3 - "$GITHUB_OUTPUT" <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          import importlib.util, re, sys
+          root = Path('.')
+          spec = importlib.util.spec_from_file_location('visibility', root/'scripts/enforce_article_visibility.py')
+          module = importlib.util.module_from_spec(spec)
+          assert spec and spec.loader
+          spec.loader.exec_module(module)
+          cutoff = datetime.now(timezone.utc) + timedelta(minutes=2)
+          articles = []
+          for path in (root/'clanky').glob('*.html'):
+              if path.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', path.name):
+                  continue
+              item = module.article_info(path)
+              if not item:
+                  continue
+              dt = item['dt']
+              if dt.tzinfo is None:
+                  dt = dt.replace(tzinfo=timezone.utc)
+              if dt.astimezone(timezone.utc) <= cutoff:
+                  articles.append(item)
+          articles.sort(key=lambda x: x['dt'], reverse=True)
+          if not articles:
+              raise SystemExit('Nenalezen žádný publikovaný článek.')
+          with open(sys.argv[1], 'a', encoding='utf-8') as out:
+              out.write(f"article_count={len(articles)}\n")
+              out.write(f"latest_rel={articles[0]['href']}\n")
+          PY
 
       - name: Připravit SSH klíč
+        shell: bash
         run: |
           set -euo pipefail
-          test -n "$SSH_KEY"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit titulku a archiv přímo přes SCP
+      - name: Nasadit jeden kanonický publikační povrch
+        shell: bash
         run: |
           set -euo pipefail
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 index.html ubuntu@57.129.43.215:/tmp/nk-index.html
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 clanky/index.html ubuntu@57.129.43.215:/tmp/nk-clanky-index.html
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          bundle="$RUNNER_TEMP/nk-article-integrity-${GITHUB_RUN_ID}"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp data/published-content-index.json "$bundle/data/"
+          cat > "$bundle/deployment-health.txt" <<EOF
+          status=ok
+          source=${{ steps.prepare.outputs.source_sha }}
+          article_count=${{ steps.prepare.outputs.article_count }}
+          latest=${{ steps.prepare.outputs.latest_rel }}
+          guard=canonical-all-articles
+          deployed_at=$(date -u +%FT%TZ)
+          EOF
+          tar -C "$bundle" -czf "$RUNNER_TEMP/nk-article-integrity.tgz" .
+          remote="/tmp/nk-article-integrity-${GITHUB_RUN_ID}"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nk-article-integrity.tgz" "ubuntu@57.129.43.215:${remote}.tgz"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 "RUN_ID='${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
           set -euo pipefail
-          sudo install -m 0644 /tmp/nk-index.html /var/www/nasekadan/index.html
-          sudo install -d -m 0755 /var/www/nasekadan/clanky
-          sudo install -m 0644 /tmp/nk-clanky-index.html /var/www/nasekadan/clanky/index.html
-          rm -f /tmp/nk-index.html /tmp/nk-clanky-index.html
+          src="/tmp/nk-article-integrity-${RUN_ID}"
+          rm -rf "$src"
+          mkdir -p "$src"
+          tar -xzf "${src}.tgz" -C "$src"
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+            sudo install -m 0644 "$src/$f" "$root/$f"
+          done
+          for f in "$src"/clanky/*.html; do
+            sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"
+          done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+              sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf "$src" "${src}.tgz"
           REMOTE
 
-      - name: Veřejně ověřit pravidlo
+      - name: Veřejně ověřit všechny články a zvlášť oba články o dárcovství
+        shell: bash
         run: |
           set -euo pipefail
-          newest="$(python3 - <<'PY'
-          from pathlib import Path
-          import re
-          from datetime import datetime, timezone, timedelta
-          best=None
-          now=datetime.now(timezone.utc)+timedelta(minutes=2)
-          for p in Path('clanky').glob('*.html'):
-              if p.name=='index.html': continue
-              t=p.read_text(encoding='utf-8',errors='replace')
-              if re.search(r'<meta[^>]+name=["\x27]robots["\x27][^>]+content=["\x27][^"\x27]*noindex',t,re.I): continue
-              m=re.search(r'article:published_time[^>]+content=["\x27]([^"\x27]+)',t,re.I) or re.search(r'"datePublished"\s*:\s*"([^"]+)"',t)
-              if not m: continue
-              try: d=datetime.fromisoformat(m.group(1).replace('Z','+00:00'))
-              except: continue
-              if d.tzinfo is None: d=d.replace(tzinfo=timezone.utc)
-              if d.astimezone(timezone.utc)>now: continue
-              if best is None or d>best[0]: best=(d,p.name)
-          print(best[1] if best else '')
-          PY
-          )"
-          test -n "$newest"
-          for attempt in $(seq 1 24); do
-            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?visibility=${GITHUB_SHA}-${attempt}" || true)"
-            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?visibility=${GITHUB_SHA}-${attempt}" || true)"
-            if grep -Fq 'data-auto-latest-hero="1"' <<<"$home" \
-              && grep -Fq "/clanky/$newest" <<<"$home" \
-              && grep -Fq "/clanky/$newest" <<<"$archive"; then
-              exit 0
+          base=https://nasekadan.cz
+          success=0
+          for attempt in $(seq 1 12); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-${attempt}"
+            home="$(curl -4 -kfsSL --max-time 40 "$base/?integrity=$q" || true)"
+            archive="$(curl -4 -kfsSL --max-time 40 "$base/clanky/?integrity=$q" || true)"
+            rss="$(curl -4 -kfsSL --max-time 40 "$base/rss.xml?integrity=$q" || true)"
+            sitemap="$(curl -4 -kfsSL --max-time 40 "$base/sitemap.xml?integrity=$q" || true)"
+            health="$(curl -4 -kfsSL --max-time 40 "$base/deployment-health.txt?integrity=$q" || true)"
+            blood="$(curl -4 -kfsSL --max-time 40 "$base$BLOOD_REL?integrity=$q" || true)"
+            stem="$(curl -4 -kfsSL --max-time 40 "$base$STEM_REL?integrity=$q" || true)"
+            if grep -Fq "source=${{ steps.prepare.outputs.source_sha }}" <<<"$health" \
+              && grep -Fq '${{ steps.prepare.outputs.latest_rel }}' <<<"$home" \
+              && grep -Fq "$BLOOD_REL" <<<"$home" \
+              && grep -Fq "$BLOOD_REL" <<<"$archive" \
+              && grep -Fq "https://nasekadan.cz$BLOOD_REL" <<<"$rss" \
+              && grep -Fq "https://nasekadan.cz$BLOOD_REL" <<<"$sitemap" \
+              && grep -Fq 'Kriticky chybí krev skupiny 0 Rh−' <<<"$blood" \
+              && grep -Fq "$STEM_REL" <<<"$archive" \
+              && grep -Fq "https://nasekadan.cz$STEM_REL" <<<"$rss" \
+              && grep -Fq "https://nasekadan.cz$STEM_REL" <<<"$sitemap" \
+              && grep -Fq 'darovala krvetvorné buňky' <<<"$stem"; then
+              if python3 scripts/audit_canonical_content_runtime.py; then
+                success=1
+                break
+              fi
             fi
-            sleep 8
+            sleep 10
           done
-          exit 1
+          test "$success" = 1
+
+      - name: Uzavřít starý incident, pokud existuje
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue="$(gh issue list --state open --search '[incident] Viditelnost článků Naše Kadaň in:title' --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "Kanonická obnova prošla. Živý web, oba články o dárcovství, titulka, celý archiv, RSS, sitemap, news-sitemap, registr a deployment-health byly znovu ověřeny. Run ${GITHUB_RUN_ID}."
+            gh issue close "$issue" --reason completed
+          fi
+
+      - name: Založit nebo doplnit incident při selhání
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[incident] Viditelnost článků Naše Kadaň'
+          body="Automatická kanonická obnova nebo veřejný audit článků selhaly.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nCommit: ${{ steps.prepare.outputs.source_sha }}\nNejnovější článek: ${{ steps.prepare.outputs.latest_rel }}\nPočet článků: ${{ steps.prepare.outputs.article_count }}"
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
