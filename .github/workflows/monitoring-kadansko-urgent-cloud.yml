@@ -1,0 +1,57 @@
+name: Jednotný monitoring Kadaňska – cloudová akutní záloha
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '5 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/triggers/unified-monitoring-urgent-cloud.txt'
+      - '.github/workflows/monitoring-kadansko-urgent-cloud.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: unified-monitoring-kadansko-urgent
+  cancel-in-progress: false
+
+jobs:
+  fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Provést cloudovou akutní kontrolu
+        run: |
+          set -euo pipefail
+          python3 scripts/build_monitoring_registry.py
+          python3 scripts/monitor_kadansko_unified.py \
+            --mode urgent \
+            --output "$RUNNER_TEMP/unified-monitoring-urgent-cloud.json"
+
+      - name: Doručit nové nálezy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish_monitoring_alerts.py \
+            --mode urgent \
+            --input "$RUNNER_TEMP/unified-monitoring-urgent-cloud.json"
+
+      - name: Uložit deduplikační stav pouze při změně
+        run: bash scripts/commit_monitoring_state.sh urgent
+
+      - name: Ověřit minimální pokrytí
+        run: |
+          python3 - "$RUNNER_TEMP/unified-monitoring-urgent-cloud.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding='utf-8'))['status']
+          assert data['checkedSources'] >= max(6, int(data['sourceCount']*0.65)), data
+          print(data)
+          PY

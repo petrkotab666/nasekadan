@@ -1,0 +1,71 @@
+name: Jednotný monitoring Kadaňska – hodinový
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '13 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'data/organizations.json'
+      - 'data/city-sources.json'
+      - 'data/kadansko-extra-sources.json'
+      - 'data/urgent-kadan-sources.json'
+      - 'data/national-kadan-sources.json'
+      - 'data/monitoring-supplemental-sources.json'
+      - 'scripts/build_monitoring_registry.py'
+      - 'scripts/monitor_kadansko_unified.py'
+      - 'scripts/publish_monitoring_alerts.py'
+      - 'scripts/commit_monitoring_state.sh'
+      - '.github/workflows/monitoring-kadansko-hourly.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: unified-monitoring-kadansko-hourly
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Sestavit jednotný registr
+        run: python3 scripts/build_monitoring_registry.py
+
+      - name: Zkontrolovat organizace, obce, média, dopravu a sítě
+        run: |
+          python3 scripts/monitor_kadansko_unified.py \
+            --mode hourly \
+            --output "$RUNNER_TEMP/unified-monitoring-hourly.json"
+
+      - name: Doručit nové nálezy bez zahlcení
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/publish_monitoring_alerts.py \
+            --mode hourly \
+            --input "$RUNNER_TEMP/unified-monitoring-hourly.json"
+
+      - name: Uložit deduplikační stav pouze při změně
+        run: bash scripts/commit_monitoring_state.sh hourly
+
+      - name: Ověřit rozsah průchodu
+        run: |
+          python3 - "$RUNNER_TEMP/unified-monitoring-hourly.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding='utf-8'))['status']
+          assert data['sourceCount'] >= 70, data
+          assert data['checkedSources'] >= max(55, int(data['sourceCount']*0.65)), data
+          coverage=data.get('coverage') or {}
+          assert not coverage.get('missingMunicipalities'), coverage
+          assert not coverage.get('missingMandatoryCategories'), coverage
+          print(data)
+          PY

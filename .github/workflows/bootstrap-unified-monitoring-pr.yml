@@ -1,0 +1,46 @@
+name: Oprava klasifikace škol v monitoringu
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bootstrap-unified-monitoring-pr.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Doplnit zkratky ZŠ a MŠ do povinných oblastí
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('scripts/build_monitoring_registry.py')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+              '"základní školy": [r"zakladni skol"],',
+              '"základní školy": [r"zakladni skol", r"\\bzs\\b"],',
+          )
+          text=text.replace(
+              '"mateřské školy": [r"matersk[ae] skol"],',
+              '"mateřské školy": [r"matersk[ae] skol", r"\\bms\\b"],',
+          )
+          path.write_text(text,encoding='utf-8',newline='\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/build_monitoring_registry.py
+          if git diff --cached --quiet; then
+            echo 'Klasifikace už je opravena.'
+            exit 0
+          fi
+          git commit -m 'Rozpoznat zkratky ZŠ a MŠ v registru monitoringu'
+          git push origin HEAD:${GITHUB_HEAD_REF}

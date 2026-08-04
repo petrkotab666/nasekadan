@@ -1,0 +1,71 @@
+name: Test jednotného monitoringu Kadaňska
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'data/organizations.json'
+      - 'data/city-sources.json'
+      - 'data/kadansko-extra-sources.json'
+      - 'data/urgent-kadan-sources.json'
+      - 'data/national-kadan-sources.json'
+      - 'data/monitoring-supplemental-sources.json'
+      - 'scripts/build_monitoring_registry.py'
+      - 'scripts/monitor_kadansko_unified.py'
+      - 'scripts/publish_monitoring_alerts.py'
+      - 'scripts/check_monitoring_health.py'
+      - 'tests/test_monitoring_unified.py'
+      - '.github/workflows/monitoring-kadansko-*.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ověřit syntaxi a filtry
+        run: |
+          python3 -m py_compile \
+            scripts/build_monitoring_registry.py \
+            scripts/monitor_kadansko_unified.py \
+            scripts/publish_monitoring_alerts.py \
+            scripts/check_monitoring_health.py
+          python3 -m unittest tests/test_monitoring_unified.py
+
+      - name: Sestavit přísně kontrolovaný registr
+        run: python3 scripts/build_monitoring_registry.py
+
+      - name: Ověřit akutní, hodinovou a denní vrstvu na živých zdrojích
+        run: |
+          set -euo pipefail
+          for MODE in urgent hourly daily; do
+            python3 scripts/monitor_kadansko_unified.py \
+              --mode "$MODE" \
+              --state "$RUNNER_TEMP/state-${MODE}.json" \
+              --status "$RUNNER_TEMP/status-${MODE}.json" \
+              --output "$RUNNER_TEMP/output-${MODE}.json"
+          done
+
+      - name: Vyhodnotit pokrytí testu
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          minimum={'urgent':6,'hourly':55,'daily':75}
+          for mode in ('urgent','hourly','daily'):
+            data=json.loads((root/f'output-{mode}.json').read_text(encoding='utf-8'))['status']
+            assert data['checkedSources'] >= minimum[mode], (mode,data)
+            assert data['sourceCount'] >= {'urgent':8,'hourly':70,'daily':100}[mode], (mode,data)
+            print(mode, json.dumps(data,ensure_ascii=False))
+          registry=json.load(open('data/monitoring-registry.json',encoding='utf-8'))
+          coverage=registry['coverage']
+          assert coverage['registeredSources'] >= 110, coverage
+          assert not coverage['missingMunicipalities'], coverage
+          assert not coverage['missingMandatoryCategories'], coverage
+          assert not coverage['organizationsWithoutUrl'], coverage
+          PY
