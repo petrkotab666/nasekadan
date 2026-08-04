@@ -1,0 +1,298 @@
+name: Automaticky obnovit dočasné připnutí zimáku
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/automation-restore-stadium-pin-20260804-2103.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: automation-restore-stadium-pin-20260804
+  cancel-in-progress: true
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: '631'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Zastavit konfliktní běhy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for workflow in article-integrity-guard.yml emergency-static-sync-chronology.yml apply-chronological-order-source.yml; do
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --limit 30 --json databaseId,status --jq '.[] | select(.status == "in_progress" or .status == "queued") | .databaseId' 2>/dev/null | while read -r id; do
+              [[ -n "$id" ]] && gh run cancel "$id" --repo "$GITHUB_REPOSITORY" || true
+            done
+          done
+          sleep 5
+
+      - name: Obnovit pravidlo a připnout pouze titulku
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/restore_pin.py" <<'PY'
+          from __future__ import annotations
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import importlib.util
+          import re
+          import subprocess
+          from xml.etree import ElementTree as ET
+
+          ROOT = Path.cwd()
+          PIN = '/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          PIN_UNTIL = '2026-08-05T16:00:00+00:00'
+          PUBLISHED = '2026-08-03T22:05:00+02:00'
+          MARKER = 'NK-TEMP-STADIUM-PIN-20260804'
+
+          def patch_engine() -> None:
+              path = ROOT / 'scripts' / 'enforce_article_visibility.py'
+              text = path.read_text(encoding='utf-8')
+              constants = (
+                  f"HOMEPAGE_PIN_HREF = {PIN!r}\n"
+                  f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat({PIN_UNTIL!r})\n"
+                  f"HOMEPAGE_PIN_MARKER = {MARKER!r}\n"
+              )
+              if 'HOMEPAGE_PIN_HREF =' not in text:
+                  anchor = 'PAGE_SIZE = 12\n'
+                  if anchor not in text:
+                      raise RuntimeError('V generátoru chybí PAGE_SIZE.')
+                  text = text.replace(anchor, anchor + constants, 1)
+              else:
+                  text = re.sub(r'^HOMEPAGE_PIN_HREF\s*=.*$', f'HOMEPAGE_PIN_HREF = {PIN!r}', text, count=1, flags=re.M)
+                  text = re.sub(r'^HOMEPAGE_PIN_UNTIL\s*=.*$', f'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat({PIN_UNTIL!r})', text, count=1, flags=re.M)
+                  if 'HOMEPAGE_PIN_MARKER =' not in text:
+                      text = text.replace(f'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat({PIN_UNTIL!r})\n', f'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat({PIN_UNTIL!r})\nHOMEPAGE_PIN_MARKER = {MARKER!r}\n', 1)
+
+              old = "    homepage_order = list(articles)\n    homepage_articles = homepage_order[:HOME_TOTAL]\n"
+              new = (
+                  "    homepage_order = list(articles)\n"
+                  "    pin_active = bool(HOMEPAGE_PIN_HREF) and datetime.now(timezone.utc) <= HOMEPAGE_PIN_UNTIL\n"
+                  "    if pin_active:\n"
+                  "        pinned = next((item for item in articles if item['href'] == HOMEPAGE_PIN_HREF), None)\n"
+                  "        if pinned is None:\n"
+                  "            raise RuntimeError(f'Připínaný článek nebyl nalezen: {HOMEPAGE_PIN_HREF}')\n"
+                  "        homepage_order = [pinned] + [item for item in articles if item['href'] != HOMEPAGE_PIN_HREF]\n"
+                  "    homepage_articles = homepage_order[:HOME_TOTAL]\n"
+              )
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif 'pin_active = bool(HOMEPAGE_PIN_HREF)' not in text:
+                  raise RuntimeError('Blok pořadí titulky nebyl nalezen.')
+              compile(text, str(path), 'exec')
+              path.write_text(text, encoding='utf-8', newline='\n')
+
+          def patch_guard() -> None:
+              path = ROOT / 'scripts' / 'enforce_all_article_visibility.py'
+              text = path.read_text(encoding='utf-8')
+              old = (
+                  "    # Titulka i archiv se řadí výhradně podle prvního zveřejnění.\n"
+                  "    engine.article_info = safe_article_info\n"
+                  "    engine.main()\n"
+              )
+              new = (
+                  f"    # {MARKER}: dočasná redakční výjimka platí pouze pro titulní hero.\n"
+                  f"    pin_href = {PIN!r}\n"
+                  f"    pin_until = datetime.fromisoformat({PIN_UNTIL!r})\n"
+                  "    pin_active = datetime.now(timezone.utc) <= pin_until\n"
+                  "    engine.article_info = safe_article_info\n"
+                  "    engine.HOMEPAGE_PIN_HREF = pin_href if pin_active else ''\n"
+                  "    engine.HOMEPAGE_PIN_UNTIL = pin_until if pin_active else datetime.fromtimestamp(0, tz=timezone.utc)\n"
+                  "    engine.main()\n"
+              )
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif MARKER not in text:
+                  raise RuntimeError('Nastavení kanonické pojistky nebylo nalezeno.')
+              text = text.replace('    expected_hero = latest\n', '    expected_hero = pin_href if pin_active else latest\n', 1)
+              needle = '    if not hero or f\'data-latest-article-href="{expected_hero}"\' not in hero.group(0):\n        raise RuntimeError(f"Titulka nemá očekávaný hlavní článek: {expected_hero}")\n'
+              addition = needle + '    if pin_active:\n        aside = re.search(r\'<aside\\b[^>]*class=["\\\'][^"\\\']*current-aside[^"\\\']*["\\\'][^>]*>.*?</aside>\', hero.group(0), re.I | re.S)\n        if not aside or latest not in aside.group(0):\n            raise RuntimeError(f"Boční blok nemá skutečně nejnovější článek: {latest}")\n'
+              if needle in text and 'Boční blok nemá skutečně nejnovější článek' not in text:
+                  text = text.replace(needle, addition, 1)
+              compile(text, str(path), 'exec')
+              path.write_text(text, encoding='utf-8', newline='\n')
+
+          def load_engine():
+              path = ROOT / 'scripts' / 'enforce_article_visibility.py'
+              spec = importlib.util.spec_from_file_location('visibility', path)
+              if spec is None or spec.loader is None:
+                  raise RuntimeError('Nelze načíst generátor.')
+              module = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              return module
+
+          def main() -> None:
+              patch_engine()
+              patch_guard()
+              subprocess.run(['python3', 'scripts/enforce_all_article_visibility.py'], check=True)
+              subprocess.run(['python3', 'scripts/ensure_weather_loader.py'], check=True)
+
+              engine = load_engine()
+              articles = []
+              for path in (ROOT / 'clanky').glob('*.html'):
+                  if path.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', path.name):
+                      continue
+                  item = engine.article_info(path)
+                  if item:
+                      articles.append(item)
+              articles.sort(key=lambda item: item['dt'], reverse=True)
+              latest = articles[0]['href']
+              if latest == PIN:
+                  raise RuntimeError('Připínaný článek změnil chronologickou pozici.')
+
+              home = (ROOT / 'index.html').read_text(encoding='utf-8')
+              hero = re.search(r'<section class="wrap hero" id="clanky".*?</section>', home, re.S)
+              if not hero or f'data-latest-article-href="{PIN}"' not in hero.group(0):
+                  raise RuntimeError('Lokální titulka nemá připnutý článek.')
+              aside = re.search(r'<aside class="current-aside">.*?</aside>', hero.group(0), re.S)
+              if not aside or f'href="{latest}"' not in aside.group(0):
+                  raise RuntimeError('Lokální boční blok nemá nejnovější článek.')
+              if '/pocasi.js' not in home:
+                  raise RuntimeError('Na titulce chybí loader počasí.')
+
+              article = (ROOT / PIN.lstrip('/')).read_text(encoding='utf-8')
+              if f'article:published_time" content="{PUBLISHED}"' not in article:
+                  raise RuntimeError('Původní datum článku se změnilo.')
+
+              archive = (ROOT / 'clanky' / 'index.html').read_text(encoding='utf-8')
+              first_archive = re.search(r'<article\\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="([^"]+)"', archive, re.S)
+              if not first_archive or first_archive.group(1) != latest:
+                  raise RuntimeError('Archiv není chronologický.')
+
+              rss_root = ET.parse(ROOT / 'rss.xml').getroot()
+              first_rss = rss_root.findtext('./channel/item/link') or ''
+              if first_rss != 'https://nasekadan.cz' + latest:
+                  raise RuntimeError(f'RSS nezačíná nejnovějším článkem: {first_rss}')
+
+              (ROOT / '.github' / 'stadium-pin-latest.txt').write_text(latest + '\n', encoding='utf-8')
+              print(f'Připraveno: hlavní={PIN}; boční={latest}; archiv a RSS chronologické.')
+
+          if __name__ == '__main__':
+              main()
+          PY
+
+          git config user.name 'Naše Kadaň – dočasné připnutí titulky'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            git fetch --depth=1 origin main
+            git reset --hard FETCH_HEAD
+            python3 "$RUNNER_TEMP/restore_pin.py"
+            git diff --check
+            git diff --exit-code -- rss.xml clanky/index.html 'clanky/strana-*.html' sitemap.xml
+            git add scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py index.html .github/stadium-pin-latest.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Obnovit dočasné připnutí zimního stadionu do 5. srpna 18:00'
+            fi
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit pouze titulní stránku na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --depth=1 origin main
+          git reset --hard FETCH_HEAD
+          grep -Fq 'data-latest-article-href="/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html"' index.html
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 index.html ubuntu@57.129.43.215:/tmp/nasekadan-index-pin.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -m 0644 /tmp/nasekadan-index-pin.html /var/www/nasekadan/index.html
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nasekadan-index-pin.html nasekadan-web:/usr/share/nginx/html/index.html
+          fi
+          rm -f /tmp/nasekadan-index-pin.html
+          REMOTE
+
+      - name: Veřejně ověřit titulku, chronologii a počasí
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          import json, re, ssl, time
+          from pathlib import Path
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+          from xml.etree import ElementTree as ET
+
+          BASE='https://nasekadan.cz'
+          PIN='/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          PUBLISHED='2026-08-03T22:05:00+02:00'
+          latest=Path('.github/stadium-pin-latest.txt').read_text(encoding='utf-8').strip()
+          ctx=ssl.create_default_context()
+
+          def fetch(path, nonce):
+              sep='&' if '?' in path else '?'
+              req=Request(BASE+path+sep+urlencode({'pincheck':nonce}), headers={'User-Agent':'NaseKadan-Pin-Automation/20260804','Cache-Control':'no-cache','Pragma':'no-cache'})
+              with urlopen(req, timeout=40, context=ctx) as r:
+                  return r.read().decode('utf-8',errors='replace')
+
+          last=None
+          for attempt in range(1,21):
+              try:
+                  nonce=f'{int(datetime.now(timezone.utc).timestamp())}-{attempt}'
+                  home=fetch('/',nonce)
+                  article=fetch(PIN,nonce)
+                  archive=fetch('/clanky/',nonce)
+                  rss=fetch('/rss.xml',nonce)
+                  forecast=fetch('/api/pocasi-predpoved.json',nonce)
+                  hero=re.search(r'<section class="wrap hero" id="clanky".*?</section>',home,re.S)
+                  assert hero and f'data-latest-article-href="{PIN}"' in hero.group(0)
+                  aside=re.search(r'<aside class="current-aside">.*?</aside>',hero.group(0),re.S)
+                  assert aside and f'href="{latest}"' in aside.group(0)
+                  assert '/pocasi.js' in home
+                  assert f'article:published_time" content="{PUBLISHED}"' in article
+                  first_archive=re.search(r'<article\\b[^>]*class="[^"]*article-card[^"]*"[^>]*>.*?href="([^"]+)"',archive,re.S)
+                  assert first_archive and first_archive.group(1)==latest
+                  root=ET.fromstring(rss)
+                  assert (root.findtext('./channel/item/link') or '') == BASE+latest
+                  data=json.loads(forecast)
+                  assert isinstance(data.get('properties',{}).get('timeseries'),list) and data['properties']['timeseries']
+                  print(f'Veřejná kontrola prošla: hlavní={PIN}; boční={latest}; počasí=ok')
+                  break
+              except Exception as exc:
+                  last=exc
+                  if attempt==20:
+                      raise
+                  time.sleep(8)
+          PY
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Připnutí bylo znovu obnoveno a veřejně ověřeno. Hlavní článek je zimní stadion, nejnovější původní článek zůstal v bočním bloku, archiv a RSS jsou chronologické, původní datum se nezměnilo a počasí funguje. Run ${GITHUB_RUN_ID}."
+          gh issue close "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --reason completed
+
+      - name: Zapsat chybu
+        if: failure()
+        shell: bash
+        run: gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "Obnova připnutí nebo veřejná kontrola selhala. Run ${GITHUB_RUN_ID}."
