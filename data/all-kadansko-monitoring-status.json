@@ -1,55 +1,115 @@
 {
   "version": 2,
-  "checkedAt": "2026-08-03T07:57:39.574887+00:00",
+  "checkedAt": "2026-08-04T19:45:33.297992+00:00",
   "bootstrap": false,
-  "sourceCount": 106,
-  "checkedSources": 92,
+  "sourceCount": 209,
+  "checkedSources": 195,
   "failedSources": 14,
-  "itemsParsed": 6622,
-  "uniqueItems": 3579,
-  "newAlerts": 2,
-  "alertsCapped": false,
+  "itemsParsed": 17139,
+  "uniqueItems": 10923,
+  "newAlerts": 12,
+  "alertsCapped": true,
   "suppressed": {
-    "genericTitle": 705,
+    "genericTitle": 890,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 10,
-    "notEditoriallySignificant": 2,
-    "notFreshOrUndated": 1,
-    "duplicate": 2338
+    "broadWithoutLocalMatch": 136,
+    "notEditoriallySignificant": 6214,
+    "notFreshOrUndated": 1034,
+    "duplicate": 5326
   },
   "coverage": {
-    "directoryOrganizations": 64,
-    "directoryOrganizationsWithUrl": 64,
-    "monitoredDirectoryOrganizations": 64,
+    "directoryOrganizations": 65,
+    "directoryOrganizationsWithUrl": 65,
+    "monitoredDirectoryOrganizations": 65,
     "missingDirectoryOrganizations": [],
     "coveragePercent": 100.0,
-    "manualUniqueSources": 70,
+    "manualUniqueSources": 76,
     "directoryUniqueSourcesAdded": 25,
-    "totalUniqueSources": 95,
+    "totalUniqueSources": 101,
     "directoryIsCanonicalRegistry": true,
-    "extraSources": 11,
-    "completeSourceCount": 106,
+    "extraSources": 108,
+    "completeSourceCount": 209,
     "scopeMunicipalities": [
-      "Domašín",
-      "Chbany",
-      "Kadaň",
       "Klášterec nad Ohří",
-      "Kovářská",
-      "Libědice",
+      "Chomutov",
+      "Jirkov",
+      "Žatec",
+      "Podbořany",
+      "Vejprty",
+      "Chbany",
+      "Račetice",
+      "Radonice u Kadaně",
+      "Vilémov u Kadaně",
       "Mašťov",
       "Měděnec",
-      "Okounov",
       "Perštejn",
-      "Pětipsy",
-      "Kryštofovy Hamry",
-      "Radonice",
+      "Libědice",
       "Rokle",
-      "Vejprty",
       "Veliká Ves",
-      "Vilémov",
+      "Domašín",
+      "Okounov",
+      "Místo",
+      "Výsluní",
+      "Kovářská",
+      "Kryštofovy Hamry",
+      "Březno u Chomutova",
+      "Droužkovice",
+      "Údlice",
+      "Otvice",
+      "Spořice",
+      "Málkov",
+      "Černovice u Chomutova",
+      "Nezabylice",
+      "Pesvice",
+      "Vrskmaň",
+      "Vysoká Pec",
+      "Boleboř",
+      "Blatno u Chomutova",
+      "Kalek",
+      "Hora Svatého Šebestiána",
+      "Křimov",
+      "Strupčice",
+      "Hrušovany",
+      "Všestudy",
+      "Bílence",
+      "Krásný Dvůr",
+      "Nepomyšl",
+      "Vroutek",
+      "Lubenec",
+      "Most",
+      "Litvínov",
+      "Louny",
+      "Ostrov",
+      "Jáchymov",
+      "Karlovy Vary",
+      "Boží Dar",
+      "Bärenstein",
+      "Annaberg-Buchholz",
+      "Oberwiesenthal",
+      "Pětipsy",
+      "Loučná pod Klínovcem"
+    ],
+    "regionalMunicipalities": 58,
+    "regionalNamedInstitutions": 25,
+    "regionalRegistryUpdatedAt": "2026-08-04",
+    "regionalRegistryComplete": true,
+    "regionalSourceEntries": 110,
+    "regionalLocalTerms": 106,
+    "supplementedMunicipalities": [
+      "Pětipsy",
+      "Loučná pod Klínovcem"
+    ],
+    "mandatoryRegionalSupplements": [
       "Loučná pod Klínovcem",
-      "Račetice"
-    ]
+      "Pětipsy"
+    ],
+    "completeHourlyMonitoring": true,
+    "monitoringPolicy": {
+      "primarySchedule": "hourly",
+      "selfHealingWatchdog": true,
+      "automaticFailedRunRetry": true,
+      "emergencyIssueTrigger": true
+    }
   },
   "sourceStatus": [
     {
@@ -65,9 +125,8 @@
       "url": "https://gis.mesto-kadan.cz/portal",
       "category": "Město a územní plánování",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: UNSAFE_LEGACY_RENEGOTIATION_DISABLED] unsafe legacy renegotiation disabled (_ssl.c:1000)>"
+      "status": "checked",
+      "itemsParsed": 13
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -205,7 +264,7 @@
       "category": "Sport",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 109
+      "itemsParsed": 110
     },
     {
       "name": "DDM Šuplík",
@@ -407,7 +466,7 @@
       "category": "Regionální kultura – Most",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 114
+      "itemsParsed": 116
     },
     {
       "name": "Městské divadlo Most – program",
@@ -531,7 +590,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 30
+      "itemsParsed": 29
     },
     {
       "name": "Povodí Ohře",
@@ -613,7 +672,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 272
+      "itemsParsed": 271
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -622,6 +681,54 @@
       "tier": "organization",
       "status": "checked",
       "itemsParsed": 26
+    },
+    {
+      "name": "Pivnice U Soudku Kadaň – veřejné informace",
+      "url": "https://www.pivnidenicek.cz/restaurace-a-hospody/ceska-republika/ustecky-kraj/chomutov/kadan/47163-u-soudku",
+      "category": "Kultura a volný čas",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 29
+    },
+    {
+      "name": "Sociální monitoring – Pivnice U Soudku Kadaň",
+      "url": "https://www.bing.com/search?q=%22Pivnice+U+Soudku%22+Kada%C5%88",
+      "category": "Kultura a volný čas – sociální zdroje",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 22
+    },
+    {
+      "name": "Sociální monitoring – ARG a hudba v Kadani",
+      "url": "https://www.bing.com/search?q=%22ARG%22+%22Kada%C5%88%22+hudba",
+      "category": "Kultura a volný čas – sociální zdroje",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 28
+    },
+    {
+      "name": "Liďák Kadaň – oficiální web",
+      "url": "https://restaurant-and-pub-lidak.eatbu.com/?lang=cs",
+      "category": "Kultura a volný čas",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 5
+    },
+    {
+      "name": "Liďák Kadaň – Instagram",
+      "url": "https://www.instagram.com/restaurant_pub_lidak",
+      "category": "Kultura a volný čas – sociální zdroje",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 12
+    },
+    {
+      "name": "Sociální monitoring – Liďák Kadaň a nové akce",
+      "url": "https://www.bing.com/search?q=%22Li%C4%8F%C3%A1k+Kada%C5%88%22+akce+program",
+      "category": "Kultura a volný čas – sociální zdroje",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 28
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -733,7 +840,7 @@
       "category": "Zdravotní, sociální a komunitní služby",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 98
+      "itemsParsed": 97
     },
     {
       "name": "Fotbalový klub Tatran Kadaň",
@@ -872,7 +979,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 7
+      "itemsParsed": 12
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -880,7 +987,7 @@
       "category": "Média – jižní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 2
+      "itemsParsed": 3
     },
     {
       "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
@@ -888,7 +995,7 @@
       "category": "Média – Krušné hory a Ohře",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 1
+      "itemsParsed": 2
     },
     {
       "name": "Google News – Pětipsy, Radonice, Rokle, Veliká Ves a Vilémov",
@@ -896,7 +1003,7 @@
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 2
+      "itemsParsed": 3
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
@@ -904,7 +1011,7 @@
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 3
+      "itemsParsed": 2
     },
     {
       "name": "Google News – kadaňské organizace a služby",
@@ -913,6 +1020,783 @@
       "tier": "aggregator",
       "status": "checked",
       "itemsParsed": 2
+    },
+    {
+      "name": "Chomutov – oficiální web",
+      "url": "https://www.chomutov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 9
+    },
+    {
+      "name": "Jirkov – oficiální web",
+      "url": "https://www.jirkov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 518
+    },
+    {
+      "name": "Žatec – oficiální web",
+      "url": "https://www.mesto-zatec.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 312
+    },
+    {
+      "name": "Podbořany – oficiální web",
+      "url": "https://www.podborany.net/cs",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not Found"
+    },
+    {
+      "name": "Vejprty – oficiální web",
+      "url": "https://www.vejprty.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 92
+    },
+    {
+      "name": "Chbany – oficiální web",
+      "url": "https://www.chbany.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 97
+    },
+    {
+      "name": "Račetice – oficiální web",
+      "url": "https://www.racetice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 151
+    },
+    {
+      "name": "Radonice u Kadaně – oficiální web",
+      "url": "https://www.obec-radonice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 194
+    },
+    {
+      "name": "Vilémov u Kadaně – oficiální web",
+      "url": "https://www.obec-vilemov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 54
+    },
+    {
+      "name": "Mašťov – oficiální web",
+      "url": "https://www.mastov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 60
+    },
+    {
+      "name": "Měděnec – oficiální web",
+      "url": "https://www.medenec.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 77
+    },
+    {
+      "name": "Perštejn – oficiální web",
+      "url": "https://www.obec-perstejn.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 161
+    },
+    {
+      "name": "Libědice – oficiální web",
+      "url": "https://www.libedice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 73
+    },
+    {
+      "name": "Rokle – oficiální web",
+      "url": "https://www.obecrokle.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 96
+    },
+    {
+      "name": "Veliká Ves – oficiální web",
+      "url": "https://www.velikaves.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 265
+    },
+    {
+      "name": "Domašín – oficiální web",
+      "url": "https://www.obec-domasin.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 80
+    },
+    {
+      "name": "Okounov – oficiální web",
+      "url": "https://www.okounov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 54
+    },
+    {
+      "name": "Místo – oficiální web",
+      "url": "https://www.obec-misto.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 89
+    },
+    {
+      "name": "Výsluní – oficiální web",
+      "url": "https://www.mesto-vysluni.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 53
+    },
+    {
+      "name": "Kovářská – oficiální web",
+      "url": "https://www.kovarska.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 55
+    },
+    {
+      "name": "Kryštofovy Hamry – oficiální web",
+      "url": "https://www.krystofovyhamry.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 109
+    },
+    {
+      "name": "Droužkovice – oficiální web",
+      "url": "https://www.drouzkovice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 110
+    },
+    {
+      "name": "Údlice – oficiální web",
+      "url": "https://www.obec-udlice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 76
+    },
+    {
+      "name": "Otvice – oficiální web",
+      "url": "https://www.otvice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 54
+    },
+    {
+      "name": "Spořice – oficiální web",
+      "url": "https://www.obecsporice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 76
+    },
+    {
+      "name": "Málkov – oficiální web",
+      "url": "https://www.malkov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 171
+    },
+    {
+      "name": "Černovice u Chomutova – oficiální web",
+      "url": "https://www.cernovice-ulk.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 125
+    },
+    {
+      "name": "Nezabylice – oficiální web",
+      "url": "https://www.nezabylice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 88
+    },
+    {
+      "name": "Pesvice – oficiální web",
+      "url": "https://www.pesvice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 86
+    },
+    {
+      "name": "Vrskmaň – oficiální web",
+      "url": "https://www.vrskman.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 404
+    },
+    {
+      "name": "Vysoká Pec – oficiální web",
+      "url": "https://www.vysokapec.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 70
+    },
+    {
+      "name": "Boleboř – oficiální web",
+      "url": "https://www.bolebor.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 189
+    },
+    {
+      "name": "Blatno u Chomutova – oficiální web",
+      "url": "https://www.obec-blatno.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 320
+    },
+    {
+      "name": "Kalek – oficiální web",
+      "url": "https://www.obeckalek.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 113
+    },
+    {
+      "name": "Hora Svatého Šebestiána – oficiální web",
+      "url": "https://www.sebestian.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 176
+    },
+    {
+      "name": "Křimov – oficiální web",
+      "url": "https://www.krimov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 328
+    },
+    {
+      "name": "Strupčice – oficiální web",
+      "url": "https://www.obec-strupcice.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 269
+    },
+    {
+      "name": "Hrušovany – oficiální web",
+      "url": "https://www.obec-hrusovany.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 149
+    },
+    {
+      "name": "Všestudy – oficiální web",
+      "url": "https://www.vsestudy.eu/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 55
+    },
+    {
+      "name": "Bílence – oficiální web",
+      "url": "https://www.bilence.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 96
+    },
+    {
+      "name": "Krásný Dvůr – oficiální web",
+      "url": "https://www.obeckrasnydvur.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 60
+    },
+    {
+      "name": "Nepomyšl – oficiální web",
+      "url": "https://www.mestysnepomysl.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 52
+    },
+    {
+      "name": "Vroutek – oficiální web",
+      "url": "https://www.vroutek.net/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 115
+    },
+    {
+      "name": "Lubenec – oficiální web",
+      "url": "https://www.lubenec.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 76
+    },
+    {
+      "name": "Most – oficiální web",
+      "url": "https://www.mesto-most.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 160
+    },
+    {
+      "name": "Louny – oficiální web",
+      "url": "https://www.mulouny.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 60
+    },
+    {
+      "name": "Ostrov – oficiální web",
+      "url": "https://ostrov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 328
+    },
+    {
+      "name": "Jáchymov – oficiální web",
+      "url": "https://www.mestojachymov.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 215
+    },
+    {
+      "name": "Karlovy Vary – oficiální web",
+      "url": "https://mmkv.cz/cs",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 340
+    },
+    {
+      "name": "Boží Dar – oficiální web",
+      "url": "https://www.bozi-dar.eu/cz",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 130
+    },
+    {
+      "name": "Bärenstein – oficiální web",
+      "url": "https://www.baerenstein-erzgebirge.de/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 118
+    },
+    {
+      "name": "Annaberg-Buchholz – oficiální web",
+      "url": "https://www.annaberg-buchholz.de/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 31
+    },
+    {
+      "name": "Oberwiesenthal – oficiální web",
+      "url": "https://stadtverwaltung.oberwiesenthal.de/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 110
+    },
+    {
+      "name": "Pětipsy – oficiální web",
+      "url": "https://www.petipsy.cz/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 41
+    },
+    {
+      "name": "Loučná pod Klínovcem – oficiální web",
+      "url": "https://www.loucna.eu/",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "checked",
+      "itemsParsed": 186
+    },
+    {
+      "name": "Kulturní centrum Klášterec nad Ohří",
+      "url": "https://kultura.klasterec.cz/",
+      "category": "culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 22
+    },
+    {
+      "name": "Zámek Klášterec nad Ohří",
+      "url": "https://www.klasterec.cz/volny-cas/informace-pro-turisty/prochazka-mestem/zamek-2279cs.html",
+      "category": "castle-culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 256
+    },
+    {
+      "name": "Kulturní, sportovní a volnočasová zařízení Chomutov",
+      "url": "https://www.kultura-sport.cz/",
+      "category": "culture-sport",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 62
+    },
+    {
+      "name": "Oblastní muzeum v Chomutově",
+      "url": "https://www.muzeumchomutov.cz/",
+      "category": "museum",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 101
+    },
+    {
+      "name": "Zoopark Chomutov",
+      "url": "https://www.zoopark.cz/",
+      "category": "family-leisure",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 54
+    },
+    {
+      "name": "Kamencové jezero Chomutov",
+      "url": "https://visit.chomutov.cz/kamencove-jezero",
+      "category": "summer-leisure",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 236
+    },
+    {
+      "name": "Aquasvět Chomutov",
+      "url": "https://www.kultura-sport.cz/aquasvet",
+      "category": "aquapark",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 57
+    },
+    {
+      "name": "KVIZ Jirkov",
+      "url": "https://www.kviz-jirkov.cz/",
+      "category": "culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 83
+    },
+    {
+      "name": "Zámek Červený Hrádek",
+      "url": "https://www.zamek-cerveny-hradek.cz/",
+      "category": "castle-culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 84
+    },
+    {
+      "name": "Městské divadlo Žatec",
+      "url": "https://www.divadlozatec.cz/",
+      "category": "theatre-culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 254
+    },
+    {
+      "name": "Infocentrum Žatec – kalendář akcí",
+      "url": "https://www.infocentrum-zatec.cz/kalendar-akci",
+      "category": "regional-calendar",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 67
+    },
+    {
+      "name": "Chrám Chmele a Piva",
+      "url": "https://www.chchp.cz/",
+      "category": "museum-culture-gastro",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 7
+    },
+    {
+      "name": "Regionální muzeum K. A. Polánka v Žatci",
+      "url": "https://www.muzeumzatec.cz/",
+      "category": "museum",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 35
+    },
+    {
+      "name": "Žatecký pivovar / Sedmý schod",
+      "url": "https://sedmyschod.com/",
+      "category": "brewery-events",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 31
+    },
+    {
+      "name": "Žatecká Dočesná",
+      "url": "https://docesna.cz/",
+      "category": "major-recurring-event",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 23
+    },
+    {
+      "name": "Májový Chmelfest Žatec",
+      "url": "https://chmelfest.cz/",
+      "category": "major-recurring-event",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 6
+    },
+    {
+      "name": "Slavnosti cibule Račetice",
+      "url": "https://www.slavnosticibule.cz/",
+      "category": "major-recurring-event",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 5
+    },
+    {
+      "name": "Slavnosti cibule Račetice – doplňkový zdroj 1",
+      "url": "https://www.racetice.cz/obec/kalendar-akci",
+      "category": "major-recurring-event",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 164
+    },
+    {
+      "name": "Slavnosti cibule Račetice – doplňkový zdroj 2",
+      "url": "https://www.facebook.com/SlavnostiCibule",
+      "category": "major-recurring-event",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 0
+    },
+    {
+      "name": "Město Podbořany – kalendář akcí",
+      "url": "https://www.podborany.net/organizace/informacni-centrum/kalendar-akci",
+      "category": "regional-calendar",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 331
+    },
+    {
+      "name": "Město Vejprty – kalendář akcí",
+      "url": "https://www.vejprty.cz/kalendar-akci",
+      "category": "regional-calendar",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 67
+    },
+    {
+      "name": "Zámek Krásný Dvůr",
+      "url": "https://www.zamek-krasnydvur.cz/cs",
+      "category": "castle-culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 111
+    },
+    {
+      "name": "Zámek Poláky",
+      "url": "https://www.zamek-polaky.cz/",
+      "category": "culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 17
+    },
+    {
+      "name": "Zámek Poláky – doplňkový zdroj 2",
+      "url": "https://www.facebook.com/zamekpolakycz",
+      "category": "culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 0
+    },
+    {
+      "name": "Zámek Poláky – doplňkový zdroj 3",
+      "url": "https://www.instagram.com/zamekpolaky",
+      "category": "culture",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 12
+    },
+    {
+      "name": "Hasištejn",
+      "url": "https://www.hasistejn.info/",
+      "category": "castle-events",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 16
+    },
+    {
+      "name": "Horní hrad",
+      "url": "https://hornihrad.cz/",
+      "category": "castle-events",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 176
+    },
+    {
+      "name": "Dolní Poohří – regionální kalendář",
+      "url": "https://www.dolnipoohri.cz/",
+      "category": "regional-aggregator",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 61
+    },
+    {
+      "name": "Google News – široký region 1",
+      "url": "https://news.google.com/rss/search?q=%28%22Annaberg-Buchholz%22+OR+%22Aquasv%C4%9Bt+Chomutov%22+OR+%22Blatno+u+Chomutova%22+OR+%22Bolebo%C5%99%22+OR+%22Bo%C5%BE%C3%AD+Dar%22+OR+%22B%C3%A4renstein%22+OR+%22B%C3%ADlence%22+OR+%22B%C5%99ezno+u+Chomutova%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 4
+    },
+    {
+      "name": "Google News – široký region 2",
+      "url": "https://news.google.com/rss/search?q=%28%22Chbany%22+OR+%22Chomutov%22+OR+%22Chr%C3%A1m+Chmele+a+Piva%22+OR+%22Doln%C3%AD+Pooh%C5%99%C3%AD+%E2%80%93+region%C3%A1ln%C3%AD+kalend%C3%A1%C5%99%22+OR+%22Doma%C5%A1%C3%ADn%22+OR+%22Drou%C5%BEkovice%22+OR+%22Hasi%C5%A1tejn%22+OR+%22Hora+Svat%C3%A9ho+%C5%A0ebesti%C3%A1na%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 38
+    },
+    {
+      "name": "Google News – široký region 3",
+      "url": "https://news.google.com/rss/search?q=%28%22Horn%C3%AD+Hal%C5%BEe%22+OR+%22Horn%C3%AD+hrad%22+OR+%22Ho%C5%99enice%22+OR+%22Hru%C5%A1ovany%22+OR+%22H%C3%A1j%22+OR+%22Infocentrum+%C5%BDatec+%E2%80%93+kalend%C3%A1%C5%99+akc%C3%AD%22+OR+%22Jirkov%22+OR+%22J%C3%A1chymov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 11
+    },
+    {
+      "name": "Google News – široký region 4",
+      "url": "https://news.google.com/rss/search?q=%28%22Kada%C5%88sk%C3%BD+Rohozec%22+OR+%22Kalek%22+OR+%22Kamencov%C3%A9+jezero+Chomutov%22+OR+%22Kamenn%C3%A9%22+OR+%22Karlovy+Vary%22+OR+%22Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22+OR+%22Kojet%C3%ADn%22+OR+%22Kotlina%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 69
+    },
+    {
+      "name": "Google News – široký region 5",
+      "url": "https://news.google.com/rss/search?q=%28%22Kov%C3%A1%C5%99sk%C3%A1%22+OR+%22Kry%C5%A1tofovy+Hamry%22+OR+%22Kr%C3%A1sn%C3%BD+Dv%C5%AFr%22+OR+%22Kulturn%C3%AD+centrum+Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22+OR+%22Kulturn%C3%AD%2C+sportovn%C3%AD+a+volno%C4%8Dasov%C3%A1+za%C5%99%C3%ADzen%C3%AD+Chomutov%22+OR+%22KVIZ+Jirkov%22+OR+%22K%C5%99imov%22+OR+%22Lib%C4%9Bdice%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 7
+    },
+    {
+      "name": "Google News – široký region 6",
+      "url": "https://news.google.com/rss/search?q=%28%22Litv%C3%ADnov%22+OR+%22Louny%22+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22+OR+%22Lubenec%22+OR+%22Mal%C3%A9+Krhovice%22+OR+%22Ma%C5%A1%C5%A5ov%22+OR+%22Mi%C5%99etice+u+Vint%C3%AD%C5%99ova%22+OR+%22Most%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 100
+    },
+    {
+      "name": "Google News – široký region 7",
+      "url": "https://news.google.com/rss/search?q=%28%22M%C3%A1jov%C3%BD+Chmelfest+%C5%BDatec%22+OR+%22M%C3%A1lkov%22+OR+%22M%C3%ADsto%22+OR+%22M%C3%BDtinka%22+OR+%22M%C4%9Bd%C4%9Bnec%22+OR+%22M%C4%9Bsto+Podbo%C5%99any+%E2%80%93+kalend%C3%A1%C5%99+akc%C3%AD%22+OR+%22M%C4%9Bsto+Vejprty+%E2%80%93+kalend%C3%A1%C5%99+akc%C3%AD%22+OR+%22M%C4%9Bstsk%C3%A9+divadlo+%C5%BDatec%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 100
+    },
+    {
+      "name": "Google News – široký region 8",
+      "url": "https://news.google.com/rss/search?q=%28%22Nepomy%C5%A1l%22+OR+%22Nezabylice%22+OR+%22Obec+Chbany+%E2%80%93+kulturn%C3%AD+a+obecn%C3%AD+akce+v%C4%8Detn%C4%9B+Pol%C3%A1k%C5%AF%22+OR+%22Oberwiesenthal%22+OR+%22Oblastn%C3%AD+muzeum+v+Chomutov%C4%9B%22+OR+%22Obrovice%22+OR+%22Okounov%22+OR+%22Ostrov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 68
+    },
+    {
+      "name": "Google News – široký region 9",
+      "url": "https://news.google.com/rss/search?q=%28%22Otvice%22+OR+%22Per%C5%A1tejn%22+OR+%22Pesvice%22+OR+%22Podbo%C5%99any%22+OR+%22Pol%C3%A1ky%22+OR+%22P%C4%9Btipsy%22+OR+%22P%C5%99eskaky%22+OR+%22Radechov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 14
+    },
+    {
+      "name": "Google News – široký region 10",
+      "url": "https://news.google.com/rss/search?q=%28%22Radonice+u+Kadan%C4%9B%22+OR+%22Ra%C4%8Detice%22+OR+%22Region%C3%A1ln%C3%AD+muzeum+K.+A.+Pol%C3%A1nka+v+%C5%BDatci%22+OR+%22Rokle%22+OR+%22Roztyly%22+OR+%22Sedlec+u+Radonic%22+OR+%22Slavnosti+cibule+Ra%C4%8Detice%22+OR+%22Sob%C4%9Bsuky%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 18
+    },
+    {
+      "name": "Google News – široký region 11",
+      "url": "https://news.google.com/rss/search?q=%28%22Spo%C5%99ice%22+OR+%22Strup%C4%8Dice%22+OR+%22Vadkovice%22+OR+%22Vejprty%22+OR+%22Velik%C3%A1+Ves%22+OR+%22Vikletice%22+OR+%22Vil%C3%A9mov+u+Kadan%C4%9B%22+OR+%22Vint%C3%AD%C5%99ov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 7
+    },
+    {
+      "name": "Google News – široký region 12",
+      "url": "https://news.google.com/rss/search?q=%28%22Vojn%C3%ADn%22+OR+%22Vroutek%22+OR+%22Vrskma%C5%88%22+OR+%22Vysok%C3%A1+Pec%22+OR+%22V%C3%BDslun%C3%AD%22+OR+%22V%C5%A1estudy%22+OR+%22Zoopark+Chomutov%22+OR+%22Z%C3%A1mek+Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 13
+    },
+    {
+      "name": "Google News – široký region 13",
+      "url": "https://news.google.com/rss/search?q=%28%22Z%C3%A1mek+Kr%C3%A1sn%C3%BD+Dv%C5%AFr%22+OR+%22Z%C3%A1mek+Pol%C3%A1ky%22+OR+%22Z%C3%A1mek+%C4%8Cerven%C3%BD+Hr%C3%A1dek%22+OR+%22%C3%9Adlice%22+OR+%22%C4%8Cejkovice%22+OR+%22%C4%8Cernovice+u+Chomutova%22+OR+%22%C5%BDatec%22+OR+%22%C5%BDateck%C3%A1+Do%C4%8Desn%C3%A1%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 10
+    },
+    {
+      "name": "Google News – široký region 14",
+      "url": "https://news.google.com/rss/search?q=%28%22%C5%BDateck%C3%BD+pivovar+%2F+Sedm%C3%BD+schod%22+OR+%22%C5%BDdov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "status": "checked",
+      "itemsParsed": 0
     }
   ]
 }
