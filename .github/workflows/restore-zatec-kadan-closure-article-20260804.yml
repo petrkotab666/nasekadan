@@ -1,5 +1,5 @@
 name: Vrátit článek o uzavírkách Žatec–Kadaň
-# trigger-version: 2026-08-04-0809
+# trigger-version: 2026-08-04-0811
 
 on:
   push:
@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      ARTICLE: clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
-      URL: https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
       SLUG: silnice-zatec-kadan-prejezd-uzavirka-srpen-2026
+      ARTICLE: clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
       EXPECTED_H1: 'Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna'
       KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
@@ -28,22 +28,22 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Zkontrolovat aktuální zdroj
+      - name: Ověřit zdroj
         run: |
           set -euo pipefail
           grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE"
           grep -Fq "/clanky/${SLUG}.html" index.html clanky/index.html doprava/index.html
           grep -Fq '/clanky/cisarsky-den-kadan-historie-2026.html' index.html clanky/index.html
-          grep -Fq "$URL" rss.xml sitemap.xml news-sitemap.xml
+          grep -Fq "$ARTICLE_URL" rss.xml sitemap.xml news-sitemap.xml
 
-      - name: Nasadit aktuální soubory na OVH
+      - name: Nasadit na OVH
         run: |
           set -euo pipefail
           key="${KEY_A:-${KEY_B:-}}"
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
           chmod 600 "$RUNNER_TEMP/key"
-          b="$RUNNER_TEMP/bundle"
+          b="$RUNNER_TEMP/b"
           mkdir -p "$b/clanky" "$b/doprava" "$b/social" "$b/data"
           cp "$ARTICLE" "$b/clanky/"
           cp clanky/index.html "$b/clanky/index.html"
@@ -51,11 +51,11 @@ jobs:
           cp social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png "$b/social/"
           cp data/published-content-index.json "$b/data/"
           cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$b/"
-          printf 'status=ok\nsource=%s\narticle=%s\n' "$(git rev-parse HEAD)" "$URL" > "$b/deployment-health.txt"
-          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$b" ubuntu@57.129.43.215:/tmp/zatec-restore
+          printf 'status=ok\nsource=%s\narticle=%s\n' "$(git rev-parse HEAD)" "$ARTICLE_URL" > "$b/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$b" ubuntu@57.129.43.215:/tmp/zatec-live
           ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          s=/tmp/zatec-restore
+          s=/tmp/zatec-live
           r=/var/www/nasekadan
           sudo install -d -m 0755 "$r/clanky" "$r/doprava" "$r/social" "$r/data"
           sudo install -m 0644 "$s/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html" "$r/clanky/"
@@ -76,13 +76,13 @@ jobs:
           rm -rf "$s"
           REMOTE
 
-      - name: Ověřit živý web bez cache
+      - name: Ověřit veřejný web
         run: |
           set -euo pipefail
           ok=false
           for n in $(seq 1 20); do
             q="${GITHUB_RUN_ID}-$(date +%s)-$n"
-            a="$(curl -4 -kfsSL --max-time 35 "$URL?v=$q" 2>/dev/null || true)"
+            a="$(curl -4 -kfsSL --max-time 35 "$ARTICLE_URL?v=$q" 2>/dev/null || true)"
             h="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/?v=$q" 2>/dev/null || true)"
             c="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/?v=$q" 2>/dev/null || true)"
             d="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/doprava/?v=$q" 2>/dev/null || true)"
@@ -91,7 +91,7 @@ jobs:
           done
           test "$ok" = true
 
-      - name: Zapsat potvrzení
+      - name: Zapsat stav
         if: success()
         uses: actions/github-script@v7
         with:
