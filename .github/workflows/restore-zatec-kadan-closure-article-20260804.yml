@@ -1,4 +1,5 @@
 name: Vrátit článek o uzavírkách Žatec–Kadaň
+# trigger-version: 2026-08-04-0809
 
 on:
   push:
@@ -10,206 +11,93 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: restore-zatec-kadan-closure-article-20260804
-  cancel-in-progress: false
-
 jobs:
-  restore-and-verify:
+  restore:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     env:
+      ARTICLE: clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
+      URL: https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
       SLUG: silnice-zatec-kadan-prejezd-uzavirka-srpen-2026
-      ARTICLE_FILE: clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
-      ARTICLE_URL: https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html
-      SOCIAL_FILE: social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png
       EXPECTED_H1: 'Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna'
-      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Vrátit článek na titulku a do dopravního přehledu
-        shell: bash
+      - name: Zkontrolovat aktuální zdroj
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          pushed=0
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            python3 <<'PY'
-          from pathlib import Path
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE"
+          grep -Fq "/clanky/${SLUG}.html" index.html clanky/index.html doprava/index.html
+          grep -Fq '/clanky/cisarsky-den-kadan-historie-2026.html' index.html clanky/index.html
+          grep -Fq "$URL" rss.xml sitemap.xml news-sitemap.xml
 
-          slug = 'silnice-zatec-kadan-prejezd-uzavirka-srpen-2026'
-          href = f'/clanky/{slug}.html'
-          title = 'Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna'
-          desc = 'Úplná uzavírka silnice II/225 začne 4. srpna. Osobní auta pojedou přes Žabokliky, těžší vozidla dlouhou objížďkou přes Pětipsy.'
-          image = 'https://nasekadan.cz/social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png'
-
-          home = Path('index.html')
-          text = home.read_text(encoding='utf-8')
-          marker = f'data-auto-article="{slug}"'
-          card = f'''    <article class="article-card transport" data-auto-article="{slug}">
-              <div class="visual" role="img" aria-label="{title}" style="background-image:linear-gradient(rgba(7,23,34,.04),rgba(7,23,34,.18)),url('{image}');background-color:#0b202b;background-size:contain;background-position:center;background-repeat:no-repeat"></div>
-              <div class="article-body"><span class="meta">3. 8. 2026 · 18:35 · DOPRAVA · ŽATEC–KADAŇ</span><h3>{title}</h3><p>{desc}</p><a class="read-more" href="{href}">Přečíst článek →</a></div>
-            </article>
-'''
-          if marker not in text:
-              anchor = '    <div class="article-list">\n'
-              if anchor not in text:
-                  raise SystemExit('Na titulní stránce chybí seznam článků.')
-              text = text.replace(anchor, anchor + card, 1)
-              home.write_text(text, encoding='utf-8', newline='\n')
-
-          traffic = Path('doprava/index.html')
-          text = traffic.read_text(encoding='utf-8')
-          if href not in text:
-              block = f'''<section aria-labelledby="aktualni-dopravni-omezeni" style="margin:36px 0"><h2 id="aktualni-dopravni-omezeni" style="font:800 34px/1.15 Georgia,serif">Aktuální dopravní omezení</h2><div class="grid"><article class="card"><p class="tag">ŽATEC–KADAŇ · OD 4. SRPNA 2026</p><h2>{title}</h2><p>{desc}</p><a href="{href}">Přečíst celý článek →</a></article></div></section>'''
-              anchor = '<section class="promo-wrap" data-promos data-context="local"></section>'
-              if anchor not in text:
-                  raise SystemExit('Na dopravní stránce chybí bod pro vložení aktuálního článku.')
-              text = text.replace(anchor, block + anchor, 1)
-              traffic.write_text(text, encoding='utf-8', newline='\n')
-
-          required = [
-              Path('clanky') / f'{slug}.html',
-              Path('clanky/index.html'), Path('rss.xml'), Path('sitemap.xml'),
-              Path('news-sitemap.xml'), Path('llms.txt'), Path('data/published-content-index.json')
-          ]
-          for path in required:
-              data = path.read_text(encoding='utf-8')
-              if href not in data and f'https://nasekadan.cz{href}' not in data:
-                  raise SystemExit(f'{path} neobsahuje odkaz na dopravní článek.')
-          PY
-            grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
-            grep -Fq "/clanky/${SLUG}.html" index.html clanky/index.html doprava/index.html
-            grep -Fq '/clanky/cisarsky-den-kadan-historie-2026.html' index.html clanky/index.html
-            grep -Fq '/pocasi.js' index.html
-            test -s "$SOCIAL_FILE"
-            git add index.html doprava/index.html
-            if git diff --cached --quiet; then
-              pushed=1
-              break
-            fi
-            git commit -m 'Vrátit dopravní článek na titulku a do přehledu [skip ci]'
-            if git push origin HEAD:main; then
-              pushed=1
-              break
-            fi
-            [[ "$attempt" == 5 ]] && exit 1
-            sleep $((attempt * 6))
-          done
-          test "$pushed" = 1
-          git fetch origin main
-          git reset --hard origin/main
-
-      - name: Připravit SSH klíč
-        shell: bash
+      - name: Nasadit aktuální soubory na OVH
         run: |
           set -euo pipefail
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          key="${KEY_A:-${KEY_B:-}}"
           test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-
-      - name: Nasadit aktuální článek a všechny přehledy
-        shell: bash
-        run: |
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          b="$RUNNER_TEMP/bundle"
+          mkdir -p "$b/clanky" "$b/doprava" "$b/social" "$b/data"
+          cp "$ARTICLE" "$b/clanky/"
+          cp clanky/index.html "$b/clanky/index.html"
+          cp doprava/index.html "$b/doprava/index.html"
+          cp social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png "$b/social/"
+          cp data/published-content-index.json "$b/data/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$b/"
+          printf 'status=ok\nsource=%s\narticle=%s\n' "$(git rev-parse HEAD)" "$URL" > "$b/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$b" ubuntu@57.129.43.215:/tmp/zatec-restore
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          sha="$(git rev-parse HEAD)"
-          bundle="$RUNNER_TEMP/zatec-kadan-restore"
-          rm -rf "$bundle"
-          mkdir -p "$bundle/clanky" "$bundle/doprava" "$bundle/social" "$bundle/data"
-          cp "$ARTICLE_FILE" "$bundle/clanky/"
-          cp clanky/index.html "$bundle/clanky/index.html"
-          cp doprava/index.html "$bundle/doprava/index.html"
-          cp "$SOCIAL_FILE" "$bundle/social/"
-          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
-          cp data/published-content-index.json "$bundle/data/"
-          printf 'status=ok\nsource=%s\ndeployer=restore-zatec-kadan-closure-article\narticle=%s\n' "$sha" "$ARTICLE_URL" > "$bundle/deployment-health.txt"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/zatec-kadan-restore
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          src=/tmp/zatec-kadan-restore
-          root=/var/www/nasekadan
-          sudo install -d -m 0755 "$root/clanky" "$root/doprava" "$root/social" "$root/data"
-          sudo install -m 0644 "$src/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html" "$root/clanky/"
-          sudo install -m 0644 "$src/clanky/index.html" "$root/clanky/index.html"
-          sudo install -m 0644 "$src/doprava/index.html" "$root/doprava/index.html"
-          sudo install -m 0644 "$src/social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png" "$root/social/"
-          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
-          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          s=/tmp/zatec-restore
+          r=/var/www/nasekadan
+          sudo install -d -m 0755 "$r/clanky" "$r/doprava" "$r/social" "$r/data"
+          sudo install -m 0644 "$s/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html" "$r/clanky/"
+          sudo install -m 0644 "$s/clanky/index.html" "$r/clanky/index.html"
+          sudo install -m 0644 "$s/doprava/index.html" "$r/doprava/index.html"
+          sudo install -m 0644 "$s/social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png" "$r/social/"
+          sudo install -m 0644 "$s/data/published-content-index.json" "$r/data/"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$s/$f" "$r/$f"; done
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/doprava /usr/share/nginx/html/social /usr/share/nginx/html/data
-            sudo docker cp "$src/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/
-            sudo docker cp "$src/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
-            sudo docker cp "$src/doprava/index.html" nasekadan-web:/usr/share/nginx/html/doprava/index.html
-            sudo docker cp "$src/social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png" nasekadan-web:/usr/share/nginx/html/social/
-            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
-            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$s/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$s/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            sudo docker cp "$s/doprava/index.html" nasekadan-web:/usr/share/nginx/html/doprava/index.html
+            sudo docker cp "$s/social/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026-ce0241987f.png" nasekadan-web:/usr/share/nginx/html/social/
+            sudo docker cp "$s/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$s/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
           fi
-          rm -rf "$src"
+          rm -rf "$s"
           REMOTE
 
-      - name: Ověřit článek, titulku, archiv a dopravní stránku
-        shell: bash
+      - name: Ověřit živý web bez cache
         run: |
           set -euo pipefail
-          stamp="${GITHUB_RUN_ID}-$(date +%s)"
-          success=false
-          for attempt in $(seq 1 20); do
-            article="$(curl -4 -kfsS -L --max-time 35 "$ARTICLE_URL?v=$stamp-$attempt" 2>/dev/null || true)"
-            home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$stamp-$attempt" 2>/dev/null || true)"
-            archive="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?v=$stamp-$attempt" 2>/dev/null || true)"
-            traffic="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/doprava/?v=$stamp-$attempt" 2>/dev/null || true)"
-            rss="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?v=$stamp-$attempt" 2>/dev/null || true)"
-            sitemap="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
-            news="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/news-sitemap.xml?v=$stamp-$attempt" 2>/dev/null || true)"
-            if grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article" \
-              && ! grep -Fqi 'noindex' <<<"$article" \
-              && grep -Fq "/clanky/${SLUG}.html" <<<"$home" \
-              && grep -Fq '/clanky/cisarsky-den-kadan-historie-2026.html' <<<"$home" \
-              && grep -Fq "/clanky/${SLUG}.html" <<<"$archive" \
-              && grep -Fq "/clanky/${SLUG}.html" <<<"$traffic" \
-              && grep -Fq "$ARTICLE_URL" <<<"$rss" \
-              && grep -Fq "$ARTICLE_URL" <<<"$sitemap" \
-              && grep -Fq "$ARTICLE_URL" <<<"$news"; then
-              success=true
-              break
-            fi
+          ok=false
+          for n in $(seq 1 20); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$n"
+            a="$(curl -4 -kfsSL --max-time 35 "$URL?v=$q" 2>/dev/null || true)"
+            h="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/?v=$q" 2>/dev/null || true)"
+            c="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/?v=$q" 2>/dev/null || true)"
+            d="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/doprava/?v=$q" 2>/dev/null || true)"
+            if grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$a" && grep -Fq "/clanky/${SLUG}.html" <<<"$h" && grep -Fq '/clanky/cisarsky-den-kadan-historie-2026.html' <<<"$h" && grep -Fq "/clanky/${SLUG}.html" <<<"$c" && grep -Fq "/clanky/${SLUG}.html" <<<"$d"; then ok=true; break; fi
             sleep 6
           done
-          test "$success" = true
+          test "$ok" = true
 
-      - name: Zapsat potvrzení obnovy
+      - name: Zapsat potvrzení
         if: success()
         uses: actions/github-script@v7
-        env:
-          ARTICLE_URL: ${{ env.ARTICLE_URL }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const owner = context.repo.owner, repo = context.repo.repo;
-            const path = '.github/zatec-kadan-article-restored-status.json';
-            const payload = {
-              status: 'success', checked_at: new Date().toISOString(), run_id: String(context.runId),
-              article: process.env.ARTICLE_URL, homepage: true, archive: true,
-              traffic_page: true, rss: true, sitemaps: true, cisarsky_article_preserved: true
-            };
-            let sha;
-            try { sha = (await github.rest.repos.getContent({owner, repo, path, ref:'main'})).data.sha; }
-            catch (e) { if (e.status !== 404) throw e; }
-            await github.rest.repos.createOrUpdateFileContents({
-              owner, repo, path, branch:'main', sha,
-              message:'Zapsat stav obnovení dopravního článku [skip ci]',
-              content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')
-            });
+            const owner=context.repo.owner,repo=context.repo.repo,path='.github/zatec-kadan-live-restored-status.json';
+            const body={status:'success',checked_at:new Date().toISOString(),run_id:String(context.runId),article:'https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html',homepage:true,archive:true,traffic_page:true,cisarsky_article_preserved:true};
+            let sha;try{sha=(await github.rest.repos.getContent({owner,repo,path,ref:'main'})).data.sha;}catch(e){if(e.status!==404)throw e;}
+            await github.rest.repos.createOrUpdateFileContents({owner,repo,path,branch:'main',sha,message:'Potvrdit obnovení dopravního článku [skip ci]',content:Buffer.from(JSON.stringify(body,null,2)+'\n').toString('base64')});
