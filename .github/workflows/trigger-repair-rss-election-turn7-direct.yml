@@ -1,0 +1,20 @@
+name: Spustit přímou opravu RSS po připnutí
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/trigger-repair-rss-election-turn7-direct.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Spustit opravný workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run repair-rss-election-turn7-direct.yml --repo petrkotab666/nasekadan --ref main
