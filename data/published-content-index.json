@@ -1,17 +1,17 @@
 {
   "schema_version": "1.4",
-  "generated_at": "2026-08-04T04:20:06.870894+00:00",
+  "generated_at": "2026-08-04T05:35:25.884119+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
-  "source_commit": "e284b21ed505fa0f605035cdf28b1f3c5aaa9499",
+  "source_commit": "5ad38b34cad4b7e047c4f84c915a72d341ac2e35",
   "article_count": 45,
   "validation": {
-    "homepage_count": 15,
-    "archive_count": 45,
+    "homepage_count": 14,
+    "archive_count": 44,
     "rss_count": 45,
     "sitemap_all_articles_present": true,
-    "news_sitemap_recent_count": 7,
-    "deployment_health": "verified_nonempty",
+    "news_sitemap_recent_count": 8,
+    "deployment_health": "repair_deploy_pending",
     "known_title_variants": {
       "rss": [
         "https://nasekadan.cz/clanky/kadansti-plavacci-zapis-podzim-2026.html",
@@ -35,67 +35,82 @@
       "https://nasekadan.cz/clanky/parts/slovan-04.html",
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
-    "public_audit_at": "2026-08-04T04:12:29.196771+00:00",
+    "public_audit_at": "2026-08-04T05:35:25.884119+00:00",
     "public_audit_sha256": "1f611369e32b84e5d6aa869596cc1bd2b6f6588b2aefaa6ec466565a71226070",
-    "repair_pending_public_verification": false,
+    "repair_pending_public_verification": true,
     "public_repair_verification": {
-      "method": "github-actions-live-canonical-audit-paginated-archive-v2.4",
+      "status": "pending_production_deploy",
+      "method": "live-web-plus-repository-structure-audit",
       "homepage_articles": 14,
       "archive_articles": 44,
       "archive_pages": 4,
-      "rss_articles": 44,
-      "sitemap_articles": 44,
-      "news_sitemap_articles": 7,
-      "all_public_h1_checked": true,
-      "deployment_health_nonempty": true,
-      "deployment_health_source": "50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a",
-      "completed_at": "2026-08-04T04:12:29.196771+00:00"
+      "rss_articles": 45,
+      "sitemap_articles": 45,
+      "news_sitemap_articles": 8,
+      "target_visible_on_homepage": true,
+      "target_visible_in_archive": false,
+      "repository_archive_repaired": true,
+      "repair_trigger_commit": "106ef514b7652e485586c235c284e2a3a5c4d293",
+      "repair_commit": "7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30",
+      "production_deploy_state": "queued_or_pending",
+      "completed_at": "2026-08-04T05:35:25.884119+00:00"
     },
-    "rss_order_matches_archive": true,
+    "rss_order_matches_archive": false,
     "last_registry_refresh": {
-      "reason": "scheduled live re-audit of homepage, paginated archive, RSS, both sitemaps, deployment health and article source history",
-      "trigger_commit": "e284b21ed505fa0f605035cdf28b1f3c5aaa9499",
-      "classification": "scheduled_consistency_audit",
+      "reason": "public archive omitted the 45th article although homepage, RSS, sitemaps and registry already included it; repository pagination was regenerated and deployment is pending",
+      "classification": "safe_repair_pending_public_verification",
+      "repaired_url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+      "trigger_commit": "106ef514b7652e485586c235c284e2a3a5c4d293",
+      "repair_commit": "7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30",
       "changed_source_commits": [
         {
+          "url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+          "from": "6d96be685c3dbafff720c1b49fbf6b1b18b9e004",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
+        },
+        {
+          "url": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
+          "from": "83b5d2b8c0e8248133e21a8cd22f507b43fab5c4",
+          "to": "f74ecb1a7c8cad5aec6c6cb8312e02d643bb8e93"
+        },
+        {
           "url": "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
-          "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-          "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+          "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
         },
         {
           "url": "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html",
-          "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-          "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+          "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
         },
         {
           "url": "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html",
-          "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-          "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+          "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
         },
         {
           "url": "https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html",
-          "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-          "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+          "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
         },
         {
           "url": "https://nasekadan.cz/clanky/petice-nemocnice-kadan.html",
-          "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-          "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+          "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
         },
         {
           "url": "https://nasekadan.cz/clanky/nemocnice-kadan.html",
-          "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-          "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+          "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+          "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
         }
       ],
-      "changed_metadata": [],
       "homepage_articles": 14,
       "archive_articles": 44,
       "archive_pages": 4,
-      "rss_articles": 44,
-      "sitemap_articles": 44,
-      "news_sitemap_articles": 7,
-      "completed_at": "2026-08-04T04:12:29.196771+00:00"
+      "rss_articles": 45,
+      "sitemap_articles": 45,
+      "news_sitemap_articles": 8,
+      "completed_at": "2026-08-04T05:35:25.884119+00:00"
     },
     "archive_page_count": 4,
     "deployment_health_status_field_present": false
@@ -134,14 +149,14 @@
       "fingerprint": "5fe175de055a04693ea2b30c",
       "status": {
         "homepage": true,
-        "archive": true,
+        "archive": false,
         "rss": true,
         "sitemap": true,
         "news_sitemap": true
       },
       "source_path": "clanky/cisarsky-den-kadan-historie-2026.html",
-      "publication_status": "published",
-      "source_commit": "6d96be685c3dbafff720c1b49fbf6b1b18b9e004"
+      "publication_status": "published_partial_distribution",
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "title": "Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?",
@@ -376,7 +391,7 @@
       },
       "source_path": "clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
       "publication_status": "published",
-      "source_commit": "83b5d2b8c0e8248133e21a8cd22f507b43fab5c4"
+      "source_commit": "f74ecb1a7c8cad5aec6c6cb8312e02d643bb8e93"
     },
     {
       "title": "Od Střelnice po klášter. Co všechno pro Kadaň zajišťuje KZK",
@@ -1101,7 +1116,7 @@
       },
       "source_path": "clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
       "publication_status": "published",
-      "source_commit": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "title": "V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů",
@@ -1232,7 +1247,7 @@
       },
       "source_path": "clanky/arc-med-nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "title": "Kadaňští hasiči cvičili na Nechranicích záchranu lidí z vody",
@@ -1366,7 +1381,7 @@
       },
       "source_path": "clanky/avies-nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "title": "Kam v Kadani a okolí od 27. července do 2. srpna: festival, koupání, kino a výlety",
@@ -1466,7 +1481,7 @@
       },
       "source_path": "clanky/nemocnice-kadan-software-kyberbezpecnost.html",
       "publication_status": "published",
-      "source_commit": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "title": "Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov",
@@ -1568,7 +1583,7 @@
       },
       "source_path": "clanky/petice-nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "title": "V Prunéřově se střetlo osobní a nákladní auto. Nehoda byla hlášena se zraněním",
@@ -1671,7 +1686,7 @@
       },
       "source_path": "clanky/nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     }
   ]
 }

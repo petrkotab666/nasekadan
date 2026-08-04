@@ -1,51 +1,67 @@
 {
-  "status": "success",
-  "checked_at": "2026-08-04T04:12:29.196771+00:00",
-  "registry_publicly_verified": true,
-  "article_count": 44,
+  "status": "repair_pending_public_verification",
+  "checked_at": "2026-08-04T05:35:25.884119+00:00",
+  "registry_publicly_verified": false,
+  "article_count": 45,
   "homepage_count": 14,
   "archive_count": 44,
   "archive_page_count": 4,
-  "rss_count": 44,
-  "sitemap_count": 44,
-  "news_sitemap_count": 7,
+  "rss_count": 45,
+  "sitemap_count": 45,
+  "news_sitemap_count": 8,
   "duplicate_urls": [],
   "duplicate_fingerprints": [],
-  "rss_order_matches_archive": true,
-  "all_public_h1_checked": true,
-  "deployment_health_source": "50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a",
-  "deployment_health_raw": "source=50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a\ndeployed_at=2026-08-04T04:05:54Z\ndeployer=water-article-update\n",
+  "rss_order_matches_archive": false,
+  "all_public_h1_checked": false,
   "changed_source_commits": [
     {
+      "url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+      "from": "6d96be685c3dbafff720c1b49fbf6b1b18b9e004",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
+    },
+    {
+      "url": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
+      "from": "83b5d2b8c0e8248133e21a8cd22f507b43fab5c4",
+      "to": "f74ecb1a7c8cad5aec6c6cb8312e02d643bb8e93"
+    },
+    {
       "url": "https://nasekadan.cz/clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
-      "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-      "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "url": "https://nasekadan.cz/clanky/arc-med-nemocnice-kadan.html",
-      "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-      "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "url": "https://nasekadan.cz/clanky/avies-nemocnice-kadan.html",
-      "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-      "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "url": "https://nasekadan.cz/clanky/nemocnice-kadan-software-kyberbezpecnost.html",
-      "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-      "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "url": "https://nasekadan.cz/clanky/petice-nemocnice-kadan.html",
-      "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-      "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     },
     {
       "url": "https://nasekadan.cz/clanky/nemocnice-kadan.html",
-      "from": "85a43a1f60a4f0db3c334f18453ec69a276a1064",
-      "to": "91e9f77d9649678693b1a87d259f4b990d45ecd0"
+      "from": "91e9f77d9649678693b1a87d259f4b990d45ecd0",
+      "to": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
     }
   ],
-  "changed_metadata": []
+  "significant_mismatch": {
+    "article": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
+    "homepage": true,
+    "archive": false,
+    "repository_archive_repaired": true,
+    "repair_trigger_commit": "106ef514b7652e485586c235c284e2a3a5c4d293",
+    "repair_commit": "7ab6bfda33dc08577ec05c2c6a5e3ca23467bf30",
+    "production_deploy_state": "queued_or_pending"
+  }
 }
