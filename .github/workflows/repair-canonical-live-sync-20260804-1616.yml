@@ -2,7 +2,7 @@ name: Opravit živý kanonický povrch 20260804 1616
 
 on:
   issues:
-    types: [opened]
+    types: [opened, reopened]
 
 permissions:
   contents: write
@@ -58,7 +58,6 @@ jobs:
             git reset --hard origin/main
             python3 - <<'PY'
           import json
-          import re
           from datetime import datetime, timezone
           from pathlib import Path
 
@@ -178,7 +177,7 @@ jobs:
           def fetch(url, binary=False):
               sep = '&' if '?' in url else '?'
               req = urllib.request.Request(url + sep + 'v=' + stamp, headers={
-                  'User-Agent': 'Naše Kadaň canonical audit',
+                  'User-Agent': 'NaseKadanCanonicalAudit/1.0',
                   'Cache-Control': 'no-cache',
                   'Pragma': 'no-cache',
               })
