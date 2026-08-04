@@ -3,8 +3,8 @@ name: Předlet Festpouť Poláky 2026
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 18 4 8 *'
-    - cron: '10 5 5 8 *'
+    - cron: '0 18 8 8 *'
+    - cron: '40 5 9 8 *'
 
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Obnovit kontrolovaný balíček
+      - name: Obnovit a přečasovat kontrolovaný balíček
         shell: bash
         run: |
           set -euo pipefail
@@ -30,6 +30,7 @@ jobs:
           tar -xJf /tmp/festpout-bundle.tar.xz -C /tmp/festpout-unpack
           install -D -m 0755 /tmp/festpout-unpack/publisher.py scripts/publish_festpout_polaky_20260805.py
           install -D -m 0755 /tmp/festpout-unpack/deploy.sh scripts/deploy_festpout_polaky_20260805.sh
+          python3 scripts/retime_festpout_publication_20260809.py
 
       - uses: actions/setup-python@v5
         with:
@@ -54,17 +55,18 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --quiet Pillow
-          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py
+          python3 -m py_compile scripts/publish_festpout_polaky_20260805.py scripts/retime_festpout_publication_20260809.py
+          grep -Fq '2026, 8, 9, 8, 0' scripts/publish_festpout_polaky_20260805.py
           bash -n scripts/deploy_festpout_polaky_20260805.sh
           python3 scripts/publish_festpout_polaky_20260805.py --dry-run
           test -s clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
-          test -s social/festpout-polaky-vlaky-kadan-20260805.png
+          test -s social/festpout-polaky-vlaky-kadan-20260809.png
           grep -Fq '<h1>Na Festpouť v Polákách pojedou zvláštní vlaky z Kadaně. Zahrají UDG, Pekař i Totální nasazení</h1>' clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
           ! grep -Fqi noindex clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html
           git diff --check
 
       - name: Předčasná publikace je zakázaná
-        if: github.event.schedule == '0 18 4 8 *'
+        if: github.event.schedule == '0 18 8 8 *'
         shell: bash
         run: |
           code="$(curl -4 -kso /dev/null -w '%{http_code}' --max-time 20 'https://nasekadan.cz/clanky/festpout-polaky-zvlastni-vlaky-z-kadane-2026.html?v=preflight' || true)"
@@ -77,6 +79,6 @@ jobs:
         shell: bash
         run: |
           title='Předlet Festpouti Poláky 2026 našel chybu'
-          body="Předletová kontrola zdroje, kontrolního součtu, článku nebo publikačních ploch selhala. Tvrdá časová závora nepovolí publikaci s neověřenými daty.\n\nWorkflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="Předletová kontrola zdroje, kontrolního součtu, článku nebo publikačních ploch selhala. Tvrdá časová závora nepovolí publikaci s neověřenými daty před 9. 8. 2026 v 8:00 Europe/Prague.\n\nWorkflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
           if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
