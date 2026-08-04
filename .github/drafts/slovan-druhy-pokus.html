@@ -3,166 +3,221 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Slovan podruhé: Kadaň chystá 48 bytů za 195 milionů. Účet prvního pokusu stále chybí | Naše Kadaň</title>
-  <meta name="description" content="Kadaň připravuje nový Slovan se 48 byty. Veřejnost ale stále nezná úplné vypořádání první stavby ani přesný osud dotace SFPI.">
+  <title>Kadaň vybírá nového stavitele Slovanu za 195 milionů. Účet prvního pokusu stále není veřejný | Naše Kadaň</title>
+  <meta name="description" content="Lhůta v novém zadávacím řízení skončila. Kadaň připravuje Slovan se 48 byty, ale úplné finanční vypořádání prvního pokusu veřejně dohledatelné není.">
   <meta name="robots" content="noindex,nofollow">
-  <link rel="canonical" href="https://nasekadan.cz/clanky/slovan-druhy-pokus.html">
-  <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="../../style.css">
   <style>
-    .article-shell{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:56px 0}
-    .article h1{font:800 clamp(38px,6vw,64px)/1.02 Georgia,serif;letter-spacing:-.035em;margin:.25em 0}
-    .article h2{font:800 34px/1.15 Georgia,serif;margin:52px 0 14px}
-    .article h3{font:800 23px/1.25 Georgia,serif;margin:32px 0 10px}
-    .article p,.article li{font-size:18px}
-    .article .leadtext{font-size:23px;color:#465862;line-height:1.55}
-    .article a{color:#9f2626;text-decoration:underline;text-underline-offset:3px}
-    .hero-photo,.photo-card{margin:30px 0}
-    .hero-photo img,.photo-card img{display:block;width:100%;height:auto;border-radius:24px;box-shadow:var(--shadow)}
-    .hero-photo img{max-height:540px;object-fit:cover}
-    .hero-photo figcaption,.photo-card figcaption{font-size:14px;color:var(--muted);margin-top:8px}
-    .numbers{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:30px 0}
-    .numbers div{background:var(--cream);border:1px solid var(--line);padding:22px;border-radius:16px}
-    .numbers b{display:block;color:var(--red);font-size:29px;line-height:1.1;margin-bottom:5px}
+    :root{
+      --red:#9f2626;--red2:#741a1a;--ink:#182832;--muted:#5d6b72;
+      --cream:#f8f3e9;--paper:#fff;--line:#d9e0e3;--bg:#f3f5f5;
+      --shadow:0 18px 50px rgba(22,36,45,.12)
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Arial,Helvetica,sans-serif}
+    a{color:var(--red);text-underline-offset:3px}
+    header{background:#14232d;color:#fff;border-bottom:4px solid var(--red)}
+    .wrap{width:min(1180px,calc(100% - 32px));margin:auto}
+    .head{height:78px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+    .logo{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none;font-weight:900;letter-spacing:.04em}
+    .logo-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:10px;background:var(--red);font-family:Georgia,serif}
+    .preview{padding:9px 13px;border:1px solid rgba(255,255,255,.35);border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+    .article-shell{display:grid;grid-template-columns:minmax(0,820px) 300px;gap:36px;align-items:start;padding:48px 0 70px}
+    .article,.sidebox{background:#fff;border:1px solid var(--line);box-shadow:var(--shadow)}
+    .article{padding:clamp(24px,5vw,58px);border-radius:24px}
+    .tag{color:var(--red);font-weight:900;font-size:13px;letter-spacing:.09em;text-transform:uppercase;margin:0}
+    h1,h2,h3{font-family:Georgia,"Times New Roman",serif}
+    h1{font-size:clamp(39px,6vw,66px);line-height:1.02;letter-spacing:-.035em;margin:.28em 0 .35em}
+    h2{font-size:34px;line-height:1.15;margin:52px 0 14px}
+    h3{font-size:24px;line-height:1.2}
+    p,li{font-size:18px}
+    .lead{font-size:23px;line-height:1.55;color:#43555f;margin-bottom:28px}
+    .hero{
+      min-height:420px;border-radius:22px;margin:28px 0;overflow:hidden;position:relative;
+      background:
+        linear-gradient(90deg,rgba(9,28,39,.90),rgba(9,28,39,.32)),
+        url("https://nasekadan.cz/assets/slovan-detail-20260724.jpg") center/cover no-repeat,
+        linear-gradient(135deg,#172b35,#6d2626);
+      display:flex;align-items:flex-end;padding:34px;color:#fff
+    }
+    .hero strong{font:900 clamp(28px,4.5vw,48px)/1.05 Georgia,serif;max-width:720px}
+    .hero small{display:block;font-size:13px;font-weight:900;letter-spacing:.08em;margin-bottom:10px}
+    .numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:30px 0}
+    .numbers div{background:var(--cream);border:1px solid #e4d9c8;padding:22px;border-radius:16px}
+    .numbers b{display:block;color:var(--red);font:900 29px/1.1 Georgia,serif;margin-bottom:6px}
     .numbers span{font-size:14px;color:var(--muted)}
-    .toc{background:#f6f8f9;border:1px solid var(--line);padding:24px;border-radius:18px;margin:28px 0}
-    .toc strong{font:800 22px Georgia,serif}.toc ol{columns:2;gap:30px}.toc li{font-size:15px;margin:7px 0}
-    .data-table{width:100%;border-collapse:collapse;margin:24px 0;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 28px #16242d0d}
+    .update{background:#edf4f6;border:1px solid #c8dbe2;border-radius:18px;padding:23px 25px;margin:30px 0}
+    .update strong{display:block;font:800 24px Georgia,serif;margin-bottom:7px}
+    .toc{background:#f7f8f8;border:1px solid var(--line);padding:24px;border-radius:18px;margin:30px 0}
+    .toc strong{font:800 22px Georgia,serif}
+    .toc ol{columns:2;gap:30px;padding-left:22px}
+    .toc li{font-size:15px;margin:7px 0}
+    .data-table{width:100%;border-collapse:collapse;margin:25px 0;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 10px 28px rgba(22,36,45,.07)}
     .data-table th,.data-table td{padding:14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-    .data-table th{background:#14232d;color:#fff}.data-table td:nth-child(2),.data-table th:nth-child(2){text-align:right;white-space:nowrap}.data-table tr:last-child td{border-bottom:0}
-    .callout{border-left:6px solid var(--red);background:var(--cream);margin:34px 0;padding:22px 26px;border-radius:0 16px 16px 0}
-    .callout strong{font:800 24px Georgia,serif;display:block;margin-bottom:5px}
-    .factcheck{border:1px solid #c7d8df;background:#f4f8fa;margin:34px 0;padding:24px;border-radius:18px}.factcheck h3{margin:0 0 12px}.factcheck li{margin-bottom:9px}
-    blockquote{border-left:6px solid var(--red);margin:42px 0;padding:22px 28px;background:#f8f4ec;border-radius:0 18px 18px 0;font:700 28px/1.4 Georgia,serif}
-    .timeline{margin:30px 0;border-left:4px solid #d7dde0;padding-left:24px}.timeline-item{position:relative;padding:0 0 28px}.timeline-item:before{content:'';position:absolute;left:-33px;top:7px;width:14px;height:14px;border-radius:50%;background:var(--red);border:4px solid #f7f8f8}.timeline-item b{font:850 21px Georgia,serif;display:block}.timeline-item p{margin:4px 0}.timeline-item:last-child{padding-bottom:0}
-    .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:28px 0}.split>div{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px}.split h3{margin:0 0 10px}.split.proven>div:first-child{border-top:5px solid #2f6e4f}.split.proven>div:last-child{border-top:5px solid var(--red)}
-    .source-list{background:#eef3f5;padding:24px;border-radius:18px;margin-top:44px}.source-list li{font-size:15px;margin-bottom:8px}.source-list small{color:var(--muted)}
-    .sticky{position:sticky;top:100px}.sidebox{background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:18px;box-shadow:0 10px 30px #16242d0d}.sidebox h3{font:800 23px Georgia,serif;margin:0 0 12px}.sidebox p,.sidebox li{font-size:14px}.preview-note{background:#fff1c9;border-color:#e0c36f}.preview-note strong{color:#7b5511}
+    .data-table th{background:#14232d;color:#fff}
+    .data-table td:last-child,.data-table th:last-child{text-align:right;white-space:nowrap}
+    .callout{border-left:6px solid var(--red);background:var(--cream);margin:35px 0;padding:22px 26px;border-radius:0 16px 16px 0}
+    .callout strong{display:block;font:800 24px Georgia,serif;margin-bottom:6px}
+    blockquote{border-left:6px solid var(--red);margin:40px 0;padding:22px 28px;background:#f8f4ec;border-radius:0 18px 18px 0;font:700 27px/1.4 Georgia,serif}
+    .timeline{margin:28px 0;border-left:4px solid #d7dde0;padding-left:24px}
+    .timeline-item{position:relative;padding:0 0 26px}
+    .timeline-item:before{content:"";position:absolute;left:-33px;top:7px;width:14px;height:14px;border-radius:50%;background:var(--red);border:4px solid var(--bg)}
+    .timeline-item b{font:850 21px Georgia,serif;display:block}
+    .timeline-item p{margin:4px 0}
+    .factbox{background:#f1f5f6;border:1px solid #cbdadd;border-radius:18px;padding:24px;margin:32px 0}
+    .factbox h3{margin-top:0}
+    .unknowns{background:#fff6e4;border:1px solid #e8cfa0;border-radius:18px;padding:25px;margin:34px 0}
+    .unknowns h3{margin-top:0}
+    .source-list{background:#eef3f5;padding:24px;border-radius:18px;margin-top:44px}
+    .source-list li{font-size:14px;margin-bottom:9px}
+    .sticky{position:sticky;top:24px}
+    .sidebox{border-radius:18px;padding:20px;margin-bottom:18px}
+    .sidebox h3{margin:0 0 12px}
+    .sidebox p,.sidebox li{font-size:14px}
+    .preview-note{background:#fff1c9;border-color:#e0c36f}
+    .preview-note strong{color:#76510d}
+    footer{padding:30px 0 50px;color:var(--muted);text-align:center}
     @media(max-width:980px){.article-shell{grid-template-columns:1fr}.sticky{position:static}.toc ol{columns:1}}
-    @media(max-width:700px){.numbers,.split{grid-template-columns:1fr}.article h1{font-size:42px}.article .leadtext{font-size:20px}.data-table th,.data-table td{padding:11px 9px;font-size:14px}}
+    @media(max-width:680px){.numbers{grid-template-columns:1fr}.article{padding:24px 20px}.hero{min-height:320px;padding:24px}.data-table{display:block;overflow:auto}.head{height:auto;padding:16px 0}.preview{display:none}}
   </style>
 </head>
 <body>
-<header><div class="wrap head"><a class="logo" href="../../index.html"><span class="logo-mark"></span><span>NAŠE <b>KADAŇ</b></span></a><nav><a href="../../index.html">Úvod</a><a href="../../index.html#akce">Akce</a><a href="../../pruvodce/">Průvodce</a></nav></div></header>
+<header>
+  <div class="wrap head">
+    <a class="logo" href="#"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a>
+    <span class="preview">HTML náhled · nepublikováno</span>
+  </div>
+</header>
+
 <main class="wrap article-shell">
 <article class="article">
-  <p class="tag">INVESTICE · BYDLENÍ · VEŘEJNÉ PENÍZE · PŘIPRAVOVANÝ ČLÁNEK</p>
-  <h1>Slovan podruhé: Kadaň chystá 48 bytů za 195 milionů. Účet prvního pokusu stále chybí</h1>
-  <p class="leadtext">Z chátrajícího Slovanu v Chomutovské ulici měl vzniknout městský bytový dům pro mladé rodiny, zdravotníky a další potřebné profese. Původně plánovaná rekonstrukce se ale změnila v úplnou demolici, následoval spor o další práce a ukončení smlouvy s vybraným zhotovitelem. Kadaň nyní připravuje nový dům se 48 byty. Veřejnost však stále nezná úplný účet první stavby, podmínky dohody s původními firmami ani přesný osud podpory SFPI.</p>
+  <p class="tag">INVESTICE · BYDLENÍ · VEŘEJNÉ PENÍZE · 5. SRPNA 2026 · 04:00</p>
+  <h1>Kadaň vybírá nového stavitele Slovanu za 195 milionů. Účet prvního pokusu stále není veřejný</h1>
+  <p class="lead"><strong>Lhůta stanovená v novém zadávacím řízení skončila 3. srpna v osm hodin ráno. Kadaň chce na místě zbouraného Slovanu postavit nový dům se 48 byty metodou Design &amp; Build. Výsledek řízení zatím zveřejněný není. Ve veřejně dohledatelných dokumentech současně stále chybí úplné finanční vypořádání první stavby, která začala jako rekonstrukce a skončila demolicí.</strong></p>
 
-  <figure class="hero-photo">
-    <img src="../../assets/slovan-detail-20260724.jpg" width="1600" height="1200" alt="Výkop a zbytky konstrukcí v areálu Slovanu v Kadani">
-    <figcaption>Areál Slovanu po ukončení prvního stavebního pokusu. Foto: Naše Kadaň, 24. 7. 2026.</figcaption>
-  </figure>
+  <div class="hero">
+    <div><small>SLOVAN · CHOMUTOVSKÁ ULICE · KADAŇ</small><strong>Druhý pokus vstoupil do další fáze. Konečný účet prvního zůstává neveřejný.</strong></div>
+  </div>
 
   <div class="numbers">
     <div><b>38 → 48 bytů</b><span>původní a nový počet plánovaných jednotek</span></div>
-    <div><b>135,73 mil. Kč</b><span>původní smluvní cena stavby včetně DPH</span></div>
+    <div><b>117,72 mil. Kč</b><span>počáteční cena první stavební smlouvy bez DPH</span></div>
+    <div><b>145,18 mil. Kč</b><span>hodnota první smlouvy po dodatku č. 6 bez DPH</span></div>
     <div><b>195 mil. Kč</b><span>předpokládaná hodnota nové zakázky bez DPH</span></div>
-    <div><b>Účet chybí</b><span>konečné vypořádání první stavby není veřejné</span></div>
   </div>
 
-  <div class="toc"><strong>Co v článku najdete</strong><ol><li><a href="#predstaveni">Co měl projekt přinést</a></li><li><a href="#demolice">Proč skončil demolicí</a></li><li><a href="#obrat">Obrat mezi březnem a červencem 2025</a></li><li><a href="#dohoda">Nezveřejněné vypořádání</a></li><li><a href="#dotace">Nejasnosti kolem podpory SFPI</a></li><li><a href="#naklady">Kolik už Slovan stál</a></li><li><a href="#druhy-pokus">Nový dům a Design &amp; Build</a></li><li><a href="#kampan">Slovan jako předvolební téma</a></li><li><a href="#zaver">Co stále potřebujeme znát</a></li></ol></div>
+  <div class="update"><strong>Co je nové</strong>Veřejné oznámení nové zakázky uvádělo konec lhůty 3. srpna 2026 v 8:00. Při poslední kontrole večer 4. srpna nebylo veřejně dohledatelné oznámení výsledku, počet účastníků ani jméno budoucího dodavatele. Částka 195 milionů korun je předpokládaná hodnota, nikoli konečná cena.</div>
 
-  <h2 id="predstaveni">Z opuštěného Slovanu mělo vzniknout městské bydlení</h2>
-  <p>Budova Slovanu v Chomutovské ulici patřila dlouhá léta k výrazným, ale nevyužívaným objektům v Kadani. Město ji v roce 2020 koupilo za osm milionů korun. Podle pozdějšího vysvětlení radnice chtělo zabránit tomu, aby se z objektu stala ubytovna, a současně získat prostor pro městské bydlení určené mladým rodinám a profesím, které se město snaží v Kadani udržet nebo přilákat – především zdravotníkům.</p>
-  <p>Úvahy o bydlení v objektu přitom vznikly už dříve. V dubnu 2015 bylo vydáno stavební povolení na částečnou přeměnu Slovanu, při které mělo vzniknout mimo jiné jedenáct bytů 2+kk, služební byt a ubytovací jednotky. Pozdější městský projekt byl podstatně rozsáhlejší: počítal se zachováním části konstrukce, nástavbou a vznikem 38 bytových jednotek.</p>
-  <p>Město nechalo zpracovat architektonickou studii a projektovou dokumentaci, získalo podporu Státního fondu podpory investic a vypsalo veřejnou zakázku. Zakázku získalo sdružení společností OHLA ŽS a PETROM STAVBY.</p>
-  <p>Původní smluvní cena činila <strong>117 719 581 korun bez DPH</strong>, respektive <strong>135 725 753 korun včetně DPH</strong>. Radnice tehdy vítěznou nabídku prezentovala jako výrazně nižší než projektantský odhad přesahující 180 milionů korun.</p>
+  <div class="toc"><strong>Obsah článku</strong><ol>
+    <li><a href="#zacatek">Jak projekt začal</a></li>
+    <li><a href="#demolice">Proč skončil demolicí</a></li>
+    <li><a href="#cena">Jak rostla smluvní cena</a></li>
+    <li><a href="#vyporadani">Co chybí ve vypořádání</a></li>
+    <li><a href="#dotace">Co dokládají dotační smlouvy</a></li>
+    <li><a href="#novy">Jak vypadá druhý pokus</a></li>
+    <li><a href="#naklady">Minimální dohledaný účet</a></li>
+    <li><a href="#zaver">Co lze uzavřít už nyní</a></li>
+  </ol></div>
 
-  <div class="callout"><strong>Projekt měl být jednou z hlavních městských investic</strong>Slovan neměl být jen opravou opuštěné budovy. Měl vytvořit desítky městských bytů a pomoci Kadani získávat nebo udržet profese důležité pro fungování města.</div>
+  <h2 id="zacatek">Z opuštěného Slovanu mělo vzniknout městské bydlení</h2>
+  <p>Město koupilo objekt Slovan v Chomutovské ulici v roce 2020 za osm milionů korun. Záměrem bylo zabránit nevhodnému využití chátrající budovy a vytvořit městské byty zejména pro mladé rodiny a profese, které chce Kadaň ve městě udržet nebo získat.</p>
+  <p>Původní městský projekt počítal se zachováním části konstrukce, nástavbou a vznikem 38 bytových jednotek. Veřejnou zakázku získalo sdružení společností OHLA ŽS a PETROM STAVBY. Počáteční cena smlouvy činila <strong>117 719 581 korun bez DPH</strong>.</p>
+
+  <div class="callout"><strong>Smysl projektu nezmizel</strong>Potřeba městského bydlení pro zdravotníky, učitele, mladé rodiny a další profese je samostatný a obhajitelný cíl. Kontrola prvního neúspěšného pokusu proto neznamená odmítnutí nové výstavby.</div>
 
   <h2 id="demolice">Z rekonstrukce se stala úplná demolice</h2>
-  <p>Po zahájení prací se podle města nejprve objevily materiály obsahující azbest. Po odkrytí dalších částí následovaly problémy s nosnou konstrukcí a základy.</p>
-  <p>Zveřejněné změnové dokumenty popisují práce související s azbestem za přibližně 5,98 milionu korun bez DPH a další statické zásahy přibližně za 1,35 milionu korun bez DPH. Změnový list číslo 5 následně uvádí rozsáhlé statické narušení a úplné odstranění původní budovy na základě rozhodnutí stavebního úřadu z 2. ledna 2025.</p>
-  <p>Samotné nové založení domu na pilotách mělo cenu zvýšit o dalších <strong>8,97 milionu korun bez DPH</strong>. Piloty měly dosahovat délky přibližně patnáct metrů a průměru 1,2 metru.</p>
-  <p>Dokument zároveň odkazuje na změnový list číslo 4, který měl řešit úplnou demolici, a na připravovaný změnový list číslo 6 k nové nosné konstrukci. Tyto dva podklady se mezi běžně veřejně dostupnými dokumenty dohledat nepodařilo.</p>
-  <p>Úplná demolice nebyla variantou, kterou by zadání architektonické studie zcela vylučovalo. Město už tehdy připouštělo také odstranění celého objektu, pokud by bylo zdůvodněné a jeho dopad byl zahrnut do ekonomiky projektu.</p>
-  <blockquote>Nejdůležitější otázkou proto není pouze to, proč byl Slovan zbourán. Zní také, proč se skutečný stav konstrukcí, základů a azbestu projevil v takovém rozsahu až po podpisu stavební smlouvy a zahájení prací.</blockquote>
+  <p>Po zahájení prací se podle zveřejněných změnových dokumentů objevily materiály obsahující azbest a následně také problémy s nosnou konstrukcí a základy. Změny zahrnovaly práce spojené s azbestem přibližně za 5,98 milionu korun bez DPH, další statické zásahy přibližně za 1,35 milionu a nové založení na pilotách za přibližně 8,97 milionu korun bez DPH.</p>
+  <p>Původní budova byla nakonec odstraněna celá. Ve změnových podkladech se objevují odkazy na dokumenty týkající se úplné demolice a nové nosné konstrukce, které nebyly v běžně dostupné sadě podkladů dohledány.</p>
 
-  <h2 id="obrat">V březnu město uklidňovalo, v červenci přišel konec</h2>
-  <div class="timeline">
-    <div class="timeline-item"><b>17. března 2025</b><p>Vedení města veřejně uvádělo, že změny projektu průběžně konzultuje s poskytovatelem podpory a nemají mít na přidělení dotace žádný vliv. Dům měl být dokončen do roku 2027.</p></div>
-    <div class="timeline-item"><b>16. července 2025</b><p>Město oznámilo, že se s původním zhotovitelem nedohodlo na pokračování a ocenění dalších prací. Ve veřejném prostoru zazněla částka přibližně 30 milionů korun zaplacených za projekt a očekávaná nutnost dotaci vrátit.</p></div>
-    <div class="timeline-item"><b>29. září 2025</b><p>Radnice popsala neshody o neprojektované práce a jejich cenu. Uvedla, že sporné položky posoudil soudní znalec a že připravuje nový koncept novostavby.</p></div>
-  </div>
-  <p>Veřejně dostupný doklad o skutečném vrácení celé dotace se však dohledat nepodařilo. Bezpečné proto není tvrzení, že město celou podporu už vrátilo. Doloženo je, že v červenci 2025 veřejně oznámilo očekávanou povinnost ji vrátit.</p>
+  <blockquote>Podstatné není jen to, že se při stavbě objevily další závady. Důležité je také oddělit cenu skutečně využitelných prací od nákladů, které se do nového domu už nepromítnou.</blockquote>
 
-  <h2 id="dohoda">Rada schválila dohodu. Její podmínky veřejnost nezná</h2>
-  <p>Dne 25. září 2025 rada města uložila odboru výstavby připravit dohodu, která měla řešit podmínky a způsob ukončení stavby, ukončení smlouvy o dílo a vzájemné vypořádání města s původním zhotovitelem.</p>
-  <p>Dne 20. listopadu 2025 rada předloženou dohodu schválila. Ve stejný den podmínila zahájení výběru nového projektanta oboustranným podpisem dohody.</p>
-  <p>Nová projektová smlouva později skutečně vznikla a město vypsalo novou stavební zakázku. To silně naznačuje, že stanovená podmínka byla splněna. Podepsaná dohoda ani její finanční přílohy však nejsou veřejně dohledatelné.</p>
-  <p>Občané tak stále nevědí, kolik původní zhotovitel vyfakturoval, které práce město uznalo, zda zůstalo zádržné, zda byly uplatněny pokuty nebo náhrada škody a zda se strany vzdaly dalších nároků.</p>
-  <p>Veřejně se nepodařilo nalézt ani znalecký posudek, na který se město odvolávalo, jeho objednávku, jméno znalce nebo přesné závěry.</p>
+  <h2 id="cena">První smlouva se dostala na 145,18 milionu bez DPH</h2>
+  <p>Částky je nutné porovnávat ve stejné daňové úrovni. Počáteční hodnota první smlouvy byla 117,72 milionu korun bez DPH. Po zveřejněných změnách a dodatcích se její hodnota zvýšila a dodatek č. 6 z března 2025 uvádí <strong>145 184 344 korun bez DPH</strong>.</p>
 
-  <h2 id="dotace">Nejasnosti zůstávají také kolem podpory SFPI</h2>
-  <p>V otevřených datech SFPI je u Města Kadaň vedena podpora z programu Nájemní bydlení se smlouvou uzavřenou 20. června 2024. U záznamu se objevuje částka přibližně <strong>29,33 milionu korun</strong> a zároveň samostatná hodnota <strong>2 853 077 korun</strong> označená jako vyplacená.</p>
-  <p>Městské rozpočtové podklady za rok 2024 naproti tomu uvádějí příjem označený „Slovan – SFPI“ přibližně 3,195 milionu korun. Bez vysvětlení fondu nebo města nelze rozdíl mezi zveřejněnými hodnotami bezpečně vyložit.</p>
-  <p>Zásadní je objednávka města z 8. června 2026. Kadaň v ní objednala dotační management projektu Slovan, který je výslovně označen jako projekt podpořený v rámci stejné výzvy SFPI č. 1/NB/2023.</p>
-  <p>Regionální rozvojová agentura má pomáhat s dokumentací k <strong>žádosti o změnu vyvolané novým stavebním řešením</strong>, s dalšími žádostmi o čerpání podpory, oznamováním změn a komunikací s fondem. Objednávka platí až do 31. prosince 2028.</p>
-  <p>Dokument tedy prokazuje pokračující práci s původní podporou. Neprokazuje ale, že SFPI změnu schválil. Rozhodnutí fondu nebo dodatek ke smlouvě se veřejně dohledat nepodařilo.</p>
-
-  <h2 id="naklady">Kolik už Slovan nejméně stál</h2>
-  <p>Ve veřejných vyjádřeních se objevily částky kolem 30 až 35 milionů korun zaplacených nebo investovaných do prvního pokusu. Městské rozpočtové podklady umožňují dohledat také starší výdaje na projektovou přípravu.</p>
   <table class="data-table">
-    <thead><tr><th>Dohledaná položka</th><th>Částka</th><th>Jak ji číst</th></tr></thead>
+    <thead><tr><th>Etapa</th><th>Hodnota bez DPH</th></tr></thead>
     <tbody>
-      <tr><td>Koupě objektu v roce 2020</td><td>8 mil. Kč</td><td>Pořizovací cena uváděná městem.</td></tr>
-      <tr><td>Projektová dokumentace v letech 2021–2022</td><td>4,665 mil. Kč</td><td>Součet rozpočtových položek 1,08 a 3,585 milionu.</td></tr>
-      <tr><td>Investiční výdaje v letech 2024–2025</td><td>32,660 mil. Kč</td><td>Součet vykázaných ročních položek 17,486 a 15,174 milionu.</td></tr>
-      <tr><td><strong>Minimální dohledaný hrubý účet</strong></td><td><strong>45,325 mil. Kč</strong></td><td>Nejde automaticky o škodu ani o konečnou cenu.</td></tr>
+      <tr><td>Počáteční smlouva první stavby</td><td>117,72 mil. Kč</td></tr>
+      <tr><td>První smlouva po dodatku č. 6</td><td>145,18 mil. Kč</td></tr>
+      <tr><td>Předpokládaná hodnota nové zakázky</td><td>195 mil. Kč</td></tr>
     </tbody>
   </table>
-  <p>Částka nemusí zahrnovat všechny průzkumy, technické a autorské dozory, právní služby, dotační management, znalce ani nové výdaje roku 2026.</p>
-  <p>Současně by nebylo správné označit všech 45,325 milionu korun za vyhozené peníze. Městu zůstal pozemek a připravené staveniště. Část dokumentace, průzkumů, povolení nebo provedených prací může být použitelná pro nový projekt.</p>
-  <p>Bez kompletního seznamu faktur a finančního vypořádání ale nelze určit, která část si zachovala hodnotu a která byla vynaložena na práce, jež už nový dům nevyužije.</p>
 
-  <h2 id="druhy-pokus">Druhý pokus má přinést 48 bytů</h2>
-  <p>Nový Slovan už nemá nabídnout původně plánovaných 38 bytů, ale <strong>48 bytových jednotek</strong>. Projekt počítá také s dalším podlažím.</p>
-  <p>Město současně připravuje kombinované financování. Rada schválila podání žádosti o úvěr od Národní rozvojové banky a žádosti o evropský grant JTM-2026-PSLF. V březnu 2026 přijala nezávazný úvěrový příslib až do výše 97,5 milionu korun se splatností patnáct let, podmíněný získáním evropského grantu.</p>
-  <p>Změnil se také způsob přípravy. Město původně objednalo u KAP ATELIER kompletní projekt včetně prováděcí dokumentace za 1,95 milionu korun bez DPH. Dodatkem z 27. dubna 2026 však prováděcí dokumentaci odstranilo a nahradilo ji standardy pro zadání metodou Design &amp; Build. Cena projektové smlouvy se tím snížila přibližně na 1,38 milionu korun bez DPH.</p>
-  <p>Předpokládaná hodnota nové stavební zakázky činí <strong>195 milionů korun bez DPH</strong>. Při Design &amp; Build nese vybraný dodavatel odpovědnost nejen za samotnou realizaci, ale také za dopracování části projektového řešení.</p>
-  <p>Nový tendr je už vyhlášený. Druhý pokus tak pokračuje ještě před tím, než je veřejnosti dostupné úplné finanční vypořádání prvního.</p>
+  <p>Smluvní hodnota ale není totéž co skutečně zaplacená částka. Konečný účet lze určit až ze soupisu faktur, převzatých prací, zádržného, sankcí, vzájemných nároků a dohody o ukončení.</p>
 
-  <h2 id="kampan">Slovan a lávka u Shellu vstupují do předvolební kampaně</h2>
-  <p>Uskupení <strong>Dáme Kadani novou šanci</strong> zveřejnilo 24. července 2026 příspěvek, který staví nedokončený Slovan do přímého kontrastu s lávkou u čerpací stanice Shell. Používá slogan: „Pojďme nejdříve vyřešit jámy a poté stavět mosty.“</p>
-  <p>Příspěvek nepřináší nový technický posudek, konečné vyúčtování ani dosud neznámou smlouvu. Jde o politické hodnocení a silný předvolební obraz. Přesně ale ukazuje, že se Slovan a lávka stávají společným symbolem debaty o prioritách, přípravě investic a hospodaření města.</p>
-  <p>Srovnání má své limity. Peníze na různé investice nelze vždy libovolně přesouvat, lávka není náhradou za bytový dům a Slovan není definitivně opuštěný projekt. Pro posouzení odpovědnosti proto zůstávají rozhodující průzkumy, změnové listy, faktury, dohoda o vypořádání, rozhodnutí SFPI a dokumentace nové zakázky. Volební slogan tyto podklady nenahrazuje.</p>
-  <div class="factcheck"><h3>Co politický příspěvek dokládá – a co ne</h3><ul><li><strong>Dokládá:</strong> Slovan a lávka se staly předvolebním tématem a jedním ze způsobů, jak opozice hodnotí investiční priority města.</li><li><strong>Nedokládá:</strong> přesnou škodu, porušení zákona, konečnou cenu první stavby ani to, že by bylo možné peníze určené na lávku jednoduše použít na Slovan.</li></ul></div>
+  <h2 id="vyporadani">Schválení dohody je známé, její finanční obraz veřejný není</h2>
+  <p>Z veřejných zápisů vyplývá, že město připravovalo a následně schválilo dohodu o ukončení stavby, smlouvy o dílo a vzájemném vypořádání s původním zhotovitelem. Samotnou podepsanou dohodu s úplnými finančními přílohami se v běžně dostupných zdrojích nepodařilo dohledat.</p>
 
-  <figure class="photo-card">
-    <img src="../../assets/slovan-vstup-20260724.jpg" width="1600" height="1200" alt="Oplocený vstup do staveniště Slovanu v Kadani" loading="lazy">
-    <figcaption>Oplocený vstup do areálu Slovanu. Foto: Naše Kadaň, 24. 7. 2026.</figcaption>
-  </figure>
+  <div class="unknowns">
+    <h3>Co z veřejných podkladů zatím nevyplývá</h3>
+    <ul>
+      <li>celková částka vyfakturovaná a skutečně uhrazená původnímu sdružení,</li>
+      <li>hodnota prací a konstrukcí použitelných pro nový projekt,</li>
+      <li>výše případného zádržného, smluvních pokut nebo náhrad,</li>
+      <li>konečné vypořádání všech vzájemných nároků,</li>
+      <li>úplný výsledek znaleckého posouzení sporných položek.</li>
+    </ul>
+  </div>
 
-  <h2 id="zaver">Nejde o důkaz porušení zákona. Jde o chybějící účet</h2>
-  <p>Z veřejně dostupných dokumentů nelze tvrdit, že město, projektant nebo původní zhotovitel porušili zákon. Nelze ani spolehlivě určit, kdo nese odpovědnost za neodhalený stav konstrukcí, proč se strany nedohodly na pokračování nebo zda bylo ukončení smlouvy pro město finančně výhodné.</p>
-  <p>Problém je v tom, že veřejnost nemá podklady, podle kterých by si postup města mohla sama zkontrolovat.</p>
-  <div class="split proven"><div><h3>Co dokumenty potvrzují</h3><ul><li>Původní projekt počítal s rekonstrukcí a 38 byty.</li><li>Budova byla úplně odstraněna.</li><li>Smlouva s původním zhotovitelem skončila před dokončením.</li><li>Rada schválila dohodu o ukončení a vypořádání.</li><li>Město připravuje nový dům se 48 byty.</li><li>Pokračuje administrace podpory ze stejné výzvy SFPI.</li></ul></div><div><h3>Co stále chybí</h3><ul><li>Podepsaná dohoda včetně finančních příloh.</li><li>Konečný soupis provedených prací a faktur.</li><li>Znalecký posudek ke sporným položkám.</li><li>Údaje o pokutách, zádržném a dalších nárocích.</li><li>Rozhodnutí SFPI o změně nebo ukončení podpory.</li><li>Doklad o případně vrácených dotačních penězích.</li></ul></div></div>
-  <p>Kadaň nové městské byty potřebuje. Bydlení pro mladé rodiny, zdravotníky, učitele a další potřebné profese dává smysl. Právě vzhledem k rozsahu investice by ale město mělo občanům srozumitelně vysvětlit, co se stalo s první smlouvou, kolik první pokus skutečně stál a jaký je přesný osud podpory SFPI.</p>
-  <p>V březnu 2025 město tvrdilo, že dotace ani dokončení projektu nejsou ohroženy. V červenci oznámilo konec spolupráce a očekávanou nutnost podporu vrátit. Na podzim rada schválila dohodu o vypořádání, jejíž obsah veřejnost nezná. V roce 2026 město připravuje změnu původní podpory, hledá nový grant a úvěr a soutěží novostavbu za 195 milionů korun bez DPH.</p>
-  <blockquote>Druhý Slovan už vzniká. Účet za ten první ale veřejnost stále nezná.</blockquote>
-  <p><strong>Naše Kadaň poskytne městu Kadaň, původnímu zhotoviteli, projektantům i SFPI prostor k věcnému vyjádření. Případné odpovědi, opravy nebo nové dokumenty do článku doplníme.</strong></p>
+  <h2 id="dotace">Město s projektem SFPI dál administrativně pracuje</h2>
+  <p>Projekt Slovan získal podporu v rámci výzvy Státního fondu podpory investic č. 1/NB/2023. Ve veřejné debatě se později objevila možnost vrácení podpory, veřejný doklad o úplném uzavření této věci však dohledaný není.</p>
+  <p>V červnu 2026 město objednalo za 110 tisíc korun bez DPH další dotační management projektu výslovně označeného jako projekt podpořený v této výzvě SFPI. Záznam dokládá pokračující administrativní práci s projektem. Sám o sobě ale nepotvrzuje konečné rozhodnutí fondu, schválení změny ani prominutí případných sankcí.</p>
+  <p>Vedle toho město zadalo zpracování žádosti o grant z evropského programu JTM-2026-PSLF za 249 980 korun bez DPH. Jde o přípravu žádosti, nikoli o doklad, že grant už byl přiznán.</p>
 
-  <div class="source-list"><h2>Zdroje a metodika</h2><ul>
-    <li><a href="https://www.noviny-kadan.cz/l/tiskova-zprava-mesta-k-situaci-kolem-slovanu/" target="_blank" rel="noopener noreferrer">Město Kadaň: tisková zpráva k situaci kolem Slovanu, 29. 9. 2025</a></li>
-    <li><a href="https://smlouvy.gov.cz/smlouva/28291935" target="_blank" rel="noopener noreferrer">Registr smluv: původní smlouva na revitalizaci Slovanu</a></li>
-    <li><a href="https://smlouvy.gov.cz/smlouva/32632596" target="_blank" rel="noopener noreferrer">Registr smluv: dodatek č. 6 a změnový list k novému založení</a></li>
-    <li><a href="https://smlouvy.gov.cz/smlouva/31360712" target="_blank" rel="noopener noreferrer">Registr smluv: inženýrskogeologický průzkum</a></li>
-    <li><a href="https://www.idnes.cz/usti/zpravy/kadan-slovan-prestavba-rekonstrukce-bytovy-dum-losenicky.A250317_112730_usti-zpravy_imst" target="_blank" rel="noopener noreferrer">iDNES, 17. 3. 2025: demolice a tehdejší vyjádření k dotaci</a></li>
-    <li><a href="https://www.idnes.cz/usti/zpravy/kadan-slovan-bytovy-dum-zpozdeni-problemy-firma-dotace.A250716_122837_usti-zpravy_grr" target="_blank" rel="noopener noreferrer">iDNES, 16. 7. 2025: ukončení spolupráce a oznámení o vrácení dotace</a></li>
-    <li><a href="https://smlouvy.gov.cz/smlouva/37725681" target="_blank" rel="noopener noreferrer">Registr smluv: změna nové projektové smlouvy a přechod na Design &amp; Build</a></li>
-    <li><a href="https://smlouvy.gov.cz/smlouva/37257929" target="_blank" rel="noopener noreferrer">Registr smluv: příprava žádosti o evropský grant</a></li>
-    <li><a href="https://smlouvy.gov.cz/smlouva/26741311" target="_blank" rel="noopener noreferrer">Registr smluv: původní dotační management projektu SFPI</a></li>
-    <li><a href="https://ted.europa.eu/en/notice/-/detail/511941-2026" target="_blank" rel="noopener noreferrer">TED: nové zadávací řízení na bytový dům Slovan</a></li>
-    <li><a href="https://www.mesto-kadan.cz/filemanager/files/4800620.pdf" target="_blank" rel="noopener noreferrer">Rada města: příprava dohody o ukončení a vypořádání</a></li>
-    <li><a href="https://www.mesto-kadan.cz/filemanager/files/4871082.pdf" target="_blank" rel="noopener noreferrer">Rada města: schválení dohody o ukončení</a></li>
-    <li>Veřejný příspěvek uskupení Dáme Kadani novou šanci na Facebooku, zachycený redakcí 24. 7. 2026.</li>
-  </ul><small>Článek rozlišuje mezi smluvní cenou a skutečně proplacenými částkami, stanoviskem města a nezávisle doloženým stavem, mezi přípravou žádosti o změnu podpory a jejím schválením a mezi politickým hodnocením a doloženým skutkovým stavem. Nenalezení dokumentu ve veřejné evidenci není vydáváno za důkaz, že dokument neexistuje.</small></div>
+  <h2 id="novy">Druhý pokus má 48 bytů a model Design &amp; Build</h2>
+  <p>Nový záměr už nepočítá s rekonstrukcí původní budovy. Na připraveném místě má vzniknout novostavba se 48 byty. Zadání využívá model Design &amp; Build, v němž vybraný dodavatel převezme odpovědnost nejen za provedení stavby, ale také za dopracování části projektového řešení.</p>
+  <p>Předpokládaná hodnota zakázky činí 195 milionů korun bez DPH. Lhůta uvedená v pozdějším veřejném oznámení skončila 3. srpna 2026 v 8:00. Výsledek další fáze řízení zatím zveřejněný není, a proto nelze uvést vítěze ani konečnou cenu.</p>
+
+  <div class="factbox">
+    <h3>195 milionů není automaticky konečný účet stavby</h3>
+    <p>Jde o předpokládanou hodnotu zadavatele. Skutečná smluvní cena může být nižší i vyšší podle výsledku řízení, rozsahu přijatého řešení a budoucích změn.</p>
+  </div>
+
+  <h2 id="naklady">Minimální dohledaný hrubý součet přesahuje 45 milionů</h2>
+  <p>Z rozpočtových podkladů a smluv lze sestavit minimální hrubý součet již vynaložených nebo evidovaných výdajů spojených s objektem a první etapou projektu.</p>
+
+  <table class="data-table">
+    <thead><tr><th>Dohledaná položka</th><th>Částka</th></tr></thead>
+    <tbody>
+      <tr><td>Koupě objektu v roce 2020</td><td>8,000 mil. Kč</td></tr>
+      <tr><td>Projektová příprava v letech 2021–2022</td><td>4,665 mil. Kč</td></tr>
+      <tr><td>Investiční výdaje evidované pro roky 2024–2025</td><td>32,660 mil. Kč</td></tr>
+      <tr><td><strong>Minimální dohledaný hrubý součet</strong></td><td><strong>45,325 mil. Kč</strong></td></tr>
+    </tbody>
+  </table>
+
+  <p>Tento součet nelze automaticky označit za škodu. Městu zůstal pozemek, připravené staveniště a část dokumentace či provedených prací může být použitelná. Současně nemusí jít o úplný účet, protože nemusí zahrnovat všechny průzkumy, dozory, právní služby, znalecké práce, dotační management a výdaje roku 2026.</p>
+
+  <h2 id="zaver">Druhý pokus může Kadani přinést potřebné byty</h2>
+  <p>Nový dům se 48 byty může být pro město důležitou a užitečnou investicí. Aby ale bylo možné celý projekt posoudit v souvislostech, je dobré znát nejen cenu nové stavby, ale také to, kolik stál první pokus a co z tehdejších prací, dokumentace nebo přípravy město využije dál.</p>
+  <p>Veřejné dokumenty už dnes ukazují, jak se projekt měnil, jak rostla smluvní cena a jak město připravuje nové financování. Úplný přehled prvního projektu ale zatím na jednom místě k dispozici není. Jeho zveřejnění by pomohlo celý příběh Slovanu uzavřít srozumitelněji a zároveň dát veřejnosti jasnější obraz o tom, na čem bude druhý pokus stavět.</p>
+
+  <div class="source-list">
+    <h3>Hlavní veřejné zdroje</h3>
+    <ol>
+      <li><a href="https://smlouvy.gov.cz/smlouva/29304048" target="_blank" rel="noopener">Registr smluv – původní smlouva Slovanu</a></li>
+      <li><a href="https://smlouvy.gov.cz/vyhledavani?subject_name=M%C4%9Bsto+Kada%C5%88" target="_blank" rel="noopener">Registr smluv – město Kadaň, dodatky a navazující služby</a></li>
+      <li><a href="https://smlouvy.gov.cz/smlouva/37257929" target="_blank" rel="noopener">Žádost o evropský grant JTM-2026-PSLF</a></li>
+      <li><a href="https://smlouvy.gov.cz/smlouva/37725681" target="_blank" rel="noopener">Úprava projektové smlouvy v souvislosti s Design &amp; Build</a></li>
+      <li><a href="https://www.patterno.de/de/ausschreibungen/tender/neubau-eines-mehrfamilienhauses-fuer-objekt-slovan-kada-igoro5rijkmd5f4hfz9pcuf6" target="_blank" rel="noopener">Veřejný přehled nového zadávacího řízení</a></li>
+      <li>Zápisy a usnesení Rady města Kadaň, rozpočtové dokumenty a změnové listy stavby.</li>
+    </ol>
+  </div>
 </article>
-<aside><div class="sticky"><div class="sidebox preview-note"><h3>Náhled článku</h3><p><strong>Tato stránka zatím není zveřejněná.</strong></p><p>Datum vydání, konečnou URL, zařazení na titulní stránku a sdílecí grafiku doplníme až při publikaci.</p></div><div class="sidebox"><h3>Rychlé shrnutí</h3><p><strong>38 bytů</strong> měl původní projekt.</p><p><strong>48 bytů</strong> má mít novostavba.</p><p><strong>195 milionů bez DPH</strong> je hodnota nového tendru.</p><p>Konečné vypořádání prvního pokusu veřejně dostupné není.</p></div><div class="sidebox"><h3>Máte podklad?</h3><p>Dokument, opravu nebo vyjádření můžete poslat na <a href="mailto:info@nasekadan.cz">info@nasekadan.cz</a>.</p></div></div></aside>
+
+<aside class="sticky">
+  <div class="sidebox preview-note"><h3>Náhled článku</h3><p><strong>Text není zveřejněný.</strong> Neobsahuje sadu otázek pro město. Neznámé skutečnosti jsou popsány pouze jako údaje, které nejsou ve veřejných podkladech dohledatelné.</p></div>
+  <div class="sidebox"><h3>Hlavní zjištění</h3><ul>
+    <li>nové řízení pokračuje po skončení lhůty,</li>
+    <li>48 bytů,</li>
+    <li>195 mil. Kč bez DPH jako odhad,</li>
+    <li>první smlouva vzrostla na 145,18 mil. Kč bez DPH,</li>
+    <li>úplné vypořádání první etapy není veřejně dohledatelné.</li>
+  </ul></div>
+  <div class="sidebox"><h3>Redakční pojistka</h3><p>Text nerozhoduje o vině, neoznačuje celý dosavadní výdaj za škodu a rozlišuje předpokládanou hodnotu, smluvní cenu a skutečně zaplacené peníze.</p></div>
+</aside>
 </main>
-<footer><div class="wrap">© 2026 Naše Kadaň · Nezávislý informační portál</div></footer>
-<script src="../../site.js" defer></script>
+
+<footer><div class="wrap">Naše Kadaň · pracovní HTML náhled · plánované vydání 5. 8. 2026 v 04:00</div></footer>
 </body>
 </html>
