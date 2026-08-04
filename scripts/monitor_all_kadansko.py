@@ -41,7 +41,7 @@ LOCAL_TERMS = {
 }
 # Některé názvy obcí jsou zároveň běžná česká slova. U těchto názvů se
 # nesmí použít prostá podřetězcová shoda, jinak vznikají falešné nálezy typu
-# „na místo vyjeli hasiči“ nebo „oprava mostu“.
+# „na místo vyjeli hasiči“, „oprava mostu“ nebo „turistický ostrov“.
 AMBIGUOUS_LOCAL_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     "misto": (
         re.compile(r"\bobec\s+misto\b"),
@@ -58,19 +58,29 @@ AMBIGUOUS_LOCAL_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
         re.compile(r"\bdo\s+mostu\b"),
         re.compile(r"\bu\s+mostu\b"),
     ),
+    "ostrov": (
+        re.compile(r"\bostrovsk\w*\b"),
+        re.compile(r"\bmesto\s+ostrov\b"),
+        re.compile(r"\bostrov\s+nad\s+ohri\b"),
+        re.compile(r"\bv\s+ostrove\b"),
+        re.compile(r"\bz\s+ostrova\b"),
+        re.compile(r"\bdo\s+ostrova\b"),
+        re.compile(r"\bostrov\s+(?:opravi|otevre|postavi|vybuduje|schvalil|spusti|chysta|investuje|ziska|nabizi|vyhlasil|bude)\b"),
+    ),
 }
 HIGH_SIGNAL_TERMS = {
     "pozar", "nehoda", "havarie", "evakuace", "vybuch", "zasah hasicu",
     "policie", "patrani", "pohresovan", "uzavirka", "neprujezd", "vyluka",
     "odstavka", "vypadek", "bez vody", "bez elektriny", "bez tepla",
     "omezeni provozu", "zmena provozu", "docasne uzavren", "zruseno",
-    "zastupitelstvo", "rada mesta", "usneseni", "uredni deska",
+    "zastupitelstv", "rada mesta", "usneseni", "uredni deska",
     "verejna vyhlaska", "verejna zakazka", "vyberove rizeni", "smlouva",
     "dodatek", "rozpocet", "ucetni zaverka", "vyrocni zprava", "dotace",
     "investice", "rekonstrukce", "stavebni povoleni", "uzemni plan", "eia",
     "konkurs", "reditel", "jednatel", "personalni zmena", "kontrola",
-    "zapis do skoly", "prijimaci rizeni", "prazdninovy provoz",
-    "zmena ceny", "jideln", "druzina", "nemocnice", "ambulance",
+    "zapis ze zasedani", "zapis zastupitelstva", "zapis do skoly",
+    "prijimaci rizeni", "prazdninovy provoz", "zmena ceny", "jideln",
+    "druzina", "nemocnice", "ambulance",
 }
 URGENT_SIGNAL_TERMS = {
     "pozar", "nehoda", "havarie", "evakuace", "vybuch", "pohresovan",
@@ -172,8 +182,6 @@ def local_matches(item: dict[str, Any]) -> list[str]:
             if any(pattern.search(haystack) for pattern in ambiguous_patterns):
                 matches.append(term)
             continue
-        # Běžné místní názvy hledáme na hranici slova; dovolujeme české
-        # skloňování a odvozeniny, ale ne náhodný výskyt uvnitř jiného slova.
         escaped = re.escape(term).replace(r"\ ", r"\s+")
         if re.search(rf"(?<!\w){escaped}\w*", haystack):
             matches.append(term)
@@ -181,11 +189,21 @@ def local_matches(item: dict[str, Any]) -> list[str]:
 
 
 def signal_level(item: dict[str, Any], tier: str) -> str:
-    text = fold(f"{item.get('title')} {item.get('description')} {item.get('category')}")
-    if any(term in text for term in URGENT_SIGNAL_TERMS):
+    # U běžných webů rozhoduje titulek. Okolní HTML často obsahuje názvy
+    # sousedních položek a nesmí z očkování psů udělat požární poplach.
+    title_text = fold(f"{item.get('title')} {item.get('category')}")
+    if any(term in title_text for term in URGENT_SIGNAL_TERMS):
         return "urgent"
-    if any(term in text for term in HIGH_SIGNAL_TERMS):
+    if any(term in title_text for term in HIGH_SIGNAL_TERMS):
         return "high"
+    # U specializovaných krizových, policejních, dopravních a síťových zdrojů
+    # smí rozhodnout i popis, protože jejich titulky bývají krátké.
+    if tier in {"emergency", "police", "transport", "utility"}:
+        full_text = fold(f"{item.get('title')} {item.get('description')} {item.get('category')}")
+        if any(term in full_text for term in URGENT_SIGNAL_TERMS):
+            return "urgent"
+        if any(term in full_text for term in HIGH_SIGNAL_TERMS):
+            return "high"
     return "medium"
 
 
@@ -346,8 +364,6 @@ def main() -> int:
             elif len(alerts) < MAX_ALERTS_PER_RUN:
                 alerts.append(item)
             else:
-                # Přebytek není zahozen ani označen jako přečtený. Zůstane
-                # nezařazený v deduplikační paměti a vrátí se v dalším běhu.
                 suppressed["deferredByCap"] += 1
                 continue
         previous = seen.get(fp) if isinstance(seen.get(fp), dict) else {}
