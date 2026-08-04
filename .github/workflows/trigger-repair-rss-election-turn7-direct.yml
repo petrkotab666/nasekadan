@@ -18,3 +18,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run repair-rss-election-turn7-direct.yml --repo petrkotab666/nasekadan --ref main
+
+# Druhý commit aktivuje spouštěč.
