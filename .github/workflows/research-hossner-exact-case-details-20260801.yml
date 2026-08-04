@@ -1,0 +1,56 @@
+name: Detaily spisu Hossner 30 C 84/2025
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-hossner-exact-case-details-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m pip install --disable-pip-version-check --quiet --index-url https://pypi.org/simple infosoud==0.1.0 requests
+      - name: Stáhnout úplný detail událostí a jednání
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/hossner-exact && mkdir -p /tmp/hossner-exact
+          python3 - <<'PY'
+          import dataclasses,json
+          from pathlib import Path
+          try:
+            from infosoud import InfoSoudClient
+          except ImportError:
+            from infosoud.client import InfoSoudClient
+          def plain(x):
+            if dataclasses.is_dataclass(x):return plain(dataclasses.asdict(x))
+            if isinstance(x,dict):return {str(k):plain(v) for k,v in x.items()}
+            if isinstance(x,(list,tuple,set)):return [plain(v) for v in x]
+            if hasattr(x,'__dict__') and not isinstance(x,(str,bytes,int,float,bool)):
+              return {k:plain(v) for k,v in vars(x).items() if not k.startswith('_')}
+            try:json.dumps(x);return x
+            except:return str(x)
+          c=InfoSoudClient(delay=.05,timeout=20);court='OSSCECV';spis='30 C 84/2025'
+          case=plain(c.search_case(spis,court));hearing=plain(c.search_hearings(spis,court));details=[]
+          for u in case.get('udalosti',[]):
+            try:d=plain(c.get_event_detail(spis,court,u['udalost'],int(u['poradi'])))
+            except Exception as e:d={'error':repr(e)}
+            details.append({'event':u,'detail':d})
+          result={'spis':spis,'case':case,'current_hearings':hearing,'event_details':details}
+          Path('/tmp/hossner-exact/result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2)[:100000])
+          PY
+      - name: Nahrát výsledek
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hossner-exact-30-c-84-2025
+          path: /tmp/hossner-exact
+          retention-days: 7
