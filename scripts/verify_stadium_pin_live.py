@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 import json
 from pathlib import Path
 import re
@@ -34,6 +35,24 @@ def fetch(path: str, nonce: str) -> str:
         return response.read().decode('utf-8', errors='replace')
 
 
+def verify_rss_order(xml_text: str) -> None:
+    root = ET.fromstring(xml_text)
+    items = root.findall('./channel/item')
+    if not items:
+        raise RuntimeError('Živé RSS neobsahuje žádné položky.')
+    links = [item.findtext('link') or '' for item in items]
+    dates = []
+    for item in items:
+        value = item.findtext('pubDate')
+        if not value:
+            raise RuntimeError('Položka živého RSS nemá datum.')
+        dates.append(parsedate_to_datetime(value))
+    if dates != sorted(dates, reverse=True):
+        raise RuntimeError('Živé RSS není v chronologickém pořadí.')
+    if links[0] == BASE + PIN:
+        raise RuntimeError('Připínaný článek byl nesprávně přesunut na začátek RSS.')
+
+
 def verify_once(latest: str, nonce: str) -> None:
     home = fetch('/', nonce)
     article = fetch(PIN, nonce)
@@ -60,9 +79,7 @@ def verify_once(latest: str, nonce: str) -> None:
     if not first_archive or first_archive.group(1) != latest:
         raise RuntimeError('Živý archiv není v chronologickém pořadí.')
 
-    root = ET.fromstring(rss)
-    if root.findtext('./channel/item/link') != BASE + latest:
-        raise RuntimeError('Živé RSS není v chronologickém pořadí.')
+    verify_rss_order(rss)
 
     weather = json.loads(forecast)
     timeseries = weather.get('properties', {}).get('timeseries')
