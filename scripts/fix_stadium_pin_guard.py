@@ -30,7 +30,7 @@ pin_until = datetime.fromisoformat({PIN_UNTIL!r})
 active = datetime.now(timezone.utc) <= pin_until
 href_value = f'HOMEPAGE_PIN_HREF = {{pin_href!r}}' if active else "HOMEPAGE_PIN_HREF = ''"
 until_value = (
-    f'HOMEPAGE_PIN_UNTIL = datetime.fromisoformat({PIN_UNTIL!r})'
+    f"HOMEPAGE_PIN_UNTIL = datetime.fromisoformat({PIN_UNTIL!r})"
     if active else
     'HOMEPAGE_PIN_UNTIL = datetime.fromtimestamp(0, tz=timezone.utc)'
 )
