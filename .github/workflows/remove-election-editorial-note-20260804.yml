@@ -1,0 +1,223 @@
+name: Odstranit zbytečné upřesnění redakce z volebního článku
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-election-editorial-note-20260804.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: remove-election-editorial-note-20260804
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE_FILE: clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_REL: /clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      REGISTRY_FILE: data/published-content-index.json
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Odstranit box a zapsat obsahovou opravu
+        id: content
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html')
+          text = path.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r'\s*<div class="update-box" data-correction="ano-video-timing">'
+              r'<strong>Upřesnění redakce</strong><p>.*?</p></div>\s*',
+              re.S,
+          )
+          fixed, count = pattern.subn('\n', text, count=1)
+          if count == 0:
+              if 'Upřesnění redakce' in text or 'data-correction="ano-video-timing"' in text:
+                  raise SystemExit('Opravný box byl nalezen, ale neodpovídá bezpečnému vzoru.')
+              print('Box už v článku není.')
+          fixed = fixed.replace('content="2026-08-04T19:06:00+02:00"', 'content="2026-08-04T19:38:00+02:00"')
+          fixed = fixed.replace('"dateModified":"2026-08-04T19:06:00+02:00"', '"dateModified":"2026-08-04T19:38:00+02:00"')
+          if 'Upřesnění redakce' in fixed or 'data-correction="ano-video-timing"' in fixed:
+              raise SystemExit('Zbytečné redakční upřesnění v článku zůstalo.')
+          if 'zveřejnil krátké video už několik dní před uzávěrkou' not in fixed:
+              raise SystemExit('V článku chybí přímo zapracované správné časové zařazení videa.')
+          path.write_text(fixed, encoding='utf-8', newline='\n')
+          PY
+            git add "$ARTICLE_FILE"
+            if git diff --cached --quiet; then
+              echo 'Článek už je opravený.'
+              pushed=1
+              break
+            fi
+            git commit -m 'Odstranit zbytečné upřesnění redakce z volebního článku'
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            echo "Souběžná změna mainu, opakuji (${attempt}/3)."
+          done
+          test "$pushed" = 1
+          git fetch origin main
+          git reset --hard origin/main
+          content_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
+          echo "content_sha=$content_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit opravený článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$ARTICLE_FILE" ubuntu@57.129.43.215:/tmp/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 "$src" "$root/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$src" nasekadan-web:/usr/share/nginx/html/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+          fi
+          rm -f "$src"
+          REMOTE
+
+      - name: Veřejně ověřit článek bez vysvětlivky
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q")"
+          grep -Fq '<h1>Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO</h1>' <<<"$article"
+          grep -Fq 'zveřejnil krátké video už několik dní před uzávěrkou' <<<"$article"
+          ! grep -Fq 'Upřesnění redakce' <<<"$article"
+          ! grep -Fq 'data-correction="ano-video-timing"' <<<"$article"
+
+      - name: Aktualizovat kanonický registr po veřejné kontrole
+        shell: bash
+        env:
+          CONTENT_SHA: ${{ steps.content.outputs.content_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+          import json, os
+          from datetime import datetime, timezone
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          url = 'https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html'
+          source = os.environ['CONTENT_SHA']
+          item = next((x for x in data.get('articles', []) if isinstance(x, dict) and x.get('url') == url), None)
+          if item is None:
+              raise SystemExit('V kanonickém registru chybí volební článek.')
+          item['modified_at'] = '2026-08-04T19:38:00+02:00'
+          item['source_commit'] = source
+          data['source_commit'] = source
+          data['generated_at'] = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          validation['last_consistency_repair'] = {
+              'classification': 'remove_unnecessary_editorial_correction_box',
+              'reason': 'Správný údaj o stáří videa ANO je zapracován přímo v textu; samostatný box Upřesnění redakce byl zbytečný.',
+              'updated_url': url,
+              'source_commit': source,
+              'status': 'success',
+              'completed_at': datetime.now(timezone.utc).isoformat(),
+              'public_verification': {
+                  'article_h1': True,
+                  'correct_timing_in_body': True,
+                  'editorial_correction_box_absent': True,
+              },
+          }
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
+          PY
+            git add "$REGISTRY_FILE"
+            if git diff --cached --quiet; then
+              pushed=1
+              break
+            fi
+            git commit -m 'Evidence: odstranit zbytečný box s upřesněním redakce'
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            echo "Souběžná změna registru, opakuji (${attempt}/3)."
+          done
+          test "$pushed" = 1
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Nasadit registr a stav nasazení
+        shell: bash
+        env:
+          CONTENT_SHA: ${{ steps.content.outputs.content_sha }}
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          printf 'status=ok\nsource=%s\narticle=%s\n' "$CONTENT_SHA" "$ARTICLE_URL" > "$RUNNER_TEMP/deployment-health.txt"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$REGISTRY_FILE" "$RUNNER_TEMP/deployment-health.txt" ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/data"
+          sudo install -m 0644 /tmp/published-content-index.json "$root/data/published-content-index.json"
+          sudo install -m 0644 /tmp/deployment-health.txt "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Uzavřít opravu
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const {owner, repo} = context.repo;
+            const title = '[repair] Odstranit upřesnění redakce z volebního článku';
+            const body = `Opraveno a veřejně ověřeno.\n\nČlánek: ${process.env.ARTICLE_URL}\n\nSamostatný box „Upřesnění redakce“ byl odstraněn. Správné časové zařazení videa ANO zůstává přirozeně zapracované přímo v textu.`;
+            const created = await github.rest.issues.create({owner, repo, title, body});
+            await github.rest.issues.update({owner, repo, issue_number: created.data.number, state: 'closed', state_reason: 'completed'});
