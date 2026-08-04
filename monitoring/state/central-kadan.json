@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T11:59:42Z",
-  "last_quick_check_at": "2026-08-04T11:59:42Z",
+  "updated_at": "2026-08-04T13:03:52Z",
+  "last_quick_check_at": "2026-08-04T13:03:52Z",
   "last_deep_check_at": "2026-08-04T07:57:20Z",
   "canonical_registry": {
     "paths": [
@@ -35,7 +35,7 @@
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "cba49186c39d869e715f6ce3fa4005ce6e2a53b3"
+    "main_sha_observed": "e8242be0272a5f1549dcece93e325609d29629e2"
   },
   "production": {
     "homepage_checked": true,
@@ -43,41 +43,45 @@
     "rss_checked": true,
     "sitemap_checked": true,
     "news_sitemap_checked": true,
+    "llms_checked": true,
     "deployment_health_checked": true,
-    "latest_public_article_url": "https://nasekadan.cz/clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html",
-    "latest_public_article_title": "Klášterecký Josef Suchý skóroval Kanadě už po 103 sekundách",
-    "latest_public_article_published_at": "2026-08-04T12:10:00+02:00",
+    "latest_public_article_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
+    "latest_public_article_title": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
+    "latest_public_article_published_at": "2026-08-04T14:10:00+02:00",
     "homepage_and_archive_consistent": true,
-    "public_audit_at": "2026-08-04T10:53:08Z",
-    "public_audit_evidence": "GitHub Actions run 30902418112; issue 568 closed after live verification",
-    "public_article_count": 46,
-    "deployment_source_commit": "a5fadd133839b481b7d9a15e3ffeee19b75116f9",
-    "public_check_attempt_at": "2026-08-04T11:59:42Z",
-    "public_check_attempt_status": "direct cache-busting connection unavailable from current runtime; last successful canonical live audit retained",
+    "discovery_surfaces_contain_latest_article": true,
+    "public_audit_at": "2026-08-04T12:31:28.102976Z",
+    "public_audit_evidence": "Commit 037c2c74d9eab236e32364e65298676e68cba526 potvrzuje živou kontrolu článku, titulky, archivu, RSS, sitemap, news-sitemap a deployment-health.",
+    "public_article_count": 47,
+    "deployment_source_commit": "50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a",
+    "public_check_attempt_at": "2026-08-04T13:03:52Z",
+    "public_check_attempt_status": "Přímé cache-busting připojení z aktuálního runtime zůstalo nedostupné; poslední úspěšný kanonický živý audit z 12:31:28 UTC byl potvrzen evidencí v repozitáři. Aktuální repo plochy obsahují nejnovější článek.",
     "repair_attempted": false
   },
   "quick_check": {
     "extraordinary_events": "no_new_significant_verified_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "official_updates_reviewed; no_new_threshold_document",
-    "petition": "no verified threshold event since previous run",
-    "technical": "no evidence of stale production; direct runtime connection unavailable and therefore no speculative repair was attempted"
+    "petition": "no_verified_threshold_event_since_previous_run",
+    "technical": "latest approved article present in homepage, archive, RSS, sitemap, news-sitemap and llms; direct live cache-busting unavailable; no evidence justifying repair"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
     "ii225-zeleznicni-prejezd-smer-kadan-20260803",
     "zimni-stadion-ochlazeni-klasterec-kadan-20260803",
     "night-train-outages-kadan-klasterec-august-2026",
-    "josef-suchy-klasterec-u18-kanada-hlinka-20260804"
+    "josef-suchy-klasterec-u18-kanada-hlinka-20260804",
+    "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804"
   ],
   "new_significant_fingerprints": [],
   "notes": [
     "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Regionální discoveryStatus nadále eviduje úplné dohledání oficiálních URL dne 4. srpna 2026 a nulový počet nevyřešených položek discoverOfficialUrl.",
+    "Regionální registr nadále eviduje úplné dohledání oficiálních URL dne 4. srpna 2026 a nulový počet nevyřešených položek discoverOfficialUrl.",
     "Rychlá kontrola policejních, hasičských, krizových, dopravních, síťových, městských a regionálních zdrojů neodhalila od předchozího běhu novou ověřenou mimořádnou událost s dostatečným významem pro samostatné upozornění čtenářům z Kadaně.",
     "Vyhledání známých soudních spisů 30 C 84/2025, 30 C 211/2025, 14 Co 104/2026 a 93 Ncp 490/2026 nepřineslo nový veřejně indexovaný procesní pohyb nebo rozhodnutí.",
-    "Dopravní a provozní nálezy dostupné v tomto běhu byly starší, již známé nebo lokální bez dostatečného nového dopadu; uzavírka II/225, noční železniční výluky a ochlazení na zimním stadionu zůstaly potlačeny jako zpracované duplicity.",
-    "Přímá cache-busting kontrola nasekadan.cz byla z aktuálního běhového prostředí blokována DNS a síťovým připojením. Poslední úspěšný kanonický živý audit z 4. srpna 2026 v 10:53 UTC zůstává platným důkazem; bez důkazu zastaralé produkce nebyl spuštěn opravný deploy.",
+    "Výzva Nemocnice Kadaň kvůli kritickému nedostatku krve 0 Rh− byla již publikována, veřejně ověřena a je přítomna na titulce, v archivu, RSS, sitemap.xml, news-sitemap.xml a llms.txt; nový nález byl proto potlačen jako zpracovaná duplicita.",
+    "Poslední živý kanonický audit 47 článků byl úspěšně dokončen 4. srpna 2026 ve 12:31:28 UTC; deployment-health tehdy uváděl stav ok a source 50e8c4af7b34cf882ca2d6d93a600d4cf879cb3a.",
+    "Přímá cache-busting kontrola nasekadan.cz nebyla z aktuálního běhového prostředí dostupná. Bez důkazu zastaralé produkce nebyl spuštěn opravný deploy.",
     "Data/city-news.json nadále eviduje 101 unikátních zdrojů a 21 unikátních selhávajících zdrojů ve 22 chybových záznamech. Zdroje zůstávají povinné a musí být dále obsluhovány náhradními oficiálními nebo důvěryhodnými kanály.",
     "Žádný nový alert, pending JSON ani GitHub Issue nebyl vytvořen, protože nebyl potvrzen nový významný a neduplicitní nález."
   ]
