@@ -1,0 +1,59 @@
+name: Okamžitě nasadit aktuální main
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/emergency-deploy-current-main-20260804.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Nasadit aktuální obsah
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          sha="$(git rev-parse HEAD)"
+          printf 'status=ok\nsource=%s\ndeployed_at=%s\n' "$sha" "$(date -u +%FT%TZ)" > deployment-health.txt
+          tar --exclude='.git' --exclude='.github' --exclude='scripts' --exclude='deploy' -czf "$RUNNER_TEMP/site.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/site.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-site.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/nasekadan-site
+          mkdir -p /tmp/nasekadan-site
+          tar -xzf /tmp/nasekadan-site.tgz -C /tmp/nasekadan-site
+          sudo mkdir -p /var/www/nasekadan
+          sudo cp -a /tmp/nasekadan-site/. /var/www/nasekadan/
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nasekadan-site/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf /tmp/nasekadan-site /tmp/nasekadan-site.tgz
+          REMOTE
+
+      - name: Ověřit veřejný web
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 8
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" | grep -Fq "source=$(git rev-parse HEAD)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html?v=$q" | grep -Fq 'Kriticky chybí skupina 0 Rh−'
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?v=$q" | grep -Fq 'zimní stadion'
