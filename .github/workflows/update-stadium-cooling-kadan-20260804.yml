@@ -1,0 +1,229 @@
+name: Aktualizovat článek o ochlazení na kadaňském zimáku
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: update-stadium-cooling-kadan-20260804
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[update] Kadaňský zimák – ochlazení')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ARTICLE_REL: /clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      ARTICLE_FILE: clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html
+      SOCIAL_FILE: social/klasterec-ochlazeni-zimni-stadion-kadan-2026-aktualizace-20260804.png
+      EXPECTED_H1: 'Kadaň se přidala ke Klášterci. Zimní stadion otevřela lidem k ochlazení'
+      OLD_TITLE: 'Klášterec otevřel zimní stadion lidem před vedrem. Mohla by se přidat i Kadaň?'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+    steps:
+      - name: Zapsat spuštění
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Aktualizace stávajícího článku byla spuštěna. GitHub Actions run: ${context.runId}`
+            });
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Přepsat článek a veřejné přehledy
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          git config user.name 'Naše Kadaň – aktualizace'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/update_zimni_stadion_kadan_20260804.py scripts/enforce_article_visibility.py
+            python3 scripts/update_zimni_stadion_kadan_20260804.py
+
+            grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+            grep -Fq '8:00–18:00' "$ARTICLE_FILE"
+            grep -Fq 'ze strany od koupaliště' "$ARTICLE_FILE"
+            if grep -Fq "$OLD_TITLE" "$ARTICLE_FILE"; then
+              echo 'V článku zůstal starý překonaný titulek.' >&2
+              exit 1
+            fi
+            grep -Fq "$ARTICLE_REL" index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml
+            test -s "$SOCIAL_FILE"
+
+            git add "$ARTICLE_FILE" "$SOCIAL_FILE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Aktualizovat: Kadaň otevřela zimní stadion k ochlazení'
+            fi
+
+            article_sha="$(git log -1 --format=%H -- "$ARTICLE_FILE")"
+            ARTICLE_SHA="$article_sha" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          target = 'https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html'
+          for article in data.get('articles', []):
+              if article.get('url') == target:
+                  article['source_commit'] = os.environ['ARTICLE_SHA']
+                  break
+          else:
+              raise SystemExit('Aktualizovaný článek chybí v kanonickém registru.')
+          data['source_commit'] = os.environ['ARTICLE_SHA']
+          data.setdefault('validation', {})['per_article_source_commits'] = True
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+            git add data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: zapsat zdroj aktualizace kadaňského zimáku'
+            fi
+
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              article_count="$(python3 - <<'PY'
+          import json
+          print(json.load(open('data/published-content-index.json', encoding='utf-8'))['article_count'])
+          PY
+              )"
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              echo "article_count=$article_count" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 3))
+          done
+
+          test "$pushed" = 1
+
+      - name: Nasadit na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/stadium-cooling-update"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp "$SOCIAL_FILE" "$bundle/social/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\narticle=https://nasekadan.cz%s\nmodified=2026-08-04T13:04:00+02:00\n' '${{ steps.prepare.outputs.source_sha }}' "$ARTICLE_REL" > "$bundle/deployment-health.txt"
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/stadium-cooling-update
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/stadium-cooling-update
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/social" "$root/data"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in "$src"/social/*; do sudo install -m 0644 "$f" "$root/social/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp "$src/social/." nasekadan-web:/usr/share/nginx/html/social/
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/stadium-cooling-update
+          REMOTE
+
+      - name: Veřejně ověřit všechny kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 35 "$base$ARTICLE_REL?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 35 "$base/?v=$q")"
+          archive="$(curl -4 -kfsS -L --max-time 35 "$base/clanky/?v=$q")"
+          rss="$(curl -4 -kfsS -L --max-time 35 "$base/rss.xml?v=$q")"
+          sitemap="$(curl -4 -kfsS -L --max-time 35 "$base/sitemap.xml?v=$q")"
+          news="$(curl -4 -kfsS -L --max-time 35 "$base/news-sitemap.xml?v=$q")"
+          registry="$(curl -4 -kfsS -L --max-time 35 "$base/data/published-content-index.json?v=$q")"
+          health="$(curl -4 -kfsS -L --max-time 35 "$base/deployment-health.txt?v=$q")"
+
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
+          grep -Fq '8:00–18:00' <<<"$article"
+          grep -Fq 'ze strany od koupaliště' <<<"$article"
+          grep -Fq 'soustředění krasobruslařek' <<<"$article"
+          if grep -Fq "$OLD_TITLE" <<<"$article"; then
+            echo 'Živý článek stále obsahuje starý titulek.' >&2
+            exit 1
+          fi
+          grep -Fq "$EXPECTED_H1" <<<"$home"
+          grep -Fq "$EXPECTED_H1" <<<"$archive"
+          grep -Fq "$EXPECTED_H1" <<<"$rss"
+          grep -Fq "https://nasekadan.cz$ARTICLE_REL" <<<"$sitemap"
+          grep -Fq "$EXPECTED_H1" <<<"$news"
+          grep -Fq "$EXPECTED_H1" <<<"$registry"
+          grep -Fq '"modified_at": "2026-08-04T13:04:00+02:00"' <<<"$registry"
+          grep -Fq '"article_count": ${{ steps.prepare.outputs.article_count }}' <<<"$registry"
+          grep -Fq 'status=ok' <<<"$health"
+          grep -Fq 'source=${{ steps.prepare.outputs.source_sha }}' <<<"$health"
+
+          curl -4 -kfsS -L --max-time 35 "$base/$SOCIAL_FILE?v=$q" -o /tmp/stadium-cooling-update.png
+          test "$(wc -c </tmp/stadium-cooling-update.png)" -gt 10000
+          curl -4 -kfsS -L --max-time 35 "$base/api/pocasi-predpoved.json?v=$q" | python3 -m json.tool >/dev/null
+
+      - name: Uzavřít požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Existující článek byl zásadně aktualizován a veřejně ověřen. Run ${context.runId}, zdrojový commit ${{ steps.prepare.outputs.source_sha }}, článků v registru: ${{ steps.prepare.outputs.article_count }}.`
+            });
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Aktualizace článku selhala. GitHub Actions run: ${context.runId}. Issue zůstává otevřené pro opravu.`
+            });
