@@ -55,14 +55,25 @@ def rss_urls(text: str) -> list[str]:
 
 def registry_entries() -> list[dict]:
     payload = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
-    entries = payload.get("entries")
+    # Aktuální kanonický registr používá pole "articles". Starší verze auditu
+    # pracovaly s polem "entries", proto podporujeme obě schémata, aby změna
+    # názvu klíče nemohla po úspěšném nasazení vyvolat falešný incident.
+    entries = payload.get("articles")
     if not isinstance(entries, list) or not entries:
-        raise RuntimeError("Kanonický registr je prázdný nebo neplatný.")
+        entries = payload.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise RuntimeError(
+            "Kanonický registr je prázdný nebo neplatný; očekává se pole articles nebo entries."
+        )
     return entries
 
 
 def parse_published(entry: dict) -> datetime:
-    value = entry.get("date_published") or entry.get("published")
+    value = (
+        entry.get("published_at")
+        or entry.get("date_published")
+        or entry.get("published")
+    )
     if not value:
         raise RuntimeError(f"V registru chybí datum publikace: {entry}")
     dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -169,9 +180,9 @@ def main() -> int:
             for e in entries
             if (e.get("canonical_url") or e.get("url")) == url
         )
-        expected_title = entry.get("title") or entry.get("headline")
-        if expected_title and h1 != expected_title:
-            raise RuntimeError(f"Neshoda H1 u {url}: {h1!r} != {expected_title!r}")
+        expected_h1 = entry.get("h1") or entry.get("title") or entry.get("headline")
+        if expected_h1 and h1 != expected_h1:
+            raise RuntimeError(f"Neshoda H1 u {url}: {h1!r} != {expected_h1!r}")
         if "noindex" in article.lower():
             raise RuntimeError(f"Publikovaný článek má noindex: {url}")
         checked += 1
