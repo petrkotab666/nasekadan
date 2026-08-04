@@ -1,4 +1,4 @@
-name: Nouzově opravit článek o zákazu odběru vody
+name: Dokončit aktualizaci článku o zákazu odběru vody
 
 on:
   push:
@@ -17,39 +17,74 @@ concurrency:
 jobs:
   repair:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_REL: clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Sjednotit titulku a archiv
+      - name: Sjednotit titulku, archiv a sitemapu
+        shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/enforce_article_visibility.py
-          git config user.name 'Naše Kadaň nouzová oprava'
+          git config user.name 'Naše Kadaň – oprava článku o vodě'
           git config user.email 'info@nasekadan.cz'
-          git add index.html clanky/index.html
-          git commit -m 'Vrátit nejnovější články na titulku a do archivu' || true
-          git pull --rebase origin main
-          git push origin HEAD:main
 
-      - name: Přepsat aktivní Docker i statický adresář
+          for attempt in 1 2 3 4; do
+            python3 scripts/enforce_article_visibility.py
+            git diff --check
+            git add -A -- index.html sitemap.xml clanky
+            if git diff --cached --quiet; then
+              echo 'Vygenerované soubory už jsou aktuální.'
+              break
+            fi
+            git commit -m 'Sjednotit web po aktualizaci článku o zákazu odběru vody'
+            if git push origin HEAD:main; then
+              break
+            fi
+            [[ "$attempt" == 4 ]] && exit 1
+            git fetch origin main
+            git reset --hard origin/main
+            sleep $((attempt * 4))
+          done
+
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/enforce_article_visibility.py
+          git diff --check
+          test -f "$ARTICLE_REL"
+          grep -Fq 'Chomutovské opatření: dalších 11 toků a úseků' "$ARTICLE_REL"
+          grep -Fq 'Prunéřovský potok, říční km 8,700–16,700' "$ARTICLE_REL"
+
+      - name: Nasadit článek a všechny související indexy
         id: deploy
+        shell: bash
         run: |
           set -euo pipefail
           test -n "$SSH_KEY"
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
+
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
           python3 scripts/enforce_article_visibility.py
+          git diff --check
+
+          article='clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          grep -Fq 'Chomutovské opatření: dalších 11 toků a úseků' "$article"
+          grep -Fq 'Prunéřovský potok, říční km 8,700–16,700' "$article"
+
+          sha="$(git rev-parse HEAD)"
+          deployed="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          printf 'source=%s\ndeployed_at=%s\ndeployer=water-article-update\n' "$sha" "$deployed" > deployment-health.txt
 
           cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
           if [[ -z "$cid" ]]; then cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"; fi
@@ -58,11 +93,12 @@ jobs:
           files=(
             index.html
             clanky/index.html
-            clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html
-            clanky/nemocnice-kadan-nove-vedeni-pavel-marek-jiri-vlas.html
+            "$article"
             rss.xml
             sitemap.xml
             news-sitemap.xml
+            llms.txt
+            deployment-health.txt
           )
           for file in "${files[@]}"; do
             test -f "$file"
@@ -72,6 +108,14 @@ jobs:
             sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
           done
 
+          sudo find /var/www/nasekadan/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete
+          sudo docker exec "$cid" sh -c "rm -f /usr/share/nginx/html/clanky/strana-*.html"
+          for file in clanky/strana-*.html; do
+            [[ -e "$file" ]] || continue
+            sudo install -m 0644 "$file" "/var/www/nasekadan/clanky/$(basename "$file")"
+            sudo docker cp "$file" "$cid:/usr/share/nginx/html/clanky/$(basename "$file")"
+          done
+
           if [[ -d social ]]; then
             sudo install -d -m 0755 /var/www/nasekadan/social
             sudo cp -a social/. /var/www/nasekadan/social/
@@ -79,27 +123,39 @@ jobs:
             sudo docker cp social/. "$cid:/usr/share/nginx/html/social/"
           fi
 
-          curl -fsS http://127.0.0.1:3224/clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html | grep -Fq 'Kvůli suchu platí na Kadaňsku zákaz odběru vody'
-          curl -fsS http://127.0.0.1:3224/index.html | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
-          curl -fsS http://127.0.0.1:3224/clanky/index.html | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          curl -fsS "http://127.0.0.1:3224/$article" | grep -Fq 'Prunéřovský potok, říční km 8,700–16,700'
+          curl -fsS http://127.0.0.1:3224/rss.xml | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          curl -fsS http://127.0.0.1:3224/sitemap.xml | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          curl -fsS http://127.0.0.1:3224/news-sitemap.xml | grep -Fq '<urlset'
+          curl -fsS http://127.0.0.1:3224/deployment-health.txt | grep -Fq "source=$sha"
           REMOTE
 
-      - name: Veřejně ověřit opravu
+      - name: Veřejně ověřit článek, RSS, sitemapu a deployment-health
         id: verify
+        shell: bash
         run: |
           set -euo pipefail
-          for n in $(seq 1 20); do
-            article="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html?repair=${GITHUB_SHA}-${n}" || true)"
-            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?repair=${GITHUB_SHA}-${n}" || true)"
-            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?repair=${GITHUB_SHA}-${n}" || true)"
-            if grep -Fq 'Kvůli suchu platí na Kadaňsku zákaz odběru vody' <<<"$article" \
-              && grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html' <<<"$home" \
-              && grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html' <<<"$archive"; then
-              exit 0
+          expected_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          success=false
+          for n in $(seq 1 25); do
+            stamp="${GITHUB_RUN_ID}-${n}-$(date +%s)"
+            article="$(curl -4 -kfsS --max-time 25 "${ARTICLE_URL}?repair=${stamp}" || true)"
+            rss="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/rss.xml?repair=${stamp}" || true)"
+            sitemap="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/sitemap.xml?repair=${stamp}" || true)"
+            news="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/news-sitemap.xml?repair=${stamp}" || true)"
+            health="$(curl -4 -kfsS --max-time 25 "https://nasekadan.cz/deployment-health.txt?repair=${stamp}" || true)"
+            if grep -Fq 'Chomutovské opatření: dalších 11 toků a úseků' <<<"$article" \
+              && grep -Fq 'Prunéřovský potok, říční km 8,700–16,700' <<<"$article" \
+              && grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html' <<<"$rss" \
+              && grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html' <<<"$sitemap" \
+              && grep -Fq '<urlset' <<<"$news" \
+              && grep -Fq "source=$expected_sha" <<<"$health"; then
+              success=true
+              break
             fi
-            sleep 5
+            sleep 6
           done
-          exit 1
+          [[ "$success" == true ]]
 
       - name: Zapsat výsledek opravy
         if: always()
