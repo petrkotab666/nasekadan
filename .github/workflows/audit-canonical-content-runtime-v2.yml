@@ -1,0 +1,120 @@
+name: Audit kanonické evidence článků v2
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: audit-canonical-content-runtime-v2
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[audit] Evidence článků Naše Kadaň v2')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Zapsat spuštění
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Opravený úplný audit byl spuštěn. Run ${context.runId}.`});
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit živý web a opravit evidenční metadata
+        id: audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+            result="$(python3 scripts/run_canonical_audit_runtime_v2.py --write)"
+            echo "$result"
+            git add data/published-content-index.json .github/canonical-content-audit-status.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: opravit auditní stav po 46. článku'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              echo "article_count=$(python3 -c 'import json; print(json.load(open("data/published-content-index.json", encoding="utf-8"))["article_count"])')" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit opravený veřejný registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -f /tmp/published-content-index.json
+          REMOTE
+
+      - name: Znovu veřejně ověřit registr a kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          registry="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q")"
+          grep -Fq '"article_count": ${{ steps.audit.outputs.article_count }}' <<<"$registry"
+          grep -Fq '"deployment_health": "ok"' <<<"$registry" || grep -Fq '"deployment_health": "verified_nonempty"' <<<"$registry"
+          for url in / /clanky/ /rss.xml /sitemap.xml /news-sitemap.xml /deployment-health.txt; do
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz${url}?v=$q" -o /tmp/check
+            test -s /tmp/check
+          done
+
+      - name: Uzavřít požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Audit dokončen. Evidenční nesoulad byl bezpečně opraven a veřejně ověřen. Run ${context.runId}, commit ${{ steps.audit.outputs.source_sha }}, článků: ${{ steps.audit.outputs.article_count }}.`});
+            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Opravený audit selhal. Run ${context.runId}. Issue zůstává otevřené pro opravu.`});
