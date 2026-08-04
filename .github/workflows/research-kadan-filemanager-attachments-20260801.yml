@@ -1,0 +1,117 @@
+name: Hledání příloh rady 26.9.2024
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/research-kadan-filemanager-attachments-20260801.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalovat nástroje
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr tesseract-ocr-ces
+          python3 -m pip install --quiet requests
+      - name: Prohledat veřejný číselný blok filemanageru
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p result/files result/text result/ocr
+          cat > /tmp/scan.py <<'PY'
+          import concurrent.futures, hashlib, json, os, re, subprocess, time, urllib.parse
+          from pathlib import Path
+          import requests
+
+          BASE='https://www.mesto-kadan.cz/filemanager/files/'
+          LO,HI=3893500,3897000
+          OUT=Path('result'); (OUT/'files').mkdir(parents=True,exist_ok=True); (OUT/'text').mkdir(exist_ok=True); (OUT/'ocr').mkdir(exist_ok=True)
+          headers={'User-Agent':'Mozilla/5.0 (compatible; NaseKadan public-document research; +https://nasekadan.cz/)'}
+          terms=[
+            'hossner','nemocnice kadaň','nemocnice kadan','11.11.2016','11. 11. 2016',
+            'dodatek č. 1 k pracovní smlouvě','dodatek c. 1 k pracovni smlouve',
+            'kritéria hodnocení ředitele','kriteria hodnoceni reditele','pobídková část','pobidkova cast',
+            '270 000','270.000','140 000','140.000','souběh funkcí','soubeh funkci'
+          ]
+
+          def probe(fid):
+              url=f'{BASE}{fid}.pdf'
+              try:
+                  r=requests.head(url,headers=headers,timeout=10,allow_redirects=True)
+                  ctype=(r.headers.get('content-type') or '').lower()
+                  clen=int(r.headers.get('content-length') or 0)
+                  disp=r.headers.get('content-disposition') or ''
+                  if r.status_code==200 and ('pdf' in ctype or clen>1000):
+                      return {'id':fid,'url':url,'status':r.status_code,'content_type':ctype,'content_length':clen,'content_disposition':disp,'final_url':r.url}
+              except Exception:
+                  return None
+              return None
+
+          hits=[]
+          with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+              for x in ex.map(probe,range(LO,HI+1),chunksize=20):
+                  if x: hits.append(x)
+          hits.sort(key=lambda x:x['id'])
+          (OUT/'probes.json').write_text(json.dumps(hits,ensure_ascii=False,indent=2),encoding='utf-8')
+          print('PUBLIC_PDF_HITS',len(hits))
+          for h in hits: print('HIT',h)
+
+          findings=[]; downloads=[]
+          for h in hits:
+              # avoid huge unrelated files, but keep metadata
+              if h['content_length'] and h['content_length']>35_000_000: continue
+              try:
+                  r=requests.get(h['url'],headers=headers,timeout=90,allow_redirects=True)
+                  if r.status_code!=200 or not r.content.startswith(b'%PDF'): continue
+                  data=r.content; sha=hashlib.sha256(data).hexdigest()
+                  p=OUT/'files'/f"{h['id']}.pdf"; p.write_bytes(data)
+                  q=subprocess.run(['pdftotext','-layout',str(p),'-'],capture_output=True,text=True,timeout=120)
+                  text=q.stdout or ''; method='pdftotext'
+                  compact=re.sub(r'\s+','',text)
+                  if len(compact)<200:
+                      info=subprocess.run(['pdfinfo',str(p)],capture_output=True,text=True).stdout
+                      m=re.search(r'Pages:\s+(\d+)',info); pages=int(m.group(1)) if m else 1
+                      # A standalone attachment should be short. OCR up to 35 pages.
+                      n=min(pages,35)
+                      d=OUT/'ocr'/str(h['id']); d.mkdir(exist_ok=True)
+                      subprocess.run(['pdftoppm','-f','1','-l',str(n),'-r','150','-jpeg',str(p),str(d/'p')],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=300)
+                      parts=[]
+                      for img in sorted(d.glob('p-*.jpg')):
+                          z=subprocess.run(['tesseract',str(img),'stdout','-l','ces+eng','--psm','6'],capture_output=True,text=True,timeout=90)
+                          parts.append(z.stdout)
+                      ocr='\n'.join(parts)
+                      if len(ocr)>len(text): text=ocr; method='ocr'
+                  tp=OUT/'text'/f"{h['id']}.txt"; tp.write_text(text,encoding='utf-8',errors='replace')
+                  low=text.lower(); found=[t for t in terms if t in low]
+                  rec={**h,'bytes':len(data),'sha256':sha,'pages_text_chars':len(text),'method':method,'terms':found}
+                  downloads.append(rec)
+                  if found:
+                      snippets=[]
+                      for t in found:
+                          i=low.find(t); snippets.append(re.sub(r'\s+',' ',text[max(0,i-600):i+1400]).strip())
+                      findings.append({**rec,'snippets':snippets})
+              except Exception as e:
+                  downloads.append({**h,'error':repr(e)})
+          (OUT/'downloads.json').write_text(json.dumps(downloads,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'findings.json').write_text(json.dumps(findings,ensure_ascii=False,indent=2),encoding='utf-8')
+          lines=['# Výsledek hledání veřejných příloh kolem rady 26. 9. 2024','',f'- Rozsah ID: {LO}–{HI}',f'- Veřejné PDF odpovědi: {len(hits)}',f'- Staženo a přečteno: {len(downloads)}',f'- Obsahové shody: {len(findings)}','']
+          for f in findings:
+              lines += [f"## ID {f['id']}",f"- URL: {f['url']}",f"- Shody: {', '.join(f['terms'])}",f"- Metoda: {f['method']}",'']
+              for s in f['snippets'][:8]: lines += [s,'']
+          (OUT/'README.md').write_text('\n'.join(lines),encoding='utf-8')
+          print('\n'.join(lines))
+          PY
+          python3 /tmp/scan.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kadan-filemanager-attachments-20240926
+          path: result
+          retention-days: 2
