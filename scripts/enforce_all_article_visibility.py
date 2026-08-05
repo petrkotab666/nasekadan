@@ -9,6 +9,7 @@ aby pozdější workflow nemohlo přepsat novější článek starším obsahem.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from html import escape
 import importlib.util
 from pathlib import Path
 import re
@@ -30,6 +31,40 @@ def load_engine():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def ensure_article_sitemap_entries(articles: list[dict]) -> None:
+    """Doplní do sitemap všechny indexovatelné články, které v ní chybějí.
+
+    Základní generátor spravuje stránkování archivu. Tato pojistka navíc
+    zajišťuje, že úplně nová URL článku bude v sitemapě ještě před finální
+    kontrolou. Existující záznamy nemění a nevytváří duplicity.
+    """
+    path = ROOT / "sitemap.xml"
+    text = path.read_text(encoding="utf-8")
+    if "</urlset>" not in text:
+        raise RuntimeError("Sitemap nemá uzavírací značku urlset.")
+
+    additions: list[str] = []
+    for item in articles:
+        absolute = f"https://nasekadan.cz{item['href']}"
+        if absolute in text:
+            continue
+        published = item["dt"]
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        lastmod = published.date().isoformat()
+        additions.append(
+            "  <url><loc>"
+            + escape(absolute)
+            + "</loc><lastmod>"
+            + lastmod
+            + "</lastmod></url>\n"
+        )
+
+    if additions:
+        text = text.replace("</urlset>", "".join(additions) + "</urlset>", 1)
+        path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def main() -> int:
@@ -70,12 +105,18 @@ def main() -> int:
     home = (ROOT / "index.html").read_text(encoding="utf-8")
     latest = all_hrefs[0]
     expected_hero = latest
-    hero = re.search(r'<section\b[^>]*class=["\'][^"\']*\bhero\b[^"\']*["\'][^>]*\bid=["\']clanky["\'][^>]*>.*?</section>', home, re.I | re.S)
+    hero = re.search(
+        r'<section\b[^>]*class=["\'][^"\']*\bhero\b[^"\']*["\'][^>]*\bid=["\']clanky["\'][^>]*>.*?</section>',
+        home,
+        re.I | re.S,
+    )
     if not hero or f'data-latest-article-href="{expected_hero}"' not in hero.group(0):
         raise RuntimeError(f"Titulka nemá očekávaný hlavní článek: {expected_hero}")
 
     expected_home = all_hrefs[: min(engine.HOME_TOTAL, len(all_hrefs))]
-    home_article_area = home.split('<section class="wrap section home-articles">', 1)[-1].split('<section class="wrap promo-wrap"', 1)[0]
+    home_article_area = home.split('<section class="wrap section home-articles">', 1)[-1].split(
+        '<section class="wrap promo-wrap"', 1
+    )[0]
     for href in expected_home:
         if href not in hero.group(0) and href not in home_article_area:
             raise RuntimeError(f"Jeden z nejnovějších článků zmizel z titulky: {href}")
@@ -92,6 +133,7 @@ def main() -> int:
         extra = [href for href in archive_hrefs if href not in all_hrefs]
         raise RuntimeError(f"Archiv není úplný nebo seřazený. Chybí={missing}, navíc={extra}")
 
+    ensure_article_sitemap_entries(articles)
     sitemap = (ROOT / "sitemap.xml").read_text(encoding="utf-8")
     for href in all_hrefs:
         if f"https://nasekadan.cz{href}" not in sitemap:
