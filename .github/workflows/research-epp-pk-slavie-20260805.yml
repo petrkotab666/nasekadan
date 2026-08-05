@@ -1,0 +1,101 @@
+name: Hluboká rešerše EPP – PK Slávie Kadaň
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-research-epp-pk-slavie-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: research-epp-pk-slavie-20260805
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat prohlížečové a síťové nástroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check requests playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Projít dynamický web, síťová data a aplikaci EPP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/research_epp_pk_slavie_20260805.py
+          python3 scripts/research_epp_pk_slavie_20260805.py
+          test -s research/epp-pk-slavie-20260805/report.md
+          test -s research/epp-pk-slavie-20260805/raw-findings.json
+
+      - name: Uložit výsledky do hlavní větve
+        id: save
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – výzkum'
+          git config user.email 'info@nasekadan.cz'
+          cp research/epp-pk-slavie-20260805/report.md "$RUNNER_TEMP/report.md"
+          cp research/epp-pk-slavie-20260805/raw-findings.json "$RUNNER_TEMP/raw-findings.json"
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p research/epp-pk-slavie-20260805
+            cp "$RUNNER_TEMP/report.md" research/epp-pk-slavie-20260805/report.md
+            cp "$RUNNER_TEMP/raw-findings.json" research/epp-pk-slavie-20260805/raw-findings.json
+            git add research/epp-pk-slavie-20260805/report.md research/epp-pk-slavie-20260805/raw-findings.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Výzkum: prověřit neveřejné stopy projektu PK Slávie v EPP'
+            fi
+            result_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "result_sha=$result_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Zapsat dokončení rešerše
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT_SHA: ${{ steps.save.outputs.result_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue_url="$(gh issue create \
+            --title '[research] EPP PK Slávie Kadaň – dokončeno' \
+            --body "Technická rešerše dynamického webu EPP, síťových odpovědí, JavaScriptu a veřejného instalačního balíčku aplikace byla dokončena.\n\nVýsledky: research/epp-pk-slavie-20260805/report.md\nData: research/epp-pk-slavie-20260805/raw-findings.json\nCommit: ${RESULT_SHA}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat konkrétní selhání rešerše
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh issue create \
+            --title '[incident] Rešerše EPP PK Slávie Kadaň' \
+            --body "Technická rešerše dynamického webu nebo instalačního balíčku aplikace selhala.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --assignee petrkotab666 || true
