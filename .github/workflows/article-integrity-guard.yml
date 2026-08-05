@@ -170,7 +170,7 @@ jobs:
 
           def get(url: str) -> str:
               request = Request(url, headers={
-                  'User-Agent': 'Naše Kadaň article order guard/3.0',
+                  'User-Agent': 'NaseKadan-article-order-guard/3.1',
                   'Cache-Control': 'no-cache',
               })
               with urlopen(request, timeout=40) as response:
