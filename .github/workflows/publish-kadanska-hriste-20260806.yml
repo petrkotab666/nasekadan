@@ -58,6 +58,38 @@ jobs:
           assert module.SOCIAL.exists() and module.SOCIAL.stat().st_size > 10000
           print('Předpublikační sestavení je v pořádku.')
           PY
+      - name: Zapsat nezávislý doklad kontroly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/kadanska-hriste-publication-preflight-20260805
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          data={
+            'status':'ok',
+            'checked_at':datetime.now(timezone.utc).isoformat(),
+            'source_commit':os.environ.get('GITHUB_SHA'),
+            'checks':[
+              'python syntax', 'shell syntax', 'article rendering',
+              'required findings present', 'social image generated and over 10 kB'
+            ],
+            'scheduled_publication':'2026-08-06T04:00:00+02:00',
+            'backup_runs':['04:07','04:17','04:32'],
+          }
+          Path('research/kadanska-hriste-publication-preflight-20260805/STATUS.json').write_text(
+            json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň publikační kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add research/kadanska-hriste-publication-preflight-20260805/STATUS.json
+          git commit -m 'Předpublikační kontrola hřišť: OK' || exit 0
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            sleep $((attempt * 4))
+          done
+          exit 1
 
   publish:
     if: github.event_name != 'push'
