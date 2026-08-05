@@ -1,0 +1,184 @@
+name: Hlavička – celý název Naše Kadaň
+
+on:
+  workflow_dispatch:
+  issues:
+    types: [opened, reopened]
+  push:
+    branches: [main]
+    paths:
+      - style.css
+      - index.html
+      - 'clanky/**/*.html'
+      - '.github/workflows/guard-header-brand-visibility.yml'
+  schedule:
+    - cron: '37 */3 * * *'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: header-brand-visibility
+  cancel-in-progress: false
+
+jobs:
+  repair-and-verify:
+    if: >-
+      github.event_name != 'issues' ||
+      (github.actor == 'petrkotab666' && github.event.issue.title == '[repair] Zobrazit celý název Naše Kadaň v hlavičce')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_URL: https://nasekadan.cz/clanky/slovan-druhy-pokus.html
+      MARKER: HEADER-BRAND-VISIBILITY-20260805
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Zajistit viditelný celý název webu
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('style.css')
+          text = path.read_text(encoding='utf-8')
+          marker = 'HEADER-BRAND-VISIBILITY-20260805'
+          rule = '''
+
+/* HEADER-BRAND-VISIBILITY-20260805
+   Inline styly některých článků dědily z tmavé hlavičky bílou barvu,
+   zatímco společný stylesheet změnil pozadí na bílé. Proto bylo slovo
+   NAŠE bílé na bílém. Pravidlo je omezené jen na logo v hlavní hlavičce. */
+.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}
+.head .logo > span:not(.logo-mark) b{color:var(--red,#a9232b)!important}
+'''
+          if marker not in text:
+              text = text.rstrip() + rule + '\n'
+              path.write_text(text, encoding='utf-8', newline='\n')
+              print('changed=true')
+          else:
+              print('changed=false')
+
+          updated = path.read_text(encoding='utf-8')
+          assert updated.count(marker) == 1, 'Pojistka musí být právě jednou.'
+          assert '.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}' in updated
+          PY
+
+          changed=false
+          if ! git diff --quiet -- style.css; then changed=true; fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          failures=[]
+          for path in [Path('index.html'), *Path('clanky').glob('*.html')]:
+              text=path.read_text(encoding='utf-8', errors='replace')
+              if 'data-site-header="v1"' not in text:
+                  continue
+              if not re.search(r'<a[^>]+class="[^"]*logo[^"]*"[^>]*>.*?<span[^>]+class="logo-mark"[^>]*>.*?</span>\s*<span>NAŠE\s*<b>KADAŇ</b></span>', text, re.I|re.S):
+                  failures.append(str(path))
+          if failures:
+              raise SystemExit('Neúplný název v hlavičce: ' + ', '.join(failures[:20]))
+          print('Zdrojové hlavičky obsahují celý název Naše Kadaň.')
+          PY
+
+      - name: Uložit opravu do main
+        if: steps.patch.outputs.changed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – pojistka hlavičky'
+          git config user.email 'info@nasekadan.cz'
+          git add style.css
+          git commit -m 'Opravit viditelnost celého názvu Naše Kadaň'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then pushed=1; break; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit společný styl na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 style.css ubuntu@57.129.43.215:/tmp/nasekadan-style-header-fix.css
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/nasekadan-style-header-fix.css
+          grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' "$src"
+          sudo install -m 0644 "$src" /var/www/nasekadan/style.css
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp "$src" nasekadan-web:/usr/share/nginx/html/style.css
+            sudo docker exec nasekadan-web grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /usr/share/nginx/html/style.css
+          fi
+          rm -f "$src"
+          REMOTE
+
+      - name: Veřejně ověřit hlavičku a CSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in 1 2 3 4 5 6; do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
+            curl -4 -kfsS -L --max-time 35 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            if grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /tmp/style.css \
+              && grep -Eq '<span>NAŠE[[:space:]]*<b>KADAŇ</b></span>' /tmp/article.html \
+              && grep -Fq '.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}' /tmp/style.css; then
+              ok=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít opravný požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Celý název Naše Kadaň je opraven ve společném CSS, nasazen na OVH a veřejně ověřen na článku o Slovanu. Kontrolní běh: ${context.runId}.`
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Oprava hlavičky nebo veřejná kontrola selhala. Kontrolní běh: ${context.runId}.`
+            });
