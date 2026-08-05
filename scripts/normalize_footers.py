@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_PARTS = {".git", ".github", ".image-parts", "lms-rescue", "node_modules"}
-FOOTER_STYLESHEET = '<link rel="stylesheet" href="/footer.css?v=20260726-event-hotfix-2">'
+FOOTER_STYLESHEET = '<link rel="stylesheet" href="/footer.css?v=20260805-event-hotfix-3">'
 
 FOOTER = '''<footer class="site-footer" data-site-footer="v1">
   <div class="wrap footer-grid">
