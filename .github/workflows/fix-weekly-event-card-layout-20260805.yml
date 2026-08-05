@@ -42,6 +42,24 @@ jobs:
               text = text.replace('</head>', css + '</head>', 1)
               article.write_text(text, encoding='utf-8')
 
+          footer = Path('footer.css')
+          footer_text = footer.read_text(encoding='utf-8')
+          footer_text = footer_text.replace(
+              'main.article-shell article.article > section.event',
+              'main.article-shell article.article > .event',
+          )
+          footer.write_text(footer_text, encoding='utf-8')
+
+          normalizer = Path('scripts/normalize_footers.py')
+          normalizer_text = normalizer.read_text(encoding='utf-8')
+          old_footer_version = 'footer.css?v=20260726-event-hotfix-2'
+          new_footer_version = 'footer.css?v=20260805-event-hotfix-3'
+          if old_footer_version in normalizer_text:
+              normalizer_text = normalizer_text.replace(old_footer_version, new_footer_version)
+              normalizer.write_text(normalizer_text, encoding='utf-8')
+          elif new_footer_version not in normalizer_text:
+              raise SystemExit('V normalizátoru nebyla nalezena očekávaná verze footer.css.')
+
           dockerfile = Path('Dockerfile')
           docker = dockerfile.read_text(encoding='utf-8')
           old = 'style.css?v=20260726-event-layout-1'
@@ -53,7 +71,7 @@ jobs:
               raise SystemExit('V Dockerfile nebyla nalezena očekávaná verze CSS.')
 
           trigger = Path('.github/water-selfhosted-trigger.txt')
-          trigger.write_text('weekly-event-layout-hotfix=2026-08-05T22:18:00+02:00\n', encoding='utf-8')
+          trigger.write_text('weekly-event-layout-hotfix=2026-08-05T22:21:00+02:00\n', encoding='utf-8')
           PY
 
       - name: Ověřit opravu
@@ -62,6 +80,9 @@ jobs:
           set -euo pipefail
           grep -Fq 'data-weekly-event-layout-hotfix="20260805"' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
           grep -Fq '.article-shell .article > .event{display:block!important' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+          grep -Fq 'main.article-shell article.article > .event' footer.css
+          ! grep -Fq 'main.article-shell article.article > section.event' footer.css
+          grep -Fq 'footer.css?v=20260805-event-hotfix-3' scripts/normalize_footers.py
           grep -Fq 'style.css?v=20260805-event-layout-2' Dockerfile
           python3 scripts/normalize_articles.py --check
 
@@ -73,6 +94,8 @@ jobs:
           git config user.email 'nasekadan-layout-bot@users.noreply.github.com'
           git add \
             clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html \
+            footer.css \
+            scripts/normalize_footers.py \
             Dockerfile \
             .github/water-selfhosted-trigger.txt
           if git diff --cached --quiet; then
