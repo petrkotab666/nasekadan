@@ -17,6 +17,7 @@ concurrency:
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  PYTHONDONTWRITEBYTECODE: '1'
 
 jobs:
   apply:
@@ -37,10 +38,16 @@ jobs:
           for attempt in 1 2 3 4; do
             git fetch origin main
             git reset --hard origin/main
-            python3 -m py_compile scripts/repair_full_site_findings_20260805.py scripts/full_site_audit_v2_20260805.py
+            python3 - <<'PY'
+          import ast
+          from pathlib import Path
+          for name in ('scripts/repair_full_site_findings_20260805.py','scripts/full_site_audit_v2_20260805.py'):
+              ast.parse(Path(name).read_text(encoding='utf-8'), filename=name)
+          PY
             python3 scripts/repair_full_site_findings_20260805.py
             python3 scripts/full_site_audit_v2_20260805.py --static --static-report /tmp/full-site-source-v2.json
-            git add -A
+            find scripts -type d -name __pycache__ -prune -exec rm -rf {} +
+            git add -A -- ':!.github/workflows'
             if ! git diff --cached --quiet; then
               git commit -m 'Aplikovat ověřené opravy úplného auditu v2'
             fi
@@ -57,6 +64,7 @@ jobs:
         run: |
           issue_url="$(gh issue create --title '[repair] Zdroj celého webu opraven a auditován v2 – success' --body "Ověřené opravy byly zapsány do main a statický audit v2 prošel bez blokující chyby.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666)"
           gh issue close "${issue_url##*/}" --reason completed
+          gh issue close 726 --reason completed || true
 
       - name: Zapsat selhání
         if: failure()
