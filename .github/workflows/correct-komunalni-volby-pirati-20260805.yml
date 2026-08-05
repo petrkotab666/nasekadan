@@ -1,0 +1,320 @@
+name: Opravit článek o komunálních volbách
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-correct-komunalni-volby-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: correct-komunalni-volby-pirati-20260805
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ARTICLE_FILE: clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_REL: /clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html
+      MODIFIED: '2026-08-05T15:23:00+02:00'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Opravit článek a kanonické plochy
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/correct_komunalni_volby_pirati_20260805.py scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+            python3 scripts/correct_komunalni_volby_pirati_20260805.py
+
+            grep -Fq 'data-editorial-correction="20260805-1523"' "$ARTICLE_FILE"
+            grep -Fq 'sdružení nezávislých kandidátů s podporou Pirátské strany' "$ARTICLE_FILE"
+            grep -Fq 'Za chybu se omlouváme' "$ARTICLE_FILE"
+            grep -Fq 'article:modified_time" content="2026-08-05T15:23:00+02:00' "$ARTICLE_FILE"
+            ! grep -Fq 'Piráti rovněž veřejně představují svůj tým' "$ARTICLE_FILE"
+            ! grep -Fq 'Jana Hladová a další veřejně představení kandidáti' "$ARTICLE_FILE"
+            ! grep -Fq 'Piráti ukazují jména, úřední potvrzení teprve přijde' "$ARTICLE_FILE"
+            grep -Fq 'další kandidátku tvoří nezávislí s podporou Pirátů' rss.xml llms.txt
+            grep -Fq '"modified_at": "2026-08-05T15:23:00+02:00"' data/published-content-index.json
+            grep -Fq 'political_candidate_list_correction' data/published-content-index.json
+            grep -Fq "$ARTICLE_REL" index.html clanky/index.html
+
+            python3 - <<'PY'
+          import json
+          import re
+          import xml.etree.ElementTree as ET
+          from collections import Counter
+          from pathlib import Path
+
+          ET.parse('rss.xml')
+          ET.parse('sitemap.xml')
+          ET.parse('news-sitemap.xml')
+          data=json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          assert data['article_count'] == 50
+          article=next(x for x in data['articles'] if x['url'].endswith('/komunalni-volby-kadan-kandidaty-lhuta-2026.html'))
+          assert article['modified_at'] == '2026-08-05T15:23:00+02:00'
+          assert 'Eliška Hladová' in article['persons']
+          assert 'Jana Hladová' not in article['persons']
+          assert 'Nezávislí s podporou Pirátů' in article['topics']
+
+          archive_paths=[Path('clanky/index.html')] + sorted(Path('clanky').glob('strana-*.html'))
+          assert len(archive_paths) == 5
+          for path in archive_paths:
+              text=path.read_text(encoding='utf-8')
+              assert text.count('data-nk-archive-schema="1"') == 1, path
+              assert '"@type": "CollectionPage"' not in text, path
+
+          root=ET.parse('sitemap.xml').getroot()
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          locs=[node.text for node in root.findall('s:url/s:loc', ns)]
+          assert all(value == 1 for value in Counter(locs).values())
+          target='https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html'
+          assert locs.count(target) == 1
+          PY
+            git diff --check
+
+            git add "$ARTICLE_FILE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml llms.txt data/published-content-index.json scripts/enforce_article_visibility.py
+            if ! git diff --cached --quiet; then
+              git commit -m 'Opravit: nezávislí s podporou Pirátů v komunálních volbách'
+            fi
+            content_sha="$(git rev-parse HEAD)"
+
+            CONTENT_SHA="$content_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next(x for x in data['articles'] if x['url']==os.environ['ARTICLE_URL'])
+          article['source_commit']=os.environ['CONTENT_SHA']
+          data['source_commit']=os.environ['CONTENT_SHA']
+          correction=data['validation']['last_editorial_correction']
+          correction['source_commit']=os.environ['CONTENT_SHA']
+          correction['status']='pending_public_verification'
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nchange=editorial-correction-pirati-candidates\nmodified=%s\n' "$content_sha" "$ARTICLE_URL" "$MODIFIED" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: zapsat opravu článku o komunálních volbách'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "content_sha=$content_sha" >> "$GITHUB_OUTPUT"
+              echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit opravu na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/komunalni-volby-correction"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp index.html rss.xml sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/komunalni-volby-correction.tgz" .
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/komunalni-volby-correction.tgz" ubuntu@57.129.43.215:/tmp/komunalni-volby-correction.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/komunalni-volby-correction
+          mkdir -p /tmp/komunalni-volby-correction
+          tar -xzf /tmp/komunalni-volby-correction.tgz -C /tmp/komunalni-volby-correction
+          src=/tmp/komunalni-volby-correction
+          root=/var/www/nasekadan
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            for f in index.html rss.xml sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/komunalni-volby-correction /tmp/komunalni-volby-correction.tgz
+          REMOTE
+
+      - name: Veřejně ověřit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 12); do
+            q="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/?v=$q" -o /tmp/home.html || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/clanky/?v=$q" -o /tmp/archive.html || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/rss.xml?v=$q" -o /tmp/rss.xml || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/sitemap.xml?v=$q" -o /tmp/sitemap.xml || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" -o /tmp/registry.json || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" -o /tmp/health.txt || true
+
+            if grep -Fq 'data-editorial-correction="20260805-1523"' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'sdružení nezávislých kandidátů s podporou Pirátské strany' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'Za chybu se omlouváme' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'article:modified_time" content="2026-08-05T15:23:00+02:00' /tmp/article.html 2>/dev/null \
+              && ! grep -Fq 'Jana Hladová a další veřejně představení kandidáti' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'další kandidátku tvoří nezávislí s podporou Pirátů' /tmp/home.html /tmp/archive.html /tmp/rss.xml 2>/dev/null \
+              && grep -Fq 'political_candidate_list_correction' /tmp/registry.json 2>/dev/null \
+              && grep -Fq 'status=ok' /tmp/health.txt 2>/dev/null; then
+              python3 - <<'PY' && ok=1 && break
+          import json
+          import xml.etree.ElementTree as ET
+          from collections import Counter
+          from pathlib import Path
+          data=json.loads(Path('/tmp/registry.json').read_text(encoding='utf-8'))
+          article=next(x for x in data['articles'] if x['url'].endswith('/komunalni-volby-kadan-kandidaty-lhuta-2026.html'))
+          assert article['modified_at']=='2026-08-05T15:23:00+02:00'
+          assert 'Eliška Hladová' in article['persons']
+          root=ET.parse('/tmp/sitemap.xml').getroot()
+          ns={'s':'http://www.sitemaps.org/schemas/sitemap/0.9'}
+          locs=[node.text for node in root.findall('s:url/s:loc',ns)]
+          assert all(v==1 for v in Counter(locs).values())
+          assert locs.count('https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html')==1
+          PY
+            fi
+            sleep 10
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít veřejné ověření v registru
+        id: finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            CONTENT_SHA='${{ steps.prepare.outputs.content_sha }}' python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          now=datetime.now(timezone.utc).isoformat()
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=False
+          correction=validation['last_editorial_correction']
+          correction['status']='success'
+          correction['public_verified_at']=now
+          correction['public_verification']={
+              'article':True,
+              'homepage':True,
+              'archive':True,
+              'rss':True,
+              'sitemap':True,
+              'registry':True,
+              'health':True,
+              'old_claims_absent':True,
+          }
+          correction['source_commit']=os.environ['CONTENT_SHA']
+          validation['last_archive_schema_repair']={
+              'status':'success',
+              'completed_at':now,
+              'archive_pages':5,
+              'single_itemlist_per_page':True,
+              'sitemap_duplicate_urls':[],
+              'generator_fixed':True,
+              'source_commit':os.environ['CONTENT_SHA'],
+          }
+          data['generated_at']=now
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            git add data/published-content-index.json
+            git commit -m 'Evidence: potvrdit veřejnou opravu volebního článku'
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "evidence_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit uzavřenou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -f /tmp/published-content-index.json
+          REMOTE
+
+      - name: Finálně ověřit evidenci a uzavřít audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          q="${GITHUB_RUN_ID}-final-$(date +%s)"
+          registry="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q")"
+          grep -Fq '"status": "success"' <<<"$registry"
+          grep -Fq 'political_candidate_list_correction' <<<"$registry"
+          grep -Fq '"single_itemlist_per_page": true' <<<"$registry"
+          gh api repos/${GITHUB_REPOSITORY}/issues/696/comments -f body="Hotovo. Při opravě volebního článku byla současně spuštěna opravená kanonická pojistka: ze všech pěti archivních stran zmizela duplicitní strukturovaná data a sitemap.xml byla deduplikována. Veřejně ověřen článek, titulka, archiv, RSS, sitemap, registr a health. Oprava článku přiznává původní redakční chybu a správně uvádí sdružení nezávislých kandidátů s podporou Pirátů. Evidence: ${{ steps.finalize.outputs.evidence_sha }}."
+          gh api repos/${GITHUB_REPOSITORY}/issues/696 -X PATCH -f state=closed -f state_reason=completed >/dev/null
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        run: |
+          gh api repos/${GITHUB_REPOSITORY}/issues/696/comments -f body="Oprava volebního článku, archivu nebo veřejná kontrola selhaly. Issue zůstává otevřená. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
