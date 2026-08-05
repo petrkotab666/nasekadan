@@ -1,0 +1,175 @@
+name: Ověřit zdroj e-Mostecko u článku o jezeře Most
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-verify-jezero-most-emostecko-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: verify-jezero-most-emostecko-20260805
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE_URL: https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit živý článek a nasazené podklady s čekáním na cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 12); do
+            q="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${attempt}-$(date +%s)"
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" -o /tmp/registry.json || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" -o /tmp/health.txt || true
+
+            if grep -Fq 'e-Mostecko – Na jezeře Most pokračuje rozsáhlá pátrací akce' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'data-source-enrichment="emostecko-20260805"' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'article:published_time" content="2026-08-05T10:50:00+02:00' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'article:modified_time" content="2026-08-05T10:50:00+02:00' /tmp/article.html 2>/dev/null \
+              && grep -Fq '"modified_at": "2026-08-05T10:50:00+02:00"' /tmp/registry.json 2>/dev/null \
+              && grep -Fq 'supporting_source_published_before_article' /tmp/registry.json 2>/dev/null \
+              && grep -Fq 'change=source-enrichment-only' /tmp/health.txt 2>/dev/null; then
+              ok=1
+              break
+            fi
+
+            echo "Veřejná kontrola zatím neprošla (${attempt}/12)."
+            echo "article-source=$(grep -Fc 'e-Mostecko – Na jezeře Most pokračuje rozsáhlá pátrací akce' /tmp/article.html 2>/dev/null || true)"
+            echo "article-marker=$(grep -Fc 'data-source-enrichment="emostecko-20260805"' /tmp/article.html 2>/dev/null || true)"
+            echo "registry-class=$(grep -Fc 'supporting_source_published_before_article' /tmp/registry.json 2>/dev/null || true)"
+            echo "health-change=$(grep -Fc 'change=source-enrichment-only' /tmp/health.txt 2>/dev/null || true)"
+            sleep 10
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít veřejné ověření v registru
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          saved=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next((x for x in data.get('articles',[]) if x.get('url')==os.environ['ARTICLE_URL']),None)
+          if article is None:
+              raise SystemExit('Článek chybí v registru.')
+          now=datetime.now(timezone.utc).isoformat()
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=False
+          enrichment=validation.setdefault('last_source_enrichment',{})
+          enrichment['status']='success'
+          enrichment['public_verified_at']=now
+          enrichment['public_verification_method']='live-article-registry-health-retry-check'
+          enrichment['content_update_required']=False
+          validation['public_audit_at']=now
+          data['generated_at']=now
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nchange=source-enrichment-only\nverified=true\n' "$(git rev-parse HEAD)" "$ARTICLE_URL" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: potvrdit zdroj e-Mostecko na veřejném webu'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              saved=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$saved" = 1
+
+      - name: Nasadit uzavřenou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json deployment-health.txt ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 "$root/data"
+          sudo install -m 0644 /tmp/published-content-index.json "$root/data/published-content-index.json"
+          sudo install -m 0644 /tmp/deployment-health.txt "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Finálně ověřit uzavřenou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 10); do
+            q="${GITHUB_RUN_ID}-final-${attempt}-$(date +%s)"
+            registry="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+            if grep -Fq '"status": "success"' <<<"$registry" \
+              && grep -Fq 'live-article-registry-health-retry-check' <<<"$registry" \
+              && grep -Fq 'verified=true' <<<"$health"; then
+              ok=1
+              break
+            fi
+            sleep 8
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít monitoringový nález
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/${GITHUB_REPOSITORY}/issues/692/comments -f body="e-Mostecko bylo doplněno jako další potvrzující zdroj do stávajícího článku. Veřejně ověřeno, že článek zdroj obsahuje a že čas vydání i datum obsahové změny zůstaly 10:50, protože e-Mostecko publikovalo už v 8:15. Registr a deployment-health jsou uzavřeny jako úspěšné. Commit: ${{ steps.evidence.outputs.source_sha }}."
+          gh api repos/${GITHUB_REPOSITORY}/issues/692 -X PATCH -f state=closed -f state_reason=completed >/dev/null
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        run: |
+          gh api repos/${GITHUB_REPOSITORY}/issues/692/comments -f body="Finální veřejné ověření doplnění zdroje e-Mostecko selhalo. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
