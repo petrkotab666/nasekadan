@@ -1,0 +1,279 @@
+name: Reklamy na vlastní weby – oprava a pojistka
+
+on:
+  workflow_dispatch:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: owned-sites-ads-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-deploy-verify:
+    if: >-
+      github.event_name != 'issues' ||
+      github.event.issue.title == '[repair] Zobrazit naše weby v článcích'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_URL: https://nasekadan.cz/clanky/slovan-druhy-pokus.html
+      VERSION: 20260805-owned-sites-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit skryté sloty a vložit garantované reklamy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          version = '20260805-owned-sites-1'
+          marker = 'OWNED-SITES-GUARANTEED-V1'
+
+          footer = Path('footer.css')
+          css = footer.read_text(encoding='utf-8')
+          old_hide = "main.article-shell [data-promos],\nmain.article-shell .article-ad-auto{display:none!important}"
+          new_hide = "main.article-shell:has(.static-article-ads) [data-promos],\nmain.article-shell:has(.static-article-ads) .article-ad-auto{display:none!important}"
+          if old_hide in css:
+              css = css.replace(old_hide, new_hide)
+          elif new_hide not in css:
+              raise SystemExit('Nenalezeno očekávané pravidlo pro reklamní sloty.')
+
+          owned_css = r'''
+
+/* OWNED-SITES-GUARANTEED-V1: vlastní weby jsou v článcích vždy viditelné,
+   partnerské affiliate reklamy zůstávají v samostatné rotaci. */
+.owned-sites-guaranteed{margin:34px 0;padding:22px;border:1px solid #d8e0e4;border-radius:20px;background:#f7f9fa;box-shadow:0 12px 32px rgba(18,35,45,.08)}
+.owned-sites-guaranteed__label{display:block;margin:0 0 14px;color:#707d84;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase}
+.owned-sites-guaranteed__title{margin:0 0 16px!important;font:800 25px/1.2 Georgia,serif!important;color:#172832}
+.owned-sites-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.owned-site-card{display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #dce3e6;border-radius:15px;background:#fff;color:#172832!important;text-decoration:none!important;box-shadow:0 8px 22px rgba(18,35,45,.07);transition:transform .15s ease,box-shadow .15s ease}
+.owned-site-card:hover{transform:translateY(-2px);box-shadow:0 13px 28px rgba(18,35,45,.12)}
+.owned-site-card img{display:block;width:100%;height:auto;aspect-ratio:16/5;object-fit:contain;background:#fff;border-bottom:1px solid #e1e6e8}
+.owned-site-card__copy{display:block;padding:13px 15px 15px}
+.owned-site-card__copy strong{display:block;margin:0 0 4px;font:800 19px/1.2 Georgia,serif;color:#172832}
+.owned-site-card__copy span{display:block;color:#586870;font-size:13px;line-height:1.45}
+.owned-site-card__copy b{display:block;margin-top:8px;color:#a9232b;font-size:13px}
+.owned-sites-sidebar{margin:22px 0 0;padding:14px;border:1px solid #d8e0e4;border-radius:18px;background:#f7f9fa;box-shadow:0 10px 26px rgba(18,35,45,.08)}
+.owned-sites-sidebar .owned-sites-guaranteed__title{font-size:22px!important;margin-bottom:12px!important}
+.owned-sites-sidebar .owned-sites-grid{grid-template-columns:1fr;gap:12px}
+.owned-sites-sidebar .owned-site-card img{aspect-ratio:16/5}
+.owned-sites-sidebar .owned-site-card__copy strong{font-size:17px}
+@media(max-width:980px){.owned-sites-sidebar{display:none!important}}
+@media(max-width:680px){.owned-sites-grid{grid-template-columns:1fr}.owned-sites-guaranteed{padding:17px}}
+'''
+          if marker not in css:
+              css = css.rstrip() + owned_css + '\n'
+          footer.write_text(css, encoding='utf-8', newline='\n')
+
+          long_ads = Path('long-article-ads.js')
+          js = long_ads.read_text(encoding='utf-8')
+          injector = r'''
+
+/* OWNED-SITES-GUARANTEED-V1 */
+(()=>{
+  'use strict';
+  const items=[
+    {title:'VašeUklízečka.cz',text:'Úklid domácností, firem, bytových domů, koberců a sedaček na Kadaňsku.',url:'https://vaseuklizecka.cz/',image:'/assets/reklamy/owned-vaseuklizecka-wide.svg'},
+    {title:'VYKLIDIME.TO',text:'Vyklízení bytů, domů, sklepů a pozůstalostí. Odnos, odvoz i úklid.',url:'https://vyklidime.to/',image:'/assets/reklamy/owned-vyklidime-banner-wide.svg'},
+    {title:'RealityKadan.cz',text:'Prodej bytů, domů, garáží a pozemků v Kadani a okolí.',url:'https://realitykadan.cz/',image:'/assets/reklamy/owned-realitykadan-banner-wide.svg'},
+    {title:'Pojistime.to',text:'Pojištění auta, domácnosti, cestování a odpovědnosti na jednom místě.',url:'https://pojistime.to/',image:'/assets/reklamy/owned-pojistime-banner-wide.svg'}
+  ];
+  const card=item=>`<a class="owned-site-card" href="${item.url}" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="${item.image}" alt="${item.title}" loading="lazy" decoding="async"><span class="owned-site-card__copy"><strong>${item.title}</strong><span>${item.text}</span><b>Otevřít web →</b></span></a>`;
+  function mount(){
+    const shell=document.querySelector('main.article-shell');
+    const article=shell?.querySelector('article.article');
+    if(!shell||!article)return;
+    if(!document.getElementById('owned-sites-guaranteed-main')){
+      const section=document.createElement('section');
+      section.id='owned-sites-guaranteed-main';
+      section.className='owned-sites-guaranteed';
+      section.setAttribute('aria-label','Reklama na naše weby a místní služby');
+      section.innerHTML=`<span class="owned-sites-guaranteed__label">Reklama · naše weby</span><h2 class="owned-sites-guaranteed__title">Naše místní služby a projekty</h2><div class="owned-sites-grid">${items.map(card).join('')}</div>`;
+      const anchor=article.querySelector(':scope > .numbers,:scope > .lead,:scope > .leadtext');
+      if(anchor)anchor.after(section);else article.querySelector('h1')?.after(section);
+    }
+    const aside=shell.querySelector('aside.sticky');
+    if(aside&&!document.getElementById('owned-sites-guaranteed-sidebar')){
+      const section=document.createElement('section');
+      section.id='owned-sites-guaranteed-sidebar';
+      section.className='owned-sites-sidebar';
+      section.setAttribute('aria-label','Naše weby v bočním sloupci');
+      section.innerHTML=`<span class="owned-sites-guaranteed__label">Reklama · naše weby</span><h2 class="owned-sites-guaranteed__title">Naše služby</h2><div class="owned-sites-grid">${items.map(card).join('')}</div>`;
+      const dynamic=aside.querySelector(':scope > [data-promos]');
+      if(dynamic)dynamic.before(section);else aside.appendChild(section);
+    }
+    document.documentElement.dataset.ownedSitesAds='v1';
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
+  setTimeout(mount,500);
+  setTimeout(mount,1500);
+})();
+'''
+          if marker not in js:
+              js = js.rstrip() + injector + '\n'
+              long_ads.write_text(js, encoding='utf-8', newline='\n')
+
+          article = Path('clanky/slovan-druhy-pokus.html')
+          html = article.read_text(encoding='utf-8')
+          main_block = '''
+  <!-- OWNED-SITES-GUARANTEED-V1 -->
+  <section id="owned-sites-guaranteed-main" class="owned-sites-guaranteed" aria-label="Reklama na naše weby a místní služby">
+    <span class="owned-sites-guaranteed__label">Reklama · naše weby</span>
+    <h2 class="owned-sites-guaranteed__title">Naše místní služby a projekty</h2>
+    <div class="owned-sites-grid">
+      <a class="owned-site-card" href="https://vaseuklizecka.cz/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-vaseuklizecka-wide.svg" alt="VašeUklízečka.cz" loading="lazy"><span class="owned-site-card__copy"><strong>VašeUklízečka.cz</strong><span>Úklid domácností, firem, bytových domů, koberců a sedaček na Kadaňsku.</span><b>Otevřít web →</b></span></a>
+      <a class="owned-site-card" href="https://vyklidime.to/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-vyklidime-banner-wide.svg" alt="VYKLIDIME.TO" loading="lazy"><span class="owned-site-card__copy"><strong>VYKLIDIME.TO</strong><span>Vyklízení bytů, domů, sklepů a pozůstalostí. Odnos, odvoz i úklid.</span><b>Otevřít web →</b></span></a>
+      <a class="owned-site-card" href="https://realitykadan.cz/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-realitykadan-banner-wide.svg" alt="RealityKadan.cz" loading="lazy"><span class="owned-site-card__copy"><strong>RealityKadan.cz</strong><span>Prodej bytů, domů, garáží a pozemků v Kadani a okolí.</span><b>Otevřít web →</b></span></a>
+      <a class="owned-site-card" href="https://pojistime.to/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-pojistime-banner-wide.svg" alt="Pojistime.to" loading="lazy"><span class="owned-site-card__copy"><strong>Pojistime.to</strong><span>Pojištění auta, domácnosti, cestování a odpovědnosti na jednom místě.</span><b>Otevřít web →</b></span></a>
+    </div>
+  </section>
+'''
+          if 'id="owned-sites-guaranteed-main"' not in html:
+              needle = '  <div class="update"><strong>Co je nové</strong>'
+              if needle not in html:
+                  raise SystemExit('Nenalezeno místo pro hlavní blok vlastních webů.')
+              html = html.replace(needle, main_block + '\n' + needle, 1)
+
+          side_block = '''
+  <section id="owned-sites-guaranteed-sidebar" class="owned-sites-sidebar" aria-label="Naše weby v bočním sloupci">
+    <span class="owned-sites-guaranteed__label">Reklama · naše weby</span>
+    <h2 class="owned-sites-guaranteed__title">Naše služby</h2>
+    <div class="owned-sites-grid">
+      <a class="owned-site-card" href="https://vaseuklizecka.cz/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-vaseuklizecka-wide.svg" alt="VašeUklízečka.cz" loading="lazy"><span class="owned-site-card__copy"><strong>VašeUklízečka.cz</strong><span>Úklid a čištění na Kadaňsku.</span><b>Otevřít web →</b></span></a>
+      <a class="owned-site-card" href="https://vyklidime.to/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-vyklidime-banner-wide.svg" alt="VYKLIDIME.TO" loading="lazy"><span class="owned-site-card__copy"><strong>VYKLIDIME.TO</strong><span>Vyklízení, odnos a odvoz.</span><b>Otevřít web →</b></span></a>
+      <a class="owned-site-card" href="https://realitykadan.cz/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-realitykadan-banner-wide.svg" alt="RealityKadan.cz" loading="lazy"><span class="owned-site-card__copy"><strong>RealityKadan.cz</strong><span>Nemovitosti v Kadani a okolí.</span><b>Otevřít web →</b></span></a>
+      <a class="owned-site-card" href="https://pojistime.to/" target="_blank" rel="nofollow sponsored noopener noreferrer"><img src="/assets/reklamy/owned-pojistime-banner-wide.svg" alt="Pojistime.to" loading="lazy"><span class="owned-site-card__copy"><strong>Pojistime.to</strong><span>Pojištění přehledně na jednom místě.</span><b>Otevřít web →</b></span></a>
+    </div>
+  </section>
+'''
+          if 'id="owned-sites-guaranteed-sidebar"' not in html:
+              needle = '  <div data-promos data-context="sidebar"></div>'
+              if needle not in html:
+                  raise SystemExit('Nenalezen sidebar reklamní slot.')
+              html = html.replace(needle, side_block + '\n' + needle, 1)
+
+          html = re.sub(r'long-article-ads\.js\?v=[^"\']+', f'long-article-ads.js?v={version}', html)
+          html = re.sub(r'footer\.css\?v=[^"\']+', f'footer.css?v={version}', html)
+          article.write_text(html, encoding='utf-8', newline='\n')
+
+          for path in Path('clanky').glob('*.html'):
+              text = path.read_text(encoding='utf-8', errors='replace')
+              changed = re.sub(r'long-article-ads\.js\?v=[^"\']+', f'long-article-ads.js?v={version}', text)
+              changed = re.sub(r'footer\.css\?v=[^"\']+', f'footer.css?v={version}', changed)
+              if changed != text:
+                  path.write_text(changed, encoding='utf-8', newline='\n')
+
+          final_css = footer.read_text(encoding='utf-8')
+          assert marker in final_css
+          assert new_hide in final_css
+          assert old_hide not in final_css
+          final_js = long_ads.read_text(encoding='utf-8')
+          assert marker in final_js
+          final_html = article.read_text(encoding='utf-8')
+          for token in ('owned-sites-guaranteed-main','owned-sites-guaranteed-sidebar','vaseuklizecka.cz','vyklidime.to','realitykadan.cz','pojistime.to',version):
+              assert token in final_html, token
+          print('Garantované reklamy na vlastní weby jsou připravené.')
+          PY
+          git diff --check
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Oprava už je v main.'
+            exit 0
+          fi
+          git config user.name 'Naše Kadaň – pojistka vlastních reklam'
+          git config user.email 'info@nasekadan.cz'
+          git add footer.css long-article-ads.js clanky/
+          git commit -m 'Garantovat reklamy na vlastní weby v článcích'
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then pushed=1; break; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Připravit a nahrát opravené soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          tar -czf "$RUNNER_TEMP/owned-sites-ads.tar.gz" footer.css long-article-ads.js clanky
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/owned-sites-ads.tar.gz" ubuntu@57.129.43.215:/tmp/owned-sites-ads.tar.gz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/owned-sites-ads-stage
+          mkdir -p /tmp/owned-sites-ads-stage
+          tar -xzf /tmp/owned-sites-ads.tar.gz -C /tmp/owned-sites-ads-stage
+          grep -Fq 'OWNED-SITES-GUARANTEED-V1' /tmp/owned-sites-ads-stage/footer.css
+          grep -Fq 'OWNED-SITES-GUARANTEED-V1' /tmp/owned-sites-ads-stage/long-article-ads.js
+          grep -Fq 'owned-sites-guaranteed-main' /tmp/owned-sites-ads-stage/clanky/slovan-druhy-pokus.html
+          sudo tar -xzf /tmp/owned-sites-ads.tar.gz -C /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/owned-sites-ads-stage/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf /tmp/owned-sites-ads-stage /tmp/owned-sites-ads.tar.gz
+          REMOTE
+
+      - name: Veřejně ověřit vlastní weby i affiliate sloty
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/footer.css?v=$q" -o /tmp/footer.css || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/long-article-ads.js?v=$q" -o /tmp/long.js || true
+            if grep -Fq 'owned-sites-guaranteed-main' /tmp/article.html \
+              && grep -Fq 'owned-sites-guaranteed-sidebar' /tmp/article.html \
+              && grep -Fq 'vaseuklizecka.cz' /tmp/article.html \
+              && grep -Fq 'vyklidime.to' /tmp/article.html \
+              && grep -Fq 'realitykadan.cz' /tmp/article.html \
+              && grep -Fq 'pojistime.to' /tmp/article.html \
+              && grep -Fq 'OWNED-SITES-GUARANTEED-V1' /tmp/footer.css \
+              && grep -Fq 'OWNED-SITES-GUARANTEED-V1' /tmp/long.js \
+              && grep -Fq 'main.article-shell:has(.static-article-ads) [data-promos]' /tmp/footer.css; then
+              ok=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít opravný požadavek
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`Reklamy na VašeUklízečka.cz, VYKLIDIME.TO, RealityKadan.cz a Pojistime.to jsou nyní napevno vložené v článku i v pravém sloupci. Affiliate reklamy zůstaly v samostatné rotaci. Veřejná kontrola proběhla v běhu ${context.runId}.`});
+            await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
+
+      - name: Zapsat selhání
+        if: failure() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`Oprava vlastních reklam nebo veřejné ověření selhalo. Kontrolní běh: ${context.runId}.`});
