@@ -9,6 +9,7 @@ replacements = {
     "r'href=[\\\"'](/clanky/strana-\\d+\\.html)[\\\"']'": "r\"href=[\\\"'](/clanky/strana-\\d+\\.html)[\\\"']\"",
     "r'<a\\b[^>]*class=[\\\"'][^\\\"']*\\bread-more\\b[^\\\"']*[\\\"'][^>]*href=[\\\"']([^\\\"']+)'": "r\"<a\\b[^>]*class=[\\\"'][^\\\"']*\\bread-more\\b[^\\\"']*[\\\"'][^>]*href=[\\\"']([^\\\"']+)\"",
     "r'href=[\\\"']([^\\\"']+)'": "r\"href=[\\\"']([^\\\"']+)\"",
+    "r'<article\\b[^>]*class=[\\\"'][^\\\"']*\\barticle-card\\b[^\\\"']*[\\\"'][^>]*>.*?</article>'": "r\"<article\\b[^>]*class=[\\\"'][^\\\"']*\\barticle-card\\b[^\\\"']*[\\\"'][^>]*>.*?</article>\"",
 }
 for old, new in replacements.items():
     text = text.replace(old, new)
