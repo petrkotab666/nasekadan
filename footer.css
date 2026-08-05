@@ -77,16 +77,16 @@ footer.site-footer .footer-legal a{
 }
 
 /* Kritická izolace prvků uvnitř článku od stejnojmenných karet na titulní stránce. */
-main.article-shell article.article > section.event{
+main.article-shell article.article > .event{
   display:block!important;
   grid-template-columns:none!important;
   gap:0!important;
   min-height:0!important;
   width:100%!important;
 }
-main.article-shell article.article > section.event > time,
-main.article-shell article.article > section.event > h3,
-main.article-shell article.article > section.event > p{
+main.article-shell article.article > .event > time,
+main.article-shell article.article > .event > h3,
+main.article-shell article.article > .event > p{
   display:block!important;
   grid-column:auto!important;
   width:100%!important;
@@ -96,7 +96,7 @@ main.article-shell article.article > section.event > p{
   word-break:normal!important;
   white-space:normal!important;
 }
-main.article-shell article.article > section.event > time{
+main.article-shell article.article > .event > time{
   display:inline-block!important;
   width:auto!important;
 }
