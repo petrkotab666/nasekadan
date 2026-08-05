@@ -1,0 +1,85 @@
+name: Připojit volby.cz do centrálního monitoringu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-volby-source-20260805.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: add-volby-source-20260805
+  cancel-in-progress: false
+
+jobs:
+  add-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Načíst aktuální hlavní větev
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Přidat volby.cz do kanonického registru
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('data/city-sources.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          sources = data.setdefault('sources', [])
+
+          required = [
+              {
+                  'name': 'Volby.cz – oficiální volební výsledky a kandidáti',
+                  'url': 'https://www.volby.cz/',
+                  'category': 'Volby a veřejná správa',
+              },
+              {
+                  'name': 'Volby.cz – otevřená data komunálních voleb',
+                  'url': 'https://www.volby.cz/opendata/',
+                  'category': 'Volby a otevřená data',
+              },
+          ]
+
+          existing_urls = {str(item.get('url', '')).rstrip('/') for item in sources}
+          changed = False
+          for item in required:
+              key = item['url'].rstrip('/')
+              if key not in existing_urls:
+                  sources.append(item)
+                  existing_urls.add(key)
+                  changed = True
+
+          if changed:
+              data['updatedAt'] = '2026-08-05'
+              path.write_text(
+                  json.dumps(data, ensure_ascii=False, indent=2) + '\n',
+                  encoding='utf-8',
+              )
+          PY
+
+      - name: Ověřit registr a uložit změnu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool data/city-sources.json >/dev/null
+          grep -F 'https://www.volby.cz/' data/city-sources.json >/dev/null
+          grep -F 'https://www.volby.cz/opendata/' data/city-sources.json >/dev/null
+          if git diff --quiet -- data/city-sources.json; then
+            echo 'Volby.cz už jsou v registru.'
+            exit 0
+          fi
+          git config user.name 'nasekadan-monitor-bot'
+          git config user.email 'nasekadan-monitor-bot@users.noreply.github.com'
+          git add data/city-sources.json
+          git commit -m 'monitoring: přidat volby.cz mezi povinné zdroje'
+          git push origin HEAD:main
