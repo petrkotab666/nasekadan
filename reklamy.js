@@ -1,4 +1,22 @@
 const promoItems=[
+/* ACTIVE_PROMOTIONS_START */
+  {id:'season-concept-fans',title:'Vedro? Ventilátory Concept',text:'Stolní, stojanové i sloupové ventilátory pro rychlejší proudění vzduchu.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html',banner:'/assets/reklamy/season-concept-fans-square.svg',wideBanner:'/assets/reklamy/season-concept-fans-wide.svg',tag:'Vedro a ochlazení',contexts:['home', 'local', 'sidebar', 'general', 'health'],weight:12,fullBleed:true,validTo:'2026-09-15'},
+  {id:'season-proalergiky-aircon',title:'Mobilní klimatizace Meaco Cool',text:'Chlazení, ventilace, odvlhčování a ovládání přes mobilní aplikaci.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=abc25217&desturl=https%3A%2F%2Fwww.proalergiky.cz%2Feshop%2Fmobilni-klimatizace-meaco-cool-9000-pro',banner:'/assets/reklamy/season-proalergiky-aircon-square.svg',wideBanner:'/assets/reklamy/season-proalergiky-aircon-wide.svg',tag:'Klimatizace',contexts:['home', 'local', 'sidebar', 'general', 'health'],weight:11,fullBleed:true,validTo:'2026-09-15'},
+  {id:'owned-vaseuklizecka',title:'VašeUklízečka.cz',text:'Úklid domácností, firem, bytových domů, koberců a sedaček na Kadaňsku.',url:'https://vaseuklizecka.cz/',banner:'/assets/reklamy/owned-vaseuklizecka-square.svg',wideBanner:'/assets/reklamy/owned-vaseuklizecka-wide.svg',tag:'Naše místní služba',contexts:['home', 'local', 'sidebar', 'general', 'health'],weight:8,fullBleed:true},
+  {id:'owned-vyklidime-banner',title:'VYKLIDIME.TO',text:'Vyklízení bytů, domů, sklepů a pozůstalostí. Odnos, odvoz i úklid.',url:'https://vyklidime.to/',banner:'/assets/reklamy/owned-vyklidime-banner-square.svg',wideBanner:'/assets/reklamy/owned-vyklidime-banner-wide.svg',tag:'Naše místní služba',contexts:['home', 'local', 'sidebar', 'general'],weight:8,fullBleed:true},
+  {id:'owned-pojistime-banner',title:'Pojistime.to',text:'Pojištění auta, domácnosti, cestování, odpovědnosti i další možnosti na jednom místě.',url:'https://pojistime.to/',banner:'/assets/reklamy/owned-pojistime-banner-square.svg',wideBanner:'/assets/reklamy/owned-pojistime-banner-wide.svg',tag:'Náš web',contexts:['finance', 'auto', 'home', 'travel', 'sidebar', 'general'],weight:6,fullBleed:true},
+  {id:'coupon-concept-leto30',title:'Concept: 30 % na malé spotřebiče',text:'Kupón LETO30 na vybrané malé spotřebiče v letním úklidu skladu. Platí do 31. srpna.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&desturl=https%3A%2F%2Fwww.concept.cz%2F',banner:'/assets/reklamy/coupon-concept-leto30-square.svg',wideBanner:'/assets/reklamy/coupon-concept-leto30-wide.svg',tag:'Kupón LETO30',contexts:['home', 'sidebar', 'general', 'local'],weight:10,fullBleed:true,validTo:'2026-08-31'},
+  {id:'coupon-concept-vyprodej30',title:'Concept: 30 % na velké spotřebiče',text:'Kupón VYPRODEJ30 na vybrané velké spotřebiče. Platí do 31. srpna.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&desturl=https%3A%2F%2Fwww.concept.cz%2F',banner:'/assets/reklamy/coupon-concept-vyprodej30-square.svg',wideBanner:'/assets/reklamy/coupon-concept-vyprodej30-wide.svg',tag:'Kupón VYPRODEJ30',contexts:['home', 'sidebar', 'general', 'local'],weight:10,fullBleed:true,validTo:'2026-08-31'},
+  {id:'coupon-ariete-italy',title:'Ariete: 25 % na kompletní sortiment',text:'Slevový kód ITALY platí na kompletní sortiment Ariete.cz do konce roku 2026.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=ffcf2387&desturl=https%3A%2F%2Fwww.ariete.cz%2F',banner:'/assets/reklamy/coupon-ariete-italy-square.svg',wideBanner:'/assets/reklamy/coupon-ariete-italy-wide.svg',tag:'Kupón ITALY',contexts:['home', 'sidebar', 'general'],weight:7,fullBleed:true,validTo:'2026-12-31'},
+  {id:'promo-aranys-80',title:'Aranys: výprodej se slevami až 80 %',text:'Výprodej vybraných produktů Aranys.cz se slevami až 80 %.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=15991a3f&desturl=https%3A%2F%2Faranys.cz%2Fakce-slevy',banner:'/assets/reklamy/promo-aranys-80-square.svg',wideBanner:'/assets/reklamy/promo-aranys-80-wide.svg',tag:'Výprodej až 80 %',contexts:['general', 'sidebar', 'home'],weight:8,fullBleed:true,validTo:'2026-12-31'},
+  {id:'coupon-museum-partner30',title:'Museum of Bricks: 30 % na vstupenky',text:'Slevový kód PARTNER30 na vstupenky. Platí do 31. srpna.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=160115dc&desturl=https%3A%2F%2Fmuseumofbricks.cz%2F',banner:'/assets/reklamy/coupon-museum-partner30-square.svg',wideBanner:'/assets/reklamy/coupon-museum-partner30-wide.svg',tag:'Kupón PARTNER30',contexts:['family', 'travel', 'sidebar', 'general', 'local'],weight:8,fullBleed:true,validTo:'2026-08-31'},
+  {id:'promo-bricks-shop-august',title:'Museum of Bricks: akční nabídka v e-shopu',text:'Slevy na vybrané produkty v e-shopu platí do 16. srpna.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=3ffab0a4&desturl=https%3A%2F%2Feshop.museumofbricks.cz%2Fakcni-nabidka%2F',banner:'/assets/reklamy/promo-bricks-shop-august-square.svg',wideBanner:'/assets/reklamy/promo-bricks-shop-august-wide.svg',tag:'Akce do 16. srpna',contexts:['family', 'sidebar', 'general', 'local'],weight:7,fullBleed:true,validTo:'2026-08-16'},
+  {id:'promo-petexpert-two-months',title:'PetExpert: dva měsíce pojištění zdarma',text:'Akce na pojištění psů a koček platí do 31. srpna.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=ce2e382f',banner:'/assets/reklamy/promo-petexpert-two-months-square.svg',wideBanner:'/assets/reklamy/promo-petexpert-two-months-wide.svg',tag:'2 měsíce zdarma',contexts:['pets', 'family', 'sidebar', 'general'],weight:6,fullBleed:true,validTo:'2026-08-31'},
+  {id:'promo-csob-eurooil1000',title:'ČSOB: poukázka EuroOil 1 000 Kč',text:'Elektronická poukázka EuroOil k autopojištění. Podmínky ověřte u partnera.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=f5e0f8fb&desturl=https%3A%2F%2Fwww.csobpoj.cz%2Fpojisteni%2Fpojisteni-vozidel',banner:'/assets/reklamy/promo-csob-eurooil1000-square.svg',wideBanner:'/assets/reklamy/promo-csob-eurooil1000-wide.svg',tag:'Poukázka 1 000 Kč',contexts:['auto', 'finance', 'sidebar', 'general'],weight:5,fullBleed:true,validTo:'2026-09-30'},
+  {id:'promo-rb-six500',title:'Raiffeisenbank: bonus až 6×500 Kč',text:'Bonus na nový běžný účet. Konkrétní podmínky ověřte na cílové stránce.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=446f3eb0',banner:'/assets/reklamy/promo-rb-six500-square.svg',wideBanner:'/assets/reklamy/promo-rb-six500-wide.svg',tag:'Bonus až 3 000 Kč',contexts:['finance', 'sidebar', 'general'],weight:5,fullBleed:true,validTo:'2026-12-31'},
+  {id:'promo-mbank-421',title:'mBank: úrok až 4,21 % p.a.',text:'mSpořicí účet Plus k novému mKontu. Akce platí do 16. srpna.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=cb64a4ba&desturl=https%3A%2F%2Fmbank.ehub.cz%2F',banner:'/assets/reklamy/promo-mbank-421-square.svg',wideBanner:'/assets/reklamy/promo-mbank-421-wide.svg',tag:'Platí do 16. srpna',contexts:['finance', 'sidebar', 'general'],weight:6,fullBleed:true,validTo:'2026-08-16'},
+  {id:'vodafone-current-offers',title:'Vodafone: aktuální tarify, internet a TV',text:'Ověřte právě dostupné nabídky. Staré červencové ceny se nezobrazují.',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=aface625',banner:'/assets/reklamy/vodafone-current-offers-square.svg',wideBanner:'/assets/reklamy/vodafone-current-offers-wide.svg',tag:'Aktuální nabídky',contexts:['internet', 'home', 'sidebar', 'general'],weight:4,fullBleed:true},
+/* ACTIVE_PROMOTIONS_END */
   {id:'realitykadan-byt',title:'Prodáváte byt v Kadani nebo v Klášterci?',text:'Rychlá nabídka bez zbytečného čekání. Férově, nezávazně a bez provize.',url:'https://realitykadan.cz',banner:'/assets/reklamy/realitykadan-byt-wide-v1.svg',wideBanner:'/assets/reklamy/realitykadan-byt-wide-v1.svg',tag:'Výkup nemovitostí',contexts:['home','local','sidebar','general','finance'],weight:6,fullBleed:true},
   {id:'realitykadan-garaz',title:'Prodáváte garáž v Kadani nebo v Klášterci?',text:'Rychlá nabídka, minimum formalit a férové podmínky.',url:'https://realitykadan.cz',banner:'/assets/reklamy/realitykadan-garaz-wide-v1.svg',wideBanner:'/assets/reklamy/realitykadan-garaz-wide-v1.svg',tag:'Výkup nemovitostí',contexts:['home','local','sidebar','general'],weight:5,fullBleed:true},
   {id:'pojistime',title:'Pojistime.to',text:'Srovnání pojištění auta, domácnosti, cestování a dalších rizik na jednom místě.',url:'https://pojistime.to',tag:'Pojištění',contexts:['finance','auto','home','travel','sidebar','general']},
@@ -21,6 +39,17 @@ const promoItems=[
 ];
 
 const towerCreativeItems=[
+/* ACTIVE_TOWERS_START */
+  {id:'season-concept-fans-tower',title:'Vedro? Ventilátory Concept',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html',image:'/assets/reklamy/season-concept-fans-tower.svg',width:300,height:600,contexts:['home', 'local', 'sidebar', 'general', 'health'],weight:6,validTo:'2026-09-15'},
+  {id:'season-proalergiky-aircon-tower',title:'Mobilní klimatizace Meaco Cool',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=abc25217&desturl=https%3A%2F%2Fwww.proalergiky.cz%2Feshop%2Fmobilni-klimatizace-meaco-cool-9000-pro',image:'/assets/reklamy/season-proalergiky-aircon-tower.svg',width:300,height:600,contexts:['home', 'local', 'sidebar', 'general', 'health'],weight:5,validTo:'2026-09-15'},
+  {id:'owned-vaseuklizecka-tower',title:'VašeUklízečka.cz',url:'https://vaseuklizecka.cz/',image:'/assets/reklamy/owned-vaseuklizecka-tower.svg',width:300,height:600,contexts:['home', 'local', 'sidebar', 'general', 'health'],weight:4},
+  {id:'owned-vyklidime-banner-tower',title:'VYKLIDIME.TO',url:'https://vyklidime.to/',image:'/assets/reklamy/owned-vyklidime-banner-tower.svg',width:300,height:600,contexts:['home', 'local', 'sidebar', 'general'],weight:4},
+  {id:'coupon-concept-leto30-tower',title:'Concept: 30 % na malé spotřebiče',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&desturl=https%3A%2F%2Fwww.concept.cz%2F',image:'/assets/reklamy/coupon-concept-leto30-tower.svg',width:300,height:600,contexts:['home', 'sidebar', 'general', 'local'],weight:5,validTo:'2026-08-31'},
+  {id:'coupon-concept-vyprodej30-tower',title:'Concept: 30 % na velké spotřebiče',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&desturl=https%3A%2F%2Fwww.concept.cz%2F',image:'/assets/reklamy/coupon-concept-vyprodej30-tower.svg',width:300,height:600,contexts:['home', 'sidebar', 'general', 'local'],weight:5,validTo:'2026-08-31'},
+  {id:'promo-aranys-80-tower',title:'Aranys: výprodej se slevami až 80 %',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=15991a3f&desturl=https%3A%2F%2Faranys.cz%2Fakce-slevy',image:'/assets/reklamy/promo-aranys-80-tower.svg',width:300,height:600,contexts:['general', 'sidebar', 'home'],weight:4,validTo:'2026-12-31'},
+  {id:'coupon-museum-partner30-tower',title:'Museum of Bricks: 30 % na vstupenky',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=160115dc&desturl=https%3A%2F%2Fmuseumofbricks.cz%2F',image:'/assets/reklamy/coupon-museum-partner30-tower.svg',width:300,height:600,contexts:['family', 'travel', 'sidebar', 'general', 'local'],weight:4,validTo:'2026-08-31'},
+  {id:'vodafone-current-offers-tower',title:'Vodafone: aktuální tarify, internet a TV',url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=aface625',image:'/assets/reklamy/vodafone-current-offers-tower.svg',width:300,height:600,contexts:['internet', 'home', 'sidebar', 'general'],weight:2},
+/* ACTIVE_TOWERS_END */
   {
     id:'dobre-knihy-tower',
     title:'Dobré-knihy.cz',
@@ -199,11 +228,19 @@ async function loadAffiliateSnapshot(){
   }
 }
 
+function isPromoActive(item){
+  const today=new Date().toISOString().slice(0,10);
+  if(item.validFrom&&today<item.validFrom)return false;
+  if(item.validTo&&today>item.validTo)return false;
+  return true;
+}
+
 function pickPromos(context,count,offset){
   const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);
-  const exact=promoItems.filter(item=>item.contexts.includes(context)).flatMap(expand);
+  const active=promoItems.filter(isPromoActive);
+  const exact=active.filter(item=>item.contexts.includes(context)).flatMap(expand);
   const exactIds=new Set(exact.map(item=>item.id));
-  const fallback=promoItems.filter(item=>!exactIds.has(item.id)).flatMap(expand);
+  const fallback=active.filter(item=>!exactIds.has(item.id)).flatMap(expand);
   const pool=[...exact,...fallback];
   if(!pool.length)return [];
   const day=new Date().toISOString().slice(0,10);
@@ -430,20 +467,22 @@ function renderPromos(){
 
 function pickTowerCreative(context,offset=0){
   const expand=item=>Array.from({length:Math.max(1,Number(item.weight)||1)},()=>item);
-  const exact=towerCreativeItems.filter(item=>item.contexts.includes(context)).flatMap(expand);
+  const active=towerCreativeItems.filter(isPromoActive);
+  const exact=active.filter(item=>item.contexts.includes(context)).flatMap(expand);
   const exactIds=new Set(exact.map(item=>item.id));
-  const pool=[...exact,...towerCreativeItems.filter(item=>!exactIds.has(item.id)).flatMap(expand)];
+  const pool=[...exact,...active.filter(item=>!exactIds.has(item.id)).flatMap(expand)];
   if(!pool.length)return null;
   const day=new Date().toISOString().slice(0,10);
   return pool[(hashSeed(`${location.pathname}|${day}|tower`)+offset)%pool.length];
 }
 
 function pickRailPromo(context,offset=0){
+  const active=promoItems.filter(isPromoActive);
   const pool=[
-    ...promoItems.filter(item=>item.contexts.includes(context)&&item.banner),
-    ...promoItems.filter(item=>!item.contexts.includes(context)&&item.banner),
-    ...promoItems.filter(item=>item.contexts.includes(context)&&!item.banner),
-    ...promoItems.filter(item=>!item.contexts.includes(context)&&!item.banner)
+    ...active.filter(item=>item.contexts.includes(context)&&item.banner),
+    ...active.filter(item=>!item.contexts.includes(context)&&item.banner),
+    ...active.filter(item=>item.contexts.includes(context)&&!item.banner),
+    ...active.filter(item=>!item.contexts.includes(context)&&!item.banner)
   ].filter((item,index,array)=>array.findIndex(entry=>entry.id===item.id)===index);
   if(!pool.length)return null;
   const day=new Date().toISOString().slice(0,10);
