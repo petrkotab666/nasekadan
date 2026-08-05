@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-05T18:41:02.912128+00:00",
+  "checkedAt": "2026-08-05T19:48:55.650021+00:00",
   "bootstrap": false,
-  "sourceCount": 209,
-  "checkedSources": 190,
-  "failedSources": 19,
-  "itemsParsed": 16723,
-  "uniqueItems": 10660,
+  "sourceCount": 211,
+  "checkedSources": 194,
+  "failedSources": 17,
+  "itemsParsed": 17077,
+  "uniqueItems": 10859,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 845,
+    "genericTitle": 891,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 1,
-    "notEditoriallySignificant": 35,
-    "notFreshOrUndated": 0,
-    "duplicate": 5218,
+    "broadWithoutLocalMatch": 7,
+    "notEditoriallySignificant": 70,
+    "notFreshOrUndated": 2,
+    "duplicate": 5327,
     "deferredByCap": 0
   },
   "coverage": {
@@ -24,12 +24,12 @@
     "monitoredDirectoryOrganizations": 65,
     "missingDirectoryOrganizations": [],
     "coveragePercent": 100.0,
-    "manualUniqueSources": 76,
+    "manualUniqueSources": 78,
     "directoryUniqueSourcesAdded": 25,
-    "totalUniqueSources": 101,
+    "totalUniqueSources": 103,
     "directoryIsCanonicalRegistry": true,
     "extraSources": 108,
-    "completeSourceCount": 209,
+    "completeSourceCount": 211,
     "scopeMunicipalities": [
       "Klášterec nad Ohří",
       "Chomutov",
@@ -566,9 +566,8 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 81
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -698,7 +697,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 30
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -721,8 +720,9 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 12
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -730,7 +730,24 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 28
+    },
+    {
+      "name": "Volby.cz – oficiální volební výsledky a kandidáti",
+      "url": "https://www.volby.cz/",
+      "category": "Volby a veřejná správa",
+      "tier": "organization",
+      "status": "checked",
+      "itemsParsed": 25
+    },
+    {
+      "name": "Volby.cz – otevřená data komunálních voleb",
+      "url": "https://www.volby.cz/opendata",
+      "category": "Volby a otevřená data",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 403: Forbidden"
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -866,9 +883,8 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 24
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -923,9 +939,8 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 72
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -983,7 +998,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 15
+      "itemsParsed": 14
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -1071,9 +1086,8 @@
       "url": "https://www.chbany.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 97
     },
     {
       "name": "Račetice – oficiální web",
@@ -1360,9 +1374,8 @@
       "url": "https://www.mestysnepomysl.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 52
     },
     {
       "name": "Vroutek – oficiální web",
@@ -1665,8 +1678,9 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 12
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Hasištejn",
@@ -1706,7 +1720,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 36
+      "itemsParsed": 35
     },
     {
       "name": "Google News – široký region 3",
@@ -1714,7 +1728,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 15
+      "itemsParsed": 14
     },
     {
       "name": "Google News – široký region 4",
@@ -1722,7 +1736,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 77
+      "itemsParsed": 87
     },
     {
       "name": "Google News – široký region 5",
@@ -1754,7 +1768,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 69
+      "itemsParsed": 71
     },
     {
       "name": "Google News – široký region 9",
@@ -1786,7 +1800,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 14
     },
     {
       "name": "Google News – široký region 13",
