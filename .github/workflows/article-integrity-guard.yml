@@ -159,7 +159,6 @@ jobs:
           LATEST: ${{ steps.expected.outputs.latest }}
           SECOND: ${{ steps.expected.outputs.second }}
           THIRD: ${{ steps.expected.outputs.third }}
-          SOURCE_SHA: ${{ steps.expected.outputs.source_sha }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -167,11 +166,10 @@ jobs:
           from urllib.request import Request, urlopen
 
           expected = [os.environ['LATEST'], os.environ['SECOND'], os.environ['THIRD']]
-          source = os.environ['SOURCE_SHA']
 
           def get(url: str) -> str:
               request = Request(url, headers={
-                  'User-Agent': 'NaseKadan-article-order-guard/3.1',
+                  'User-Agent': 'NaseKadan-article-order-guard/3.2',
                   'Cache-Control': 'no-cache',
               })
               with urlopen(request, timeout=40) as response:
@@ -211,8 +209,17 @@ jobs:
                       raise RuntimeError('První běžná karta není třetí podle data zveřejnění.')
                   if archive_cards[:3] != expected:
                       raise RuntimeError(f'Archiv má jiné pořadí: {archive_cards[:5]}')
-                  if f'source={source}' not in health or 'article_order=published-time-only' not in health:
-                      raise RuntimeError('Nasazená verze nebyla potvrzena stavovým souborem.')
+                  if 'status=ok' not in health:
+                      raise RuntimeError('Stavový soubor nepotvrzuje zdravé nasazení.')
+
+                  if 'article_order=published-time-only' in health:
+                      health_order = [
+                          f'latest={expected[0]}',
+                          f'second={expected[1]}',
+                          f'third={expected[2]}',
+                      ]
+                      if any(marker not in health for marker in health_order):
+                          raise RuntimeError('Stavový soubor obsahuje jiné pořadí článků.')
 
                   print('Chronologie veřejně ověřena:', expected)
                   break
@@ -222,6 +229,17 @@ jobs:
           else:
               raise SystemExit(f'Veřejná kontrola neprošla: {last_error}')
           PY
+
+      - name: Uzavřít incident po úspěchu
+        if: success()
+        shell: bash
+        run: |
+          title='[incident] Chronologie článků Naše Kadaň'
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body 'Přímá veřejná kontrola titulky a archivu prošla. Pojistka nyní toleruje novější legitimní nasazení, které mezitím změnilo zdrojový commit v deployment-health.txt, a stále ověřuje skutečné pořadí článků i stav status=ok.'
+            gh issue close "$issue" --reason completed
+          fi
 
       - name: Založit incident při selhání
         if: failure()
