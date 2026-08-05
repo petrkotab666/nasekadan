@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-05T16:10:05.777225+00:00",
+  "generated_at": "2026-08-05T16:12:05.253913+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "d1992eb5c0c72667c1e312c11da8fa03d03fdf72",
@@ -28,7 +28,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
     "public_audit_at": "2026-08-05T10:41:13.600874+00:00",
-    "repair_pending_public_verification": false,
+    "repair_pending_public_verification": true,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -149,24 +149,11 @@
       "source_commit": "d1992eb5c0c72667c1e312c11da8fa03d03fdf72"
     },
     "last_publication": {
-      "status": "success",
-      "checked_at": "2026-08-05T16:09:47.774387+00:00",
+      "status": "pending_public_verification",
+      "checked_at": "2026-08-05T16:12:05.253913+00:00",
       "article_url": "https://nasekadan.cz/clanky/vyluka-zatec-blatno-do-24-srpna-2026.html",
       "classification": "practical_transport_alert",
-      "source_commit": "b0ef8df8d94341c201398ef0ac67a3562ae8e15f",
-      "public_verified_at": "2026-08-05T16:10:05.777212+00:00",
-      "public_verification": {
-        "article": true,
-        "homepage": true,
-        "archive": true,
-        "rss": true,
-        "sitemap": true,
-        "news_sitemap": true,
-        "llms": true,
-        "registry": true,
-        "health": true,
-        "social_image": true
-      }
+      "source_commit": "pending-publication-commit"
     }
   },
   "articles": [
@@ -214,7 +201,7 @@
       },
       "source_path": "clanky/vyluka-zatec-blatno-do-24-srpna-2026.html",
       "publication_status": "published",
-      "source_commit": "b0ef8df8d94341c201398ef0ac67a3562ae8e15f"
+      "source_commit": "pending-publication-commit"
     },
     {
       "title": "Na jezeře Most pátrají po dvou lidech. Kvůli bouřce se neměli dostat na břeh",
