@@ -95,7 +95,7 @@ jobs:
           urls=set()
           pattern=re.compile(r'https://nasekadan\.cz/(?:social|assets|images|img)/[^\"\'\s)<>]+',re.I)
           for text in texts: urls.update(pattern.findall(text))
-          urls.add('https://nasekadan.cz/social/kam-v-kadani-a-okoli-3-9-srpna-2026-199cb73db2.png')
+          urls.add('https://nasekadan.cz/social/kam-v-kadani-a-okoli-3-9-srpna-2026-bff154b86a.png')
           ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
           def check(url):
               req=Request(url+('?image_sync='+str(time.time_ns())),headers={'User-Agent':'NaseKadan-image-sync/1.0','Cache-Control':'no-cache'})
