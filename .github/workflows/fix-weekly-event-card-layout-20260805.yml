@@ -1,0 +1,90 @@
+name: Opravit rozpad karet v kulturním přehledu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-weekly-event-card-layout-20260805.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-weekly-event-card-layout-20260805
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit rozvržení karet a obnovit CSS cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          article = Path('clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html')
+          text = article.read_text(encoding='utf-8')
+          marker = 'data-weekly-event-layout-hotfix="20260805"'
+          css = '''\n  <style data-weekly-event-layout-hotfix="20260805">\n    .article-shell .article > .event{display:block!important;grid-template-columns:none!important;grid-auto-columns:auto!important;grid-auto-flow:initial!important;gap:0!important;min-height:0!important;width:100%!important}\n    .article-shell .article > .event > time,.article-shell .article > .event > h3,.article-shell .article > .event > p,.article-shell .article > .event > ul,.article-shell .article > .event > ol,.article-shell .article > .event > div{grid-column:auto!important;width:auto!important;max-width:none!important;min-width:0!important}\n    .article-shell .article > .event > h3,.article-shell .article > .event > p,.article-shell .article > .event > ul,.article-shell .article > .event > ol{display:block!important;overflow-wrap:normal!important;word-break:normal!important}\n    .article-shell .article > .event > time{display:inline-block!important;height:auto!important;max-width:100%!important;white-space:normal!important}\n  </style>\n'''
+          if marker not in text:
+              if '</head>' not in text:
+                  raise SystemExit('Článek nemá uzavírací značku </head>.')
+              text = text.replace('</head>', css + '</head>', 1)
+              article.write_text(text, encoding='utf-8')
+
+          dockerfile = Path('Dockerfile')
+          docker = dockerfile.read_text(encoding='utf-8')
+          old = 'style.css?v=20260726-event-layout-1'
+          new = 'style.css?v=20260805-event-layout-2'
+          if old in docker:
+              docker = docker.replace(old, new)
+              dockerfile.write_text(docker, encoding='utf-8')
+          elif new not in docker:
+              raise SystemExit('V Dockerfile nebyla nalezena očekávaná verze CSS.')
+
+          trigger = Path('.github/water-selfhosted-trigger.txt')
+          trigger.write_text('weekly-event-layout-hotfix=2026-08-05T22:18:00+02:00\n', encoding='utf-8')
+          PY
+
+      - name: Ověřit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'data-weekly-event-layout-hotfix="20260805"' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+          grep -Fq '.article-shell .article > .event{display:block!important' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+          grep -Fq 'style.css?v=20260805-event-layout-2' Dockerfile
+          python3 scripts/normalize_articles.py --check
+
+      - name: Uložit opravu a spustit kanonické nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-layout-bot'
+          git config user.email 'nasekadan-layout-bot@users.noreply.github.com'
+          git add \
+            clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html \
+            Dockerfile \
+            .github/water-selfhosted-trigger.txt
+          if git diff --cached --quiet; then
+            echo 'Oprava už je v main.'
+            exit 0
+          fi
+          git commit -m 'fix: obnovit šířku karet kulturního přehledu'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
