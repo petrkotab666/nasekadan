@@ -130,7 +130,7 @@ RUN printf '\n\n/* Mobilní pravidla vložená při produkčním sestavení */\n
 # Reklamní balík už vložil jediný normalizátor článků. Zde se upravují pouze
 # obecné soubory webu a jednou se doplní navigace a upoutávky.
 RUN find /usr/share/nginx/html -type f -name '*.html' -exec sed -i \
-  -e 's#style.css"#style.css?v=20260726-event-layout-1"#g' \
+  -e 's#style.css"#style.css?v=20260805-event-layout-2"#g' \
   -e 's#site.js"#site.js?v=20260724-nemocnice-7"#g' \
   -e 's#<script src="[^"]*navigation\.js[^"]*"[^>]*></script>##g' \
   -e 's#<script src="[^"]*upoutavky\.js[^"]*"[^>]*></script>##g' \
