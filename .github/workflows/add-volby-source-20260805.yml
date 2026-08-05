@@ -1,4 +1,4 @@
-name: Připojit volby.cz do centrálního monitoringu
+name: Připojit volby.cz a spustit úplný monitoring
 
 on:
   workflow_dispatch:
@@ -9,15 +9,16 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: add-volby-source-20260805
   cancel-in-progress: false
 
 jobs:
-  add-source:
+  add-and-scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - name: Načíst aktuální hlavní větev
         uses: actions/checkout@v4
@@ -36,7 +37,6 @@ jobs:
           path = Path('data/city-sources.json')
           data = json.loads(path.read_text(encoding='utf-8'))
           sources = data.setdefault('sources', [])
-
           required = [
               {
                   'name': 'Volby.cz – oficiální volební výsledky a kandidáti',
@@ -49,37 +49,110 @@ jobs:
                   'category': 'Volby a otevřená data',
               },
           ]
-
-          existing_urls = {str(item.get('url', '')).rstrip('/') for item in sources}
+          existing = {str(item.get('url', '')).rstrip('/') for item in sources}
           changed = False
           for item in required:
               key = item['url'].rstrip('/')
-              if key not in existing_urls:
+              if key not in existing:
                   sources.append(item)
-                  existing_urls.add(key)
+                  existing.add(key)
                   changed = True
-
           if changed:
               data['updatedAt'] = '2026-08-05'
-              path.write_text(
-                  json.dumps(data, ensure_ascii=False, indent=2) + '\n',
-                  encoding='utf-8',
-              )
+              path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           PY
-
-      - name: Ověřit registr a uložit změnu
-        shell: bash
-        run: |
-          set -euo pipefail
           python3 -m json.tool data/city-sources.json >/dev/null
           grep -F 'https://www.volby.cz/' data/city-sources.json >/dev/null
           grep -F 'https://www.volby.cz/opendata/' data/city-sources.json >/dev/null
-          if git diff --quiet -- data/city-sources.json; then
-            echo 'Volby.cz už jsou v registru.'
-            exit 0
-          fi
+
+      - name: Ověřit monitorovací programy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile \
+            scripts/update_city_news.py \
+            scripts/monitor_national_kadan.py \
+            scripts/monitor_all_kadansko.py \
+            scripts/run_complete_regional_monitor.py \
+            scripts/upsert_github_issue.py
+
+      - name: Spustit kompletní regionální monitoring
+        id: monitor
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/complete-region-alerts.json"
+          success=0
+          for attempt in 1 2 3; do
+            echo "Kompletní průchod – pokus ${attempt}/3"
+            if python3 scripts/run_complete_regional_monitor.py \
+              --state data/all-kadansko-monitoring-state.json \
+              --status data/all-kadansko-monitoring-status.json \
+              --output "$output"; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 25))
+          done
+          test "$success" -eq 1
+          test -s "$output"
+          echo "output=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Ověřit čerstvost a výsledek
+        shell: bash
+        env:
+          OUTPUT: ${{ steps.monitor.outputs.output }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          status = json.loads(Path('data/all-kadansko-monitoring-status.json').read_text(encoding='utf-8'))
+          output = json.loads(Path(os.environ['OUTPUT']).read_text(encoding='utf-8'))
+          checked = datetime.fromisoformat(str(status.get('checkedAt') or '').replace('Z', '+00:00'))
+          if checked.tzinfo is None:
+              checked = checked.replace(tzinfo=timezone.utc)
+          age = (datetime.now(timezone.utc) - checked.astimezone(timezone.utc)).total_seconds() / 60
+          source_count = int(status.get('sourceCount') or 0)
+          checked_sources = int(status.get('checkedSources') or 0)
+          if age > 15:
+              raise SystemExit(f'Stav je starý {age:.1f} minuty.')
+          if source_count < 140:
+              raise SystemExit(f'V registru je jen {source_count} zdrojů.')
+          if checked_sources < max(75, int(source_count * 0.65)):
+              raise SystemExit(f'Dostupných bylo jen {checked_sources}/{source_count} zdrojů.')
+          if output.get('status', {}).get('checkedAt') != status.get('checkedAt'):
+              raise SystemExit('Výstup a stavový soubor si neodpovídají.')
+          print(json.dumps({
+              'checkedAt': status.get('checkedAt'),
+              'sourceCount': source_count,
+              'checkedSources': checked_sources,
+              'failedSources': status.get('failedSources'),
+              'newAlerts': status.get('newAlerts'),
+              'alerts': output.get('alerts') or [],
+          }, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Uložit čerstvý stav
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name 'nasekadan-monitor-bot'
           git config user.email 'nasekadan-monitor-bot@users.noreply.github.com'
-          git add data/city-sources.json
-          git commit -m 'monitoring: přidat volby.cz mezi povinné zdroje'
-          git push origin HEAD:main
+          git add data/city-sources.json data/all-kadansko-monitoring-state.json data/all-kadansko-monitoring-status.json
+          if git diff --cached --quiet; then
+            echo 'Není co ukládat.'
+            exit 0
+          fi
+          git commit -m 'monitoring: přidat volby.cz a obnovit úplný stav'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
