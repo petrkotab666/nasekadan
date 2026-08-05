@@ -1,0 +1,26 @@
+name: Diagnostika veřejného deployment-health
+
+"on":
+  push:
+    paths:
+      - '.github/dispatch/slovan-health-diagnose.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Vypsat veřejný deployment-health bez cache
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for attempt in 1 2 3; do
+            q="${GITHUB_RUN_ID}-$(date +%s%N)"
+            echo "--- attempt $attempt ---"
+            curl -4 -ksS -L -D - --connect-timeout 20 --max-time 60 "https://nasekadan.cz/deployment-health.txt?v=$q" | cat -v
+            sleep 3
+          done
