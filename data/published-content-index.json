@@ -28,7 +28,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
     "public_audit_at": "2026-08-05T10:41:13.600874+00:00",
-    "repair_pending_public_verification": false,
+    "repair_pending_public_verification": true,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -85,26 +85,21 @@
       "public_verification_method": "live-article-registry-and-health-status-check"
     },
     "last_cultural_update": {
-      "status": "success",
-      "checked_at": "2026-08-05T11:47:17.158742+00:00",
+      "status": "pending_public_verification",
       "updated_url": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
-      "source_commit": "3c4093e2274e4c5e74d94535aa651ed575ba0f70",
+      "modified_at": "2026-08-05T13:59:00+02:00",
       "events": [
-        "jirkov-komentovana-prochazka-20260805",
-        "jirkov-pohadka-rybar-rybka-20260806"
+        "bilina-archeologicke-leto-20260807",
+        "stranna-perseidy-vino-20260808",
+        "sporice-multizanrovy-festival-20260808",
+        "louny-vecerni-vez-20260807",
+        "bitva-budyne-20260808",
+        "libochovice-exoticke-ptactvo-20260808",
+        "horni-jiretin-pout-20260808"
       ],
-      "completed_at": "2026-08-05T11:52:48.409719+00:00",
-      "public_verification": {
-        "article": true,
-        "homepage": true,
-        "archive": true,
-        "rss": true,
-        "sitemap": true,
-        "registry": true,
-        "health": true,
-        "news_sitemap_required": false,
-        "news_sitemap_reason": "Původní článek byl zveřejněn 2. srpna a při aktualizaci 5. srpna už nepatřil do omezeného přehledu nejnovějších zpráv."
-      }
+      "excluded_unverified": [
+        "Kokeš fest – Hipodrom Most"
+      ]
     }
   },
   "articles": [
@@ -573,21 +568,35 @@
       "h1": "Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání",
       "url": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
       "published_at": "2026-08-02T12:00:00+02:00",
-      "modified_at": "2026-08-05T13:39:00+02:00",
+      "modified_at": "2026-08-05T13:59:00+02:00",
       "persons": [],
       "organizations": [
         "Naše Kadaň",
         "Pivnice U Soudku Kadaň",
         "Liďák Kadaň",
         "Město Jirkov",
-        "Dětské divadlo Z bedny"
+        "Dětské divadlo Z bedny",
+        "Archeologický ústav AV ČR",
+        "Obec Březno",
+        "Obec Spořice",
+        "Město Louny",
+        "Bitva Budyně",
+        "Státní zámek Libochovice",
+        "Město Horní Jiřetín"
       ],
       "places": [
         "Kadaň",
         "Most",
         "Jirkov",
         "Informační centrum Jirkov",
-        "Jirkovská synagoga"
+        "Jirkovská synagoga",
+        "Hradiště Bílina",
+        "Stranná",
+        "Spořice",
+        "Kostel sv. Mikuláše v Lounech",
+        "Vodní hrad Budyně nad Ohří",
+        "Zámek Libochovice",
+        "Horní Jiřetín"
       ],
       "cases": [
         "Týdenní přehled akcí 3.–9. srpna 2026",
@@ -595,14 +604,29 @@
         "DJ Phantom na Liďáku – 7. srpna 2026",
         "Kapela GOLF na Liďáku – 8. srpna 2026",
         "Komentovaná procházka centrem Jirkova 5. srpna 2026",
-        "Pohádka O rybáři a rybce v jirkovské synagoze 6. srpna 2026"
+        "Pohádka O rybáři a rybce v jirkovské synagoze 6. srpna 2026",
+        "Archeologické léto Bílina 7. srpna 2026",
+        "Perseidy ve Stranné 8. srpna 2026",
+        "Multižánrový festival Spořice 8. srpna 2026",
+        "Večerní věž Louny 7. srpna 2026",
+        "Bitva Budyně 8. srpna 2026",
+        "Výstava exotického ptactva Libochovice 8.–9. srpna 2026",
+        "Městské slavnosti a pouť Horní Jiřetín 8.–9. srpna 2026"
       ],
       "topics": [
         "Kultura",
         "Volný čas",
         "Jirkov",
         "Komentované procházky",
-        "Pohádky v synagoze"
+        "Pohádky v synagoze",
+        "Archeologické léto",
+        "Perseidy",
+        "Víno",
+        "Hudební festivaly",
+        "Večerní prohlídky",
+        "Historické bitvy",
+        "Exotické ptactvo",
+        "Městské slavnosti a poutě"
       ],
       "fingerprint": "a56ea06ba182653288c2f4aa",
       "status": {
@@ -614,7 +638,7 @@
       },
       "source_path": "clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
       "publication_status": "published",
-      "source_commit": "3c4093e2274e4c5e74d94535aa651ed575ba0f70"
+      "source_commit": "pending-regional-weekend-tips"
     },
     {
       "title": "Od Střelnice po klášter. Co všechno pro Kadaň zajišťuje KZK",
