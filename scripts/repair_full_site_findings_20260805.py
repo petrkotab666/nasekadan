@@ -28,13 +28,14 @@ def replace(path: str | Path, old: str, new: str) -> bool:
 
 
 def replace_cultural_image_everywhere() -> None:
+    # Workflow soubory jsou chráněné zvláštním oprávněním GitHubu a opravují se
+    # samostatně přes Contents API. Tento skript mění pouze publikační obsah.
     candidates: set[Path] = {
         ROOT / "index.html",
         ROOT / "rss.xml",
         ROOT / "sitemap.xml",
         ROOT / "news-sitemap.xml",
         ROOT / "llms.txt",
-        ROOT / ".github" / "workflows" / "sync-all-public-images-20260805.yml",
     }
     for folder, patterns in (
         (ROOT / "clanky", ("*.html",)),
@@ -136,7 +137,7 @@ for path in ("clanky/parts/slovan-01.html", "nahled/lavka-shell-pracovni-7c26.ht
     replace(path, "/assets/lavka-shell-20260724.jpg", "/social/slovan-druhy-pokus-e2e4356bbb.png")
 replace("clanky/parts/slovan-04.html", "/assets/slovan-vstup-20260724.jpg", "/social/slovan-druhy-pokus-e2e4356bbb.png")
 
-# Sjednoť kulturní obrázek ve stránce, kartách, registru i kontrole obrázků.
+# Sjednoť kulturní obrázek ve stránce, kartách a registru.
 replace_cultural_image_everywhere()
 
 # Oprav strukturovaná data potvrzená auditem.
