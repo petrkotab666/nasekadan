@@ -15,7 +15,12 @@ MODULE = runpy.run_path(str(ROOT / "scripts" / "patch-active-promotions.py"))
 PROMOS = MODULE["PROMOS"]
 TOWERS = MODULE["TOWERS"]
 REPORT = ROOT / "data" / "active-promotions-validation.json"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151 Safari/537.36 NaseKadanPromotionAudit/1.0"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151 Safari/537.36 NaseKadanPromotionAudit/1.1"
+
+
+def is_tracker_url(raw_url: str) -> bool:
+    parsed = urlparse(raw_url)
+    return (parsed.hostname or "").lower() in {"ehub.cz", "www.ehub.cz"} and parsed.path.lower().startswith("/system/scripts/click.php")
 
 
 def client_redirect(body: bytes) -> str:
@@ -37,17 +42,16 @@ def probe(url: str) -> dict:
         response = requests.get(url, headers=headers, timeout=(10, 30), allow_redirects=True)
         body = response.content
         final = response.url
-        host = (urlparse(final).hostname or "").lower()
         redirects = len(response.history)
-        if host.endswith("ehub.cz"):
+        if is_tracker_url(final):
             next_url = client_redirect(body)
             if next_url:
                 response = requests.get(next_url, headers=headers, timeout=(10, 30), allow_redirects=True)
                 body = response.content
                 final = response.url
-                host = (urlparse(final).hostname or "").lower()
                 redirects += len(response.history) + 1
-        ok = 200 <= response.status_code < 400 and bool(body.strip()) and not host.endswith("ehub.cz")
+        host = (urlparse(final).hostname or "").lower()
+        ok = 200 <= response.status_code < 400 and bool(body.strip()) and not is_tracker_url(final)
         return {"url": url, "ok": ok, "status": response.status_code, "finalUrl": final, "finalHost": host, "bytes": len(body), "redirects": redirects}
     except Exception as exc:  # noqa: BLE001
         return {"url": url, "ok": False, "status": None, "finalUrl": "", "finalHost": "", "bytes": 0, "redirects": 0, "error": f"{type(exc).__name__}: {exc}"}
@@ -95,6 +99,5 @@ def main() -> int:
     return 0
 
 
-# Úmyslná změna pro jednorázové spuštění workflow 5. 8. 2026.
 if __name__ == "__main__":
     raise SystemExit(main())
