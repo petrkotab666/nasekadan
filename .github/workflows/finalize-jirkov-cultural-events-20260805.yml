@@ -1,0 +1,192 @@
+name: Finálně ověřit jirkovské akce v kulturním přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-finalize-jirkov-cultural-events-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-jirkov-cultural-events-20260805
+  cancel-in-progress: false
+
+jobs:
+  verify-finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE_REL: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      EVENT_WALK: jirkov-komentovana-prochazka-20260805
+      EVENT_FAIRYTALE: jirkov-pohadka-rybar-rybka-20260806
+      MODIFIED: '2026-08-05T13:39:00+02:00'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit živý kulturní přehled a relevantní veřejné kanály
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 10); do
+            q="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            article="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            registry="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+
+            article_ok=0; home_ok=0; archive_ok=0; rss_ok=0; sitemap_ok=0; registry_ok=0; health_ok=0
+            grep -Fq "data-event-id=\"${EVENT_WALK}\"" <<<"$article" \
+              && grep -Fq "data-event-id=\"${EVENT_FAIRYTALE}\"" <<<"$article" \
+              && grep -Fq 'STŘEDA 5. 8. · 15:00' <<<"$article" \
+              && grep -Fq 'ČTVRTEK 6. 8. · 16:00' <<<"$article" \
+              && grep -Fq 'Město Jirkov – oficiální kalendář akcí' <<<"$article" \
+              && grep -Fq "article:modified_time\" content=\"${MODIFIED}" <<<"$article" \
+              && article_ok=1 || true
+            grep -Fq "$ARTICLE_REL" <<<"$home" && home_ok=1 || true
+            grep -Fq "$ARTICLE_REL" <<<"$archive" && archive_ok=1 || true
+            grep -Fq "$ARTICLE_URL" <<<"$rss" && rss_ok=1 || true
+            grep -Fq "$ARTICLE_URL" <<<"$sitemap" && sitemap_ok=1 || true
+            grep -Fq '"modified_at": "2026-08-05T13:39:00+02:00"' <<<"$registry" \
+              && grep -Fq 'jirkov-komentovana-prochazka-20260805' <<<"$registry" \
+              && grep -Fq 'jirkov-pohadka-rybar-rybka-20260806' <<<"$registry" \
+              && registry_ok=1 || true
+            grep -Fq 'status=ok' <<<"$health" && health_ok=1 || true
+
+            echo "attempt=$attempt article=$article_ok home=$home_ok archive=$archive_ok rss=$rss_ok sitemap=$sitemap_ok registry=$registry_ok health=$health_ok"
+            if test "$article_ok" = 1 && test "$home_ok" = 1 && test "$archive_ok" = 1 \
+              && test "$rss_ok" = 1 && test "$sitemap_ok" = 1 && test "$registry_ok" = 1 \
+              && test "$health_ok" = 1; then
+              ok=1
+              break
+            fi
+            sleep 7
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít kanonickou evidenci aktualizace
+        id: finalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=False
+          update=validation.setdefault('last_cultural_update',{})
+          update.update({
+              'status':'success',
+              'completed_at':datetime.now(timezone.utc).isoformat(),
+              'updated_url':'https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html',
+              'events':['jirkov-komentovana-prochazka-20260805','jirkov-pohadka-rybar-rybka-20260806'],
+              'public_verification':{
+                  'article':True,
+                  'homepage':True,
+                  'archive':True,
+                  'rss':True,
+                  'sitemap':True,
+                  'registry':True,
+                  'health':True,
+                  'news_sitemap_required':False,
+                  'news_sitemap_reason':'Původní článek byl zveřejněn 2. srpna a při aktualizaci 5. srpna už nepatřil do omezeného přehledu nejnovějších zpráv.'
+              }
+          })
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+          git config user.name 'Naše Kadaň – kulturní přehled'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json
+          git commit -m 'Evidence: potvrdit jirkovské akce v kulturním přehledu'
+          git push origin HEAD:main
+          echo "evidence_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit uzavřenou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index-jirkov-final.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -m 0644 /tmp/published-content-index-jirkov-final.json /var/www/nasekadan/data/published-content-index.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/published-content-index-jirkov-final.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -f /tmp/published-content-index-jirkov-final.json
+          REMOTE
+
+      - name: Finálně ověřit uzavřenou evidenci
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          q="${GITHUB_RUN_ID}-final-$(date +%s)"
+          registry="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q")"
+          grep -Fq '"status": "success"' <<<"$registry"
+          grep -Fq '"repair_pending_public_verification": false' <<<"$registry"
+          grep -Fq '"news_sitemap_required": false' <<<"$registry"
+          grep -Fq 'jirkov-komentovana-prochazka-20260805' <<<"$registry"
+          grep -Fq 'jirkov-pohadka-rybar-rybka-20260806' <<<"$registry"
+
+      - name: Zapsat úspěšný stav
+        if: success()
+        uses: actions/github-script@v7
+        env:
+          EVIDENCE_SHA: ${{ steps.finalize.outputs.evidence_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const path='.github/jirkov-cultural-live-status.json';
+            const payload={
+              status:'success',
+              run_id:String(context.runId),
+              evidence_sha:process.env.EVIDENCE_SHA||'',
+              checked_at:new Date().toISOString(),
+              article:'https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html',
+              events:[
+                {id:'jirkov-komentovana-prochazka-20260805',starts_at:'2026-08-05T15:00:00+02:00'},
+                {id:'jirkov-pohadka-rybar-rybka-20260806',starts_at:'2026-08-06T16:00:00+02:00'}
+              ],
+              public_verification:{article:true,homepage:true,archive:true,rss:true,sitemap:true,registry:true,health:true},
+              news_sitemap_required:false
+            };
+            let sha;
+            try { const old=await github.rest.repos.getContent({owner,repo,path,ref:'main'}); sha=old.data.sha; }
+            catch(e){ if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,repo,path,branch:'main',sha,
+              message:'Zapsat úspěšné ověření jirkovských akcí [skip ci]',
+              content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')
+            });
