@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-04T23:11:49.133996+00:00",
+  "checkedAt": "2026-08-05T01:13:24.412244+00:00",
   "bootstrap": false,
   "sourceCount": 209,
-  "checkedSources": 195,
-  "failedSources": 14,
-  "itemsParsed": 17142,
-  "uniqueItems": 10927,
+  "checkedSources": 192,
+  "failedSources": 17,
+  "itemsParsed": 17124,
+  "uniqueItems": 10908,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
     "genericTitle": 891,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 2,
-    "notEditoriallySignificant": 52,
+    "broadWithoutLocalMatch": 1,
+    "notEditoriallySignificant": 48,
     "notFreshOrUndated": 0,
-    "duplicate": 5324,
+    "duplicate": 5325,
     "deferredByCap": 0
   },
   "coverage": {
@@ -606,8 +606,9 @@
       "url": "https://vystrahy.chmi.cz/",
       "category": "Počasí a výstrahy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Dopravníinfo.cz",
@@ -697,7 +698,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 25
+      "itemsParsed": 29
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -720,8 +721,9 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 12
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -1004,7 +1006,7 @@
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 3
+      "itemsParsed": 4
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
@@ -1660,8 +1662,9 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 12
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Hasištejn",
@@ -1701,7 +1704,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 36
+      "itemsParsed": 38
     },
     {
       "name": "Google News – široký region 3",
@@ -1717,7 +1720,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 69
+      "itemsParsed": 68
     },
     {
       "name": "Google News – široký region 5",
