@@ -95,5 +95,6 @@ def main() -> int:
     return 0
 
 
+# Úmyslná změna pro jednorázové spuštění workflow 5. 8. 2026.
 if __name__ == "__main__":
     raise SystemExit(main())
