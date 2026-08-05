@@ -1,0 +1,36 @@
+name: Nouzově publikovat přehled kadaňských hřišť
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/publish-kadanska-hriste-emergency-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-kadanska-hriste-20260806
+  cancel-in-progress: false
+
+jobs:
+  publish-emergency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Znovu sestavit, nasadit a veřejně ověřit
+        shell: bash
+        run: bash scripts/run_publish_kadanska_hriste_20260806.sh
