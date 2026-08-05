@@ -10,7 +10,7 @@ on:
       - '.github/header-v2-trigger.txt'
       - '.github/workflows/guard-header-brand-visibility.yml'
   schedule:
-    - cron: '37 */3 * * *'
+    - cron: '*/5 * * * *'
 
 permissions:
   contents: write
