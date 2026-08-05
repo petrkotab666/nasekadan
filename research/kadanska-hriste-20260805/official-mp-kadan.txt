@@ -1,0 +1,178 @@
+Městská policie Kadaň
+window.onload = function(){ checkBrowserCompatibility('Prohlížeč nepodporuje funkce nezbytné k zobrazení této webové stránky.','Prohlížeč nemusí podporovat funkce nezbytné k zobrazení této webové stránky.','[1]Aktualizujte svůj prohlížeč[/1] nebo [2]pokračujte bez aktualizace[/2].','http://outdatedbrowser.com/'); }; x5engine.utils.currentPagePath = 'index.html'; x5engine.boot.push(function () { x5engine.imPageToTop.initializeButton({}); });
+x5engine.boot.push(function () {x5engine.analytics.setPageView({ "postUrl": "analytics/wsx5analytics.php" });});
+Přejít na obsah
+Městská policie Kadaň
+Městská policie Kadaň
+Přeskočit menu
+×
+Domovská stránka
+Základní informace
+Činnost MP
+Nejčastejší dotazy
+var imHeader_imMenuObject_01_settings = { 'menuId': 'imHeader_imMenuObject_01', 'responsiveMenuEffect': 'none', 'responsiveMenuLevelOpenEvent': 'mouseover', 'animationDuration': 0, } x5engine.boot.push(function(){x5engine.initMenu(imHeader_imMenuObject_01_settings)}); $(function () { $('#imHeader_imMenuObject_01_container ul li').not('.imMnMnSeparator').each(function () { $(this).on('mouseenter', function (evt) { if (!evt.originalEvent) { evt.stopImmediatePropagation(); evt.preventDefault(); return; } }); }); }); $(function () {$('#imHeader_imMenuObject_01_container ul li').not('.imMnMnSeparator').each(function () { var $this = $(this), timeout = 0, subtimeout = 0, width = 'none', height = 'none'; var submenu = $this.children('ul').add($this.find('.multiple-column > ul')); $this.on('mouseenter', function () { if($(this).parents('#imHeader_imMenuObject_01_container-menu-opened').length > 0) return; clearTimeout(timeout); clearTimeout(subtimeout); $this.children('.multiple-column').show(0); submenu.stop(false, false); if (width == 'none') { width = submenu.width(); } if (height == 'none') { height = submenu.height(); submenu.css({ overflow : 'hidden', height: 0}); } setTimeout(function () { submenu.css({ overflow : 'hidden'}).fadeIn(1).animate({ height: height }, 300, null, function() {$(this).css('overflow', 'visible'); }); }, 250); }).on('mouseleave', function () { if($(this).parents('#imHeader_imMenuObject_01_container-menu-opened').length > 0) return; timeout = setTimeout(function () { submenu.stop(false, false); submenu.css('overflow', 'hidden').animate({ height: 0 }, 300, null, function() {$(this).fadeOut(0); }); subtimeout = setTimeout(function () { $this.children('.multiple-column').hide(0); }, 300); }, 250); });});});
+Přeskočit menu
+×
+Domovská stránka
+Základní informace
+Činnost MP
+Nejčastejší dotazy
+var imStickyBar_imMenuObject_03_settings = { 'menuId': 'imStickyBar_imMenuObject_03', 'responsiveMenuEffect': 'none', 'responsiveMenuLevelOpenEvent': 'mouseover', 'animationDuration': 0, } x5engine.boot.push(function(){x5engine.initMenu(imStickyBar_imMenuObject_03_settings)}); $(function () { $('#imStickyBar_imMenuObject_03_container ul li').not('.imMnMnSeparator').each(function () { $(this).on('mouseenter', function (evt) { if (!evt.originalEvent) { evt.stopImmediatePropagation(); evt.preventDefault(); return; } }); }); }); $(function () {$('#imStickyBar_imMenuObject_03_container ul li').not('.imMnMnSeparator').each(function () { var $this = $(this), timeout = 0, subtimeout = 0, width = 'none', height = 'none'; var submenu = $this.children('ul').add($this.find('.multiple-column > ul')); $this.on('mouseenter', function () { if($(this).parents('#imStickyBar_imMenuObject_03_container-menu-opened').length > 0) return; clearTimeout(timeout); clearTimeout(subtimeout); $this.children('.multiple-column').show(0); submenu.stop(false, false); if (width == 'none') { width = submenu.width(); } if (height == 'none') { height = submenu.height(); submenu.css({ overflow : 'hidden', height: 0}); } setTimeout(function () { submenu.css({ overflow : 'hidden'}).fadeIn(1).animate({ height: height }, 300, null, function() {$(this).css('overflow', 'visible'); }); }, 250); }).on('mouseleave', function () { if($(this).parents('#imStickyBar_imMenuObject_03_container-menu-opened').length > 0) return; timeout = setTimeout(function () { submenu.stop(false, false); submenu.css('overflow', 'hidden').animate({ height: 0 }, 300, null, function() {$(this).fadeOut(0); }); subtimeout = setTimeout(function () { $this.children('.multiple-column').hide(0); }, 300); }, 250); });});});
+Městská policie Kadaň
+Tísňové volání:
+156
+Tel.: 474 332 298, 606 310 014
+Adresa: Chomutovská 1254, 43201 Kadaň
+Aktuality
+Máte zájem o práci u městské policie
+?
+Podmínky výběrového řízení najdete
+zde...
+function loadimObjectVideo_14() { $('#imObjectVideo_14').width('100%'); $('#imObjectVideo_14_container').empty(); var settings = { 'target': '#imObjectVideo_14_container', 'type': 'youtube', 'url': 'https://www.youtube.com/watch?v=m7vW1nG1_WE', 'width': 700, 'height': 393, 'showVideoControls': false, 'loop': false, 'muted': false, 'autoplay': true }; var w = Math.min(700, $('#imObjectVideo_14').width()); settings.width = w; var h = w > 700 ? 393 : (settings.width / 700 * 393); settings.height = h; x5engine.mediaPlayer(settings); } x5engine.boot.push(loadimObjectVideo_14); var imObjectVideo_14_resizeTo = null, imObjectVideo_14_width = 0; var elementResize = function() { x5engine.utils.onElementResize(document.getElementById('imObjectVideo_14'), function (rect, target) { if (imObjectVideo_14_width == rect.width || (imObjectVideo_14_width >= 700 && rect.width > 700)) { return; } imObjectVideo_14_width = rect.width; if (!!imObjectVideo_14_resizeTo) { clearTimeout(imObjectVideo_14_resizeTo); } imObjectVideo_14_resizeTo = setTimeout(function() { loadimObjectVideo_14(); }, 50); }); } x5engine.boot.push(elementResize);
+Koloběžky jedním z hlavních témat semináře
+V rámci spolupráce městských policií v Kadani a Klášterci nad Ohří se v červnu uskutečnil seminář, během kterého nadporučík Jan Peček z Policie ČR seznámil přítomné zástupce obou městských policií s podmínkami provozu koloběžek a motocyklů, především kdy je vyžadováno řidičské oprávnění. A zmínil další požadavky, které musí uživatelé výše zmíněných vozidel splňovat. Během semináře se v rámci diskuze řešili konkrétní případy z praxe. Podrobné informace o najdou zájemci
+zde…
+Městská policie v Kadani se na provoz koloběžek, a také cyklistů, v letních měsících více zaměří. Bude během toho reagovat také na připomínky, které zazněly během jarních setkávání na sídlištích.
+Výborná reprezentace městské policie
+V sobotu 27. června se na hřišti v Úhošťanech uskutečnilo mistrovství Unie tělovýchovných organizací Policie České republiky v malé kopané. Soutěž byla pořádána ve spolupráci s SKP Kadaň. Mistrovství se zúčastnilo 10 týmů mezi kterými bylo i mužstvo Městské policie Kadaň. A vedlo si skvěle, když nakonec vybojovalo druhé místo. „Chtěl bych poděkovat hráčům za výbornou reprezentaci naší městské policie,“ dodal k jejich úspěchu Jindřich Drozd, ředitel MP Kadaň.
+Besed na sídlištích se účastní i zástupci městské policie
+Od prvního června probíhají setkání zástupců města s veřejností na jednotlivých sídlištích. Fotografie jsou se setkání na sídlišti B. Starosta Jan Losenický nejprve informoval, jak byly vyřešeny připomínky z minulého setkáním, které se konalo v minulém roce. Bylo jich přes 40. Přítomní se také dozvěděli o novinkách a chystaných investičních akcích. A především mohli vznášet další připomínky, co by chtěli na sídlišti zlepšit. Vše se pečlivě zapsalo.
+Setkání se účastníci také zástupci městské policie, kteří odpovídají na případné dotazy. Na často kladené otázky najdete odpovědi na těchto stránkách, další odpovědi a konkrétní řešení připomínek najdete na stránkách:
+setkavanikadan.cz
+.
+„Rozmohl se nám tady takový nešvar“...
+Zlidovělá filmová hláška přesně popisuje stálý nešvar, kterým je v Kadani odkládání nejrůznějšího materiálu,
+především dožitého nábytku nebo větších elektrických spotřebičů z domácnosti ke stání ke kontejnerům. Obyvatelé města tak činí hlavně z pohodlnosti. Správně by měly zmíněné věci skončit na sběrném dvoře. Lidé tak přidělávají práci pracovníkům technických služeb, kteří tyto věci musí odvést a rostou tím i náklady. Více práce má díky tomu také městská policie, která podobné případy šetří. Zaměřuje se na to při své kontrolní činnosti a silným pomocníkem je robustní kamerový systém, který dokáže řadu případu také odhalit. Pokud nedojde k nápravě, čeká hříšníky pokuta.
+K jednomu z posledních takových případů došlo 1. dubna, a nebyl to apríl. Večer krátce po osmé hodině řešila městská policie odložení několika kusů starého nábytku ke kontejnerovému stání v Chomutovské ulici. Při šetření svědkové potvrdili, že věci ke kontejnerům vynášeli tři muži z bytu ženy, která se strážníkům k činu doznala. Nebyla však ochotna věc napravit, stejně jako jeden z trojlístku. Byla jim uložena pokuta. Naopak zbylí dva muži se o nápravu snažili.
+Učili seniory jak se bránit v krizových situacích
+Jaroslav Zetek, který školí i členy městské policie, navštívil v lednu kadaňské seniory. Za asistence strážníka Petra Matyáše se snažil naučit seniory jak se chovat a bránit v kritických situacích, do kterých se mohou dostat. A jak také využít jako obranné prostředky i věci, které lidé běžně nosí u sebe, jako jsou například klíče, tužky, lahve s pitím atd. Účastnice, protože šlo výhradně o ženy, si mohly také předváděné obranné techniky vyzkoušet v praxi. Podle jejich zájmu nešlo o první návštěvu zmíněného odborníka na sebeobranu u spolku Nestárnoucí senioři Kadaně.
+Kamerový systém městské policie se rozšířil díky dotaci Ústeckého kraje
+Městská policie stále vylepšuje svůj bezpečnostní kamerový systém. Za poslední dobu se díky tomu zlepšila kvalitu obrazu, zoomu i záznamu vše se posunulo na vyšší technologickou úroveň. Ale zároveň je také nutné jeho rozšiřování, jak v Kadani rostou nová sídliště, roste také potřeba rozšiřování městského. Kamerový systému městské policii umožňuje sledovat aktuální dění na ulicích a veřejných prostranstvích města. Nejnovější kamerový body byl uplynulých týdnech vybudován na Strážišti, kde dosud žádná městská kamera nebyla. Jistě to ocení občané, kteří na to při besedách poukazovali. Pořízení nového kamerového bodu podpořil Ústecký kraj poskytnutím investiční dotace z Programu 2025 ve výši 226 050 Kč.
+Hřiště kontrolují detektorem kovu
+Část činnosti městské policie je věnována prevenci. Zvláště v případě dětí. Známé jsou besedy na školách nebo výchova na dopravním hřiště. Mezi prevenci spadá i pravidelná kontrola dětských hřišť. Jak vizuální, zda vše funguje jak má, a nemůže dojít k úrazu, tak pomocí detektorem kovu. Tak aby děti při hraní nenarazili na něco nebezpečného. Kontroly se provádějí na každém hřišti zhruba dvakrát ročně. Během prázdnin se kontroly provádějí častěji. Zkontrolované hřiště je opatřeno nálepkou, která uvádí datum kontroly.
+K fotu: Na ilustrační fotografii vidíte jeden z možných nálezů detektorem kovu. Opravdu se ale v jednom případě podařilo strážníku obsluhující detektor najít ztracené klíče, když byl o to požádán.
+Zprávy z ulice
+Nedala pozor a pak se jela uklidnit
+20. července
+Večer po osmé hodině přijala městská policie oznámení dopravní nehodě při které mělo vozidlo nabourat do sloupku oplocení a ujet z místa nehody. Nehoda se stal v ulici Kpt. Jaroše, u výjezdu z ulice 5. května. Místní šetřením se z dílů vozidla, které zůstaly v místě nehody, se podařilo zjistit stáří i typ a řadu vozidla. Vozidlo, které odpovídalo popisu, se nacházela na parkovišti u Lidlu. Vozidlo mělo nabouraný pravý přední nárazník spolu se světlometem a mlhovkou. Na místě se nacházela řidička a dva spolujezdci. Všichni byli bez zranění. Zkouška na alkohol byla negativní. Žena uvedla, že nedávala při řízení pozor a na kruhovém objezdu strhla řízení vpravo a nabourala do zábradlí, které poškodila. Následně zpanikařila, neuvědomil asi, že musí zůstat na místě a odjela na nejbližší parkoviště aby se uklidnila. Případ dořeší Policie ČR.
+Koberce uklidili pod dozorem
+19. července
+Dopoledne před půl dvanáctou si obsluha kamerového systému v Chomutovské ulici všimla dvou mladých mužů, kteří odkládali dřevěné desky do popelnicového stání. Dalším nahlédnutím na kamerový záznam byla na místě zjištěna hromada koberců. Zpětným dohledáním na kamerových záznamech se ukázalo, že o dva dny dříve v nočních hodinách hází muž a žena koberce z okna na chodník. Podle místní znalosti poznali strážníci jejich totožnost. Muž a jeho přítelkyně se strážníkům přiznali, že vynášeli kusy koberců k popelnicovému stání. Musí se vystěhovat a nevědí, kam je dát. Byli vyzváni aby koberce uklidili, což učinili a byla jim uložena bloková pokuta.
+Ježek skončil svojí cestu v boxu
+18. července
+Odpoledne v půl čtvrté přijala městská policie oznámení, že v ulici Na Podlesí u prodejny Rossmann se nachází uhynulý ježek. Podle strážníků se pravděpodobně jedna o ježka obecného. Strážníci zajistili jeho hygienický převoz do kafilerního boxu v Prunéřově.
+Na víně a čokoládě si nepochutnal
+16. července
+Odpoledne po šestnácté hodině řešila hlídka městské policie drobnou krádež, ke které došlo v Albertu. Muž si chtěl odnést bez zaplacení zboží v hodnotě 252 Kč. Šlo o láhev vína a 6 kusů čokolád. Zboží bylo vráceno bez poškození do prodejny a muži uložena pokuta.
+Náprava pod dohledem
+16. července
+odpoledne před půl pátou byla hlídka městské policie vyslána k domu v Chomutovské ulici, kde někdo u kontejnerů odložil lednici. Místním šetřením strážníci zjistili, že lednici zde odložila žena, která byla vyzvána aby ji odstranila. Tak se i stalo. Pod dohledem strážníků byla naložena do dodávky a odvezena. Žena byla poučena jak má v případě likvidace vysloužilých věcí postupovat a věc byla v tomto případě vyřešena domluvou.
+Šlo o dobrý skutek?
+15. července
+Odpoledne před druhou hodinou obdržela městská policie telefonické oznámení o poničeném trávníku na cestě na Svatý kopeček v ulici Pionýrů. Strážníci na místě zjistili, že trávník není poničen, ale je na něm navezena vrstva zeminy. Místním šetřením zjistili, kdo sem zeminu navezl. Muž, který tak učinil, strážníkům vysvětlil, že do zeminy namíchal i travní osivo, které bude několik dní zalévat. Chtěl pouze zvelebit cestu na kopec. Informace o případu dostal městský úřad.
+Strážníkům neutekl
+14. července
+Hlídku městská policie zastavil podavač z Albertu a oznámil, že jim utekl zloděj z obchodu směrem do Chomutovské ulice a že jeho kolegyně běží za ním. Strážníci podezřelého dostihli v Chomutovské ulici a pak se s ním vrátili do prodejny. Muž se ke krádeži jídla v hodnotě 121 Kč přiznal. Vložil si ho do batohu a utekl. Byla mu uložena bloková pokuta.
+Raději zlámal pruty
+9. července
+Odpoledne před šestnáctou hodinou byla hlídka městské policie vyslána k řece Ohří do oblasti podél cyklostezky do Klášterce nad Ohří. Jejich cílem bylo prověřit zda zde někdo nechytá ryby bez platného povolení. Dva muži zde měli nahozené pruty. Jeden z nich neměl platné povolení k lovu ryb. Byl informován o dalším postupu. Aby mu nebyly zabaveny pruty, raději na ně šlápnul a zlomil je. O případu byla vyrozuměna rybářská stráž a vše dořeší správní orgán.
+Stále to zkouší
+7. července
+Po šestnácté hodině byla hlídka městské policie vyslána do Kauflandu, kde došlo k drobné krádeži. Muž se pokusil pronést bez zaplacení zboží přes samoobslužné poklady v hodnotě 59,90 Kč, když si je zastrčil do kapsy. Byla mu uložena bloková pokuta.
+Strážníci dopadli zloděje kol
+5. července
+Když nastupovala noční směna, byla městská policie požádána Policií ČR o koordinaci při pátrání po pachateli krádeže dvou jízdních kole, ke kterému došlo na Mírovém náměstí. Totožnost pachatele byla strážníkům známa, dostali i popis jeho oblečení. Naposledy se měl pohybovat na pánském horském kole Prunéřovskou ulici směrem k vlakovému přejezdu pod Bystřickým kopcem. Když muž zahlédl přijíždějící hlídku, dal se s jízdním kole na útěk přes louku. Na výzvy k zastavení nedbal. Do akce se zapojily i další hlídky. Strážníci pátrali v oblasti u hřbitova, kde se mohl pachatel ukrývat. Nakonec bylo nalezeno odcizené kolo a asi dva metry od něj ležel ukrytý pachatel. Po zadržení a předání Policii ČR uvedl, kde se v lese nachází druhé odcizené kolo.
+Zloděje dopadli rychle
+1. července
+Po poledni přijala městská policie telefonické oznámení, že v areálu Prefa odcizili dva muži radiátory. Na místo byly vyslány dvě hlídky, které hledaly v okolí podezřelé. Ty byli dopadeni u nedaleké firmy. Odcizené radiátory v počtu 4 kusů se nacházely na vozíku. Případ si převzala Policie ČR.
+Zbytečný hazard
+30. června
+Před osmou hodinou prováděla hlídka městské policie kontrolu v oblasti Žatecké ulice. Přitom si strážníci všimli jedoucího vozidla, kde na místě spolujezdec bylo malé dítě, které nebylo připoutáno bezpečnostním pásem ani usazeno v autosedačce a volně se pohybovalo po vozidle. Hlídka vozidlo na vhodném místě zastavila. Řidiče strážníci upozornili na porušení bezpečnosti. Dechová zkouška na alkohol byla negativní.
+Hledal spadlé klíče v kontejneru
+27. června
+Odpoledne v půl třetí obdržela městská policie telefonické upozornění, že v ulici Na Podlesí se nachází starší muž, který se přehrabuje v kontejneru. Strážníci zjistili, že muž si omylem vyhodil do kontejneru klíče od domova. Při hledání utrpěl drobné poranění ruky. Díky delšímu pobytu na slunci nebyl v dobrém zdravotním stavu. Strážníci mu poskytli základní pomoc a posadili ho do stínu. Strážníkům se podařilo kontaktovat jeho syna, který se dostavil na místo a otce si převzal do svojí péče.
+Našli jen příslušenstv
+í
+25. června
+Během celého dopoledne prováděla hlídka městské policie pátrání po kolu, které bylo odcizeno ze zahrady domu v ulici Václava Havla. V rámci šetření byl zjištěn podezřelý a hlídka opakovaně prováděla ohledání místa v lese u Prunéřovského potoka, kde se měl vyskytovat. Podařilo se najít jen příslušenství z odcizeného kola jako cyklistickou brašnu, pumpičku, klíče atd. Nalezené věci byly předány Policii ČR, která věc šetří.
+Kávu nepronesl
+16. června
+Ráno po sedmé hodině byla hlídka městské policie přivolána to Penny. Důvodem byl muž, který se pokusil pronést bez zaplacení odnést dvě kilová balení kávy v celkové ceně 1199,80 Kč. Zboží měl v batohu, ale neprošel bezpečnostním rámem. Muž bydlící v Chomutovské ulici se k činu přiznal a byla mu uložena bloková pokuta. Zboží bylo v pořádku vráceno na prodejnu.
+Asistence při převozu pacientky
+15. června
+Ráno po šesté hodině byla městská policie požádána pracovníky nemocnice o asistenci při převozu ženy na záchytku do Teplic. Převozu, který se uskutečnil sanitním vozidlem, se za městskou policii zúčastnil jeden strážník. Cesta proběhla v klidu a žena byla v pořádku předána do rukou zdravotníků v Teplicích.
+Skončil v nemocnici
+13. června
+Večer krátce po deváté hodině byla městská policie upozorněna na muže, který ležel v Tyršově ulici na chodníku s batohem na zádech. Strážníci na místě zjistili, že muž nemá viditelné zranění ale nebyl schopen verbálně komunikovat ani se udržet na nohou. Zkouška jeho dechu ukázala, že má v krvi 4,37 promile alkoholu. Vzhledem k vysoké hodnotě alkoholu a k jeho špatnému stavu byla na místo přivolána zdravotnická záchranná služba, která převezla muže na vyšetření do nemocnice.
+Ztracená značka
+10. června
+Ráno po osmé hodině prováděla hlídka městské policie kontrolu v oblasti ulice Na Průtahu. Během ní nalezla přední tabulku s registrační značkou vozidla . Lustrací bylo zjištěno, že provozovatelem vozidla, které byla značka přidělena, je muž z Málkova. Značka vozidla byla předána na odbor dopravy na evidenci vozidel.
+Potřetí skončil na záchytce
+9. června
+Večer před půl osmou hodinou byla hlídka městské policie vyslána do ulice Jana Švermy. Podle telefonického oznámení se zde u jednoho domu nachází muž, který řve a zvoní na zvonek. Strážníci zjistili, že je pod vlivem alkoholu. Dostalo se mu poučení a výzvy, aby místo opustil. Kolem osmé hodiny se situace ale opakovala. Muž stál u vchodových dveří opřený o zvonek. Strážníky po výzvě opět poslechl, ale po deváté hodině musela městská policie opět na místě zasahovat, když zde muž pořvával. Dechová zkouška ukázala, že má 2,54 promile alkoholu v krvi. Byl převezen k lékaři, který rozhodl o jeho umístění na záchytku do Teplic.
+Použil kleště aby si dobil mobil
+4. června
+V noci po půl druhé si obsluha kamerového dohlížecího systému všimla dvou mužů na Mírovém náměstí, kteří s kleštěmi v rukou něco dělali pod lavičkou. Po příjezdu strážníkům muži sdělili, že pouze dobíjejí telefon. Aby tak mohli učinit, přiznal se jeden z dvojice, že použil kleště a přeštípl zámek od elektrické skříně pod lavičkou. Případ dořeší správní orgán.
+Pomohli s převozem
+2. června
+V noci před desátou hodinou přijala městská policie žádost z obvodního oddělení Policie ČR v Klášterci nad Ohří a asistenci při převozu osoby na záchytku do Teplic. Jednalo se o muže, který měl mít podle policie sebevražedné sklony. Převoz proběhl bez problémů a pacient byl předán zdravotnickému personálu v pořádku.
+Pod vlivem se za volant nesedá
+30. května
+Když nad ránem v půl čtvrté prováděla hlídka kontrolu v oblasti ulice Na Průtahu, zaregistrovali strážníci dopravní nehodu. Řidič osobního auta narazil do dopravní značky, viditelně jel nepřiměřenou rychlostí. Nehoda byla bez zranění. Řidič bydlící v Kadani ale při dechové zkoušce měl v krvi 1,84 promile alkoholu. Na místo byla přivolána Policie ČR, která si případ převzala.
+Skončil na záchytce
+18. května
+Večer po osmé hodině obdržela městská policie oznámení od asistenta prevence kriminality, že na hradbách u bašty leží na lavičce muž, zřejmě je pod vlivem alkoholu a nejde probudit. Strážníci, kteří na místo dorazili, na základě místní znalosti poznali jeho totožnost. Muž byl bez viditelného zranění ale zjevně pod vlivem alkoholu a nebyl schopen normální komunikace. Nebyl ani schopen chůze a strážníkům odpovídal neurčitými gesta. Z obav o jeho zdraví byla na místo přivolána zdravotnická záchranná služba. Po převozu do nemocnice byl u muže naměřena hodnota 3,93 promile alkoholu v krvi. Následně lékař rozhodl o jeho převozu na záchytku do Teplic.
+Část odcizeného zboží snědl již prodejně
+17. května
+Večer před sedmou hodinou byla hlídka městské policie přivolána do Kauflandu, kde došlo k drobné krádeži. Zadržený muž podle ostrahy snědl uvnitř prodejny kuřecí pokrm v hodnotě 45,38 Kč a další potravinu v hodnotě 113,70 Kč si strčil do kapsy a prošel bez zaplacení přes pokladnu. Případ dořeší přestupková komise.
+Opakované rušení nočního klidu
+16. květn
+a
+V noci po desáté hodině byla hlídka městské policie vyslána k domu v Chomutovské ulici, kde mělo docházet k rušení nočního klidu. Před vchodem domu se nacházelo několik osob, kterým se dostalo poučení a po chvíli byl klid. V před půlnocí byli strážníci vyslání na stejnou adresu znovu. Spojili se s uživatelkou bytu a ta přiznala, že si je rušení nočního klidu vědoma a hudbu vypne. V jejím bytě se kromě ní nacházelo několik osob. Žena byla vyzvána, aby zajistila, že se se situace s rušením nočního klidu nebude opakovat. Přesto v noci po čtvrté hodině byla hlídka na místo znovu přivolána. Žena jim řekla, že akci již ukončila a bude na místě klid
+Ke krádeži ji donutila životní situace
+12. května
+Odpoledne před jednou hodinou obdržela městská policie oznámení o drobné krádeži, ke které mělo dojít v Kauflandu. Strážníci na místě zjistili, že žena z Vintířova měla se zbožím v hodnotě 446,30 Kč projít pokladní zónou bez zaplacení. Potvrdil to kamerový záznam. Žena se k činu přiznala uvedla, že je ve špatné životní situaci a proto se se pokusila pronést zboží bez zaplacení. Byla ji uložena bloková pokuta.
+Pomoc v nouzi
+10. května
+V noci před čtvrtou hodinou se na městskou policii se žádostí o pomoc obrátila žena, která měla starost o svou starou maminku. Upadla z postele a nemůže se zvednout. Po příjezdu na místo jim její muž řekl, že jeho paní spadla z postele na zem a sám ji nemůže zvednout. Žena byla na pohled bez zranění, ale měla problém s nohami a proto se nemohla sama zvednout. Strážníci ji spolu s jejím mužem pomohli do postele. Při posouzení stavu nohou a z obavy o její zdraví byla na místo přivolána zdravotnická záchranná služba
+Zmatený muž
+4. května
+Večer po osmnácté hodině se na městskou policii obrátili dvě ženy, které uvedly, že v parku za Kauflandem si všimli muže, který tu zmateně pobíhá a v ruce má injekční stříkačku. Muž byl hlučný a působil nebezpečně. Spolu s mužem zde byla i žena se zanedbaným vzhledem, která byla rovněž velmi hlučná. Totožnost ženy byla strážníkům díky místní znalosti známa. Muž měl bydliště v Košťanech. Na místo byla přivolána hlídka Policie ČR, která si případ převzala k došetření pro podezření z možného spáchání trestného činu.
+Opatření, aby se nestalo neštěstí
+3. května
+Dopoledne před jedenáctou hodinou přijala městská policie oznámení, že na sídlišti Na Podlesí na dětském hřišti došlo k poničení zabezpečovacích lan, která jistí fotbalovou branku proti pádu. Strážníci na místě zjistili situaci, informovali o závadě odbor životního prostředí a páskou vstup zakázán ohraničili oblast kolem branky, než bude zajištěna náprava.
+Zapomněl kde bydlí
+2. května
+Večer před sedmou hodinou přijala městská policie oznámení, že v Chomutovské ulici se našel chlapec, který brečí a tvrdí, že hledá matku. Strážníci se spojili s oznamovatelkou. Chlapec jim řekl, že hledá svou matku a panelový dům, ve kterém bydlí, si nepamatuje, jelikož se nedávno nastěhovali. Dále uvedl, že je mu zima, má žízeň a hlad, protože naposledy měl snídani. Jeho otce ani matku se nepodařilo telefonicky kontaktovat, ale chlapec si nakonec vzpomněl, kde bydlí. Cestou potkali jeho matku, která si šla pro syna. Případ došetří odbor sociálních věcí.
+Do kláštera přes zeď
+1. května
+Večer po půl osmé obdržela městská policie upozornění, že v areálu Alžbětinského kláštera se nachází nějaký muž, pravděpodobně bezdomovec. Strážníci v areálu kláštera skutečně muže objevili. Kolem sebe měl poházené věci, většinou oblečení, spací potřeby a obaly od jídel. Strážníkům řekl, že zde přespává už asi čtvrtý den. Na zahradu kláštera se dostával přes zeď. Muž byl z místa vykázán a za doprovodu hlídky jej opustil. Případ dořeší přestupková komise.
+Ukázali mu správný postup
+24. dubna
+Když hlídka městské policie během kontroly projížděla v noci před půl desátou ulicí Jana Švermy, všimla si muže, který odkládal nějaké věci vedle kontejnerového stání. Šlo o dřevěné desky z rozebraného nábytku. Strážníci ho poučili, že takto nemůže konat a věci patří na sběrný dvůr v areálu Technických služeb Kadaň, kam je může v pracovní den odvést. Muž poté začal nakládat odpad zpět do svého vozidla. Byla mu uložena bloková pokuta
+.
+Chycen při činu
+18. dubna
+Když hlídka městské policie večer před půl osmou prováděla kontrolu v chomutovské ulici, všimli si strážníci muže, který odnášel kus postele k popelnicovému stání. Zde se již nacházela hromada dalších kusů nábytku. U vchodu přilehlého domu měl připraveny kusy gauče, několik dřevěných desek a televizi. Muž strážníkům vysvětlil, že se stěhuje z bytu, který musí do druhého dne vyklidit. Nic odnášet zpět nechtěl ani si nezajistil odvoz do sběrného dvora. Byla mu uložena pokuta ve výši 6000 Kč.
+Černou skládku odklidili
+16. dubna
+Dopoledne po deváté hodině kontrolovala hlídka městské policie oblast Královského vrchu. Přitom strážníci zjistili vyhozené 4 kusy pneumatik. Pneumatiky byly odklizeny a předány do Technických služeb Kadaň k likvidaci. Zjistit původce černé skládky se nepodařilo.
+Doprovod na záchytku
+15. dubna
+Deset minut po půlnoci byla městská policie požádána o doprovod pacienta na záchytku v Teplicích. Muž byl pod vlivem drog a již v nemocnici při příjmu mu hlídka Policie ČR byla nucena nasadit pouta. Ta mu byla v zájmu bezpečnosti ponechána i během celé doby převozu a sejmuta až na záchytce v Teplicích.
+Zkoušel další možnost krádeže
+13. dubna
+Odpoledne po jedné hodině řešili strážníci drobnou krádež, ke které došlo v Kauflandu. Pracovník ostrahy jim zdělil, že viděl muže jak bere zboží z regálu a ukládá je do vozíku na podporu chůze. U pokladny uhradil jen část zboží a zbytek ponechal ve vozíku. Šlo o zboží v hodnotě 511,52 Kč. Muž se k činu doznal a byla mu uložena bloková pokuta.
+Chtěl nakupovat zadarmo
+5. dubna
+Odpoledne po třetí hodině byla hlídka městské policie vyslána do Alberta, kde bezpečnostní kamery odhalily ženu, která se snažil odnést zboží bez zaplacení. Strážníkům svůj čin zdůvodňovala tím, že má málo peněz a platí vysoký nájem, ale přesto chtěla svému příteli a dětem udělat radost. Proto vzala pivo, sladké tyčinky a čokoládu a chtěla z prodejny odejít bez zaplacení. Nahlédnutím do registru přestupků byla zjištěna recidiva. Byla ji uložena pokuta.
+Trik mu nevyšel
+5. dubna
+Odpoledne před půl jednou řešili strážníci případ muže, který se v Kauflandu dopustil drobné krádeže. Jak dosvědčila bezpečnostní kamera, zboží, které chtěl odnést bez placení, si dal do batohu, a následně zamířil na samoobslužné poklady, kde uhradil jen věci, které měl v nákupním košíku. Hodnota odcizeného zboží byla 552,30 Kč. Byla mu uložena pokuta.
+Volali záchranku
+5. dubna
+V dopoledních hodinách obdržela městská policie upozornění, že na autobusové zastávce u koupaliště se nachází ležící muž. Šlo o muže z Kadaně, který strážníky požádal o přivolání zdravotnické záchranné služby. Stěžoval si bolesti na prsou a vystřelující bolest od žaludku směrem k srdci. Po příjezdu zdravotníků měl tlak 237/114. Byl převezen na vyšetření do nemocnice.
+Městská policie Kadaň
+Chomutovská 1254, 43201 Kadaň
+Návrat na obsah
+Chcete-li použít tuto webovou stránku, musíte povolit JavaScript.
