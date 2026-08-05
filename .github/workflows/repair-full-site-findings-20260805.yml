@@ -28,8 +28,8 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Opravit nálezy a commitnout
-        id: fix
+
+      - name: Opravit nálezy, ověřit zdroj a commitnout
         shell: bash
         run: |
           set -euo pipefail
@@ -38,38 +38,52 @@ jobs:
           for attempt in 1 2 3 4; do
             git fetch origin main
             git reset --hard origin/main
+            python3 -m py_compile scripts/repair_full_site_findings_20260805.py scripts/full_site_audit_v2_20260805.py
             python3 scripts/repair_full_site_findings_20260805.py
-            python3 scripts/repair_full_site_audit_source_20260805.py
-            python3 -m py_compile scripts/full_site_audit_20260805.py
-            git add clanky nahled index.html rss.xml sitemap.xml news-sitemap.xml llms.txt data scripts/full_site_audit_20260805.py
-            if ! git diff --cached --quiet; then git commit -m 'Opravit nálezy úplného auditu webu'; fi
-            if git push origin HEAD:main; then break; fi
+            python3 scripts/full_site_audit_v2_20260805.py --static --static-report /tmp/full-site-static-before-deploy-v2.json
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m 'Dokončit opravy úplného auditu webu'
+            fi
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [[ "$attempt" == 4 ]]; then
+              echo 'Nepodařilo se bezpečně odeslat opravu do main.' >&2
+              exit 1
+            fi
             sleep $((attempt*5))
           done
+
       - name: Nasadit celý web
         shell: bash
         run: |
+          set -euo pipefail
           chmod +x deploy/sync-production.sh
           sudo -E env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
-      - name: Finální statický a živý audit
+
+      - name: Finální statický a živý audit v2
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          python3 scripts/repair_full_site_audit_source_20260805.py
-          python3 -m py_compile scripts/full_site_audit_20260805.py
-          python3 scripts/full_site_audit_20260805.py --static --static-report /tmp/full-site-static-final.json
-          python3 scripts/full_site_audit_20260805.py --live --live-report /tmp/full-site-live-final.json
+          python3 -m py_compile scripts/repair_full_site_findings_20260805.py scripts/full_site_audit_v2_20260805.py
+          python3 scripts/full_site_audit_v2_20260805.py --static --static-report /tmp/full-site-static-final-v2.json
+          python3 scripts/full_site_audit_v2_20260805.py --live --live-report /tmp/full-site-live-final-v2.json
+
       - name: Zapsat úspěch
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const {owner,repo}=context.repo;
-            const body=`Opravy z úplného auditu byly nasazeny a finální statický i živý audit prošel.\n\nRun: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            for(const n of [719,720,721]){
-              try{await github.rest.issues.createComment({owner,repo,issue_number:n,body});await github.rest.issues.update({owner,repo,issue_number:n,state:'closed',state_reason:'completed'});}catch(e){}
+            const body=`Opravy z úplného auditu byly nasazeny a stabilní finální statický i živý audit v2 prošel. Ověřen byl celý registr článků, archiv, titulní strana, RSS, sitemap.xml, news-sitemap.xml, interní odkazy, obrázky, canonical URL, strukturovaná data a deployment-health.txt.\n\nRun: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            for(const n of [719,720,721,723]){
+              try{
+                await github.rest.issues.createComment({owner,repo,issue_number:n,body});
+                await github.rest.issues.update({owner,repo,issue_number:n,state:'closed',state_reason:'completed'});
+              }catch(e){}
             }
-            const x=await github.rest.issues.create({owner,repo,title:'[audit] Celý web Naše Kadaň – finální success',body,assignees:['petrkotab666']});
+            const x=await github.rest.issues.create({owner,repo,title:'[audit] Celý web Naše Kadaň – finální success v2',body,assignees:['petrkotab666']});
             await github.rest.issues.update({owner,repo,issue_number:x.data.number,state:'closed',state_reason:'completed'});
