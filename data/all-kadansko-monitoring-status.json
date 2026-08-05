@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-05T01:13:24.412244+00:00",
+  "checkedAt": "2026-08-05T03:23:58.889480+00:00",
   "bootstrap": false,
   "sourceCount": 209,
-  "checkedSources": 192,
-  "failedSources": 17,
-  "itemsParsed": 17124,
-  "uniqueItems": 10908,
+  "checkedSources": 189,
+  "failedSources": 20,
+  "itemsParsed": 16742,
+  "uniqueItems": 10603,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 891,
+    "genericTitle": 882,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 1,
-    "notEditoriallySignificant": 48,
+    "broadWithoutLocalMatch": 11,
+    "notEditoriallySignificant": 51,
     "notFreshOrUndated": 0,
-    "duplicate": 5325,
+    "duplicate": 5257,
     "deferredByCap": 0
   },
   "coverage": {
@@ -126,8 +126,9 @@
       "url": "https://gis.mesto-kadan.cz/portal",
       "category": "Město a územní plánování",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 13
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -370,7 +371,7 @@
       "category": "Základní školy",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 245
+      "itemsParsed": 244
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -458,8 +459,9 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 125
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -516,8 +518,9 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 82
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -606,9 +609,8 @@
       "url": "https://vystrahy.chmi.cz/",
       "category": "Počasí a výstrahy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Dopravníinfo.cz",
@@ -674,7 +676,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 271
+      "itemsParsed": 268
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -731,7 +733,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 29
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -1382,8 +1384,9 @@
       "url": "https://www.mesto-most.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "checked",
-      "itemsParsed": 160
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Louny – oficiální web",
@@ -1704,7 +1707,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 38
+      "itemsParsed": 37
     },
     {
       "name": "Google News – široký region 3",
@@ -1720,7 +1723,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 68
+      "itemsParsed": 70
     },
     {
       "name": "Google News – široký region 5",
@@ -1752,7 +1755,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 66
+      "itemsParsed": 68
     },
     {
       "name": "Google News – široký region 9",
@@ -1760,7 +1763,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 14
     },
     {
       "name": "Google News – široký region 10",
@@ -1784,7 +1787,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 12
     },
     {
       "name": "Google News – široký region 13",
@@ -1792,7 +1795,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 11
+      "itemsParsed": 9
     },
     {
       "name": "Google News – široký region 14",
