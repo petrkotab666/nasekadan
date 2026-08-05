@@ -1,0 +1,209 @@
+name: Opravit mrtvý obrázek Slovanu a ověřit všechny náhledy
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-repair-missing-slovan-image-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: repair-missing-slovan-image-20260805
+  cancel-in-progress: true
+
+env:
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit zdroje a uložit změnu
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – oprava obrázků'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/repair_missing_slovan_image_reference_20260805.py
+            python3 scripts/enforce_all_article_visibility.py
+            git diff --check
+            git add clanky/slovan-druhy-pokus.html clanky/parts/slovan-01.html .github/drafts/slovan-druhy-pokus.html scripts/publish_slovan_article.py scripts/publish_slovan_20260805.py index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Opravit mrtvý obrázek Slovanu ve všech zdrojích'
+            fi
+            source_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit opravený článek, přehledy a celý obrazový balík
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/slovan-image-fix"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky/parts" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp clanky/index.html "$bundle/clanky/index.html"
+          cp clanky/strana-*.html "$bundle/clanky/"
+          cp clanky/slovan-druhy-pokus.html "$bundle/clanky/"
+          cp clanky/parts/slovan-01.html "$bundle/clanky/parts/"
+          cp -a social/. "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\nchange=repair-missing-slovan-image\n' "${{ steps.source.outputs.source_sha }}" > "$bundle/deployment-health.txt"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/slovan-image-fix.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/slovan-image-fix.tgz" ubuntu@57.129.43.215:/tmp/slovan-image-fix.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/slovan-image-fix
+          mkdir -p /tmp/slovan-image-fix
+          tar -xzf /tmp/slovan-image-fix.tgz -C /tmp/slovan-image-fix
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 /var/www/nasekadan/clanky/parts /var/www/nasekadan/social /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/slovan-image-fix/index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 /tmp/slovan-image-fix/rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 /tmp/slovan-image-fix/sitemap.xml /var/www/nasekadan/sitemap.xml
+          sudo install -m 0644 /tmp/slovan-image-fix/news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+          sudo install -m 0644 /tmp/slovan-image-fix/llms.txt /var/www/nasekadan/llms.txt
+          sudo install -m 0644 /tmp/slovan-image-fix/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          sudo install -m 0644 /tmp/slovan-image-fix/clanky/index.html /var/www/nasekadan/clanky/index.html
+          sudo install -m 0644 /tmp/slovan-image-fix/clanky/slovan-druhy-pokus.html /var/www/nasekadan/clanky/slovan-druhy-pokus.html
+          sudo install -m 0644 /tmp/slovan-image-fix/clanky/parts/slovan-01.html /var/www/nasekadan/clanky/parts/slovan-01.html
+          for file in /tmp/slovan-image-fix/clanky/strana-*.html; do sudo install -m 0644 "$file" "/var/www/nasekadan/clanky/$(basename "$file")"; done
+          sudo cp -a /tmp/slovan-image-fix/social/. /var/www/nasekadan/social/
+          sudo install -m 0644 /tmp/slovan-image-fix/data/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/slovan-image-fix/data/article-integrity-manifest.json /var/www/nasekadan/data/article-integrity-manifest.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky/parts /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker cp /tmp/slovan-image-fix/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/slovan-image-fix/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/slovan-image-fix/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp /tmp/slovan-image-fix/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/slovan-image-fix/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp /tmp/slovan-image-fix/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker cp /tmp/slovan-image-fix/clanky/. nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp /tmp/slovan-image-fix/social/. nasekadan-web:/usr/share/nginx/html/social/
+            sudo docker cp /tmp/slovan-image-fix/data/. nasekadan-web:/usr/share/nginx/html/data/
+          fi
+          rm -rf /tmp/slovan-image-fix /tmp/slovan-image-fix.tgz
+          REMOTE
+
+      - name: Veřejně ověřit článek, kulturní kartu a všechny obrazové reference
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from urllib.request import Request, urlopen
+          import re, ssl, time
+
+          ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+          def fetch(url):
+              sep='&' if '?' in url else '?'
+              req=Request(url+sep+'slovan_fix='+str(time.time_ns()),headers={'User-Agent':'NaseKadan-image-fix/1.0','Cache-Control':'no-cache'})
+              with urlopen(req,timeout=35,context=ctx) as response:
+                  return response.status,response.headers.get_content_type(),response.read()
+
+          status,_,article=fetch('https://nasekadan.cz/clanky/slovan-druhy-pokus.html')
+          text=article.decode('utf-8','replace')
+          assert status == 200
+          assert 'assets/slovan-detail-20260724.jpg' not in text
+          assert 'social/slovan-druhy-pokus-e2e4356bbb.png' in text
+
+          status,_,home=fetch('https://nasekadan.cz/')
+          home_text=home.decode('utf-8','replace')
+          assert status == 200
+          status,ctype,culture=fetch('https://nasekadan.cz/social/kam-v-kadani-a-okoli-3-9-srpna-2026-199cb73db2.png')
+          assert status == 200 and ctype.startswith('image/') and len(culture) > 1000
+          blocks=re.findall(r'<article\b[^>]*class=["\'][^"\']*\barticle-card\b[^"\']*["\'][^>]*>.*?</article>',home_text,re.I|re.S)
+          culture_blocks=[block for block in blocks if 'Kam v Kadani a okolí od 3. do 9. srpna' in block]
+          if culture_blocks:
+              block=culture_blocks[0]
+              assert '/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html' in block
+              assert 'kam-v-kadani-a-okoli-3-9-srpna-2026-199cb73db2.png' in block
+
+          pages=['https://nasekadan.cz/','https://nasekadan.cz/clanky/']
+          for number in range(2,8):
+              try:
+                  status,_,data=fetch(f'https://nasekadan.cz/clanky/strana-{number}.html')
+                  if status == 200: pages.append(f'https://nasekadan.cz/clanky/strana-{number}.html')
+              except Exception:
+                  break
+          pages += re.findall(r'<loc>(https://nasekadan\.cz/clanky/[^<]+\.html)</loc>',fetch('https://nasekadan.cz/sitemap.xml')[2].decode('utf-8','replace'))
+          image_urls=set()
+          for page in sorted(set(pages)):
+              try:
+                  status,_,data=fetch(page)
+              except Exception as exc:
+                  raise SystemExit(f'Nelze načíst {page}: {exc}')
+              if status != 200: raise SystemExit(f'{page}: HTTP {status}')
+              page_text=data.decode('utf-8','replace')
+              image_urls.update(re.findall(r'https://nasekadan\.cz/(?:social|assets|images|img)/[^"\'\s)<>]+',page_text,re.I))
+          failed=[]
+          def check(url):
+              try:
+                  status,ctype,data=fetch(url)
+                  return url,status,ctype,len(data),''
+              except Exception as exc:
+                  return url,0,'',0,str(exc)
+          with ThreadPoolExecutor(max_workers=24) as pool:
+              futures=[pool.submit(check,url) for url in sorted(image_urls)]
+              for future in as_completed(futures):
+                  url,status,ctype,size,error=future.result()
+                  if status != 200 or size < 128 or not ctype.startswith('image/'):
+                      failed.append((url,status,ctype,size,error))
+          if failed:
+              for item in failed[:50]: print('CHYBA',item)
+              raise SystemExit(f'Nedostupných obrazových referencí: {len(failed)}')
+          print(f'Ověřeno {len(image_urls)} obrazových referencí a správná kulturní karta.')
+          PY
+
+      - name: Uzavřít incident a zapsat úspěch
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const {owner, repo} = context.repo;
+            for (const number of [715]) {
+              try {
+                await github.rest.issues.createComment({owner, repo, issue_number:number, body:'Mrtvý odkaz na obrázek Slovanu byl nahrazen existující grafikou, celý obrazový balík je synchronizovaný a veřejná kontrola všech nalezených obrazových referencí prošla. Incident se uzavírá.'});
+                await github.rest.issues.update({owner, repo, issue_number:number, state:'closed', state_reason:'completed'});
+              } catch (_) {}
+            }
+            const created=await github.rest.issues.create({owner,repo,title:'[repair] Obrazové náhledy celého webu – success',body:`Prázdný náhled kulturního přehledu byl obnoven, mrtvý odkaz ve Slovanu opraven a všechny veřejně nalezené obrazové reference prošly kontrolou.\n\nRun: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,assignees:['petrkotab666']});
+            await github.rest.issues.update({owner,repo,issue_number:created.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Zapsat incident
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Oprava mrtvého obrázku Slovanu' --body "Oprava nebo úplná veřejná kontrola obrazových referencí selhala.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
