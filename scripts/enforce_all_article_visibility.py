@@ -214,6 +214,29 @@ def validate_archive_schema() -> None:
             raise RuntimeError(f"Archivní stránka {path.name} stále obsahuje starý ItemList.")
 
 
+
+def normalize_generated_text_files() -> None:
+    """Odstraní koncové mezery z kanonicky generovaných veřejných souborů.
+
+    VISIBILITY-WHITESPACE-NORMALIZATION-20260805
+    """
+    paths = [
+        ROOT / "index.html",
+        ROOT / "clanky" / "index.html",
+        ROOT / "rss.xml",
+        ROOT / "sitemap.xml",
+        ROOT / "news-sitemap.xml",
+        ROOT / "llms.txt",
+    ]
+    paths.extend(sorted((ROOT / "clanky").glob("strana-*.html")))
+    for generated in paths:
+        if not generated.is_file():
+            continue
+        original = generated.read_text(encoding="utf-8", errors="replace")
+        normalized = "\n".join(line.rstrip() for line in original.splitlines()) + "\n"
+        if normalized != original:
+            generated.write_text(normalized, encoding="utf-8", newline="\n")
+
 def main() -> int:
     engine = load_engine()
     original_article_info = engine.article_info
@@ -288,6 +311,8 @@ def main() -> int:
     for href in all_hrefs:
         if f"https://nasekadan.cz{href}" not in sitemap_locs:
             raise RuntimeError(f"Článek chybí v sitemapě: {href}")
+
+    normalize_generated_text_files()
 
     print(
         f"Viditelnost obnovena: {len(all_hrefs)} článků, "
