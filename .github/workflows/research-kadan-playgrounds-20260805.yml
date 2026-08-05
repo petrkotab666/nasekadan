@@ -1,0 +1,49 @@
+name: Hluboká rešerše kadaňských hřišť
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/research-kadan-playgrounds-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-kadan-playgrounds-20260805
+  cancel-in-progress: false
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nainstalovat nástroje pro PDF a OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-ces libreoffice-writer
+
+      - name: Stáhnout a zpracovat oficiální zdroje
+        run: python3 scripts/research_kadan_playgrounds_20260805.py
+
+      - name: Zapsat výsledky do repozitáře
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add research/kadanska-hriste-20260805/
+          git commit -m 'Rešerše: vytěžit úřední dokumenty a obrazové přílohy ke hřištím' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1
