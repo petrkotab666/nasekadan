@@ -110,7 +110,12 @@ def sitemap_block_score(block: str) -> tuple[int, int]:
 
 
 def deduplicate_sitemap() -> list[str]:
-    """Ponechá každou URL právě jednou a upřednostní úplnější záznam."""
+    """Ponechá každou URL právě jednou a upřednostní úplnější záznam.
+
+    Sitemapu skládá z čistého prefixu, jediné normalizované sady URL a
+    původního suffixu. Opakované spuštění je proto idempotentní a nemůže
+    hromadit prázdné řádky po odstraněných blocích ``<url>``.
+    """
     path = ROOT / "sitemap.xml"
     text = path.read_text(encoding="utf-8")
     if "</urlset>" not in text:
@@ -119,7 +124,8 @@ def deduplicate_sitemap() -> list[str]:
     order: list[str] = []
     selected: dict[str, str] = {}
     duplicates: list[str] = []
-    for match in URL_BLOCK_RE.finditer(text):
+    matches = list(URL_BLOCK_RE.finditer(text))
+    for match in matches:
         block = match.group(0).strip()
         loc_match = LOC_RE.search(block)
         if not loc_match:
@@ -133,9 +139,13 @@ def deduplicate_sitemap() -> list[str]:
         if sitemap_block_score(block) > sitemap_block_score(selected[loc]):
             selected[loc] = block
 
-    without_urls = URL_BLOCK_RE.sub("", text)
     rendered = "\n".join("  " + selected[loc] for loc in order) + "\n"
-    text = without_urls.replace("</urlset>", rendered + "</urlset>", 1)
+    if matches:
+        prefix = text[: matches[0].start()].rstrip()
+        suffix = text[matches[-1].end() :].lstrip()
+        text = prefix + "\n" + rendered + suffix
+    else:
+        text = text.replace("</urlset>", rendered + "</urlset>", 1)
     path.write_text(text, encoding="utf-8", newline="\n")
 
     final_locs = [match.group(1).strip() for match in LOC_RE.finditer(text)]
