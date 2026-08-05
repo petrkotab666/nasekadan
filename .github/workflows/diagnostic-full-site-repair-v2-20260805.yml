@@ -1,0 +1,51 @@
+name: Diagnostika finální opravy webu v2
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-diagnostic-full-site-repair-v2-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: diagnostic-full-site-repair-v2
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit syntaxi, opravu a statický audit v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/repair_full_site_findings_20260805.py scripts/full_site_audit_v2_20260805.py
+          python3 scripts/repair_full_site_findings_20260805.py
+          python3 scripts/full_site_audit_v2_20260805.py --static --static-report /tmp/full-site-diagnostic-v2.json
+          cat /tmp/full-site-diagnostic-v2.json
+
+      - name: Zapsat úspěch
+        if: success()
+        shell: bash
+        run: |
+          issue_url="$(gh issue create --title '[diagnostic] Finální oprava webu v2 – success' --body "Opravný skript na čistém runneru prošel kompilací, deterministickou opravou a úplným statickým auditem v2.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Diagnostika finální opravy webu v2' --body "Kompilace, oprava nebo statický audit v2 selhaly.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
