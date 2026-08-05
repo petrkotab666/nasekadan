@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T14:36:28.729959+00:00",
+  "generatedAt": "2026-08-05T19:56:25.724353+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
@@ -8,9 +8,9 @@
     "Kultura Kadaň (15)",
     "Liďák Kadaň – kulturní program (0)",
     "Kino Hvězda (0)",
-    "Městská knihovna (0)",
-    "Turistický portál Kadaň (0)",
-    "Městské muzeum v Kadani (0)",
+    "Městská knihovna (15)",
+    "Turistický portál Kadaň (15)",
+    "Městské muzeum v Kadani (15)",
     "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
@@ -72,17 +72,19 @@
     "Chomutovský deník (15)",
     "Autokemp Prunéřov – aktuality (7)",
     "Pivnice U Soudku Kadaň – veřejné informace (15)",
-    "Sociální monitoring – Pivnice U Soudku Kadaň (0)",
-    "Sociální monitoring – ARG a hudba v Kadani (0)",
+    "Sociální monitoring – Pivnice U Soudku Kadaň (15)",
+    "Sociální monitoring – ARG a hudba v Kadani (15)",
     "Liďák Kadaň – oficiální web (5)",
-    "Liďák Kadaň – Instagram (5)",
-    "Sociální monitoring – Liďák Kadaň a nové akce (0)",
+    "Liďák Kadaň – Instagram (0)",
+    "Sociální monitoring – Liďák Kadaň a nové akce (15)",
+    "Volby.cz – oficiální volební výsledky a kandidáti (15)",
+    "Volby.cz – otevřená data pro volební výsledky (14)",
     "Úřad práce ČR – kontaktní pracoviště Kadaň (9)",
     "Kultura Kadaň (15)",
-    "Turistické informační centrum Kadaň (0)",
-    "Galerie Josefa Lieslera (0)",
-    "Františkánský klášter Kadaň (0)",
-    "Kadaňský hrad (0)",
+    "Turistické informační centrum Kadaň (15)",
+    "Galerie Josefa Lieslera (15)",
+    "Františkánský klášter Kadaň (15)",
+    "Kadaňský hrad (14)",
     "Autokemp Prunéřov (6)",
     "Autokemp Prunéřov – zdroj 3 (3)",
     "Autokemp Prunéřov – zdroj 4 (0)",
@@ -105,9 +107,6 @@
   ],
   "errors": [
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
-    "Městská knihovna: URLError: <urlopen error timed out>",
-    "Turistický portál Kadaň: URLError: <urlopen error timed out>",
-    "Městské muzeum v Kadani: URLError: <urlopen error timed out>",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
@@ -119,10 +118,7 @@
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Doprava Ústeckého kraje: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
-    "Turistické informační centrum Kadaň: URLError: <urlopen error timed out>",
-    "Galerie Josefa Lieslera: URLError: <urlopen error timed out>",
-    "Františkánský klášter Kadaň: URLError: <urlopen error timed out>",
-    "Kadaňský hrad: URLError: <urlopen error timed out>",
+    "Liďák Kadaň – Instagram: HTTPError: HTTP Error 429: Too Many Requests",
     "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
@@ -191,27 +187,24 @@
       "url": "https://www.knihovnakadan.cz/",
       "category": "Knihovna",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Turistický portál Kadaň",
       "url": "https://kadan.eu/",
       "category": "Turistika",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Městské muzeum v Kadani",
       "url": "https://kadan.eu/informace/mestske-muzeum/",
       "category": "Muzeum a památky",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Městské muzeum v Kadani – veřejný Facebook",
@@ -718,7 +711,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 0
+      "itemsFound": 15
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -726,7 +719,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 0
+      "itemsFound": 15
     },
     {
       "name": "Liďák Kadaň – oficiální web",
@@ -741,8 +734,9 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak/",
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 5
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -750,7 +744,23 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 0
+      "itemsFound": 15
+    },
+    {
+      "name": "Volby.cz – oficiální volební výsledky a kandidáti",
+      "url": "https://www.volby.cz/",
+      "category": "Volby a veřejná správa",
+      "origin": "manual_registry",
+      "status": "checked",
+      "itemsFound": 15
+    },
+    {
+      "name": "Volby.cz – otevřená data pro volební výsledky",
+      "url": "https://www.volby.cz/opendata/opendata.htm",
+      "category": "Volby a otevřená data",
+      "origin": "manual_registry",
+      "status": "checked",
+      "itemsFound": 14
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -773,36 +783,32 @@
       "url": "https://kadan.eu/informace/tic/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Galerie Josefa Lieslera",
       "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Františkánský klášter Kadaň",
       "url": "https://kadan.eu/pamatky/frantiskansky-klaster/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 15
     },
     {
       "name": "Kadaňský hrad",
       "url": "https://kadan.eu/pamatky/kadansky-hrad/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsFound": 14
     },
     {
       "name": "Autokemp Prunéřov",
@@ -967,9 +973,9 @@
     "monitoredDirectoryOrganizations": 65,
     "missingDirectoryOrganizations": [],
     "coveragePercent": 100.0,
-    "manualUniqueSources": 76,
+    "manualUniqueSources": 78,
     "directoryUniqueSourcesAdded": 25,
-    "totalUniqueSources": 101,
+    "totalUniqueSources": 103,
     "directoryIsCanonicalRegistry": true
   },
   "retainedPreviousItems": false,
@@ -991,6 +997,15 @@
       "description": "2026 – Kemp Dánsko 29.8.-30.8.2026 – Kemp TJ Bohemians 12.9.-13.9.2026 – Kemp TJ Bohemians 26.9.-27.9.2026 – Kemp TJ Bohemians 10.10.-11.10.2026 – Kemp TJ Bohemians 14.10.-17.10.2026 – ME Teamgym Espoo, Finsko – – – ČP = Český pohár v teamgymu. Rozpisy závodů můžete nalézt v  Nejnovější příspěvky",
       "source": "https://www.gymfed.cz/kalendar?sport=TG",
       "sourceName": "Gymnastika Kadaň – SK Kosagym"
+    },
+    {
+      "id": "7d73af02aa29",
+      "title": "tuto trasu.",
+      "date": "2026-08-01",
+      "category": "Velké regionální festivaly",
+      "description": "Festival LET IT ROLL 2026 proběhne v termínu 30. 7. – 1. 8. 2026. Jedná se o 3 oficiální festivalové noci – čtvrtek, pátek a sobota. Místo konání: Jezero Most Zadej si do navigace  V okolí sleduj oranžové značení, které tě navede k festivalu. Akce je přístupná pro návštěvníky od 18 let bez vyjímky. OTEVÍRACÍ ČASY PARKOVIŠTĚ ST 29. 7. 2026 od 16:00 – NE 2. 8. 2026 do 12:00 POKLADNY & CUSTOMER CARE ST 29. 7. 2026 od 16",
+      "source": "https://maps.app.goo.gl/iXuvjTAa97LefyRf9",
+      "sourceName": "Let It Roll 2026 – Jezero Most"
     },
     {
       "id": "65942bada3aa",
@@ -1749,6 +1764,15 @@
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
     },
     {
+      "id": "cbc34daad935",
+      "title": "Česká národní rada",
+      "date": "",
+      "category": "Volby a veřejná správa",
+      "description": "1992",
+      "source": "https://www.volby.cz/pls/cnr1992/u0",
+      "sourceName": "Volby.cz – oficiální volební výsledky a kandidáti"
+    },
+    {
       "id": "4b450e974d65",
       "title": "Časté dotazy",
       "date": "",
@@ -1855,24 +1879,6 @@
       "description": "Městský úřad Portál občana Platební portál Ústeckého kraje  Telefonní seznam Dokumenty a formuláře Úřední deska Ztráty a nálezy Odbory městského úřadu Městské organizace Organizace a služby <a href",
       "source": "https://www.mesto-kadan.cz/cs/mestsky-urad/urad-online-a-rezervace.html",
       "sourceName": "Město Kadaň"
-    },
-    {
-      "id": "62837f5bf0bd",
-      "title": "Územně analytické podklady",
-      "date": "",
-      "category": "Město a územní plánování",
-      "description": "li class=\"dropdown\"> Územní plánování Aktuálně projednávané... Územní plánování - město Kadaň Územní plánování - obce v ORP  Územní studie krajiny ORP Kadaň Plánovací smlouvy Analýza bydlení Kontakty Formuláře Studie",
-      "source": "https://gis.mesto-kadan.cz/portal/uap/uap",
-      "sourceName": "Městský GIS Kadaň"
-    },
-    {
-      "id": "26ebe9f2df8f",
-      "title": "Územní studie krajiny ORP Kadaň",
-      "date": "",
-      "category": "Město a územní plánování",
-      "description": ";nování Aktuálně projednávané... Územní plánování - město Kadaň Územní plánování - obce v ORP Územně analytické podklady  Plánovací smlouvy Analýza bydlení Kontakty Formuláře Studie",
-      "source": "https://gis.mesto-kadan.cz/portal/usk",
-      "sourceName": "Městský GIS Kadaň"
     }
   ]
 }
