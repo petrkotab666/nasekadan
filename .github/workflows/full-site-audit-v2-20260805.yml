@@ -1,0 +1,119 @@
+name: Stabilní úplný audit webu v2
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-full-site-audit-v2-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: full-site-audit-v2-20260805
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit syntaxi auditu
+        run: python3 -m py_compile scripts/full_site_audit_v2_20260805.py
+
+      - name: Statický audit celého repozitáře
+        id: static
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/full_site_audit_v2_20260805.py --static --static-report /tmp/full-site-static-v2.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Živý audit celého produkčního webu
+        id: live
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python3 scripts/full_site_audit_v2_20260805.py --live --live-report /tmp/full-site-live-v2.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit "$code"
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs');
+            const {owner,repo}=context.repo;
+            const read=path=>{try{return JSON.parse(fs.readFileSync(path,'utf8'));}catch(error){return {status:'missing',errors:[{type:'report_missing',error:String(error)}],warnings:[]};}};
+            const compact=report=>({
+              status:report.status, article_count:report.article_count,
+              html_files_checked:report.html_files_checked,
+              local_references_checked:report.local_references_checked,
+              sitemap_urls_checked:report.sitemap_urls_checked,
+              html_pages_checked:report.html_pages_checked,
+              internal_references_checked:report.internal_references_checked,
+              article_images_checked:report.article_images_checked,
+              card_images_checked:report.card_images_checked,
+              cards_checked:report.cards_checked,
+              archive_pages_checked:report.archive_pages_checked,
+              rss_items:report.rss_items, news_urls:report.news_urls,
+              errors:(report.errors||[]).slice(0,150), warnings:(report.warnings||[]).slice(0,150)
+            });
+            const staticReport=read('/tmp/full-site-static-v2.json');
+            const liveReport=read('/tmp/full-site-live-v2.json');
+            const ok=staticReport.status==='passed' && liveReport.status==='passed';
+            const title=ok?'[audit] Celý web Naše Kadaň v2 – success':'[audit] Celý web Naše Kadaň v2 – nalezené závady';
+            const body=[
+              ok?'Stabilní statický i živý audit celého webu prošel bez blokujících chyb.':'Audit v2 našel konkrétní závady nebo nesoulady.',
+              '',`Run: ${process.env.RUN_URL}`,'',
+              '## Statický audit','```json',JSON.stringify(compact(staticReport),null,2),'```','',
+              '## Živý audit','```json',JSON.stringify(compact(liveReport),null,2),'```'
+            ].join('\n');
+            const existing=await github.paginate(github.rest.issues.listForRepo,{owner,repo,state:'open',per_page:100});
+            if(ok){
+              for(const issue of existing.filter(x=>['[audit] Celý web Naše Kadaň – nalezené závady','[audit] Celý web Naše Kadaň v2 – nalezené závady'].includes(x.title))){
+                await github.rest.issues.createComment({owner,repo,issue_number:issue.number,body:'Následný audit v2 prošel.\n\n'+process.env.RUN_URL});
+                await github.rest.issues.update({owner,repo,issue_number:issue.number,state:'closed',state_reason:'completed'});
+              }
+            }
+            const created=await github.rest.issues.create({owner,repo,title,body,assignees:['petrkotab666']});
+            if(ok) await github.rest.issues.update({owner,repo,issue_number:created.data.number,state:'closed',state_reason:'completed'});
+
+      - name: Vyhodnotit audit
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          failed=[]
+          for name,path in [('static',Path('/tmp/full-site-static-v2.json')),('live',Path('/tmp/full-site-live-v2.json'))]:
+              if not path.exists():
+                  failed.append(name+': report chybí')
+                  continue
+              report=json.loads(path.read_text(encoding='utf-8'))
+              if report.get('status')!='passed':
+                  failed.append(name+': '+str(len(report.get('errors',[])))+' chyb')
+          if failed:
+              raise SystemExit('; '.join(failed))
+          print('Audit v2 prošel bez blokujících chyb.')
+          PY
