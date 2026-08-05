@@ -1,0 +1,262 @@
+name: Publikovat výluku přes Žatec do 24. srpna
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-publish-vyluka-zatec-blatno-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-vyluka-zatec-blatno-20260805
+  cancel-in-progress: false
+
+env:
+  SLUG: vyluka-zatec-blatno-do-24-srpna-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/vyluka-zatec-blatno-do-24-srpna-2026.html
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat tvorbu sociální grafiky
+        run: python3 -m pip install --disable-pip-version-check pillow
+
+      - name: Sestavit článek a zapsat ho do všech kanálů
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – publikace'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/publish_vyluka_zatec_blatno_20260805.py scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+            python3 scripts/publish_vyluka_zatec_blatno_20260805.py
+            git diff --check
+            git add "clanky/${SLUG}.html" "social/${SLUG}.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Publikovat: výluka přes Žatec potrvá do 24. srpna'
+            fi
+            content_sha="$(git rev-parse HEAD)"
+            CONTENT_SHA="$content_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next(item for item in data['articles'] if item['url']==os.environ['ARTICLE_URL'])
+          article['source_commit']=os.environ['CONTENT_SHA']
+          publication=data.setdefault('validation',{}).setdefault('last_publication',{})
+          publication['source_commit']=os.environ['CONTENT_SHA']
+          publication['status']='pending_public_verification'
+          publication['checked_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nchange=publish-vyluka-zatec-blatno\npublished=2026-08-05T18:00:00+02:00\n' "$content_sha" "$ARTICLE_URL" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: připravit ověření výluky přes Žatec'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "content_sha=$content_sha" >> "$GITHUB_OUTPUT"
+              echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit článek a kanonické plochy na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/vyluka-zatec"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp "social/${SLUG}.png" "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/vyluka-zatec.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/vyluka-zatec.tgz" ubuntu@57.129.43.215:/tmp/vyluka-zatec.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/vyluka-zatec
+          mkdir -p /tmp/vyluka-zatec
+          tar -xzf /tmp/vyluka-zatec.tgz -C /tmp/vyluka-zatec
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/vyluka-zatec/index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 /tmp/vyluka-zatec/rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 /tmp/vyluka-zatec/sitemap.xml /var/www/nasekadan/sitemap.xml
+          sudo install -m 0644 /tmp/vyluka-zatec/news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+          sudo install -m 0644 /tmp/vyluka-zatec/llms.txt /var/www/nasekadan/llms.txt
+          sudo install -m 0644 /tmp/vyluka-zatec/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          sudo install -m 0644 /tmp/vyluka-zatec/data/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/vyluka-zatec/data/article-integrity-manifest.json /var/www/nasekadan/data/article-integrity-manifest.json
+          sudo install -m 0644 /tmp/vyluka-zatec/social/vyluka-zatec-blatno-do-24-srpna-2026.png /var/www/nasekadan/social/vyluka-zatec-blatno-do-24-srpna-2026.png
+          sudo find /var/www/nasekadan/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete
+          for file in /tmp/vyluka-zatec/clanky/*.html; do sudo install -m 0644 "$file" "/var/www/nasekadan/clanky/$(basename "$file")"; done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/vyluka-zatec/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/vyluka-zatec/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/vyluka-zatec/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp /tmp/vyluka-zatec/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/vyluka-zatec/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp /tmp/vyluka-zatec/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker exec nasekadan-web sh -c "find /usr/share/nginx/html/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete"
+            sudo docker cp /tmp/vyluka-zatec/clanky/. nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp /tmp/vyluka-zatec/social/vyluka-zatec-blatno-do-24-srpna-2026.png nasekadan-web:/usr/share/nginx/html/social/vyluka-zatec-blatno-do-24-srpna-2026.png
+            sudo docker cp /tmp/vyluka-zatec/data/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/vyluka-zatec/data/article-integrity-manifest.json nasekadan-web:/usr/share/nginx/html/data/article-integrity-manifest.json
+          fi
+          rm -rf /tmp/vyluka-zatec /tmp/vyluka-zatec.tgz
+          REMOTE
+
+      - name: Veřejně ověřit úplnou publikaci bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, time
+          from urllib.request import Request, urlopen
+          targets = {
+              'article': ('https://nasekadan.cz/clanky/vyluka-zatec-blatno-do-24-srpna-2026.html', 'Výluka přes Žatec potrvá do 24. srpna'),
+              'home': ('https://nasekadan.cz/', '/clanky/vyluka-zatec-blatno-do-24-srpna-2026.html'),
+              'archive': ('https://nasekadan.cz/clanky/', '/clanky/vyluka-zatec-blatno-do-24-srpna-2026.html'),
+              'rss': ('https://nasekadan.cz/rss.xml', 'vyluka-zatec-blatno-do-24-srpna-2026.html'),
+              'sitemap': ('https://nasekadan.cz/sitemap.xml', 'vyluka-zatec-blatno-do-24-srpna-2026.html'),
+              'news': ('https://nasekadan.cz/news-sitemap.xml', 'vyluka-zatec-blatno-do-24-srpna-2026.html'),
+              'llms': ('https://nasekadan.cz/llms.txt', 'vyluka-zatec-blatno-do-24-srpna-2026.html'),
+              'registry': ('https://nasekadan.cz/data/published-content-index.json', 'practical_transport_alert'),
+              'health': ('https://nasekadan.cz/deployment-health.txt', 'status=ok'),
+          }
+          last = None
+          for attempt in range(20):
+              try:
+                  nonce = f'{int(time.time())}-{attempt}'
+                  for name, (url, needle) in targets.items():
+                      req = Request(url + ('&' if '?' in url else '?') + 'vyluka=' + nonce, headers={'User-Agent':'NaseKadan-publication-check/1.0','Cache-Control':'no-cache'})
+                      with urlopen(req, timeout=35) as response:
+                          text = response.read().decode('utf-8','replace')
+                      if needle not in text:
+                          raise RuntimeError(f'{name}: chybí {needle}')
+                  req = Request('https://nasekadan.cz/social/vyluka-zatec-blatno-do-24-srpna-2026.png?vyluka=' + nonce, headers={'User-Agent':'NaseKadan-publication-check/1.0','Cache-Control':'no-cache'})
+                  with urlopen(req, timeout=35) as response:
+                      image = response.read()
+                  if len(image) < 10000 or not image.startswith(b'\x89PNG'):
+                      raise RuntimeError('sociální PNG není platné')
+                  print('Veřejná publikace je úplná a ověřená.')
+                  break
+              except Exception as exc:
+                  last = exc
+                  time.sleep(8)
+          else:
+              raise SystemExit(f'Veřejná kontrola neprošla: {last}')
+          PY
+
+      - name: Uzavřít veřejné ověření v registru
+        id: evidence
+        shell: bash
+        env:
+          CONTENT_SHA: ${{ steps.build.outputs.content_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – evidence'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            CONTENT_SHA="$CONTENT_SHA" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next(item for item in data['articles'] if item['url']==os.environ['ARTICLE_URL'])
+          article['source_commit']=os.environ['CONTENT_SHA']
+          publication=data.setdefault('validation',{}).setdefault('last_publication',{})
+          publication.update({
+              'status':'success',
+              'article_url':os.environ['ARTICLE_URL'],
+              'classification':'practical_transport_alert',
+              'source_commit':os.environ['CONTENT_SHA'],
+              'public_verified_at':datetime.now(timezone.utc).isoformat(),
+              'public_verification':{
+                  'article':True,'homepage':True,'archive':True,'rss':True,
+                  'sitemap':True,'news_sitemap':True,'llms':True,'registry':True,
+                  'health':True,'social_image':True
+              }
+          })
+          data['validation']['repair_pending_public_verification']=False
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            git add data/published-content-index.json
+            if ! git diff --cached --quiet; then git commit -m 'Evidence: potvrdit publikaci výluky přes Žatec'; fi
+            evidence_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "evidence_sha=$evidence_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit finální registr a uzavřít evidenci
+        shell: bash
+        env:
+          EVIDENCE_SHA: ${{ steps.evidence.outputs.evidence_sha }}
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi; rm -f /tmp/published-content-index.json'
+          for attempt in $(seq 1 12); do
+            if curl -fsS --max-time 30 "https://nasekadan.cz/data/published-content-index.json?evidence=$(date +%s)-$attempt" | grep -Fq '"status": "success"'; then break; fi
+            sleep 6
+          done
+          curl -fsS --max-time 30 "https://nasekadan.cz/data/published-content-index.json?evidence=$(date +%s)" | grep -Fq 'practical_transport_alert'
+          gh issue create --title '[publish] Výluka přes Žatec do 24. srpna – success' --body "Článek byl zveřejněn, nasazen a veřejně ověřen.\n\n${ARTICLE_URL}\nObsahový commit: ${{ steps.build.outputs.content_sha }}\nEvidence: ${EVIDENCE_SHA}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 > "$RUNNER_TEMP/success-issue.txt"
+          issue_url="$(cat "$RUNNER_TEMP/success-issue.txt")"
+          issue_number="${issue_url##*/}"
+          gh issue close "$issue_number" --reason completed
+
+      - name: Zapsat selhání publikace
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Publikace výluky přes Žatec' --body "Publikace nebo veřejná kontrola selhala.\n\nČlánek: ${ARTICLE_URL}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
