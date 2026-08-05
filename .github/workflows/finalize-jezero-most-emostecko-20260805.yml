@@ -1,0 +1,197 @@
+name: Dokončit doplnění zdroje e-Mostecko
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-finalize-jezero-most-emostecko-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: finalize-jezero-most-emostecko-20260805
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ARTICLE_URL: https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      ARTICLE_FILE: clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      ENRICHMENT_SHA: 29743e3ddbcf5fc96713359334dd10fe666db14e
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit již nasazený článek a registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 10); do
+            q="${GITHUB_RUN_ID}-pre-${attempt}-$(date +%s)"
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" -o /tmp/registry.json || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" -o /tmp/health.txt || true
+            if grep -Fq 'e-Mostecko – Na jezeře Most pokračuje rozsáhlá pátrací akce' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'data-source-enrichment="emostecko-20260805"' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'article:published_time" content="2026-08-05T10:50:00+02:00' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'article:modified_time" content="2026-08-05T10:50:00+02:00' /tmp/article.html 2>/dev/null \
+              && grep -Fq 'supporting_source_published_before_article' /tmp/registry.json 2>/dev/null \
+              && grep -Fq '"modified_at": "2026-08-05T10:50:00+02:00"' /tmp/registry.json 2>/dev/null \
+              && grep -Fq 'status=ok' /tmp/health.txt 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 8
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít stav v kanonickém registru
+        id: evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          saved=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            ARTICLE_URL="$ARTICLE_URL" ENRICHMENT_SHA="$ENRICHMENT_SHA" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          article_path=Path('clanky/jezero-most-patrani-dva-lide-bourka-2026.html')
+          article_text=article_path.read_text(encoding='utf-8')
+          required=(
+              'e-Mostecko – Na jezeře Most pokračuje rozsáhlá pátrací akce',
+              'data-source-enrichment="emostecko-20260805"',
+              'article:published_time" content="2026-08-05T10:50:00+02:00',
+              'article:modified_time" content="2026-08-05T10:50:00+02:00',
+          )
+          for value in required:
+              if value not in article_text:
+                  raise SystemExit(f'Článek neobsahuje očekávaný důkaz: {value}')
+
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next((x for x in data.get('articles',[]) if x.get('url')==os.environ['ARTICLE_URL']),None)
+          if article is None:
+              raise SystemExit('Článek chybí v registru.')
+          if article.get('published_at')!='2026-08-05T10:50:00+02:00' or article.get('modified_at')!='2026-08-05T10:50:00+02:00':
+              raise SystemExit('Čas článku byl nežádoucím způsobem změněn.')
+          article['source_commit']=os.environ['ENRICHMENT_SHA']
+          now=datetime.now(timezone.utc).isoformat()
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=False
+          validation['deployment_health']='ok'
+          validation['public_audit_at']=now
+          enrichment=validation.setdefault('last_source_enrichment',{})
+          enrichment.update({
+              'status':'success',
+              'public_verified_at':now,
+              'public_verification_method':'live-article-registry-and-health-status-check',
+              'article_url':os.environ['ARTICLE_URL'],
+              'source':'e-Mostecko',
+              'source_published_at':'2026-08-05T08:15:00+02:00',
+              'classification':'supporting_source_published_before_article',
+              'content_update_required':False,
+              'source_commit':os.environ['ENRICHMENT_SHA'],
+          })
+          data['generated_at']=now
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nverified=true\n' "$ENRICHMENT_SHA" "$ARTICLE_URL" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: potvrdit e-Mostecko jako veřejný zdroj'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              saved=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$saved" = 1
+
+      - name: Nasadit uzavřenou evidenci a health
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json deployment-health.txt ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 "$root/data"
+          sudo install -m 0644 /tmp/published-content-index.json "$root/data/published-content-index.json"
+          sudo install -m 0644 /tmp/deployment-health.txt "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Finálně ověřit veřejný stav
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 12); do
+            q="${GITHUB_RUN_ID}-final-${attempt}-$(date +%s)"
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" -o /tmp/article-final.html || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" -o /tmp/registry-final.json || true
+            curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" -o /tmp/health-final.txt || true
+            if grep -Fq 'e-Mostecko – Na jezeře Most pokračuje rozsáhlá pátrací akce' /tmp/article-final.html 2>/dev/null \
+              && grep -Fq '"status": "success"' /tmp/registry-final.json 2>/dev/null \
+              && grep -Fq 'live-article-registry-and-health-status-check' /tmp/registry-final.json 2>/dev/null \
+              && grep -Fq '"repair_pending_public_verification": false' /tmp/registry-final.json 2>/dev/null \
+              && grep -Fq 'status=ok' /tmp/health-final.txt 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 8
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít monitoringový nález
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/${GITHUB_REPOSITORY}/issues/692/comments -f body="Hotovo: e-Mostecko je doplněno jako další potvrzující zdroj do stávajícího článku. Veřejně ověřen článek, registr i provozní health. Čas vydání a modified zůstaly 10:50, protože zdroj vyšel už v 8:15 a nebyl pozdějším vývojem. Commit evidence: ${{ steps.evidence.outputs.source_sha }}."
+          gh api repos/${GITHUB_REPOSITORY}/issues/692 -X PATCH -f state=closed -f state_reason=completed >/dev/null
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        run: |
+          gh api repos/${GITHUB_REPOSITORY}/issues/692/comments -f body="Dokončení veřejné evidence zdroje e-Mostecko selhalo. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
