@@ -1,0 +1,75 @@
+name: Opravit nálezy úplného auditu webu
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-repair-full-site-findings-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  NASEKADAN_SKIP_AUTOMATION_INSTALL: '1'
+
+jobs:
+  repair:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Opravit nálezy a commitnout
+        id: fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – oprava úplného auditu'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/repair_full_site_findings_20260805.py
+            python3 scripts/repair_full_site_audit_source_20260805.py
+            python3 -m py_compile scripts/full_site_audit_20260805.py
+            git add clanky nahled index.html rss.xml sitemap.xml news-sitemap.xml llms.txt data scripts/full_site_audit_20260805.py
+            if ! git diff --cached --quiet; then git commit -m 'Opravit nálezy úplného auditu webu'; fi
+            if git push origin HEAD:main; then break; fi
+            sleep $((attempt*5))
+          done
+      - name: Nasadit celý web
+        shell: bash
+        run: |
+          chmod +x deploy/sync-production.sh
+          sudo -E env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
+      - name: Finální statický a živý audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/repair_full_site_audit_source_20260805.py
+          python3 -m py_compile scripts/full_site_audit_20260805.py
+          python3 scripts/full_site_audit_20260805.py --static --static-report /tmp/full-site-static-final.json
+          python3 scripts/full_site_audit_20260805.py --live --live-report /tmp/full-site-live-final.json
+      - name: Zapsat úspěch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const {owner,repo}=context.repo;
+            const body=`Opravy z úplného auditu byly nasazeny a finální statický i živý audit prošel.\n\nRun: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            for(const n of [719,720,721]){
+              try{await github.rest.issues.createComment({owner,repo,issue_number:n,body});await github.rest.issues.update({owner,repo,issue_number:n,state:'closed',state_reason:'completed'});}catch(e){}
+            }
+            const x=await github.rest.issues.create({owner,repo,title:'[audit] Celý web Naše Kadaň – finální success',body,assignees:['petrkotab666']});
+            await github.rest.issues.update({owner,repo,issue_number:x.data.number,state:'closed',state_reason:'completed'});
