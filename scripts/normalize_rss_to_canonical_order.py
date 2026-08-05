@@ -132,6 +132,10 @@ def main() -> int:
         count=1,
         flags=re.I | re.S,
     )
+    # Po odstranění původních itemů zůstávají na některých řádcích pouze
+    # mezery. Vyčistíme je před git diff --check, aby pojistka neselhala na
+    # kosmetickém trailing whitespace po jinak správné opravě.
+    updated = re.sub(r"(?m)^[ \t]+$", "", updated)
     updated = re.sub(r"\n{3,}", "\n\n", updated).rstrip() + "\n"
 
     check_urls = [item_link(item) for item in ITEM_RE.findall(updated) if item_link(item)]
