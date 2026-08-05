@@ -1,0 +1,195 @@
+name: Vyřadit nefunkční proklik Concept
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/disable-concept-invalid-click-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-disable-concept-invalid-click
+  cancel-in-progress: false
+
+jobs:
+  patch-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Odstranit Concept z veřejných reklamních bloků
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, re
+
+          broken_id = 'b23975b5'
+
+          path = Path('obsah-doplnky.js')
+          text = path.read_text(encoding='utf-8')
+          text, count = re.subn(r"^\s*\{id:'concept',name:'Concept\.cz'.*?\},\n", '', text, count=1, flags=re.M)
+          if count != 1:
+              raise SystemExit(f'Concept nebyl jednoznačně odstraněn z obsah-doplnky.js: {count}')
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          path = Path('horko-feed.js')
+          text = path.read_text(encoding='utf-8')
+          text, count = re.subn(r"\n\s*\{\n\s*id:'horko-concept',.*?\n\s*\},", '', text, count=1, flags=re.S)
+          if count != 1:
+              raise SystemExit(f'Concept nebyl jednoznačně odstraněn z horko-feed.js: {count}')
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          path = Path('scripts/inject_heat_feed_static.py')
+          text = path.read_text(encoding='utf-8')
+          original = text
+          text = re.sub(r"\n\s*\{\s*['\"]id['\"]:\s*['\"]horko-concept['\"].*?\n\s*\},?", '', text, count=1, flags=re.S)
+          text = text.replace("a_bid=b23975b5", "a_bid=BLOCKED-b23975b5")
+          if text == original:
+              raise SystemExit('Generátor statického feedu neobsahoval očekávanou stopu Concept.')
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          path = Path('reklamy.js')
+          text = path.read_text(encoding='utf-8')
+          anchor = "    if(!row||typeof row!=='object')continue;\n"
+          guard = anchor + "    if(String(row.defaultLinkId||'').toLowerCase()==='b23975b5'||normalizeToken(row.name)==='concept-cz')continue;\n"
+          if "normalizeToken(row.name)==='concept-cz'" not in text:
+              if anchor not in text:
+                  raise SystemExit('V reklamy.js nebylo nalezeno místo pro blocklist.')
+              text = text.replace(anchor, guard, 1)
+          path.write_text(text, encoding='utf-8', newline='\n')
+
+          for json_path in [Path('assets/affiliate-site-snapshot.json'), Path('assets/affiliate-site-travel-overlay.json')]:
+              if not json_path.exists():
+                  continue
+              data = json.loads(json_path.read_text(encoding='utf-8'))
+              changed = False
+              def walk(value):
+                  nonlocal changed
+                  if isinstance(value, dict):
+                      if str(value.get('defaultLinkId', '')).lower() == broken_id or str(value.get('name', '')).lower() == 'concept.cz':
+                          value['publicUse'] = False
+                          value['publicCtaEnabled'] = False
+                          value['affiliateLinkStatus'] = 'blocked-invalid-click'
+                          value['blockedReason'] = 'eHUB click endpoint returned a blank page instead of redirecting on 2026-08-05'
+                          changed = True
+                      for child in value.values(): walk(child)
+                  elif isinstance(value, list):
+                      for child in value: walk(child)
+              walk(data)
+              if changed:
+                  json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          for html in Path('.').rglob('*.html'):
+              if any(part in {'.git', 'reports'} for part in html.parts):
+                  continue
+              source = html.read_text(encoding='utf-8', errors='replace')
+              updated = source.replace('obsah-doplnky.js?v=20260730-pojistime-rotation-4', 'obsah-doplnky.js?v=20260805-concept-disabled-1')
+              updated = re.sub(r'horko-feed\.js(?:\?v=[^\"\']+)?', 'horko-feed.js?v=20260805-concept-disabled-1', updated)
+              if updated != source:
+                  html.write_text(updated, encoding='utf-8', newline='\n')
+
+          for public_file in [Path('obsah-doplnky.js'), Path('horko-feed.js')]:
+              value = public_file.read_text(encoding='utf-8')
+              if 'a_bid=b23975b5' in value:
+                  raise SystemExit(f'Nefunkční affiliate URL zůstala v {public_file}.')
+          print('Concept byl vyřazen z veřejných reklamních bloků.')
+          PY
+          python3 -m py_compile scripts/inject_heat_feed_static.py
+          git diff --check
+          git config user.name 'Naše Kadaň – affiliate kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add obsah-doplnky.js horko-feed.js reklamy.js scripts/inject_heat_feed_static.py assets/affiliate-site-snapshot.json assets/affiliate-site-travel-overlay.json
+          find . -type f -name '*.html' -not -path './.git/*' -not -path './reports/*' -print0 | xargs -0 -r git add --
+          if ! git diff --cached --quiet; then
+            git commit -m 'Vyřadit nefunkční proklik Concept'
+            for attempt in 1 2 3 4; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 4
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit opravené reklamní skripty
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/concept-click-fix"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/assets"
+          cp obsah-doplnky.js horko-feed.js reklamy.js "$bundle/"
+          cp assets/affiliate-site-snapshot.json assets/affiliate-site-travel-overlay.json "$bundle/assets/"
+          find . -type f -name '*.html' -not -path './.git/*' -not -path './reports/*' -print0 | while IFS= read -r -d '' file; do
+            mkdir -p "$bundle/$(dirname "$file")"
+            cp "$file" "$bundle/$file"
+          done
+          cat > "$bundle/affiliate-health.txt" <<EOF
+          status=ok
+          source=${{ steps.patch.outputs.source_sha }}
+          blocked_partner=Concept.cz
+          blocked_creative=b23975b5
+          reason=invalid-blank-redirect
+          deployed_at=$(date -u +%FT%TZ)
+          EOF
+          tar -C "$bundle" -czf "$RUNNER_TEMP/concept-click-fix.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/concept-click-fix.tgz" ubuntu@57.129.43.215:/tmp/concept-click-fix.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/concept-click-fix
+          mkdir -p /tmp/concept-click-fix
+          tar -xzf /tmp/concept-click-fix.tgz -C /tmp/concept-click-fix
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          root=/var/www/nasekadan
+          sudo cp -a /tmp/concept-click-fix/. "$root/"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/concept-click-fix/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf /tmp/concept-click-fix /tmp/concept-click-fix.tgz
+          REMOTE
+
+      - name: Veřejně ověřit odstranění odkazu
+        id: verify
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.patch.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          sleep 5
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          addons="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/obsah-doplnky.js?v=$q")"
+          heat="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/horko-feed.js?v=$q")"
+          ads="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/reklamy.js?v=$q")"
+          health="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/affiliate-health.txt?v=$q")"
+          ! grep -Fq 'a_bid=b23975b5' <<<"$addons"
+          ! grep -Fq 'a_bid=b23975b5' <<<"$heat"
+          grep -Fq "normalizeToken(row.name)==='concept-cz'" <<<"$ads"
+          grep -Fq "source=$SOURCE_SHA" <<<"$health"
+          grep -Fq 'blocked_creative=b23975b5' <<<"$health"
