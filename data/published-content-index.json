@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-04T17:42:23.461757+00:00",
+  "generated_at": "2026-08-05T00:23:12.729812+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e",
@@ -46,23 +46,22 @@
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
     "last_consistency_repair": {
-      "classification": "remove_unnecessary_editorial_correction_box",
-      "reason": "Správný údaj o stáří videa ANO je zapracován přímo v textu; samostatný box Upřesnění redakce byl zbytečný.",
-      "updated_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
-      "source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e",
+      "classification": "rss_order_normalized_to_first_publication",
+      "reason": "RSS řadilo aktualizovaný starší článek před novější články; pořadí i pubDate byly srovnány podle prvního zveřejnění.",
+      "source_commit": "776a5ae6bd98069dc4a0ed74cdff1267fc40e01c",
       "status": "success",
-      "completed_at": "2026-08-04T17:42:23.461770+00:00",
+      "completed_at": "2026-08-05T00:23:12.729812+00:00",
       "public_verification": {
-        "article_h1": true,
-        "correct_timing_in_body": true,
-        "editorial_correction_box_absent": true
+        "rss_complete": true,
+        "rss_order_matches_archive": true,
+        "duplicate_urls_absent": true
       }
     },
     "news_sitemap_xml_well_formed": true,
     "news_sitemap_image_namespace_declared": true,
     "last_consistency_audit": {
       "status": "success",
-      "checked_at": "2026-08-04T17:16:50.467340+00:00",
+      "checked_at": "2026-08-05T00:23:12.729812+00:00",
       "article_count": 48,
       "homepage_count": 14,
       "archive_count": 48,
