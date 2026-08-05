@@ -1,8 +1,8 @@
 {
-  "status": "failure",
-  "run_id": "31002830490",
-  "source_sha": "31a58fe3728257331f1b07280328414ab4b42564",
-  "checked_at": "2026-08-05T11:48:51.888Z",
+  "status": "success",
+  "run_id": "31003199974",
+  "evidence_sha": "6a74d03dd75df8666c45bd48b937028676482a70",
+  "checked_at": "2026-08-05T11:52:58.625Z",
   "article": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
   "events": [
     {
@@ -14,7 +14,14 @@
       "starts_at": "2026-08-06T16:00:00+02:00"
     }
   ],
-  "prepare": "success",
-  "deploy": "success",
-  "public_verify": "failure"
+  "public_verification": {
+    "article": true,
+    "homepage": true,
+    "archive": true,
+    "rss": true,
+    "sitemap": true,
+    "registry": true,
+    "health": true
+  },
+  "news_sitemap_required": false
 }
