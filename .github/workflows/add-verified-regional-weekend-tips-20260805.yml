@@ -1,0 +1,325 @@
+name: Doplnit ověřené regionální tipy do kulturního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/regional-weekend-tips-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: regional-weekend-tips-20260805
+  cancel-in-progress: false
+
+jobs:
+  update-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE: clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_REL: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      MODIFIED: 2026-08-05T13:59:00+02:00
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.OVH_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Doplnit tipy a obnovit veřejné plochy
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kulturní přehled'
+          git config user.email 'info@nasekadan.cz'
+
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/add_verified_regional_weekend_tips_20260805.py scripts/enforce_all_article_visibility.py
+            python3 scripts/add_verified_regional_weekend_tips_20260805.py
+            python3 scripts/enforce_all_article_visibility.py
+
+            for marker in \
+              bilina-archeologicke-leto-20260807 \
+              stranna-perseidy-vino-20260808 \
+              sporice-multizanrovy-festival-20260808 \
+              louny-vecerni-vez-20260807 \
+              bitva-budyne-20260808 \
+              libochovice-exoticke-ptactvo-20260808 \
+              horni-jiretin-pout-20260808; do
+              grep -Fq "data-event-id=\"$marker\"" "$ARTICLE"
+              grep -Fq "$marker" data/published-content-index.json
+            done
+            grep -Fq "article:modified_time\" content=\"${MODIFIED}" "$ARTICLE"
+            grep -Fq 'Kokeš fest – Hipodrom Most' data/published-content-index.json
+            grep -Fq "$ARTICLE_REL" index.html clanky/index.html
+            grep -Fq "$ARTICLE_URL" rss.xml sitemap.xml llms.txt data/published-content-index.json
+            grep -Fq '"modified_at": "2026-08-05T13:59:00+02:00"' data/published-content-index.json
+
+            python3 - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          ET.parse('rss.xml')
+          ET.parse('sitemap.xml')
+          ET.parse('news-sitemap.xml')
+          data=json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          assert data['article_count'] >= 50
+          assert data['validation']['duplicate_urls'] == []
+          assert data['validation']['duplicate_fingerprints'] == []
+          PY
+            git diff --check
+
+            git add "$ARTICLE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Aktualizovat: přidat ověřené regionální víkendové tipy'
+            fi
+            article_sha="$(git rev-parse HEAD)"
+
+            ARTICLE_SHA="$article_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next((x for x in data.get('articles',[]) if x.get('url')==os.environ['ARTICLE_URL']),None)
+          if article is None:
+              raise SystemExit('Kulturní přehled chybí v registru.')
+          article['source_commit']=os.environ['ARTICLE_SHA']
+          data['source_commit']=os.environ['ARTICLE_SHA']
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=True
+          update=validation.setdefault('last_cultural_update',{})
+          update.update({
+              'status':'pending_public_verification',
+              'checked_at':datetime.now(timezone.utc).isoformat(),
+              'updated_url':os.environ['ARTICLE_URL'],
+              'source_commit':os.environ['ARTICLE_SHA'],
+              'modified_at':'2026-08-05T13:59:00+02:00',
+          })
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nupdated=%s\nchange=verified-regional-weekend-tips\n' "$article_sha" "$ARTICLE_URL" "$MODIFIED" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: zapsat regionální víkendové tipy'
+            fi
+
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit kulturní přehled na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/regional-weekend-tips"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE" "$bundle/clanky/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/regional-weekend-tips.tgz" .
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/regional-weekend-tips.tgz" ubuntu@57.129.43.215:/tmp/regional-weekend-tips.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/regional-weekend-tips
+          mkdir -p /tmp/regional-weekend-tips
+          tar -xzf /tmp/regional-weekend-tips.tgz -C /tmp/regional-weekend-tips
+          src=/tmp/regional-weekend-tips
+          root=/var/www/nasekadan
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+              sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/regional-weekend-tips /tmp/regional-weekend-tips.tgz
+          REMOTE
+
+      - name: Veřejně ověřit článek a evidenci
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 10); do
+            q="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            article="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            registry="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+
+            valid=1
+            for marker in \
+              bilina-archeologicke-leto-20260807 \
+              stranna-perseidy-vino-20260808 \
+              sporice-multizanrovy-festival-20260808 \
+              louny-vecerni-vez-20260807 \
+              bitva-budyne-20260808 \
+              libochovice-exoticke-ptactvo-20260808 \
+              horni-jiretin-pout-20260808; do
+              grep -Fq "data-event-id=\"$marker\"" <<<"$article" || valid=0
+              grep -Fq "$marker" <<<"$registry" || valid=0
+            done
+            grep -Fq "article:modified_time\" content=\"${MODIFIED}" <<<"$article" || valid=0
+            grep -Fq 'Bitva Budyně: dvě bitvy' <<<"$article" || valid=0
+            grep -Fq 'Městské slavnosti a pouť v Horním Jiřetíně' <<<"$article" || valid=0
+            grep -Fq "$ARTICLE_REL" <<<"$home" || valid=0
+            grep -Fq "$ARTICLE_REL" <<<"$archive" || valid=0
+            grep -Fq "$ARTICLE_URL" <<<"$rss" || valid=0
+            grep -Fq "$ARTICLE_URL" <<<"$sitemap" || valid=0
+            grep -Fq '"modified_at": "2026-08-05T13:59:00+02:00"' <<<"$registry" || valid=0
+            grep -Fq 'status=ok' <<<"$health" || valid=0
+            if test "$valid" = 1; then ok=1; break; fi
+            sleep 8
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít evidenci veřejné kontroly
+        id: finalize
+        if: steps.verify.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          EVIDENCE_SHA="${{ steps.prepare.outputs.source_sha }}" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=False
+          update=validation.setdefault('last_cultural_update',{})
+          update.update({
+              'status':'success',
+              'public_verified_at':datetime.now(timezone.utc).isoformat(),
+              'public_verification':{
+                  'article':True,'homepage':True,'archive':True,'rss':True,
+                  'sitemap':True,'registry':True,'health':True,
+                  'news_sitemap_required':False,
+              },
+              'evidence_commit':os.environ.get('EVIDENCE_SHA',''),
+              'updated_url':os.environ['ARTICLE_URL'],
+              'excluded_unverified':['Kokeš fest – Hipodrom Most'],
+          })
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – kulturní přehled'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Evidence: potvrdit ověřené regionální víkendové tipy'
+            for attempt in 1 2 3; do
+              if git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 3
+              git fetch origin main
+              git rebase origin/main
+            done
+          fi
+          echo "evidence_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi; rm -f /tmp/published-content-index.json'
+
+          for attempt in $(seq 1 6); do
+            q="${GITHUB_RUN_ID}-final-${attempt}-$(date +%s)"
+            registry="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            if grep -Fq '"status": "success"' <<<"$registry" \
+              && grep -Fq '"news_sitemap_required": false' <<<"$registry" \
+              && grep -Fq 'Kokeš fest – Hipodrom Most' <<<"$registry"; then
+              exit 0
+            fi
+            sleep 6
+          done
+          exit 1
+
+      - name: Zapsat stav běhu
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PREPARE_OUTCOME: ${{ steps.prepare.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          FINALIZE_OUTCOME: ${{ steps.finalize.outcome }}
+          SOURCE_SHA: ${{ steps.prepare.outputs.source_sha }}
+          EVIDENCE_SHA: ${{ steps.finalize.outputs.evidence_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const status=(process.env.PREPARE_OUTCOME==='success'&&process.env.DEPLOY_OUTCOME==='success'&&process.env.VERIFY_OUTCOME==='success'&&process.env.FINALIZE_OUTCOME==='success')?'success':'failure';
+            const payload={
+              status,
+              run_id:String(context.runId),
+              checked_at:new Date().toISOString(),
+              source_sha:process.env.SOURCE_SHA||'',
+              evidence_sha:process.env.EVIDENCE_SHA||'',
+              article:'https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html',
+              verified_events:7,
+              excluded_unverified:['Kokeš fest – Hipodrom Most'],
+              prepare:process.env.PREPARE_OUTCOME||'skipped',
+              deploy:process.env.DEPLOY_OUTCOME||'skipped',
+              public_verify:process.env.VERIFY_OUTCOME||'skipped',
+              finalize:process.env.FINALIZE_OUTCOME||'skipped',
+              news_sitemap_required:false
+            };
+            let sha;
+            try { const old=await github.rest.repos.getContent({owner,repo,path:'.github/regional-weekend-cultural-live-status.json',ref:'main'}); sha=old.data.sha; }
+            catch(e){ if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,repo,path:'.github/regional-weekend-cultural-live-status.json',branch:'main',
+              message:`Zapsat stav regionálních víkendových tipů: ${status} [skip ci]`,sha,
+              content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')
+            });
