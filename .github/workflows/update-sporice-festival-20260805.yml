@@ -1,0 +1,127 @@
+name: Doplnit přesný program festivalu Spořice
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/update-sporice-festival-20260805.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-sporice-festival-20260805
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Doplnit článek a monitorovací zdroje
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          article_path = Path('clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html')
+          html = article_path.read_text(encoding='utf-8')
+
+          post_url = ('https://www.facebook.com/permalink.php?story_fbid='
+                      'pfbid02s1ZT4wgp7MgornH9F6GdweJPEwTWUTrNDkkdcorA82cvvhb2yFA9DK1XCQ2FbBygl'
+                      '&id=61550039245639')
+
+          event = f'''<div class="event" data-event-id="sporice-multizanrovy-festival-20260808"><time datetime="2026-08-08T12:30:00+02:00">SOBOTA 8. 8. · 12:30–00:10</time><h3>12. Multižánrový festival Spořice</h3><p><strong>Areál u koupaliště ve Spořicích.</strong> Pořadatel zveřejnil kompletní časový program: Divná Bára 12:30–13:30, Epydemye 14:10–15:15, Poetika 15:55–16:55, Žlutý pes 17:45–18:45, Polemic 19:25–20:40, N.O.H.A. 21:25–22:35 a Hentai Corporation 23:10–00:10. Festival uvádí Lukáš Budai.</p><p><strong>Vstupné:</strong> 500 Kč v předprodeji, 600 Kč na místě. Předprodej probíhá na Obecním úřadě Spořice; pořadatel na plakátu uvádí telefon 474 621 721.</p><p><a href="{post_url}">Oficiální příspěvek festivalu s kompletním programem</a> · <a href="https://www.obecsporice.cz/obec/udalosti/akce-ve-sporicich/">Oficiální přehled akcí obce Spořice</a></p><p><em>Upřesněno 5. srpna ve 22:03 podle veřejného plakátu pořadatele; termín a účast interpretů potvrzují také jejich oficiální koncertní kalendáře.</em></p></div>'''
+
+          pattern = re.compile(r'<div class="event" data-event-id="sporice-multizanrovy-festival-20260808">.*?</div>', re.S)
+          html, count = pattern.subn(event, html, count=1)
+          if count != 1:
+              raise SystemExit(f'Nepodařilo se jednoznačně najít blok festivalu Spořice: {count}')
+
+          html = html.replace('2026-08-05T13:59:00+02:00', '2026-08-05T22:03:00+02:00')
+          html = html.replace('AKTUALIZOVÁNO 5. SRPNA 2026 · 13:59', 'AKTUALIZOVÁNO 5. SRPNA 2026 · 22:03')
+          html = html.replace('Stav ověření a poslední aktualizace: středa 5. srpna 2026 ve 13:59.',
+                              'Stav ověření a poslední aktualizace: středa 5. srpna 2026 ve 22:03.')
+
+          official_source = f'    <li><a href="{post_url}">Multižánrový festival Spořice – oficiální plakát s programem a vstupným</a></li>\n'
+          marker = '    <li><a href="https://www.epydemye.cz/events/next/2026">Epydemye – turné kalendář a Spořice</a></li>\n'
+          if official_source not in html:
+              if marker not in html:
+                  raise SystemExit('Nenalezeno místo pro doplnění zdroje festivalu.')
+              html = html.replace(marker, official_source + marker, 1)
+
+          article_path.write_text(html, encoding='utf-8')
+
+          sources_path = Path('data/city-sources.json')
+          data = json.loads(sources_path.read_text(encoding='utf-8'))
+          sources = data.setdefault('sources', [])
+          additions = [
+              {
+                  'name': 'Obec Spořice – akce ve Spořicích',
+                  'url': 'https://www.obecsporice.cz/obec/udalosti/akce-ve-sporicich/',
+                  'category': 'Regionální kultura – Spořice',
+              },
+              {
+                  'name': 'Multižánrový festival Spořice – veřejný Facebook',
+                  'url': 'https://www.facebook.com/profile.php?id=61550039245639',
+                  'category': 'Regionální kultura – Spořice – sociální zdroje',
+              },
+          ]
+          existing = {str(item.get('url', '')).rstrip('/') for item in sources}
+          for item in additions:
+              key = item['url'].rstrip('/')
+              if key not in existing:
+                  sources.append(item)
+                  existing.add(key)
+          data['updatedAt'] = '2026-08-05'
+          sources_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          Path('.github/weekly-events-direct-deploy-trigger.txt').write_text(
+              'Aktualizace festivalu Spořice: 2026-08-05T22:03:00+02:00\n',
+              encoding='utf-8',
+          )
+          PY
+
+      - name: Ověřit změnu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool data/city-sources.json >/dev/null
+          grep -F 'Divná Bára 12:30–13:30' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html >/dev/null
+          grep -F 'Hentai Corporation 23:10–00:10' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html >/dev/null
+          grep -F '500 Kč v předprodeji, 600 Kč na místě' clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html >/dev/null
+          grep -F 'Multižánrový festival Spořice – veřejný Facebook' data/city-sources.json >/dev/null
+
+      - name: Uložit a spustit nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kulturní monitoring'
+          git config user.email 'actions@users.noreply.github.com'
+          git add \
+            clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html \
+            data/city-sources.json \
+            .github/weekly-events-direct-deploy-trigger.txt
+          if git diff --cached --quiet; then
+            echo 'Požadované údaje už jsou doplněné.'
+            exit 0
+          fi
+          git commit -m 'Kultura: doplnit přesný program festivalu Spořice'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 4))
+          done
+          exit 1
