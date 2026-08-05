@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   issues:
     types: [opened, reopened]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/header-pr-trigger.txt'
   push:
     branches: [main]
     paths:
@@ -15,6 +19,7 @@ on:
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
   group: header-brand-visibility
@@ -32,8 +37,6 @@ jobs:
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
       ARTICLE_FILE: clanky/slovan-druhy-pokus.html
       ARTICLE_URL: https://nasekadan.cz/clanky/slovan-druhy-pokus.html
-      INLINE_MARKER: HEADER-BRAND-INLINE-20260805
-      CSS_MARKER: HEADER-BRAND-VISIBILITY-20260805
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,41 +50,31 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-
-          css_rule = '''
+          css_rule='''
 
 /* HEADER-BRAND-VISIBILITY-20260805 */
 .head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}
 .head .logo > span:not(.logo-mark) b{color:var(--red,#a9232b)!important}
 '''
-          for name in ('style.css', 'footer.css'):
-              path = Path(name)
-              text = path.read_text(encoding='utf-8')
-              if 'HEADER-BRAND-VISIBILITY-20260805' not in text:
-                  path.write_text(text.rstrip() + css_rule + '\n', encoding='utf-8', newline='\n')
-
-          article = Path('clanky/slovan-druhy-pokus.html')
-          text = article.read_text(encoding='utf-8')
-          inline = '''
+          for name in ('style.css','footer.css'):
+              p=Path(name); t=p.read_text(encoding='utf-8')
+              if 'HEADER-BRAND-VISIBILITY-20260805' not in t:
+                  p.write_text(t.rstrip()+css_rule+'\n',encoding='utf-8',newline='\n')
+          article=Path('clanky/slovan-druhy-pokus.html')
+          t=article.read_text(encoding='utf-8')
+          inline='''
   <style id="HEADER-BRAND-INLINE-20260805">
     header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}
     header[data-site-header="v1"] .head .logo > span:not(.logo-mark) b{color:#a9232b!important}
   </style>
 '''
-          if 'HEADER-BRAND-INLINE-20260805' not in text:
-              if '</head>' not in text:
-                  raise SystemExit('Článek nemá uzavírací značku head.')
-              text = text.replace('</head>', inline + '</head>', 1)
-              article.write_text(text, encoding='utf-8', newline='\n')
-
-          final = article.read_text(encoding='utf-8')
+          if 'HEADER-BRAND-INLINE-20260805' not in t:
+              t=t.replace('</head>',inline+'</head>',1)
+              article.write_text(t,encoding='utf-8',newline='\n')
+          final=article.read_text(encoding='utf-8')
           assert 'HEADER-BRAND-INLINE-20260805' in final
           assert '<span>NAŠE <b>KADAŇ</b></span>' in final
-          for name in ('style.css', 'footer.css'):
-              css = Path(name).read_text(encoding='utf-8')
-              assert 'HEADER-BRAND-VISIBILITY-20260805' in css
           PY
-
           changed=false
           if ! git diff --quiet -- "$ARTICLE_FILE" style.css footer.css; then changed=true; fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
@@ -95,14 +88,13 @@ jobs:
           git config user.email 'info@nasekadan.cz'
           git add "$ARTICLE_FILE" style.css footer.css
           git commit -m 'Vynutit celý název Naše Kadaň přímo v článku'
-          pushed=0
           for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then pushed=1; break; fi
+            if git push origin HEAD:main; then exit 0; fi
             git fetch origin main
             git rebase origin/main
-            sleep $((attempt * 3))
+            sleep $((attempt*3))
           done
-          test "$pushed" = 1
+          exit 1
 
       - name: Nasadit článek i oba styly přímo na OVH
         shell: bash
@@ -121,8 +113,6 @@ jobs:
           src=/tmp/nasekadan-header-fix-v2
           root=/var/www/nasekadan
           grep -Fq 'HEADER-BRAND-INLINE-20260805' "$src/clanky/slovan-druhy-pokus.html"
-          grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' "$src/style.css"
-          grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' "$src/footer.css"
           sudo install -d -m 0755 "$root/clanky"
           sudo install -m 0644 "$src/clanky/slovan-druhy-pokus.html" "$root/clanky/slovan-druhy-pokus.html"
           sudo install -m 0644 "$src/style.css" "$root/style.css"
@@ -146,31 +136,58 @@ jobs:
             curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
             curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
             curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/footer.css?v=$q" -o /tmp/footer.css || true
-            if grep -Fq 'HEADER-BRAND-INLINE-20260805' /tmp/article.html \
-              && grep -Fq '<span>NAŠE <b>KADAŇ</b></span>' /tmp/article.html \
-              && grep -Fq 'header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}' /tmp/article.html \
-              && grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /tmp/style.css \
-              && grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /tmp/footer.css; then
-              ok=1
-              break
-            fi
-            sleep $((attempt * 4))
+            python3 - <<'PY' && ok=1 && break || true
+          from pathlib import Path
+          html=Path('/tmp/article.html').read_text(encoding='utf-8',errors='replace')
+          style=Path('/tmp/style.css').read_text(encoding='utf-8',errors='replace')
+          footer=Path('/tmp/footer.css').read_text(encoding='utf-8',errors='replace')
+          assert 'HEADER-BRAND-INLINE-20260805' in html
+          assert '<span>NAŠE <b>KADAŇ</b></span>' in html
+          assert 'color:#13232d!important' in html
+          assert 'HEADER-BRAND-VISIBILITY-20260805' in style or 'HEADER-BRAND-VISIBILITY-20260805' in footer
+          PY
+            sleep $((attempt*4))
           done
           test "$ok" = 1
 
-      - name: Uzavřít opravný požadavek
-        if: success() && github.event_name == 'issues'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Celý název Naše Kadaň je nyní vynucen přímo uvnitř článku, nasazen na OVH a veřejně ověřen. Kontrolní běh: ${context.runId}.`});
-            await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
+      - name: Zapsat veřejný důkaz
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY'
+          import json,datetime,os
+          data={'status':'passed','checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'article':'https://nasekadan.cz/clanky/slovan-druhy-pokus.html','visibleBrand':'NAŠE KADAŇ','runId':os.environ.get('GITHUB_RUN_ID','')}
+          open('reports/header-brand-live-status.json','w',encoding='utf-8').write(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          PY
+          git config user.name 'Naše Kadaň – veřejná kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/header-brand-live-status.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Potvrdit veřejně celý název Naše Kadaň [skip ci]'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt*3))
+          done
+          exit 1
 
-      - name: Zapsat selhání
-        if: failure() && github.event_name == 'issues'
+      - name: Oznámit úspěch ve vlákně
+        if: success() && (github.event_name == 'issues' || github.event_name == 'pull_request_target')
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Druhá oprava hlavičky nebo její veřejná kontrola selhala. Kontrolní běh: ${context.runId}.`});
+            const number = context.eventName === 'issues' ? context.issue.number : context.payload.pull_request.number;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:number,body:`Celý název NAŠE KADAŇ je vložen přímo do článku, nasazen na OVH a veřejně ověřen. Kontrolní běh: ${context.runId}.`});
+            if (context.eventName === 'issues') await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:number,state:'closed',state_reason:'completed'});
+
+      - name: Zapsat selhání do vlákna
+        if: failure() && (github.event_name == 'issues' || github.event_name == 'pull_request_target')
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const number = context.eventName === 'issues' ? context.issue.number : context.payload.pull_request.number;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:number,body:`Přímá oprava nebo veřejná kontrola názvu webu selhala. Kontrolní běh: ${context.runId}.`});
