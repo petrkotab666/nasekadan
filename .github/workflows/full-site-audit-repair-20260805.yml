@@ -1,0 +1,164 @@
+name: Úplný audit a oprava celého webu
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-full-site-audit-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: false
+
+jobs:
+  audit_repair:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 70
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      NASEKADAN_SKIP_AUTOMATION_INSTALL: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit zdroj auditu, provést statickou kontrolu a uložit bezpečné opravy
+        id: static
+        shell: bash
+        run: |
+          set -u
+          git config user.name 'Naše Kadaň – úplný audit'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          static_status=1
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/repair_full_site_audit_source_20260805.py
+            python3 -m py_compile scripts/full_site_audit_20260805.py
+            set +e
+            python3 scripts/full_site_audit_20260805.py --repair --static --static-report reports/full-site-audit-static-20260805.json
+            static_status=$?
+            set -e
+            printf '%s\n' "$static_status" > /tmp/nasekadan-static-audit-exit.txt
+            git add scripts/full_site_audit_20260805.py reports/full-site-audit-static-20260805.json index.html clanky/index.html clanky/strana-*.html clanky/*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Audit webu: opravit karty, odkazy a lokální obrazové reference'
+            fi
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          test "$pushed" = 1
+          echo "static_status=$static_status" >> "$GITHUB_OUTPUT"
+
+      - name: Plně kanonicky nasadit všechny veřejné soubory a obrázky
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo -E env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
+
+      - name: Provést úplný audit živého webu
+        id: live
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/repair_full_site_audit_source_20260805.py
+          python3 -m py_compile scripts/full_site_audit_20260805.py
+          python3 scripts/full_site_audit_20260805.py --live --live-report /tmp/full-site-audit-live-20260805.json
+
+      - name: Zapsat výsledek úplného auditu
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          LIVE_OUTCOME: ${{ steps.live.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const {owner, repo} = context.repo;
+            function readJson(path) {
+              try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
+              catch (_) { return null; }
+            }
+            const staticReport = readJson('reports/full-site-audit-static-20260805.json');
+            const liveReport = readJson('/tmp/full-site-audit-live-20260805.json');
+            const deployOk = process.env.DEPLOY_OUTCOME === 'success';
+            const staticOk = staticReport && staticReport.status === 'passed';
+            const liveOk = liveReport && liveReport.status === 'passed';
+            const ok = deployOk && staticOk && liveOk;
+            const title = ok ? '[audit] Celý web Naše Kadaň – success' : '[incident] Úplný audit webu Naše Kadaň';
+            const compact = report => report ? {
+              status: report.status,
+              article_count: report.article_count,
+              html_files_checked: report.html_files_checked,
+              sitemap_urls_checked: report.sitemap_urls_checked,
+              internal_references_checked: report.internal_references_checked,
+              article_images_checked: report.article_images_checked,
+              card_images_checked: report.card_images_checked,
+              cards_checked: report.cards_checked,
+              errors: (report.errors || []).slice(0, 25),
+              warnings: (report.warnings || []).slice(0, 15),
+              repairs: (report.repairs || []).slice(0, 15),
+            } : null;
+            const body = [
+              ok ? 'Úplný audit a plné kanonické nasazení celého webu proběhly úspěšně.' : 'Úplný audit nebo nasazení odhalily trvající problém.',
+              '',
+              `Deploy: ${process.env.DEPLOY_OUTCOME}`,
+              `Živý audit: ${process.env.LIVE_OUTCOME}`,
+              `Run: ${process.env.RUN_URL}`,
+              '',
+              '## Statická kontrola',
+              '```json', JSON.stringify(compact(staticReport), null, 2), '```',
+              '',
+              '## Veřejná kontrola',
+              '```json', JSON.stringify(compact(liveReport), null, 2), '```',
+            ].join('\n');
+            const existing = await github.paginate(github.rest.issues.listForRepo, {owner, repo, state:'open', per_page:100});
+            for (const issue of existing.filter(x => x.title === '[incident] Úplný audit webu Naše Kadaň')) {
+              if (ok) {
+                await github.rest.issues.createComment({owner, repo, issue_number:issue.number, body:'Následující úplný audit již prošel. Incident se uzavírá.\n\n' + process.env.RUN_URL});
+                await github.rest.issues.update({owner, repo, issue_number:issue.number, state:'closed', state_reason:'completed'});
+              }
+            }
+            const created = await github.rest.issues.create({owner, repo, title, body, assignees:['petrkotab666']});
+            if (ok) await github.rest.issues.update({owner, repo, issue_number:created.data.number, state:'closed', state_reason:'completed'});
+
+      - name: Vyhodnotit audit jako blokující kontrolu
+        if: always()
+        shell: bash
+        env:
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+        run: |
+          set -euo pipefail
+          static_status="$(cat /tmp/nasekadan-static-audit-exit.txt 2>/dev/null || echo 1)"
+          live_status="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('/tmp/full-site-audit-live-20260805.json')
+          if not path.exists():
+              print(1)
+          else:
+              print(0 if json.loads(path.read_text(encoding='utf-8')).get('status') == 'passed' else 1)
+          PY
+          )"
+          test "$DEPLOY_OUTCOME" = success
+          test "$static_status" = 0
+          test "$live_status" = 0
