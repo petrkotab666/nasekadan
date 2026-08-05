@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-05T13:13:13.608768+00:00",
+  "generated_at": "2026-08-05T14:09:15.634985+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "b968796d189f56dff8c9824f04a3f8e9e48dba82",
@@ -28,7 +28,7 @@
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
     "public_audit_at": "2026-08-05T10:41:13.600874+00:00",
-    "repair_pending_public_verification": false,
+    "repair_pending_public_verification": true,
     "public_repair_verification": {
       "status": "success",
       "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
@@ -114,6 +114,18 @@
         "news_sitemap_required": false
       },
       "evidence_commit": "c31f8919b14c9972ce64b1165c85127b3f770b8d"
+    },
+    "last_editorial_correction": {
+      "status": "pending_public_verification",
+      "checked_at": "2026-08-05T14:09:15.634985+00:00",
+      "article_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
+      "modified_at": "2026-08-05T15:23:00+02:00",
+      "classification": "political_candidate_list_correction",
+      "corrected_claims": [
+        "Kandiduje sdružení nezávislých kandidátů s podporou Pirátské strany, nikoli Pirátská strana.",
+        "Miloslava Karfilátová byla nesprávně převzata z kandidátky 2022 a není uváděna jako kandidátka 2026."
+      ],
+      "primary_correction_source": "Písemné vyjádření kandidátky Elišky Hladové ze dne 5. srpna 2026"
     }
   },
   "articles": [
@@ -206,7 +218,7 @@
       "h1": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
       "url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
       "published_at": "2026-08-04T18:46:00+02:00",
-      "modified_at": "2026-08-04T19:38:00+02:00",
+      "modified_at": "2026-08-05T15:23:00+02:00",
       "persons": [
         "Jan Losenický",
         "Radek Oswald",
@@ -218,23 +230,25 @@
         "Michal Vyčichlo",
         "Jan Hudák",
         "Soňa Pusztakürti",
-        "Jana Hladová",
-        "Jiří Kulhánek"
+        "Jiří Kulhánek",
+        "Eliška Hladová"
       ],
       "organizations": [
         "ODS Kadaň",
         "Dáme Kadani novou šanci",
         "ANO 2011",
-        "Piráti Kadaň",
         "Městský úřad Kadaň",
-        "Ministerstvo vnitra"
+        "Ministerstvo vnitra",
+        "Sdružení nezávislých kandidátů s podporou Pirátů",
+        "Česká pirátská strana"
       ],
       "places": [
         "Kadaň"
       ],
       "cases": [
         "Podání kandidátních listin pro komunální volby 2026 v Kadani",
-        "Rozdělení někdejší kandidátky ODS"
+        "Rozdělení někdejší kandidátky ODS",
+        "Oprava nesprávného označení kandidujícího uskupení a kandidátů"
       ],
       "topics": [
         "Komunální volby 2026",
@@ -242,7 +256,8 @@
         "ODS",
         "Dáme Kadani novou šanci",
         "ANO",
-        "Piráti"
+        "Nezávislí s podporou Pirátů",
+        "Oprava článku"
       ],
       "fingerprint": "ef5e20bb0e584ddc9f136ccb",
       "status": {
@@ -254,7 +269,7 @@
       },
       "source_path": "clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
       "publication_status": "published",
-      "source_commit": "681781e6a59112d3d64e81054bc840dce8f6bd2e"
+      "source_commit": "pending-editorial-correction-sync"
     },
     {
       "title": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
