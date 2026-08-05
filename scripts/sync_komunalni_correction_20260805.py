@@ -27,9 +27,11 @@ def write(path: Path, text: str) -> None:
 
 
 def normalize_generated_whitespace() -> None:
-    paths = [ROOT / "index.html", ROOT / "clanky" / "index.html"] + sorted(
-        (ROOT / "clanky").glob("strana-*.html")
-    )
+    paths = [
+        ROOT / "index.html",
+        ROOT / "clanky" / "index.html",
+        ROOT / "sitemap.xml",
+    ] + sorted((ROOT / "clanky").glob("strana-*.html"))
     for path in paths:
         if not path.exists():
             continue
