@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T03:33:51.160260+00:00",
+  "generatedAt": "2026-08-05T09:06:49.159660+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
@@ -25,7 +25,7 @@
     "TILIA Kadaň, z. s. (15)",
     "TILIA Kadaň – kontakty a pracoviště (9)",
     "Světlo Kadaň (0)",
-    "Vzdělávání na Kadaňsku (15)",
+    "Vzdělávání na Kadaňsku (0)",
     "MŠ Husova Kadaň (5)",
     "MŠ Olgy Havlové Kadaň (15)",
     "MŠ Čtyřlístek Kadaň (15)",
@@ -75,7 +75,7 @@
     "Sociální monitoring – Pivnice U Soudku Kadaň (15)",
     "Sociální monitoring – ARG a hudba v Kadani (15)",
     "Liďák Kadaň – oficiální web (5)",
-    "Liďák Kadaň – Instagram (6)",
+    "Liďák Kadaň – Instagram (0)",
     "Sociální monitoring – Liďák Kadaň a nové akce (15)",
     "Úřad práce ČR – kontaktní pracoviště Kadaň (9)",
     "Kultura Kadaň (15)",
@@ -86,7 +86,7 @@
     "Autokemp Prunéřov (6)",
     "Autokemp Prunéřov – zdroj 3 (3)",
     "Autokemp Prunéřov – zdroj 4 (0)",
-    "Vzdělávání na Kadaňsku (15)",
+    "Vzdělávání na Kadaňsku (0)",
     "Domovy sociálních služeb Kadaň a Mašťov (15)",
     "Kožní ambulance MUDr. Stanislava Voráče (1)",
     "Městská správa sociálních služeb Kadaň (15)",
@@ -107,16 +107,20 @@
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Let It Roll – akce: HTTPError: HTTP Error 404: Not Found",
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
     "ČEZ – tiskové zprávy: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Povodí Ohře: HTTPError: HTTP Error 403: Forbidden",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
+    "Doprava Ústeckého kraje: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
+    "Liďák Kadaň – Instagram: HTTPError: HTTP Error 429: Too Many Requests",
+    "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
-    "Římskokatolická farnost Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+    "Římskokatolická farnost Kadaň: URLError: <urlopen error timed out>"
   ],
   "sourceStatus": [
     {
@@ -319,8 +323,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -653,8 +658,9 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 0
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -726,8 +732,9 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak/",
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 6
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -814,8 +821,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -938,7 +946,7 @@
       "origin": "organization_directory",
       "status": "failed",
       "itemsFound": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     }
   ],
   "monitoringCoverage": {
@@ -964,24 +972,6 @@
       "sourceName": "ZAČÍT SPOLU Kadaň"
     },
     {
-      "id": "a711429c63d0",
-      "title": "Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení 23.9.2026",
-      "date": "2026-09-23",
-      "category": "Školství",
-      "description": "ních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení (Restaurace Střelnice, Čechova 147 Kadaň) Aktuality  17.6.2026: Vážení partneři, dovolujeme si Vás srdečně pozvat na seminář PhDr. Libora Kyncla na téma Formativní přístup k hodnocení, který se bude konat dne 23.9.2026 od 09:00 do 16:00 hod. v příjemném prostředí salonku restaurace Střelnice v Ka",
-      "source": "https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-formativni-pristup-k-hodnoceni-23-9-2026-vypis-clanek-861.html",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "2dfdd5b838e2",
-      "title": "Celý článek",
-      "date": "2026-09-23",
-      "category": "Školství",
-      "description": "ních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení (Restaurace Střelnice, Čechova 147 Kadaň) Aktuality Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení 23.9.2026 17.6.2026: Vážení partneři, dovolujeme si Vás srdečně pozvat na seminář PhDr. Libora Kyncla na téma Formativní přístup k hodnocení, který se bude konat dne 23.",
-      "source": "https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-formativni-pristup-k-hodnoceni-23-9-2026-vypis-clanek-861.html",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
       "id": "46ac3f18e144",
       "title": "kalendáři ČGF",
       "date": "2026-08-30",
@@ -989,60 +979,6 @@
       "description": "2026 – Kemp Dánsko 29.8.-30.8.2026 – Kemp TJ Bohemians 12.9.-13.9.2026 – Kemp TJ Bohemians 26.9.-27.9.2026 – Kemp TJ Bohemians 10.10.-11.10.2026 – Kemp TJ Bohemians 14.10.-17.10.2026 – ME Teamgym Espoo, Finsko – – – ČP = Český pohár v teamgymu. Rozpisy závodů můžete nalézt v  Nejnovější příspěvky",
       "source": "https://www.gymfed.cz/kalendar?sport=TG",
       "sourceName": "Gymnastika Kadaň – SK Kosagym"
-    },
-    {
-      "id": "f530659df5b1",
-      "title": "Čtenářský poklad- Knihy, co na první pohled nezaujmou",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-formati",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=19",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "fd91c9250ecf",
-      "title": "Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "ation:none;text-shadow:0px 1px 0px #2f6627;\"> Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00:  (Restaurace Střelnice, Čechova 147 Kadaň) Aktuality Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení 23.9.2026 17.6.2026: Vážení partneři, dovolujeme si Vás srdečně",
-      "source": "https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-formativni-pristup-k-hodnoceni-vypis-clanek-861.html",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "7b402302cb0f",
-      "title": "Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "další pomůcky k zapůjčení Kalendář 26.8.202610:00:00:  (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení (Restaurace Střelnice, Čechova 147 Kadaň) Aktuality Pozvánka na seminář od P",
-      "source": "https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s-durazem-na-bezpecnost-a-ekonomiku-provozu-vypis-clanek-860.html",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "78c1e5a6a2e0",
-      "title": "Pomůcky k zapůjčení",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více  Čtenářský poklad- Knihy, co na první pohled nezaujmou .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"https:",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "e2819264aab0",
-      "title": "Celý článek",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "3> Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: Pozvánka na seminář od PhDr. Libora Kyncla - Formativní přístup k hodnocení (Restaurace Střelnice, Čechova 147 Kadaň) Aktuality Pozvánka na seminář od PhDr. Libora Kyncla - Formativní pří",
-      "source": "https://www.vzdelavani-kadansko.cz/pozvanka-na-prakticky-seminar-nocni-vareni-s-durazem-na-bezpecnost-a-ekonomiku-provozu-vypis-clanek-860.html",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "156f0e19ced0",
-      "title": ".. další pomůcky k zapůjčení",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Čtenářský poklad- Knihy, co na první pohled nezaujmou  Kalendář 26.8.202610:00:00: <a href=\"https:",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
-      "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
       "id": "65942bada3aa",
@@ -1065,18 +1001,18 @@
     {
       "id": "35773887de99",
       "title": "❮ Předchozí",
-      "date": "2026-07-28",
+      "date": "2026-07-29",
       "category": "Smlouvy a hospodaření",
-      "description": "\"4\"> 28.07.2026 74 365 CZK bez DPH PETROM STAVBY, a.s. Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "\"4\"> 29.07.2026 449 000 CZK s DPH Žatecká brána s.r.o. Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp%3Bdo=searchResultList-setOffset&amp%3Bcontract_id=&amp%3Bversion_id=&amp%3Bpublication_date%5Bfrom%5D=&amp%3Bpublication_date%5Bto%5D=&amp%3Bsubject_box=uaybdrx&amp%3Bsubject_name=&amp%3Bsubject_idnum=&amp%3Bsubject_address=&amp%3Bparty_box=&amp%3Bparty_name=&amp%3Bparty_idnum=&amp%3Bparty_address=&amp%3Bcontr_num=&amp%3Bcontract_reference_number=&amp%3Bsign_date%5Bfrom%5D=&amp%3Bsign_date%5Bto%5D=&amp%3Bcontract_descr=&amp%3Bsign_person_name=&amp%3Bvalue_no_vat%5Bfrom%5D=&amp%3Bvalue_no_vat%5Bto%5D=&amp%3Bvalue_vat%5Bfrom%5D=&amp%3Bvalue_vat%5Bto%5D=&amp%3Bvalue_foreign%5Bfrom%5D=&amp%3Bvalue_foreign%5Bto%5D=&amp%3Bforeign_currency=&amp%3Bfile_text=&amp%3Bsearch_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
     {
       "id": "57c557404329",
       "title": "Na začátek",
-      "date": "2026-07-28",
+      "date": "2026-07-29",
       "category": "Smlouvy a hospodaření",
-      "description": "\"4\"> 28.07.2026 74 365 CZK bez DPH PETROM STAVBY, a.s. Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "\"4\"> 29.07.2026 449 000 CZK s DPH Žatecká brána s.r.o. Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp%3Bdo=searchResultList-setOffset&amp%3Bcontract_id=&amp%3Bversion_id=&amp%3Bpublication_date%5Bfrom%5D=&amp%3Bpublication_date%5Bto%5D=&amp%3Bsubject_box=uaybdrx&amp%3Bsubject_name=&amp%3Bsubject_idnum=&amp%3Bsubject_address=&amp%3Bparty_box=&amp%3Bparty_name=&amp%3Bparty_idnum=&amp%3Bparty_address=&amp%3Bcontr_num=&amp%3Bcontract_reference_number=&amp%3Bsign_date%5Bfrom%5D=&amp%3Bsign_date%5Bto%5D=&amp%3Bcontract_descr=&amp%3Bsign_person_name=&amp%3Bvalue_no_vat%5Bfrom%5D=&amp%3Bvalue_no_vat%5Bto%5D=&amp%3Bvalue_vat%5Bfrom%5D=&amp%3Bvalue_vat%5Bto%5D=&amp%3Bvalue_foreign%5Bfrom%5D=&amp%3Bvalue_foreign%5Bto%5D=&amp%3Bforeign_currency=&amp%3Bfile_text=&amp%3Bsearch_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1187,15 +1123,6 @@
       "description": "c\">15.06.2026 Hodnotit se bude nápaditost výzdoby, kvetení rostlin, péče o květinovou výzdobu, harmonie barev a celkový estetický dojem.  <span class=",
       "source": "https://www.noviny-kadan.cz/l/vyberkove-rizeni",
       "sourceName": "Kadaňské noviny"
-    },
-    {
-      "id": "d1d8362a63ff",
-      "title": "Pozvánka na soutěž Regional Service-Learning Award",
-      "date": "2026-06-09",
-      "category": "Školství",
-      "description": "bezpečnost a ekonomiku provozu 9.6.2026: Vážení partneři, dovolujeme si Vás srdečně pozvat na seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu, který se bude konat ve středu 26. srpna 2026 od 10:00 - 12:00 hod v GASTRO Konrád, Vodních staveb 5471, Chomutov. .. Celý článek  8.6.2026: Před několika dny odstartovala možnost přihlášení \"dobrovolnických\" projektů, ve kterých se aktivně zapojují děti a mlád",
-      "source": "https://www.vzdelavani-kadansko.cz/pozvanka-na-soutez-regional-service-learning-award-vypis-clanek-857.html",
-      "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
       "id": "ba3b4fa64b91",
@@ -1445,7 +1372,7 @@
       "title": "Přidat zde pivočáru",
       "date": "2022-09-09",
       "category": "Kultura a volný čas",
-      "description": "62662264522\" data-ad-slot=\"5357729984\" data-ad-format=\"horizontal\" data-full-width-responsive=\"true\" > (adsbygoogle = window.adsbygoogle || []).push({}); U Soudku  Název U Soudku Adresa Poštovní 842, Kadaň Web Přidat internetovou adresu... Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Zavřeno Co se tu čepuje",
+      "description": "62662264522\" data-ad-slot=\"5357729984\" data-ad-format=\"horizontal\" data-full-width-responsive=\"true\" > (adsbygoogle = window.adsbygoogle || []).push({}); U Soudku  Název U Soudku Adresa Poštovní 842, Kadaň Web Přidat internetovou adresu... Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Otevřeno Co se tu čepuj",
       "source": "https://www.pivnidenicek.cz/pivocary?pub=47163-u-soudku",
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
     },
@@ -1454,7 +1381,7 @@
       "title": "Přidat internetovou adresu...",
       "date": "2022-09-09",
       "category": "Kultura a volný čas",
-      "description": "ve pub-detail-table no-hover mb2\"> Název U Soudku Adresa Poštovní 842, Kadaň Web  Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Zavřeno Co se tu čepuje Pivo Poslední cena Aktualizace před 0 <td title=\"Celkem vypito 3 piv",
+      "description": "ve pub-detail-table no-hover mb2\"> Název U Soudku Adresa Poštovní 842, Kadaň Web  Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Otevřeno Co se tu čepuje Pivo Poslední cena Aktualizace před 0 <td title=\"Celkem vypito 3 pi",
       "source": "https://www.pivnidenicek.cz/restaurace-a-hospody/upravit/47163-u-soudku",
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
     },
@@ -1526,7 +1453,7 @@
       "title": "Železniční přejezd ve Spořické ulici se uzavře. Řidiče čeká objížďka",
       "date": "",
       "category": "Regionální média",
-      "description": "js-fade-area min-w-0 w-full overflow-hidden \" data-class=\" after:to-surface after:from-transparent\" > Chomutovsko <div class=\"flex flex-col items-stretch gap-1.5 \"",
+      "description": "troly? Deník.cz <div class=\"flex flex-col items-stretch gap-1.5 \"",
       "source": "https://chomutovsky.denik.cz/zpravy-region/zeleznicni-prejezd-ve-sporicke-ulici-se-uzavre-ridice-ceka-objizdka",
       "sourceName": "Chomutovský deník"
     },
@@ -1540,6 +1467,15 @@
       "sourceName": "Správa železnic – cestující"
     },
     {
+      "id": "e201579d0c55",
+      "title": "Žatecký a lounský deník",
+      "date": "",
+      "category": "Regionální média",
+      "description": "h2 class=\"text-base lg:text-lg h-12 lg:h-14\"> Detektiv Vachálek o vrahu Slovákovi: I vagabund má svoji vagabundskou čest <div class=\"js-fade-area min-w-0 w-full over",
+      "source": "https://zatecky.denik.cz/",
+      "sourceName": "Chomutovský deník"
+    },
+    {
       "id": "5ca5ff6f19a8",
       "title": "Švejk restaurant U Věžičky",
       "date": "",
@@ -1547,6 +1483,15 @@
       "description": "arker\"> ' + icon + ' ', iconAnchor: [12, 24] }) }).addTo(map); $('ul.tags li').tooltip(); }); }); //]]> Nejbližší hospody v okolí Název Adresa Město Pivo Vzdálenost  Poštovní 741 Kadaň Plzeňský Prazdroj 12° 0,04 km FK Tatran Kadaň U Stadionu 1378 Plzeňský Prazdroj 12°, Gambrinus 12° 0,48 km ČEWA Na Průtahu 1854 Plzeňský Prazdroj 12°, Gambrinus 10°,... 0,51 km Posezení Pohoda",
       "source": "https://www.pivnidenicek.cz/restaurace-a-hospody/ceska-republika/ustecky-kraj/chomutov/kadan/47161-svejk-restaurant-u-vezicky",
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
+    },
+    {
+      "id": "2f7354ff13a3",
+      "title": "Šok v turistickém ráji. Chlapec zemřel po žahnutí medúzy, úřady bijí na poplach",
+      "date": "",
+      "category": "Regionální média",
+      "description": "g:text-lg h-12 lg:h-14\"> Kvůli suchu hrozí zákaz napouštění bazénů i zalévání. Pokuty jdou i do tisíců <div class=\"js-fade-area min-w-0 w-full overflow-hidden \" d",
+      "source": "https://www.denik.cz/svet/thajsko-meduza-smrt-chlapec-zahnuti",
+      "sourceName": "Chomutovský deník"
     },
     {
       "id": "caa92ed821e6",
@@ -1853,6 +1798,69 @@
       "description": "r-right\"> Sportovní kluby Sportovní zařízení Svazy  Web ČUS Sportovní kluby Uvedeny pouze sportovní kluby a tělovýchovné jednoty - členové okresních sdružení ČUS. Název",
       "source": "https://iscus.cz/web/organizacni-struktura",
       "sourceName": "BK DDM Kadaň"
+    },
+    {
+      "id": "138ad49f743f",
+      "title": "ČEZ Distribuce",
+      "date": "",
+      "category": "Elektřina a odstávky",
+      "description": "Plánované odstávky elektřiny |  | ČEZ Distribuce <meta property=\"og:url\" content=\"https://www.cezdistribuce.cz/cs/pro-zakazniky/potrebuji-vyresit/s",
+      "source": "https://www.cezdistribuce.cz/cs",
+      "sourceName": "ČEZ Distribuce – plánované odstávky"
+    },
+    {
+      "id": "75abe8547439",
+      "title": "ČESKÝ POHÁR BENJAMÍNKŮ 2026",
+      "date": "",
+      "category": "Sportovní organizace a kluby",
+      "description": "y Kadaň získali dotaci ve výši 113 600 Kč na podporu oddílu rychlostních kanoistů a dračích lodí. Na sportovní aktivity dětí a mládeže.  od Honza Zubko | 5. května 2026 NÁŠ ODDÍL I LETOS OPĚT DOSTAL DŮVĚRU K POŘÁDÁNÍ ČESKÉHO POHÁRU BENJAMÍNKŮ O VÍKENDU 6 A 7.ČERVNA SE NA OHŘI BUDOU PROHÁNĚT ZÁVODNÍCI Z TÉMĚŘ CELÉ REPUBLIKY, PŘIJĎTE JE PODPOŘIT. Jarní Brigáda na loděnici TJVS od <a href=\"https://www.tjvskadan.c",
+      "source": "https://www.tjvskadan.cz/cesky-pohar-benjaminku-2025",
+      "sourceName": "TJ Vodní sporty Kadaň"
+    },
+    {
+      "id": "ff004a52a3ac",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Město",
+      "description": "i> Mapa webu Aktuality Webkamery Kalendář akcí  Město Město Zastupitelstvo města Rada města Komise rady <a href=\"https://www.mes",
+      "source": "https://www.mesto-kadan.cz/cs/mestsky-urad/uredni-deska-6.html",
+      "sourceName": "Město Kadaň"
+    },
+    {
+      "id": "5c29a689497f",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Mateřské školy",
+      "description": "(()=>{let e=setInterval((function(){document.body&&(document.body.classList.add(\"cq-polyfill-loaded\"),clearInterval(e))}),100)}))}))}))})() <link rel=\"alterna",
+      "source": "https://www.msctyrlistekkadan.cz/uredni-deska",
+      "sourceName": "MŠ Čtyřlístek Kadaň"
+    },
+    {
+      "id": "5345108fd9d2",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Mateřské školy",
+      "description": "i\">Dokumenty ke stažení Důležité informace Informace Informace o zpracování GDPR  Prohlášení o přístupnosti Školní řád Rozpočet a rozpočtový výhled Stravování Jídelníček Informace o stravování Alergeny <div class=\"ba-row row-fluid\" id=\"item-1650890",
+      "source": "https://www.ms-pisnicka.cz/informace/uredni-deska",
+      "sourceName": "MŠ Písnička Kadaň"
+    },
+    {
+      "id": "f4a5e19ce2f2",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Mateřské školy",
+      "description": "Důležité informace Informace o zpracovávání osobních údajů Sponzoři  Prohlášení o přístupnosti Školní vzdělávací program Školní řád Rozpočet a rozpočtový výhled Stravování Jídelníček Alergeny Termín plateb Vnitřní předpis pro školní stravování <i class=\"ba-icons ba-icon-men",
+      "source": "https://www.mshvezdicka.eu/dulezite-informace/uredni-deska",
+      "sourceName": "MŠ Hvězdička Kadaň"
+    },
+    {
+      "id": "2308ee32e625",
+      "title": "Úřední deska",
+      "date": "",
+      "category": "Základní školy",
+      "description": "Dokumenty  E-podatelna Povinné informace",
+      "source": "https://www.5zskadan.cz/o-skole/uredni-deska",
+      "sourceName": "ZŠ Na Podlesí Kadaň"
     }
   ]
 }
