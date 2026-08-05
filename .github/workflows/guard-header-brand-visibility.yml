@@ -4,6 +4,11 @@ on:
   workflow_dispatch:
   issues:
     types: [opened, reopened]
+  push:
+    branches: [main]
+    paths:
+      - '.github/header-v2-trigger.txt'
+      - '.github/workflows/guard-header-brand-visibility.yml'
   schedule:
     - cron: '37 */3 * * *'
 
