@@ -1,0 +1,59 @@
+name: Opravit deployment-health Slovanu
+
+"on":
+  push:
+    paths:
+      - '.github/dispatch/slovan-health-repair.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Nasadit kanonický deployment-health a veřejně ověřit
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          grep -Fq 'status=ok' deployment-health.txt
+          grep -Fq 'article=https://nasekadan.cz/clanky/slovan-druhy-pokus.html' deployment-health.txt
+          for attempt in 1 2 3 4; do
+            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 deployment-health.txt ubuntu@57.129.43.215:/tmp/deployment-health.txt && \
+               ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0644 /tmp/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/deployment-health.txt
+          REMOTE
+            then break; fi
+            test "$attempt" -lt 4
+            sleep $((attempt*5))
+          done
+          for attempt in $(seq 1 15); do
+            q="${GITHUB_RUN_ID}-$(date +%s%N)"
+            if body="$(curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/deployment-health.txt?v=$q")" && \
+               grep -Fq 'status=ok' <<<"$body" && \
+               grep -Fq 'source=dc5cd07491db8c85ec5ef6f5c560585835a75162' <<<"$body" && \
+               grep -Fq 'article=https://nasekadan.cz/clanky/slovan-druhy-pokus.html' <<<"$body"; then
+              printf '%s\n' "$body"
+              exit 0
+            fi
+            sleep 8
+          done
+          exit 1
