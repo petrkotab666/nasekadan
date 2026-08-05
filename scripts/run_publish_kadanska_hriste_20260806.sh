@@ -25,6 +25,8 @@ public_ok() {
   registry="$(curl -4 -kfsS -L --max-time 25 "$BASE/data/published-content-index.json?v=$q" 2>/dev/null || true)"
   grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article" &&
   grep -Fq '5.4 · Chomutovská u čp. 1229' <<<"$article" &&
+  grep -Fq '953&nbsp;359 Kč včetně DPH' <<<"$article" &&
+  grep -Fq 'VYSSPA Sports Technology' <<<"$article" &&
   grep -Fq "$ARTICLE_REL" <<<"$home" && grep -Fq "$ARTICLE_REL" <<<"$archive" &&
   grep -Fq "$ARTICLE_URL" <<<"$rss" && grep -Fq "$ARTICLE_URL" <<<"$sitemap" &&
   grep -Fq "$ARTICLE_URL" <<<"$news" && grep -Fq 'status=ok' <<<"$health" &&
@@ -43,9 +45,10 @@ src=Path('scripts/run_publish_jezero_most_20260805.sh').read_text(encoding='utf-
 replacements={
 'jezero-most-patrani-dva-lide-bourka-2026':'jak-se-kadan-stara-o-hriste-2026',
 'publish_jezero_most_20260805.py':'publish_kadanska_hriste_20260806.py',
+'  python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py\n  python3 scripts/publish_kadanska_hriste_20260806.py':'  python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py scripts/enrich_kadanska_hriste_20260806.py\n  python3 scripts/publish_kadanska_hriste_20260806.py\n  python3 scripts/enrich_kadanska_hriste_20260806.py\n  python3 scripts/enforce_all_article_visibility.py',
 'Na jezeře Most pátrají po dvou lidech. Kvůli bouřce se neměli dostat na břeh':'Jak se Kadaň stará o svá hřiště? Nové prvky, opravy i velké rekonstrukce',
 'Proč zprávu přinášíme i v Kadani':'5.4 · Chomutovská u čp. 1229',
-'Výsledek pátrání nebyl v době vydání veřejně potvrzen':'4.1 · centrální hřiště na sídlišti E',
+'Výsledek pátrání nebyl v době vydání veřejně potvrzen':'953&nbsp;359 Kč včetně DPH',
 'gh issue comment 690':'gh issue comment 724',
 'gh issue close 690':'gh issue close 724',
 'jezero-most-bundle':'kadanska-hriste-bundle',
@@ -56,6 +59,14 @@ replacements={
 }
 for old,new in replacements.items():
     src=src.replace(old,new)
+required=(
+    'python3 scripts/enrich_kadanska_hriste_20260806.py',
+    "grep -Fq '953&nbsp;359 Kč včetně DPH'",
+    'jak-se-kadan-stara-o-hriste-2026',
+)
+for item in required:
+    if item not in src:
+        raise SystemExit(f'Při sestavení běhu chybí povinná pojistka: {item}')
 Path('/tmp/run-kadanska-hriste.sh').write_text(src,encoding='utf-8')
 PY
 chmod +x /tmp/run-kadanska-hriste.sh
