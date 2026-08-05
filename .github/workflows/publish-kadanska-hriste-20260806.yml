@@ -1,0 +1,80 @@
+name: Publikovat přehled kadaňských hřišť ve 4:00
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/publish_kadanska_hriste_20260806.py'
+      - 'scripts/run_publish_kadanska_hriste_20260806.sh'
+      - '.github/workflows/publish-kadanska-hriste-20260806.yml'
+  schedule:
+    - cron: '0 2 6 8 *'
+    - cron: '7 2 6 8 *'
+    - cron: '17 2 6 8 *'
+    - cron: '32 2 6 8 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-kadanska-hriste-20260806
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ověřit syntaxi a sestavení článku bez publikace
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet Pillow
+          python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py
+          bash -n scripts/run_publish_kadanska_hriste_20260806.sh
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          path=Path('scripts/publish_kadanska_hriste_20260806.py')
+          spec=importlib.util.spec_from_file_location('playgrounds',path)
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          html=module.article_page()
+          assert '<h1>Jak se Kadaň stará o svá hřiště?' in html
+          assert '5.4 · Chomutovská u čp. 1229' in html
+          assert '4.1 · centrální hřiště na sídlišti E' in html
+          assert '2. dubna 2026 přímo pro hřiště 6.1' in html
+          module.make_social()
+          assert module.SOCIAL.exists() and module.SOCIAL.stat().st_size > 10000
+          print('Předpublikační sestavení je v pořádku.')
+          PY
+
+  publish:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Publikovat, nasadit a veřejně ověřit
+        shell: bash
+        run: bash scripts/run_publish_kadanska_hriste_20260806.sh
