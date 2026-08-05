@@ -1,0 +1,220 @@
+name: Aktualizovat pátrání na jezeře Most
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-update-jezero-most-20260805-1218.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: update-jezero-most-20260805-1218
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ARTICLE_REL: /clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      ARTICLE_FILE: clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      EXPECTED_H1: 'Na jezeře Most pátrají po dvou lidech. Kvůli bouřce se neměli dostat na břeh'
+      MODIFIED: '2026-08-05T12:18:00+02:00'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Aktualizovat článek a kanonické plochy
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/update_jezero_most_20260805_1218.py scripts/enforce_all_article_visibility.py
+            python3 scripts/update_jezero_most_20260805_1218.py
+
+            grep -Fq "<h1>${EXPECTED_H1}</h1>" "$ARTICLE_FILE"
+            grep -Fq 'Aktualizace 5. srpna ve 12:18' "$ARTICLE_FILE"
+            grep -Fq 'pohřešované se zatím nepodařilo najít' "$ARTICLE_FILE"
+            grep -Fq 'data-update-jezero-most="20260805-1218"' "$ARTICLE_FILE"
+            grep -Fq "$ARTICLE_REL" index.html clanky/index.html
+            grep -Fq "$ARTICLE_URL" rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            grep -Fq 'Pátrání po dvou lidech na jezeře Most pokračuje' rss.xml llms.txt
+            grep -Fq '"modified_at": "2026-08-05T12:18:00+02:00"' data/published-content-index.json
+            python3 - <<'PY'
+          import json, xml.etree.ElementTree as ET
+          from pathlib import Path
+          ET.parse('rss.xml')
+          ET.parse('sitemap.xml')
+          ET.parse('news-sitemap.xml')
+          data=json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          assert data['article_count'] >= 50
+          assert data['validation']['duplicate_urls'] == []
+          assert data['validation']['duplicate_fingerprints'] == []
+          PY
+            git diff --check
+
+            git add "$ARTICLE_FILE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Aktualizovat: pátrání na jezeře Most pokračuje'
+            fi
+            article_sha="$(git rev-parse HEAD)"
+
+            ARTICLE_SHA="$article_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next((x for x in data.get('articles',[]) if x.get('url')==os.environ['ARTICLE_URL']),None)
+          if article is None:
+              raise SystemExit('Aktualizovaný článek chybí v registru.')
+          article['source_commit']=os.environ['ARTICLE_SHA']
+          data['source_commit']=os.environ['ARTICLE_SHA']
+          now=datetime.now(timezone.utc).isoformat()
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=True
+          validation['last_consistency_audit']={
+              'status':'pending_public_verification',
+              'checked_at':now,
+              'article_count':len(data.get('articles',[])),
+              'updated_url':os.environ['ARTICLE_URL'],
+              'source_commit':os.environ['ARTICLE_SHA'],
+              'update_reason':'Pátrání pokračuje; pohřešované se zatím nepodařilo najít.'
+          }
+          data['generated_at']=now
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nupdated=%s\n' "$article_sha" "$ARTICLE_URL" "$MODIFIED" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: zapsat aktualizaci pátrání na jezeře Most'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            article_count="$(python3 - <<'PY'
+          import json
+          print(json.load(open('data/published-content-index.json',encoding='utf-8'))['article_count'])
+          PY
+          )"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              echo "article_count=$article_count" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit aktualizaci na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/jezero-most-update-1218"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE_FILE" "$bundle/clanky/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/jezero-most-update-1218.tgz" .
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/jezero-most-update-1218.tgz" ubuntu@57.129.43.215:/tmp/jezero-most-update-1218.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/jezero-most-update-1218
+          mkdir -p /tmp/jezero-most-update-1218
+          tar -xzf /tmp/jezero-most-update-1218.tgz -C /tmp/jezero-most-update-1218
+          src=/tmp/jezero-most-update-1218
+          root=/var/www/nasekadan
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/jezero-most-update-1218 /tmp/jezero-most-update-1218.tgz
+          REMOTE
+
+      - name: Veřejně ověřit aktualizaci
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 6
+          base=https://nasekadan.cz
+          q="${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 40 "$base/?v=$q")"
+          archive="$(curl -4 -kfsS -L --max-time 40 "$base/clanky/?v=$q")"
+          rss="$(curl -4 -kfsS -L --max-time 40 "$base/rss.xml?v=$q")"
+          sitemap="$(curl -4 -kfsS -L --max-time 40 "$base/sitemap.xml?v=$q")"
+          news="$(curl -4 -kfsS -L --max-time 40 "$base/news-sitemap.xml?v=$q")"
+          registry="$(curl -4 -kfsS -L --max-time 40 "$base/data/published-content-index.json?v=$q")"
+          health="$(curl -4 -kfsS -L --max-time 40 "$base/deployment-health.txt?v=$q")"
+
+          grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article"
+          grep -Fq 'Aktualizace 5. srpna ve 12:18' <<<"$article"
+          grep -Fq 'pohřešované se zatím nepodařilo najít' <<<"$article"
+          grep -Fq 'article:published_time" content="2026-08-05T10:50:00+02:00' <<<"$article"
+          grep -Fq 'article:modified_time" content="2026-08-05T12:18:00+02:00' <<<"$article"
+          grep -Fq "$ARTICLE_REL" <<<"$home"
+          grep -Fq 'Pátrání po dvou lidech na jezeře Most pokračuje' <<<"$home"
+          grep -Fq "$ARTICLE_REL" <<<"$archive"
+          grep -Fq 'Pátrání po dvou lidech na jezeře Most pokračuje' <<<"$rss"
+          grep -Fq "$ARTICLE_URL" <<<"$sitemap"
+          grep -Fq "$ARTICLE_URL" <<<"$news"
+          grep -Fq '"modified_at": "2026-08-05T12:18:00+02:00"' <<<"$registry"
+          grep -Fq '"article_count": ${{ steps.prepare.outputs.article_count }}' <<<"$registry"
+          grep -Fq 'status=ok' <<<"$health"
+          grep -Fq "updated=$MODIFIED" <<<"$health"
+
+      - name: Zapsat úspěch a uzavřít monitoringový nález
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api repos/${GITHUB_REPOSITORY}/issues/692/comments -f body="Stávající článek byl aktualizován bez vytvoření nové URL. Doplněno: rozsáhlá pátrací akce pokračuje a pohřešované se zatím nepodařilo najít. Veřejně ověřen článek, titulka, archiv, RSS, sitemap, news-sitemap, registr a deployment-health. Commit: ${{ steps.prepare.outputs.source_sha }}."
+          gh api repos/${GITHUB_REPOSITORY}/issues/692 -X PATCH -f state=closed -f state_reason=completed >/dev/null
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        run: |
+          gh api repos/${GITHUB_REPOSITORY}/issues/692/comments -f body="Aktualizace stávajícího článku nebo její veřejná kontrola selhala. Nález zůstává otevřený. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" || true
