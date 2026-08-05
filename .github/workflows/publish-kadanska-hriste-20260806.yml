@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/publish_kadanska_hriste_20260806.py'
+      - 'scripts/enrich_kadanska_hriste_20260806.py'
       - 'scripts/run_publish_kadanska_hriste_20260806.sh'
       - '.github/workflows/publish-kadanska-hriste-20260806.yml'
   schedule:
@@ -40,10 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check --quiet Pillow
-          python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py
+          python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py scripts/enrich_kadanska_hriste_20260806.py
           bash -n scripts/run_publish_kadanska_hriste_20260806.sh
           python3 - <<'PY'
-          import importlib.util
+          import importlib.util, subprocess
           from pathlib import Path
           path=Path('scripts/publish_kadanska_hriste_20260806.py')
           spec=importlib.util.spec_from_file_location('playgrounds',path)
@@ -54,9 +55,16 @@ jobs:
           assert '5.4 · Chomutovská u čp. 1229' in html
           assert '4.1 · centrální hřiště na sídlišti E' in html
           assert '2. dubna 2026 přímo pro hřiště 6.1' in html
+          module.ARTICLE.parent.mkdir(parents=True,exist_ok=True)
+          module.ARTICLE.write_text(html,encoding='utf-8')
+          subprocess.run(['python3','scripts/enrich_kadanska_hriste_20260806.py'],check=True)
+          enriched=module.ARTICLE.read_text(encoding='utf-8')
+          assert '953&nbsp;359 Kč včetně DPH' in enriched
+          assert 'VYSSPA Sports Technology' in enriched
+          assert 'odstranění původního povrchu hřiště 5.20' in enriched
           module.make_social()
           assert module.SOCIAL.exists() and module.SOCIAL.stat().st_size > 10000
-          print('Předpublikační sestavení je v pořádku.')
+          print('Předpublikační sestavení včetně hřiště 5.20 je v pořádku.')
           PY
       - name: Zapsat nezávislý doklad kontroly
         shell: bash
@@ -73,10 +81,12 @@ jobs:
             'source_commit':os.environ.get('GITHUB_SHA'),
             'checks':[
               'python syntax', 'shell syntax', 'article rendering',
-              'required findings present', 'social image generated and over 10 kB'
+              'required findings present', 'hřiště 5.20 full reconstruction history',
+              'social image generated and over 10 kB'
             ],
             'scheduled_publication':'2026-08-06T04:00:00+02:00',
             'backup_runs':['04:07','04:17','04:32'],
+            'emergency_workflow':True,
           }
           Path('research/kadanska-hriste-publication-preflight-20260805/STATUS.json').write_text(
             json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
