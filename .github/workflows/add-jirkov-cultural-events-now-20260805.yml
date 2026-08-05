@@ -1,0 +1,293 @@
+name: Doplnit jirkovské akce do kulturního přehledu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-add-jirkov-cultural-events-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: add-jirkov-cultural-events-20260805
+  cancel-in-progress: false
+
+jobs:
+  update-deploy-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ARTICLE: clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_REL: /clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html
+      EVENT_WALK: jirkov-komentovana-prochazka-20260805
+      EVENT_FAIRYTALE: jirkov-pohadka-rybar-rybka-20260806
+      MODIFIED: '2026-08-05T13:39:00+02:00'
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Doplnit akce a obnovit veřejné plochy
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kulturní přehled'
+          git config user.email 'info@nasekadan.cz'
+
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/add_jirkov_events_to_current_culture_20260805.py scripts/enforce_all_article_visibility.py
+            python3 scripts/add_jirkov_events_to_current_culture_20260805.py
+            python3 scripts/enforce_all_article_visibility.py
+
+            grep -Fq "data-event-id=\"${EVENT_WALK}\"" "$ARTICLE"
+            grep -Fq "data-event-id=\"${EVENT_FAIRYTALE}\"" "$ARTICLE"
+            grep -Fq 'STŘEDA 5. 8. · 15:00' "$ARTICLE"
+            grep -Fq 'ČTVRTEK 6. 8. · 16:00' "$ARTICLE"
+            grep -Fq 'Město Jirkov – oficiální kalendář akcí' "$ARTICLE"
+            grep -Fq "article:modified_time\" content=\"${MODIFIED}" "$ARTICLE"
+            grep -Fq "$ARTICLE_REL" index.html clanky/index.html
+            grep -Fq "$ARTICLE_URL" rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            grep -Fq '"modified_at": "2026-08-05T13:39:00+02:00"' data/published-content-index.json
+            python3 - <<'PY'
+          import json, xml.etree.ElementTree as ET
+          from pathlib import Path
+          ET.parse('rss.xml')
+          ET.parse('sitemap.xml')
+          ET.parse('news-sitemap.xml')
+          data=json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          assert data['article_count'] >= 50
+          assert data['validation']['duplicate_urls'] == []
+          assert data['validation']['duplicate_fingerprints'] == []
+          PY
+            git diff --check
+
+            git add "$ARTICLE" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Aktualizovat: doplnit Jirkov do kulturního přehledu'
+            fi
+            article_sha="$(git rev-parse HEAD)"
+
+            ARTICLE_SHA="$article_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next((x for x in data.get('articles',[]) if x.get('url')==os.environ['ARTICLE_URL']),None)
+          if article is None:
+              raise SystemExit('Kulturní přehled chybí v registru.')
+          article['source_commit']=os.environ['ARTICLE_SHA']
+          data['source_commit']=os.environ['ARTICLE_SHA']
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=True
+          validation['last_cultural_update']={
+              'status':'pending_public_verification',
+              'checked_at':datetime.now(timezone.utc).isoformat(),
+              'updated_url':os.environ['ARTICLE_URL'],
+              'source_commit':os.environ['ARTICLE_SHA'],
+              'events':['jirkov-komentovana-prochazka-20260805','jirkov-pohadka-rybar-rybka-20260806']
+          }
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nupdated=%s\nchange=jirkov-cultural-events\n' "$article_sha" "$ARTICLE_URL" "$MODIFIED" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: zapsat doplnění jirkovských akcí'
+            fi
+
+            final_sha="$(git rev-parse HEAD)"
+            article_count="$(python3 - <<'PY'
+          import json
+          print(json.load(open('data/published-content-index.json',encoding='utf-8'))['article_count'])
+          PY
+          )"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              echo "article_count=$article_count" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit kulturní přehled na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/jirkov-cultural-events"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp "$ARTICLE" "$bundle/clanky/"
+          cp clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp data/published-content-index.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/jirkov-cultural-events.tgz" .
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/jirkov-cultural-events.tgz" ubuntu@57.129.43.215:/tmp/jirkov-cultural-events.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/jirkov-cultural-events
+          mkdir -p /tmp/jirkov-cultural-events
+          tar -xzf /tmp/jirkov-cultural-events.tgz -C /tmp/jirkov-cultural-events
+          src=/tmp/jirkov-cultural-events
+          root=/var/www/nasekadan
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+              sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/jirkov-cultural-events /tmp/jirkov-cultural-events.tgz
+          REMOTE
+
+      - name: Veřejně ověřit článek a evidenci
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 8); do
+            q="${GITHUB_RUN_ID}-${attempt}-$(date +%s)"
+            article="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            registry="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 -H 'Cache-Control: no-cache' "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+
+            if grep -Fq "data-event-id=\"${EVENT_WALK}\"" <<<"$article" \
+              && grep -Fq "data-event-id=\"${EVENT_FAIRYTALE}\"" <<<"$article" \
+              && grep -Fq 'STŘEDA 5. 8. · 15:00' <<<"$article" \
+              && grep -Fq 'ČTVRTEK 6. 8. · 16:00' <<<"$article" \
+              && grep -Fq 'Město Jirkov – oficiální kalendář akcí' <<<"$article" \
+              && grep -Fq "article:modified_time\" content=\"${MODIFIED}" <<<"$article" \
+              && grep -Fq "$ARTICLE_REL" <<<"$home" \
+              && grep -Fq "$ARTICLE_REL" <<<"$archive" \
+              && grep -Fq "$ARTICLE_URL" <<<"$rss" \
+              && grep -Fq "$ARTICLE_URL" <<<"$sitemap" \
+              && grep -Fq "$ARTICLE_URL" <<<"$news" \
+              && grep -Fq '"modified_at": "2026-08-05T13:39:00+02:00"' <<<"$registry" \
+              && grep -Fq 'jirkov-komentovana-prochazka-20260805' <<<"$registry" \
+              && grep -Fq 'status=ok' <<<"$health"; then
+              ok=1
+              break
+            fi
+            sleep 7
+          done
+          test "$ok" = 1
+
+      - name: Uzavřít evidenci veřejné kontroly
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          validation=data.setdefault('validation',{})
+          validation['repair_pending_public_verification']=False
+          update=validation.setdefault('last_cultural_update',{})
+          update['status']='success'
+          update['completed_at']=datetime.now(timezone.utc).isoformat()
+          update['public_verification']={
+              'article':True,'homepage':True,'archive':True,'rss':True,
+              'sitemap':True,'news_sitemap':True,'registry':True,'health':True
+          }
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – kulturní přehled'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json
+          git commit -m 'Evidence: potvrdit jirkovské akce v kulturním přehledu'
+          git push origin HEAD:main
+
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index-jirkov.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'sudo install -m 0644 /tmp/published-content-index-jirkov.json /var/www/nasekadan/data/published-content-index.json; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp /tmp/published-content-index-jirkov.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi; rm -f /tmp/published-content-index-jirkov.json'
+
+      - name: Zapsat stav běhu
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PREPARE_OUTCOME: ${{ steps.prepare.outcome }}
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          SOURCE_SHA: ${{ steps.prepare.outputs.source_sha }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner=context.repo.owner, repo=context.repo.repo;
+            const status=(process.env.PREPARE_OUTCOME==='success'&&process.env.DEPLOY_OUTCOME==='success'&&process.env.VERIFY_OUTCOME==='success')?'success':'failure';
+            const payload={
+              status,
+              run_id:String(context.runId),
+              source_sha:process.env.SOURCE_SHA||'',
+              checked_at:new Date().toISOString(),
+              article:'https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html',
+              events:[
+                {id:'jirkov-komentovana-prochazka-20260805',starts_at:'2026-08-05T15:00:00+02:00'},
+                {id:'jirkov-pohadka-rybar-rybka-20260806',starts_at:'2026-08-06T16:00:00+02:00'}
+              ],
+              prepare:process.env.PREPARE_OUTCOME||'skipped',
+              deploy:process.env.DEPLOY_OUTCOME||'skipped',
+              public_verify:process.env.VERIFY_OUTCOME||'skipped'
+            };
+            let sha;
+            try {
+              const old=await github.rest.repos.getContent({owner,repo,path:'.github/jirkov-cultural-live-status.json',ref:'main'});
+              sha=old.data.sha;
+            } catch(e) { if(e.status!==404) throw e; }
+            await github.rest.repos.createOrUpdateFileContents({
+              owner,repo,path:'.github/jirkov-cultural-live-status.json',branch:'main',
+              message:`Zapsat stav doplnění jirkovských akcí: ${status} [skip ci]`,sha,
+              content:Buffer.from(JSON.stringify(payload,null,2)+'\n').toString('base64')
+            });
