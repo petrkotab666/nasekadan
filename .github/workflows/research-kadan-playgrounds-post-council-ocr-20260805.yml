@@ -1,0 +1,127 @@
+name: OCR objednávek OŽP po rozhodnutí o hřištích
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/research-kadan-playgrounds-post-council-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: research-kadan-playgrounds-post-council-20260805
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nainstalovat OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-ces
+      - name: Projít všechny smlouvy OŽP po 25. červnu
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf research/kadanska-hriste-po-usneseni-20260805
+          mkdir -p research/kadanska-hriste-po-usneseni-20260805/text /tmp/kadan-post-council
+          python3 - <<'PY'
+          import json, re, ssl, subprocess, urllib.request, xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          OUT=Path('research/kadanska-hriste-po-usneseni-20260805')
+          TMP=Path('/tmp/kadan-post-council')
+          CTX=ssl._create_unverified_context()
+          UA='NaseKadan-playgrounds-post-council/1.0'
+          DUMPS=['https://data.smlouvy.gov.cz/dump_2026_06.xml','https://data.smlouvy.gov.cz/dump_2026_07.xml','https://data.smlouvy.gov.cz/dump_2026_08.xml']
+          KEY=('hřišť','hrist','sportovi','reviz','kontrol','brank','herní','herni','dopadov','písk','pisk','envy','herold','kučer','kucer','hřiště hrou','hriste hrou')
+          def get(url):
+              req=urllib.request.Request(url,headers={'User-Agent':UA,'Accept':'*/*'})
+              with urllib.request.urlopen(req,timeout=240,context=CTX) as r: return r.read()
+          def loc(tag): return tag.rsplit('}',1)[-1]
+          def values(e):
+              out=[]
+              for n in e.iter():
+                  if n.text and n.text.strip(): out.append((loc(n.tag),n.text.strip()))
+                  for v in n.attrib.values(): out.append(('@attr',v))
+              return out
+          records=[]
+          dump_errors=[]
+          for url in DUMPS:
+              p=TMP/Path(urlparse(url).path).name
+              try: p.write_bytes(get(url))
+              except Exception as exc:
+                  dump_errors.append({'url':url,'error':str(exc)}); continue
+              for _,e in ET.iterparse(p,events=('end',)):
+                  if loc(e.tag).lower()!='zaznam': continue
+                  x=ET.tostring(e,encoding='unicode')
+                  low=x.casefold()
+                  if '00261912' not in low: e.clear(); continue
+                  vals=values(e)
+                  d={}
+                  for k,v in vals: d.setdefault(k,[]).append(v)
+                  signed=(d.get('datumUzavreni') or [''])[0]
+                  published=(d.get('casZverejneni') or [''])[0]
+                  if max(signed[:10],published[:10]) < '2026-06-25': e.clear(); continue
+                  unit=' '.join(d.get('utvar',[])).casefold()
+                  party=' '.join(d.get('nazev',[])).casefold()
+                  subject=' '.join(d.get('predmet',[])).casefold()
+                  # OŽP bereme celé, ostatní jen při hřišťových klíčích.
+                  relevant=('životního prostředí' in unit or 'zivotniho prostredi' in unit or any(k in (subject+' '+party) for k in KEY))
+                  if not relevant: e.clear(); continue
+                  urls=sorted({v for _,v in vals if v.startswith('http')})
+                  attachments=[u for u in urls if '/soubor/' in u or re.search(r'\.(pdf|docx?|rtf|odt)(\?|$)',u,re.I)]
+                  records.append({'signed':signed,'published':published,'unit':unit,'subject':subject,'parties':d.get('nazev',[]),'values':vals,'urls':urls,'attachments':attachments})
+                  e.clear()
+          (OUT/'records.json').write_text(json.dumps(records,ensure_ascii=False,indent=2),encoding='utf-8')
+          results=[]; errors=[]
+          for ri,rec in enumerate(records,1):
+              for ai,url in enumerate(rec['attachments'],1):
+                  try:
+                      blob=get(url)
+                      src=TMP/f'r{ri:03d}-{ai:02d}.pdf'; src.write_bytes(blob)
+                      raw=TMP/f'r{ri:03d}-{ai:02d}-raw.txt'
+                      subprocess.run(['pdftotext','-layout',str(src),str(raw)],check=False)
+                      text=raw.read_text(encoding='utf-8',errors='replace') if raw.exists() else ''
+                      used_ocr=len(re.sub(r'\s+','',text))<300
+                      if used_ocr and blob.startswith(b'%PDF-'):
+                          prefix=TMP/f'r{ri:03d}-{ai:02d}-page'
+                          subprocess.run(['pdftoppm','-jpeg','-r','220',str(src),str(prefix)],check=False)
+                          parts=[]
+                          for pi,img in enumerate(sorted(TMP.glob(f'r{ri:03d}-{ai:02d}-page-*.jpg')),1):
+                              base=TMP/f'r{ri:03d}-{ai:02d}-ocr-{pi:03d}'
+                              subprocess.run(['tesseract',str(img),str(base),'-l','ces+eng','--psm','6'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                              txt=base.with_suffix('.txt')
+                              parts.append(f'\n\n===== STRANA {pi} / OCR =====\n'+(txt.read_text(encoding='utf-8',errors='replace') if txt.exists() else ''))
+                          text += ''.join(parts)
+                      dest=OUT/'text'/f'r{ri:03d}-{ai:02d}.txt'; dest.write_text(text,encoding='utf-8')
+                      hits=[line.strip() for line in text.splitlines() if any(k in line.casefold() for k in KEY)]
+                      results.append({'record':ri,'attachment':ai,'url':url,'text_file':str(dest.relative_to(OUT)),'used_ocr':used_ocr,'hits':hits[:100]})
+                  except Exception as exc: errors.append({'record':ri,'url':url,'error':str(exc)})
+          (OUT/'attachment-results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'errors.json').write_text(json.dumps({'dump_errors':dump_errors,'attachment_errors':errors},ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'STATUS.json').write_text(json.dumps({'records':len(records),'attachments':len(results),'dump_errors':len(dump_errors),'attachment_errors':len(errors),'keyword_hits':sum(bool(x['hits']) for x in results)},ensure_ascii=False,indent=2),encoding='utf-8')
+          print('records',len(records),'attachments',len(results),'keyword_hits',sum(bool(x['hits']) for x in results),'errors',len(errors)+len(dump_errors))
+          PY
+      - name: Uložit výsledek
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add research/kadanska-hriste-po-usneseni-20260805/
+          git commit -m 'Rešerše hřišť: OCR všech objednávek OŽP po usnesení' || true
+          for attempt in 1 2 3 4; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            sleep $((attempt*5))
+          done
+          exit 1
