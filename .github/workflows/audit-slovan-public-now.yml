@@ -1,0 +1,230 @@
+name: Nezávisle ověřit veřejnou publikaci Slovanu
+
+"on":
+  push:
+    paths:
+      - '.github/dispatch/slovan-public-audit.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: slovan-public-audit-20260805
+  cancel-in-progress: false
+
+env:
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  audit:
+    name: Veřejný audit všech publikačních ploch
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Připravit nezávislý veřejný audit
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/audit_slovan_public.sh" <<'AUDIT'
+          #!/usr/bin/env bash
+          set -Eeuo pipefail
+          BASE='https://nasekadan.cz'
+          ARTICLE_URL="$BASE/clanky/slovan-druhy-pokus.html"
+          EXPECTED_H1='Kadaň vybírá nového stavitele Slovanu za 195 milionů. Účet prvního pokusu stále není veřejný'
+          EXPECTED_PUBLISHED='2026-08-05T04:00:00+02:00'
+          Q="audit-${GITHUB_RUN_ID:-manual}-$(date +%s%N)"
+          D="$RUNNER_TEMP/slovan-public-audit"
+          rm -rf "$D" && mkdir -p "$D"
+          fetch() { curl -4 -kfsS -L --retry 3 --retry-all-errors --connect-timeout 20 --max-time 60 "$1?v=$Q" -o "$2"; }
+          fetch "$ARTICLE_URL" "$D/article.html"
+          fetch "$BASE/" "$D/home.html"
+          fetch "$BASE/clanky/" "$D/archive-1.html"
+          for n in 2 3 4 5 6; do curl -4 -kfsS -L --retry 2 --retry-all-errors --connect-timeout 20 --max-time 60 "$BASE/clanky/strana-$n.html?v=$Q" -o "$D/archive-$n.html" || true; done
+          fetch "$BASE/rss.xml" "$D/rss.xml"
+          fetch "$BASE/sitemap.xml" "$D/sitemap.xml"
+          fetch "$BASE/news-sitemap.xml" "$D/news-sitemap.xml"
+          fetch "$BASE/llms.txt" "$D/llms.txt"
+          fetch "$BASE/data/published-content-index.json" "$D/registry.json"
+          fetch "$BASE/data/article-integrity-manifest.json" "$D/manifest.json"
+          fetch "$BASE/deployment-health.txt" "$D/health.txt"
+          fetch "$BASE/social/slovan-druhy-pokus-20260805.png" "$D/social.png"
+          fetch "$BASE/api/pocasi-predpoved.json" "$D/weather.json"
+          EXPECTED_H1="$EXPECTED_H1" EXPECTED_PUBLISHED="$EXPECTED_PUBLISHED" D="$D" python3 - <<'PY'
+          from __future__ import annotations
+          import hashlib, json, os, re, struct
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urlparse
+
+          d=Path(os.environ['D'])
+          title=os.environ['EXPECTED_H1']
+          published=os.environ['EXPECTED_PUBLISHED']
+          url='https://nasekadan.cz/clanky/slovan-druhy-pokus.html'
+          rel='/clanky/slovan-druhy-pokus.html'
+          article_bytes=(d/'article.html').read_bytes()
+          article=article_bytes.decode('utf-8')
+          home=(d/'home.html').read_text(encoding='utf-8')
+          llms=(d/'llms.txt').read_text(encoding='utf-8')
+          health=(d/'health.txt').read_text(encoding='utf-8')
+
+          assert f'<h1>{title}</h1>' in article
+          assert f'<title>{title} | Naše Kadaň</title>' in article
+          assert f'<link rel="canonical" href="{url}">' in article
+          assert 'index,follow' in article and 'noindex' not in article.lower()
+          assert published in article
+          assert f'"datePublished":"{published}"' in article
+          assert f'property="article:published_time" content="{published}"' in article
+          assert '/social/slovan-druhy-pokus-20260805.png' in article
+          forbidden=('Náhled článku','nepublikováno','pracovní HTML náhled','PŘIPRAVOVANÝ ČLÁNEK','Otázky pro město')
+          assert not any(x.lower() in article.lower() for x in forbidden)
+          assert 'Druhý pokus může Kadani přinést potřebné byty' in article
+
+          assert rel in home and title in home and '/pocasi.js' in home
+          archives='\n'.join(p.read_text(encoding='utf-8') for p in sorted(d.glob('archive-*.html')) if p.stat().st_size)
+          assert rel in archives and title in archives and '5. 8. 2026' in archives and '04:00' in archives
+
+          registry=json.loads((d/'registry.json').read_text(encoding='utf-8'))
+          count=registry['article_count']
+          assert isinstance(count,int) and count>=49
+          assert len(registry['articles'])==count
+          assert registry['validation']['archive_count']==count
+          assert registry['validation']['rss_count']==count
+          assert registry['validation']['duplicate_urls']==[]
+          assert registry['validation']['duplicate_fingerprints']==[]
+          assert registry['validation']['repair_pending_public_verification'] is False
+          assert registry['validation']['last_consistency_audit']['status']=='success'
+          current=next(x for x in registry['articles'] if x['url']==url)
+          assert current['h1']==title and current['published_at']==published
+          assert current['source_commit'] not in ('',None,'pending-publication-commit')
+          assert all(current['status'][k] for k in ('homepage','archive','rss','sitemap','news_sitemap'))
+
+          # Every canonical article must remain discoverable exactly once in the public archive pages.
+          for item in registry['articles']:
+              path=urlparse(item['url']).path
+              assert archives.count(path)==1, (path, archives.count(path))
+
+          rss=ET.parse(d/'rss.xml').getroot()
+          items=rss.findall('./channel/item')
+          assert len(items)==count
+          matches=[x for x in items if (x.findtext('link') or '').strip()==url]
+          assert len(matches)==1
+          assert matches[0].findtext('title')==title
+          assert '05 Aug 2026 04:00:00 +0200' in (matches[0].findtext('pubDate') or '')
+
+          sm={'s':'http://www.sitemaps.org/schemas/sitemap/0.9','n':'http://www.google.com/schemas/sitemap-news/0.9'}
+          sitemap=ET.parse(d/'sitemap.xml').getroot()
+          locs={x.text for x in sitemap.findall('.//s:loc',sm)}
+          assert url in locs
+          for item in registry['articles']:
+              assert item['url'] in locs, item['url']
+
+          news=ET.parse(d/'news-sitemap.xml').getroot()
+          news_urls=news.findall('s:url',sm)
+          assert len(news_urls)==10
+          target=[]
+          for node in news_urls:
+              if node.findtext('s:loc',namespaces=sm)==url: target.append(node)
+          assert len(target)==1
+          assert target[0].findtext('.//n:publication_date',namespaces=sm)==published
+          assert target[0].findtext('.//n:title',namespaces=sm)==title
+
+          assert url in llms and title in llms
+
+          manifest=json.loads((d/'manifest.json').read_text(encoding='utf-8'))
+          assert manifest['article_count']==count and len(manifest['articles'])==count
+          m=next(x for x in manifest['articles'] if x['url']==url)
+          assert m['title']==title and m['published_at']==published
+          assert m['sha256']==hashlib.sha256(article_bytes).hexdigest()
+          assert m['bytes']==len(article_bytes)
+
+          assert 'status=ok' in health and f'article={url}' in health
+          source=re.search(r'^source=([0-9a-f]{40})$',health,re.M)
+          assert source
+          assert source.group(1)==current['source_commit']
+
+          png=(d/'social.png').read_bytes()
+          assert len(png)>10000 and png[:8]==b'\x89PNG\r\n\x1a\n'
+          width,height=struct.unpack('>II',png[16:24])
+          assert (width,height)==(1200,630)
+
+          weather=json.loads((d/'weather.json').read_text(encoding='utf-8'))
+          assert isinstance(weather,(dict,list)) and bool(weather)
+
+          result={
+            'status':'success',
+            'article_url':url,
+            'h1':title,
+            'published_at':published,
+            'article_count':count,
+            'archive_page_count':registry['validation']['archive_page_count'],
+            'rss_count':len(items),
+            'news_sitemap_count':len(news_urls),
+            'source_commit':current['source_commit'],
+            'social_image':{'bytes':len(png),'width':width,'height':height},
+            'checks':['article','indexation','working_notes','homepage','full_archive','rss','sitemap','news_sitemap','llms','canonical_registry','integrity_manifest','social_image','deployment_health','weather']
+          }
+          (d/'result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False))
+          PY
+          AUDIT
+          chmod +x "$RUNNER_TEMP/audit_slovan_public.sh"
+
+      - name: První nezávislá kontrola
+        id: first_audit
+        continue-on-error: true
+        shell: bash
+        run: "$RUNNER_TEMP/audit_slovan_public.sh"
+
+      - name: Automatická obnova při jakékoli neúplnosti
+        if: steps.first_audit.outcome != 'success'
+        shell: bash
+        run: bash scripts/publish_slovan_runtime.sh rescue
+
+      - name: Konečný nezávislý audit
+        shell: bash
+        run: "$RUNNER_TEMP/audit_slovan_public.sh"
+
+      - name: Uložit veřejný audit do kanonické evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/audits
+          cp "$RUNNER_TEMP/slovan-public-audit/result.json" data/audits/slovan-public-audit-20260805.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p data/audits
+            cp "$RUNNER_TEMP/slovan-public-audit/result.json" data/audits/slovan-public-audit-20260805.json
+            git add data/audits/slovan-public-audit-20260805.json
+            if git diff --cached --quiet; then exit 0; fi
+            git commit -m 'Audit: potvrdit úplnou veřejnou publikaci Slovanu'
+            if git push origin HEAD:main; then exit 0; fi
+            sleep $((attempt*3))
+          done
+          exit 1
+
+      - name: Zapsat incident při neodstranitelném selhání
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const {owner, repo}=context.repo;
+            const title='[incident] Veřejný audit Slovanu 5. srpna';
+            const body=`Nezávislý veřejný audit nebo automatická obnova selhaly.\n\nRun: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const existing=await github.paginate(github.rest.issues.listForRepo,{owner,repo,state:'open',per_page:100});
+            const issue=existing.find(x=>x.title===title);
+            if(issue) await github.rest.issues.createComment({owner,repo,issue_number:issue.number,body});
+            else await github.rest.issues.create({owner,repo,title,body});
