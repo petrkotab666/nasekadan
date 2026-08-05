@@ -1,0 +1,94 @@
+name: Vyhodnotit rešerši EPP – PK Slávie Kadaň
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-summarize-epp-pk-slavie-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: summarize-epp-pk-slavie-20260805
+  cancel-in-progress: false
+
+jobs:
+  summarize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytáhnout pouze shody a parametry projektu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/summarize_epp_pk_slavie_20260805.py
+          python3 scripts/summarize_epp_pk_slavie_20260805.py
+          test -s research/epp-pk-slavie-20260805/summary.md
+          test -s research/epp-pk-slavie-20260805/summary.json
+
+      - name: Uložit kompaktní výsledek
+        id: save
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – výzkum'
+          git config user.email 'info@nasekadan.cz'
+          cp research/epp-pk-slavie-20260805/summary.md "$RUNNER_TEMP/summary.md"
+          cp research/epp-pk-slavie-20260805/summary.json "$RUNNER_TEMP/summary.json"
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p research/epp-pk-slavie-20260805
+            cp "$RUNNER_TEMP/summary.md" research/epp-pk-slavie-20260805/summary.md
+            cp "$RUNNER_TEMP/summary.json" research/epp-pk-slavie-20260805/summary.json
+            git add research/epp-pk-slavie-20260805/summary.md research/epp-pk-slavie-20260805/summary.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Výzkum: vyhodnotit parametry projektu PK Slávie v EPP'
+            fi
+            result_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "result_sha=$result_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Zapsat dokončení vyhodnocení
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT_SHA: ${{ steps.save.outputs.result_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue_url="$(gh issue create \
+            --title '[research] EPP PK Slávie Kadaň – vyhodnoceno' \
+            --body "Velká technická data byla zpracována do kompaktního souhrnu relevantních shod a polí.\n\nSouhrn: research/epp-pk-slavie-20260805/summary.md\nJSON: research/epp-pk-slavie-20260805/summary.json\nCommit: ${RESULT_SHA}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat selhání vyhodnocení
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh issue create \
+            --title '[incident] Vyhodnocení EPP PK Slávie Kadaň' \
+            --body "Zpracování uložených technických dat do malého souhrnu selhalo.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --assignee petrkotab666 || true
