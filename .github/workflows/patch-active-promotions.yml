@@ -1,0 +1,66 @@
+name: Připravit aktivní akce, kupóny a bannery
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '28 5 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/active-promotions-trigger.txt'
+      - 'scripts/patch-active-promotions.py'
+      - 'scripts/validate-active-promotions.py'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: active-promotions
+  cancel-in-progress: true
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check requests
+      - name: Vygenerovat správné široké, čtvercové a svislé bannery
+        run: python scripts/patch-active-promotions.py
+      - name: Ověřit rozměry a každý veřejný proklik
+        run: python scripts/validate-active-promotions.py
+      - name: Ověřit syntaxi reklamního skriptu
+        run: node --check reklamy.js
+      - name: Uložit změny a spustit standardní nasazení reklam
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – aktivní akce'
+          git config user.email 'info@nasekadan.cz'
+          git add reklamy.js assets/reklamy data/active-promotions-validation.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Aktualizovat aktivní akce, kupóny a responzivní bannery'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            test "$attempt" -lt 4
+            git fetch origin main
+            git rebase origin/main
+          done
+      - name: Založit incident při chybě
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title='[affiliate] Aktivní akce nebo bannery neprošly kontrolou';
+            const body=`Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const issues=await github.rest.issues.listForRepo({owner:context.repo.owner,repo:context.repo.repo,state:'open',per_page:100});
+            const existing=issues.data.find(i=>i.title===title);
+            if(existing) await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:existing.number,body});
+            else await github.rest.issues.create({owner:context.repo.owner,repo:context.repo.repo,title,body});
