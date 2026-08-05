@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T09:06:49.159660+00:00",
+  "generatedAt": "2026-08-05T14:36:28.729959+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
@@ -8,9 +8,9 @@
     "Kultura Kadaň (15)",
     "Liďák Kadaň – kulturní program (0)",
     "Kino Hvězda (0)",
-    "Městská knihovna (15)",
-    "Turistický portál Kadaň (15)",
-    "Městské muzeum v Kadani (15)",
+    "Městská knihovna (0)",
+    "Turistický portál Kadaň (0)",
+    "Městské muzeum v Kadani (0)",
     "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
@@ -39,7 +39,7 @@
     "ZŠ a MŠ při nemocnici Kadaň (15)",
     "ZAČÍT SPOLU Kadaň (10)",
     "ZUŠ Klementa Slavického Kadaň (15)",
-    "Gymnázium Kadaň (15)",
+    "Gymnázium Kadaň (0)",
     "Astronomicko přírodovědná observatoř Kadaň (15)",
     "Observatoř Kadaň – veřejný Facebook (0)",
     "SPŠS a OA Kadaň (15)",
@@ -72,17 +72,17 @@
     "Chomutovský deník (15)",
     "Autokemp Prunéřov – aktuality (7)",
     "Pivnice U Soudku Kadaň – veřejné informace (15)",
-    "Sociální monitoring – Pivnice U Soudku Kadaň (15)",
-    "Sociální monitoring – ARG a hudba v Kadani (15)",
+    "Sociální monitoring – Pivnice U Soudku Kadaň (0)",
+    "Sociální monitoring – ARG a hudba v Kadani (0)",
     "Liďák Kadaň – oficiální web (5)",
-    "Liďák Kadaň – Instagram (0)",
-    "Sociální monitoring – Liďák Kadaň a nové akce (15)",
+    "Liďák Kadaň – Instagram (5)",
+    "Sociální monitoring – Liďák Kadaň a nové akce (0)",
     "Úřad práce ČR – kontaktní pracoviště Kadaň (9)",
     "Kultura Kadaň (15)",
-    "Turistické informační centrum Kadaň (15)",
-    "Galerie Josefa Lieslera (15)",
-    "Františkánský klášter Kadaň (15)",
-    "Kadaňský hrad (14)",
+    "Turistické informační centrum Kadaň (0)",
+    "Galerie Josefa Lieslera (0)",
+    "Františkánský klášter Kadaň (0)",
+    "Kadaňský hrad (0)",
     "Autokemp Prunéřov (6)",
     "Autokemp Prunéřov – zdroj 3 (3)",
     "Autokemp Prunéřov – zdroj 4 (0)",
@@ -105,18 +105,24 @@
   ],
   "errors": [
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
+    "Městská knihovna: URLError: <urlopen error timed out>",
+    "Turistický portál Kadaň: URLError: <urlopen error timed out>",
+    "Městské muzeum v Kadani: URLError: <urlopen error timed out>",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "Gymnázium Kadaň: HTTPError: HTTP Error 404: Not Found",
     "Let It Roll – akce: HTTPError: HTTP Error 404: Not Found",
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
-    "ČEZ – tiskové zprávy: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Povodí Ohře: HTTPError: HTTP Error 403: Forbidden",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Doprava Ústeckého kraje: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
-    "Liďák Kadaň – Instagram: HTTPError: HTTP Error 429: Too Many Requests",
+    "Turistické informační centrum Kadaň: URLError: <urlopen error timed out>",
+    "Galerie Josefa Lieslera: URLError: <urlopen error timed out>",
+    "Františkánský klášter Kadaň: URLError: <urlopen error timed out>",
+    "Kadaňský hrad: URLError: <urlopen error timed out>",
     "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
@@ -185,24 +191,27 @@
       "url": "https://www.knihovnakadan.cz/",
       "category": "Knihovna",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Turistický portál Kadaň",
       "url": "https://kadan.eu/",
       "category": "Turistika",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Městské muzeum v Kadani",
       "url": "https://kadan.eu/informace/mestske-muzeum/",
       "category": "Muzeum a památky",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Městské muzeum v Kadani – veřejný Facebook",
@@ -437,8 +446,9 @@
       "url": "https://www.gymka.cz/news/",
       "category": "Střední školy",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "HTTPError: HTTP Error 404: Not Found"
     },
     {
       "name": "Astronomicko přírodovědná observatoř Kadaň",
@@ -591,9 +601,8 @@
       "url": "https://www.cez.cz/cs/pro-media/tiskove-zpravy",
       "category": "Energetika",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsFound": 0
     },
     {
       "name": "ČEZ Distribuce – plánované odstávky",
@@ -709,7 +718,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -717,7 +726,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "Liďák Kadaň – oficiální web",
@@ -732,9 +741,8 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak/",
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
-      "status": "failed",
-      "itemsFound": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsFound": 5
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -742,7 +750,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
       "status": "checked",
-      "itemsFound": 15
+      "itemsFound": 0
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -765,32 +773,36 @@
       "url": "https://kadan.eu/informace/tic/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Galerie Josefa Lieslera",
       "url": "https://kadan.eu/aktivity/galerie-josefa-lieslera/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Františkánský klášter Kadaň",
       "url": "https://kadan.eu/pamatky/frantiskansky-klaster/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Kadaňský hrad",
       "url": "https://kadan.eu/pamatky/kadansky-hrad/",
       "category": "Kultura, památky a volný čas",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 14
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Autokemp Prunéřov",
@@ -1003,7 +1015,7 @@
       "title": "❮ Předchozí",
       "date": "2026-07-29",
       "category": "Smlouvy a hospodaření",
-      "description": "\"4\"> 29.07.2026 449 000 CZK s DPH Žatecká brána s.r.o. Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "ass=\"4\"> 29.07.2026 -38 666 CZK s DPH JAMPL-PSV s.r.o. Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp%3Bdo=searchResultList-setOffset&amp%3Bcontract_id=&amp%3Bversion_id=&amp%3Bpublication_date%5Bfrom%5D=&amp%3Bpublication_date%5Bto%5D=&amp%3Bsubject_box=uaybdrx&amp%3Bsubject_name=&amp%3Bsubject_idnum=&amp%3Bsubject_address=&amp%3Bparty_box=&amp%3Bparty_name=&amp%3Bparty_idnum=&amp%3Bparty_address=&amp%3Bcontr_num=&amp%3Bcontract_reference_number=&amp%3Bsign_date%5Bfrom%5D=&amp%3Bsign_date%5Bto%5D=&amp%3Bcontract_descr=&amp%3Bsign_person_name=&amp%3Bvalue_no_vat%5Bfrom%5D=&amp%3Bvalue_no_vat%5Bto%5D=&amp%3Bvalue_vat%5Bfrom%5D=&amp%3Bvalue_vat%5Bto%5D=&amp%3Bvalue_foreign%5Bfrom%5D=&amp%3Bvalue_foreign%5Bto%5D=&amp%3Bforeign_currency=&amp%3Bfile_text=&amp%3Bsearch_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1012,7 +1024,7 @@
       "title": "Na začátek",
       "date": "2026-07-29",
       "category": "Smlouvy a hospodaření",
-      "description": "\"4\"> 29.07.2026 449 000 CZK s DPH Žatecká brána s.r.o. Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "ass=\"4\"> 29.07.2026 -38 666 CZK s DPH JAMPL-PSV s.r.o. Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp%3Bdo=searchResultList-setOffset&amp%3Bcontract_id=&amp%3Bversion_id=&amp%3Bpublication_date%5Bfrom%5D=&amp%3Bpublication_date%5Bto%5D=&amp%3Bsubject_box=uaybdrx&amp%3Bsubject_name=&amp%3Bsubject_idnum=&amp%3Bsubject_address=&amp%3Bparty_box=&amp%3Bparty_name=&amp%3Bparty_idnum=&amp%3Bparty_address=&amp%3Bcontr_num=&amp%3Bcontract_reference_number=&amp%3Bsign_date%5Bfrom%5D=&amp%3Bsign_date%5Bto%5D=&amp%3Bcontract_descr=&amp%3Bsign_person_name=&amp%3Bvalue_no_vat%5Bfrom%5D=&amp%3Bvalue_no_vat%5Bto%5D=&amp%3Bvalue_vat%5Bfrom%5D=&amp%3Bvalue_vat%5Bto%5D=&amp%3Bvalue_foreign%5Bfrom%5D=&amp%3Bvalue_foreign%5Bto%5D=&amp%3Bforeign_currency=&amp%3Bfile_text=&amp%3Bsearch_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1449,15 +1461,6 @@
       "sourceName": "Správa železnic – cestující"
     },
     {
-      "id": "97cdbd4d5a94",
-      "title": "Železniční přejezd ve Spořické ulici se uzavře. Řidiče čeká objížďka",
-      "date": "",
-      "category": "Regionální média",
-      "description": "troly? Deník.cz <div class=\"flex flex-col items-stretch gap-1.5 \"",
-      "source": "https://chomutovsky.denik.cz/zpravy-region/zeleznicni-prejezd-ve-sporicke-ulici-se-uzavre-ridice-ceka-objizdka",
-      "sourceName": "Chomutovský deník"
-    },
-    {
       "id": "b434260c360f",
       "title": "Železnice na letiště",
       "date": "",
@@ -1467,15 +1470,6 @@
       "sourceName": "Správa železnic – cestující"
     },
     {
-      "id": "e201579d0c55",
-      "title": "Žatecký a lounský deník",
-      "date": "",
-      "category": "Regionální média",
-      "description": "h2 class=\"text-base lg:text-lg h-12 lg:h-14\"> Detektiv Vachálek o vrahu Slovákovi: I vagabund má svoji vagabundskou čest <div class=\"js-fade-area min-w-0 w-full over",
-      "source": "https://zatecky.denik.cz/",
-      "sourceName": "Chomutovský deník"
-    },
-    {
       "id": "5ca5ff6f19a8",
       "title": "Švejk restaurant U Věžičky",
       "date": "",
@@ -1483,15 +1477,6 @@
       "description": "arker\"> ' + icon + ' ', iconAnchor: [12, 24] }) }).addTo(map); $('ul.tags li').tooltip(); }); }); //]]> Nejbližší hospody v okolí Název Adresa Město Pivo Vzdálenost  Poštovní 741 Kadaň Plzeňský Prazdroj 12° 0,04 km FK Tatran Kadaň U Stadionu 1378 Plzeňský Prazdroj 12°, Gambrinus 12° 0,48 km ČEWA Na Průtahu 1854 Plzeňský Prazdroj 12°, Gambrinus 10°,... 0,51 km Posezení Pohoda",
       "source": "https://www.pivnidenicek.cz/restaurace-a-hospody/ceska-republika/ustecky-kraj/chomutov/kadan/47161-svejk-restaurant-u-vezicky",
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
-    },
-    {
-      "id": "2f7354ff13a3",
-      "title": "Šok v turistickém ráji. Chlapec zemřel po žahnutí medúzy, úřady bijí na poplach",
-      "date": "",
-      "category": "Regionální média",
-      "description": "g:text-lg h-12 lg:h-14\"> Kvůli suchu hrozí zákaz napouštění bazénů i zalévání. Pokuty jdou i do tisíců <div class=\"js-fade-area min-w-0 w-full overflow-hidden \" d",
-      "source": "https://www.denik.cz/svet/thajsko-meduza-smrt-chlapec-zahnuti",
-      "sourceName": "Chomutovský deník"
     },
     {
       "id": "caa92ed821e6",
@@ -1510,15 +1495,6 @@
       "description": "Škola O škole  Pedagogický sbor Vzdělávací programy Dokumenty Výchovný poradce a metodik prevence Přípravná třída <li id=\"menu-item-3074\" class=\"menu-item menu-item-type-post_type menu-item-obj",
       "source": "https://www.zvskadan.cz/skola/skolska-rada",
       "sourceName": "ZŠ a MŠ při nemocnici Kadaň"
-    },
-    {
-      "id": "e9da5eff93a7",
-      "title": "Školská rada",
-      "date": "",
-      "category": "Střední školy",
-      "description": "type-post_type menu-item-object-page menu-item-65675 menu-item-depth-1\"> Informace o provozu podatelny a o podmínkách přijímání dokumentů  Postup při podávání stížností, oznámení a podnětů Spolek přátel Gymnázia Kadaň Fakultní škola Přf UJEP <li id=\"menu-item-17342\" class=\"menu-item menu-item-type-p",
-      "source": "https://www.gymka.cz/o-nas/skolska-rada",
-      "sourceName": "Gymnázium Kadaň"
     },
     {
       "id": "b81026e95dbc",
@@ -1692,13 +1668,13 @@
       "sourceName": "Městské divadlo Most – program"
     },
     {
-      "id": "427437991546",
-      "title": "Ředitelé školy",
+      "id": "ceba7f6b6fcc",
+      "title": "Čím vyšší daň z tabáku, tím spíš ji lidé budou obcházet, říká europoslanec Kubín",
       "date": "",
-      "category": "Střední školy",
-      "description": "menu-item-type-post_type menu-item-object-page menu-item-20304 menu-item-depth-subitem\"> SVVŠ – gymnázium při budování socialismu  Václav Lemberg – 2. poválečný ředitel Pár postřehů pro budoucí studenty z roku 1997 Dokumenty</sp",
-      "source": "https://www.gymka.cz/historie/reditele-skoly",
-      "sourceName": "Gymnázium Kadaň"
+      "category": "Regionální média",
+      "description": ":text-lg h-12 lg:h-14\"> Opilý řidič pod vlivem kokainu se pokusil uplatit policisty. Hrozí mu vyhoštění <d",
+      "source": "https://www.denik.cz/evropa-pro-cechy/cim-vyssi-dan-z-tabaku-tim-spis-ji-lide-budou-obchazet-rika-europoslanec-kubin",
+      "sourceName": "Chomutovský deník"
     },
     {
       "id": "159bd158d08c",
@@ -1831,7 +1807,7 @@
       "title": "Úřední deska",
       "date": "",
       "category": "Mateřské školy",
-      "description": "(()=>{let e=setInterval((function(){document.body&&(document.body.classList.add(\"cq-polyfill-loaded\"),clearInterval(e))}),100)}))}))}))})() <link rel=\"alterna",
+      "description": "(()=>{let e=setInterval((function(){document.body&&(document.body.classList.add(\"cq-polyfill-loaded\"),clearInterval(e))}),100)}))}))}))})() <link rel=\"alternate\" h",
       "source": "https://www.msctyrlistekkadan.cz/uredni-deska",
       "sourceName": "MŠ Čtyřlístek Kadaň"
     },
@@ -1861,6 +1837,42 @@
       "description": "Dokumenty  E-podatelna Povinné informace",
       "source": "https://www.5zskadan.cz/o-skole/uredni-deska",
       "sourceName": "ZŠ Na Podlesí Kadaň"
+    },
+    {
+      "id": "4f97e46b6b19",
+      "title": "Úřad práce České republiky",
+      "date": "",
+      "category": "Město, úřady a městské služby",
+      "description": "Content\" aria-expanded=\"false\" aria-label=\"Toggle navigation\"> Pro občany Práce a zaměstnání Jazyk Česky Česky <img src=\"/Images/Flag1x1.gb.svg\" class=\"up-img-flag-menu\" /",
+      "source": "https://www.uradprace.cz/",
+      "sourceName": "Úřad práce ČR – kontaktní pracoviště Kadaň"
+    },
+    {
+      "id": "770b3a3819c6",
+      "title": "Úřad online a rezervace",
+      "date": "",
+      "category": "Město",
+      "description": "Městský úřad Portál občana Platební portál Ústeckého kraje  Telefonní seznam Dokumenty a formuláře Úřední deska Ztráty a nálezy Odbory městského úřadu Městské organizace Organizace a služby <a href",
+      "source": "https://www.mesto-kadan.cz/cs/mestsky-urad/urad-online-a-rezervace.html",
+      "sourceName": "Město Kadaň"
+    },
+    {
+      "id": "62837f5bf0bd",
+      "title": "Územně analytické podklady",
+      "date": "",
+      "category": "Město a územní plánování",
+      "description": "li class=\"dropdown\"> Územní plánování Aktuálně projednávané... Územní plánování - město Kadaň Územní plánování - obce v ORP  Územní studie krajiny ORP Kadaň Plánovací smlouvy Analýza bydlení Kontakty Formuláře Studie",
+      "source": "https://gis.mesto-kadan.cz/portal/uap/uap",
+      "sourceName": "Městský GIS Kadaň"
+    },
+    {
+      "id": "26ebe9f2df8f",
+      "title": "Územní studie krajiny ORP Kadaň",
+      "date": "",
+      "category": "Město a územní plánování",
+      "description": ";nování Aktuálně projednávané... Územní plánování - město Kadaň Územní plánování - obce v ORP Územně analytické podklady  Plánovací smlouvy Analýza bydlení Kontakty Formuláře Studie",
+      "source": "https://gis.mesto-kadan.cz/portal/usk",
+      "sourceName": "Městský GIS Kadaň"
     }
   ]
 }
