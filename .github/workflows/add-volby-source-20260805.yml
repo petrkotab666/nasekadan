@@ -26,7 +26,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Přidat volby.cz do kanonického registru
+      - name: Přidat a opravit zdroje volby.cz v kanonickém registru
         shell: bash
         run: |
           set -euo pipefail
@@ -37,33 +37,50 @@ jobs:
           path = Path('data/city-sources.json')
           data = json.loads(path.read_text(encoding='utf-8'))
           sources = data.setdefault('sources', [])
+          main_url = 'https://www.volby.cz/'
+          open_url = 'https://www.volby.cz/opendata/opendata.htm'
+          old_open_urls = {
+              'https://www.volby.cz/opendata',
+              'https://www.volby.cz/opendata/',
+          }
+          changed = False
+
+          for item in sources:
+              url = str(item.get('url', ''))
+              if url in old_open_urls or item.get('name') == 'Volby.cz – otevřená data komunálních voleb':
+                  if url != open_url:
+                      item['url'] = open_url
+                      changed = True
+                  item['name'] = 'Volby.cz – otevřená data pro volební výsledky'
+                  item['category'] = 'Volby a otevřená data'
+
+          existing = {str(item.get('url', '')).rstrip('/') for item in sources}
           required = [
               {
                   'name': 'Volby.cz – oficiální volební výsledky a kandidáti',
-                  'url': 'https://www.volby.cz/',
+                  'url': main_url,
                   'category': 'Volby a veřejná správa',
               },
               {
-                  'name': 'Volby.cz – otevřená data komunálních voleb',
-                  'url': 'https://www.volby.cz/opendata/',
+                  'name': 'Volby.cz – otevřená data pro volební výsledky',
+                  'url': open_url,
                   'category': 'Volby a otevřená data',
               },
           ]
-          existing = {str(item.get('url', '')).rstrip('/') for item in sources}
-          changed = False
           for item in required:
               key = item['url'].rstrip('/')
               if key not in existing:
                   sources.append(item)
                   existing.add(key)
                   changed = True
+
           if changed:
               data['updatedAt'] = '2026-08-05'
               path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           PY
           python3 -m json.tool data/city-sources.json >/dev/null
           grep -F 'https://www.volby.cz/' data/city-sources.json >/dev/null
-          grep -F 'https://www.volby.cz/opendata/' data/city-sources.json >/dev/null
+          grep -F 'https://www.volby.cz/opendata/opendata.htm' data/city-sources.json >/dev/null
 
       - name: Ověřit monitorovací programy
         shell: bash
@@ -147,7 +164,7 @@ jobs:
             echo 'Není co ukládat.'
             exit 0
           fi
-          git commit -m 'monitoring: přidat volby.cz a obnovit úplný stav'
+          git commit -m 'monitoring: opravit otevřená data volby.cz a obnovit stav'
           for attempt in 1 2 3 4 5; do
             if git pull --rebase origin main && git push origin HEAD:main; then
               exit 0
