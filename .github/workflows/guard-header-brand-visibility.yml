@@ -4,11 +4,6 @@ on:
   workflow_dispatch:
   issues:
     types: [opened, reopened]
-  push:
-    branches: [main]
-    paths:
-      - style.css
-      - '.github/workflows/guard-header-brand-visibility.yml'
   schedule:
     - cron: '37 */3 * * *'
 
@@ -24,45 +19,66 @@ jobs:
   repair-and-verify:
     if: >-
       github.event_name != 'issues' ||
-      github.event.issue.title == '[repair] Zobrazit celý název Naše Kadaň v hlavičce'
+      github.event.issue.title == '[repair] Vynutit celý název Naše Kadaň v hlavičce v2'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_FILE: clanky/slovan-druhy-pokus.html
       ARTICLE_URL: https://nasekadan.cz/clanky/slovan-druhy-pokus.html
+      INLINE_MARKER: HEADER-BRAND-INLINE-20260805
+      CSS_MARKER: HEADER-BRAND-VISIBILITY-20260805
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Opravit viditelnost slova NAŠE
+      - name: Vložit neprůstřelnou opravu do článku i společných stylů
         id: patch
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('style.css')
-          text = path.read_text(encoding='utf-8')
-          marker = 'HEADER-BRAND-VISIBILITY-20260805'
-          rule = '''
 
-/* HEADER-BRAND-VISIBILITY-20260805
-   Některé články dědily bílou barvu loga z vlastní tmavé hlavičky,
-   zatímco společný styl změnil hlavičku na bílou. */
+          css_rule = '''
+
+/* HEADER-BRAND-VISIBILITY-20260805 */
 .head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}
 .head .logo > span:not(.logo-mark) b{color:var(--red,#a9232b)!important}
 '''
-          if marker not in text:
-              path.write_text(text.rstrip() + rule + '\n', encoding='utf-8', newline='\n')
-          updated = path.read_text(encoding='utf-8')
-          assert updated.count(marker) == 1
-          assert '.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}' in updated
+          for name in ('style.css', 'footer.css'):
+              path = Path(name)
+              text = path.read_text(encoding='utf-8')
+              if 'HEADER-BRAND-VISIBILITY-20260805' not in text:
+                  path.write_text(text.rstrip() + css_rule + '\n', encoding='utf-8', newline='\n')
+
+          article = Path('clanky/slovan-druhy-pokus.html')
+          text = article.read_text(encoding='utf-8')
+          inline = '''
+  <style id="HEADER-BRAND-INLINE-20260805">
+    header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}
+    header[data-site-header="v1"] .head .logo > span:not(.logo-mark) b{color:#a9232b!important}
+  </style>
+'''
+          if 'HEADER-BRAND-INLINE-20260805' not in text:
+              if '</head>' not in text:
+                  raise SystemExit('Článek nemá uzavírací značku head.')
+              text = text.replace('</head>', inline + '</head>', 1)
+              article.write_text(text, encoding='utf-8', newline='\n')
+
+          final = article.read_text(encoding='utf-8')
+          assert 'HEADER-BRAND-INLINE-20260805' in final
+          assert '<span>NAŠE <b>KADAŇ</b></span>' in final
+          for name in ('style.css', 'footer.css'):
+              css = Path(name).read_text(encoding='utf-8')
+              assert 'HEADER-BRAND-VISIBILITY-20260805' in css
           PY
+
           changed=false
-          if ! git diff --quiet -- style.css; then changed=true; fi
+          if ! git diff --quiet -- "$ARTICLE_FILE" style.css footer.css; then changed=true; fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Uložit opravu do main
@@ -72,10 +88,10 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – pojistka hlavičky'
           git config user.email 'info@nasekadan.cz'
-          git add style.css
-          git commit -m 'Opravit viditelnost celého názvu Naše Kadaň'
+          git add "$ARTICLE_FILE" style.css footer.css
+          git commit -m 'Vynutit celý název Naše Kadaň přímo v článku'
           pushed=0
-          for attempt in 1 2 3 4; do
+          for attempt in 1 2 3 4 5; do
             if git push origin HEAD:main; then pushed=1; break; fi
             git fetch origin main
             git rebase origin/main
@@ -83,7 +99,7 @@ jobs:
           done
           test "$pushed" = 1
 
-      - name: Nasadit společný styl na OVH
+      - name: Nasadit článek i oba styly přímo na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -91,30 +107,45 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 style.css ubuntu@57.129.43.215:/tmp/nasekadan-style-header-fix.css
+          mkdir -p "$RUNNER_TEMP/header-fix/clanky"
+          cp "$ARTICLE_FILE" "$RUNNER_TEMP/header-fix/clanky/slovan-druhy-pokus.html"
+          cp style.css footer.css "$RUNNER_TEMP/header-fix/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/header-fix" ubuntu@57.129.43.215:/tmp/nasekadan-header-fix-v2
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          src=/tmp/nasekadan-style-header-fix.css
-          grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' "$src"
-          sudo install -m 0644 "$src" /var/www/nasekadan/style.css
+          src=/tmp/nasekadan-header-fix-v2
+          root=/var/www/nasekadan
+          grep -Fq 'HEADER-BRAND-INLINE-20260805' "$src/clanky/slovan-druhy-pokus.html"
+          grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' "$src/style.css"
+          grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' "$src/footer.css"
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 "$src/clanky/slovan-druhy-pokus.html" "$root/clanky/slovan-druhy-pokus.html"
+          sudo install -m 0644 "$src/style.css" "$root/style.css"
+          sudo install -m 0644 "$src/footer.css" "$root/footer.css"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp "$src" nasekadan-web:/usr/share/nginx/html/style.css
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$src/clanky/slovan-druhy-pokus.html" nasekadan-web:/usr/share/nginx/html/clanky/slovan-druhy-pokus.html
+            sudo docker cp "$src/style.css" nasekadan-web:/usr/share/nginx/html/style.css
+            sudo docker cp "$src/footer.css" nasekadan-web:/usr/share/nginx/html/footer.css
           fi
-          rm -f "$src"
+          rm -rf "$src"
           REMOTE
 
-      - name: Veřejně ověřit hlavičku a CSS
+      - name: Veřejně ověřit přímo vloženou opravu
         shell: bash
         run: |
           set -euo pipefail
           ok=0
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in 1 2 3 4 5 6 7 8; do
             q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
-            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
-            curl -4 -kfsS -L --max-time 35 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
-            if grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /tmp/style.css \
-              && grep -Eq '<span>NAŠE[[:space:]]*<b>KADAŇ</b></span>' /tmp/article.html \
-              && grep -Fq '.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}' /tmp/style.css; then
+            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/footer.css?v=$q" -o /tmp/footer.css || true
+            if grep -Fq 'HEADER-BRAND-INLINE-20260805' /tmp/article.html \
+              && grep -Fq '<span>NAŠE <b>KADAŇ</b></span>' /tmp/article.html \
+              && grep -Fq 'header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}' /tmp/article.html \
+              && grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /tmp/style.css \
+              && grep -Fq 'HEADER-BRAND-VISIBILITY-20260805' /tmp/footer.css; then
               ok=1
               break
             fi
@@ -128,7 +159,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Celý název Naše Kadaň je opraven ve společném CSS, nasazen na OVH a veřejně ověřen. Kontrolní běh: ${context.runId}.`});
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Celý název Naše Kadaň je nyní vynucen přímo uvnitř článku, nasazen na OVH a veřejně ověřen. Kontrolní běh: ${context.runId}.`});
             await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
 
       - name: Zapsat selhání
@@ -137,4 +168,4 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Oprava hlavičky nebo veřejná kontrola selhala. Kontrolní běh: ${context.runId}.`});
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `Druhá oprava hlavičky nebo její veřejná kontrola selhala. Kontrolní běh: ${context.runId}.`});
