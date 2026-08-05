@@ -214,3 +214,9 @@ main.article-shell .article-ad-auto{display:none!important}
   footer.site-footer .footer-legal{align-items:flex-start}
   footer.site-footer .footer-legal span{width:100%;margin:0 0 3px}
 }
+
+/* HEADER-BRAND-VISIBILITY-20260805
+   Některé články mají vlastní tmavou hlavičku a z ní dědí bílou barvu loga.
+   Společný styl ale hlavičku zobrazí bíle, takže slovo NAŠE bylo bílé na bílém. */
+.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}
+.head .logo > span:not(.logo-mark) b{color:var(--red,#a9232b)!important}
