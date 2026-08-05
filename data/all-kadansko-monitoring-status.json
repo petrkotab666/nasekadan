@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-05T22:17:30.571370+00:00",
+  "checkedAt": "2026-08-05T23:44:48.029299+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 190,
-  "failedSources": 23,
-  "itemsParsed": 16510,
-  "uniqueItems": 10408,
-  "newAlerts": 1,
+  "checkedSources": 196,
+  "failedSources": 17,
+  "itemsParsed": 17093,
+  "uniqueItems": 10804,
+  "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 864,
+    "genericTitle": 892,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 1,
-    "notEditoriallySignificant": 46,
-    "notFreshOrUndated": 1,
-    "duplicate": 5238,
+    "broadWithoutLocalMatch": 4,
+    "notEditoriallySignificant": 62,
+    "notFreshOrUndated": 0,
+    "duplicate": 5397,
     "deferredByCap": 0
   },
   "coverage": {
@@ -223,9 +223,8 @@
       "url": "https://www.tskadan.cz/",
       "category": "Městské služby",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 20
     },
     {
       "name": "Kabelová televize Kadaň",
@@ -314,9 +313,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -461,9 +459,8 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 123
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -520,9 +517,8 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 82
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -651,9 +647,8 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -702,7 +697,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 30
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -725,8 +720,9 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 12
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -734,7 +730,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 29
     },
     {
       "name": "Volby.cz – oficiální volební výsledky a kandidáti",
@@ -845,9 +841,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 85
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -969,7 +964,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -1018,7 +1013,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 17
+      "itemsParsed": 21
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -1106,8 +1101,9 @@
       "url": "https://www.chbany.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "checked",
-      "itemsParsed": 97
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error _ssl.c:983: The handshake operation timed out>"
     },
     {
       "name": "Račetice – oficiální web",
@@ -1299,7 +1295,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 405
+      "itemsParsed": 406
     },
     {
       "name": "Vysoká Pec – oficiální web",
@@ -1323,7 +1319,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 323
+      "itemsParsed": 324
     },
     {
       "name": "Kalek – oficiální web",
@@ -1347,7 +1343,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 328
+      "itemsParsed": 331
     },
     {
       "name": "Strupčice – oficiální web",
@@ -1418,9 +1414,8 @@
       "url": "https://www.mesto-most.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 160
     },
     {
       "name": "Louny – oficiální web",
@@ -1635,9 +1630,8 @@
       "url": "https://www.slavnosticibule.cz/",
       "category": "major-recurring-event",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 5
     },
     {
       "name": "Slavnosti cibule Račetice – doplňkový zdroj 1",
@@ -1700,8 +1694,9 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 12
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Hasištejn",
@@ -1716,9 +1711,8 @@
       "url": "https://hornihrad.cz/",
       "category": "castle-events",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 176
     },
     {
       "name": "Dolní Poohří – regionální kalendář",
@@ -1758,7 +1752,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 86
+      "itemsParsed": 85
     },
     {
       "name": "Google News – široký region 5",
@@ -1790,7 +1784,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 69
+      "itemsParsed": 70
     },
     {
       "name": "Google News – široký region 9",
@@ -1806,7 +1800,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 11
+      "itemsParsed": 10
     },
     {
       "name": "Google News – široký region 11",
