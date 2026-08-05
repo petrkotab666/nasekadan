@@ -13,15 +13,6 @@
       icon:'❄️'
     },
     {
-      id:'horko-concept',
-      title:'Ventilátory Concept',
-      text:'Přímý výběr stolních, stojanových a sloupových ventilátorů pro ochlazení bytu, kanceláře nebo ložnice.',
-      tag:'Ventilátory',
-      url:'https://ehub.cz/system/scripts/click.php?a_aid=6926a50f&a_bid=b23975b5&data1=nasekadan&data2=horko-concept&desturl=https%3A%2F%2Fwww.concept.cz%2Fventilatory_c3392989.html',
-      target:'concept.cz/ventilatory',
-      icon:'🌬️'
-    },
-    {
       id:'horko-biano',
       title:'Rolety a žaluzie na Biano',
       text:'Přímý výpis rolet, žaluzií a zatemňovacího stínění, které pomáhá omezit přehřívání interiéru.',
