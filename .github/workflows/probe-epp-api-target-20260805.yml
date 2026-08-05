@@ -1,0 +1,97 @@
+name: Cíleně zkontrolovat veřejné API EPP
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/run-epp-api-target-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: probe-epp-api-target-20260805
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat síťový klient
+        run: python3 -m pip install --disable-pip-version-check requests
+
+      - name: Projít úplný veřejný seznam projektů
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/probe_epp_pk_slavie_api_20260805.py
+          python3 scripts/probe_epp_pk_slavie_api_20260805.py
+          test -s research/epp-pk-slavie-20260805/api-target-result.json
+          test -s research/epp-pk-slavie-20260805/api-target-result.md
+
+      - name: Uložit výsledek
+        id: save
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – výzkum'
+          git config user.email 'info@nasekadan.cz'
+          cp research/epp-pk-slavie-20260805/api-target-result.json "$RUNNER_TEMP/result.json"
+          cp research/epp-pk-slavie-20260805/api-target-result.md "$RUNNER_TEMP/result.md"
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p research/epp-pk-slavie-20260805
+            cp "$RUNNER_TEMP/result.json" research/epp-pk-slavie-20260805/api-target-result.json
+            cp "$RUNNER_TEMP/result.md" research/epp-pk-slavie-20260805/api-target-result.md
+            git add research/epp-pk-slavie-20260805/api-target-result.json research/epp-pk-slavie-20260805/api-target-result.md
+            if ! git diff --cached --quiet; then
+              git commit -m 'Výzkum: cíleně prověřit projekt PK Slávie ve veřejném API EPP'
+            fi
+            result_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "result_sha=$result_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Zapsat dokončení
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT_SHA: ${{ steps.save.outputs.result_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          issue_url="$(gh issue create \
+            --title '[research] Veřejné API EPP – PK Slávie vyhodnoceno' \
+            --body "Úplný veřejný seznam projektů a aktuální rozhraní EPP byly cíleně prohledány podle názvu klubu, města a plaveckých výrazů.\n\nVýsledek: research/epp-pk-slavie-20260805/api-target-result.md\nData: research/epp-pk-slavie-20260805/api-target-result.json\nCommit: ${RESULT_SHA}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat selhání
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh issue create \
+            --title '[incident] Kontrola veřejného API EPP' \
+            --body "Cílená kontrola veřejných dat EPP nedoběhla.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --assignee petrkotab666 || true
