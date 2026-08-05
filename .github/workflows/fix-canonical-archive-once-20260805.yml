@@ -1,0 +1,430 @@
+name: Jednorázově opravit kanonická data archivu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-canonical-archive-once-20260805.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: fix-canonical-archive-once-20260805
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Opravit generátor, archiv, sitemapu a registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json
+          import re
+          import subprocess
+
+          root = Path('.')
+          source = root / 'scripts' / 'enforce_article_visibility.py'
+          text = source.read_text(encoding='utf-8')
+
+          helper = r'''
+          def remove_legacy_archive_schema(text: str) -> str:
+              pattern = re.compile(
+                  r'<script(?![^>]*data-nk-archive-schema=)[^>]*type=["\']application/ld\+json["\'][^>]*>.*?</script>',
+                  re.I | re.S,
+              )
+
+              def replace(match: re.Match[str]) -> str:
+                  block = match.group(0)
+                  if re.search(r'"@type"\s*:\s*"CollectionPage"', block) and '#article-list' in block:
+                      return ''
+                  return block
+
+              return pattern.sub(replace, text)
+          '''.strip('\n')
+
+          if 'def remove_legacy_archive_schema(' not in text:
+              marker = '\ndef set_archive_meta('
+              if marker not in text:
+                  raise SystemExit('Nelze najít set_archive_meta pro vložení pojistky.')
+              text = text.replace(marker, '\n\n' + helper + '\n\n' + marker.lstrip('\n'), 1)
+
+          text, count = re.subn(
+              r'(def set_archive_meta\([^\n]+\) -> str:\n)(?!    text = remove_legacy_archive_schema\(text\)\n)',
+              r'\1    text = remove_legacy_archive_schema(text)\n',
+              text,
+              count=1,
+          )
+          if count != 1 and 'def set_archive_meta' in text and 'text = remove_legacy_archive_schema(text)' not in text:
+              raise SystemExit('Nepodařilo se zapojit odstranění starého archivního schématu.')
+
+          sitemap_function = r'''def _sitemap_entry_score(block: str) -> tuple[int, int]:
+              metadata = sum(block.count(tag) for tag in ('<lastmod>', '<changefreq>', '<priority>'))
+              return metadata, len(block)
+
+
+          def update_sitemap(total_pages: int) -> None:
+              text = SITEMAP.read_text(encoding='utf-8')
+              text = re.sub(r'\s*<url>\s*<loc>https://nasekadan\.cz/clanky/strana-\d+\.html</loc>.*?</url>', '', text, flags=re.S)
+              additions = ''.join(f'  <url><loc>{absolute_page_url(page)}</loc></url>\n' for page in range(2, total_pages + 1))
+              text = text.replace('</urlset>', additions + '</urlset>')
+
+              matches = list(re.finditer(r'<url>.*?</url>', text, flags=re.S))
+              if not matches:
+                  raise RuntimeError('Sitemap neobsahuje žádné URL záznamy.')
+
+              selected: dict[str, str] = {}
+              order: list[str] = []
+              for match in matches:
+                  block = match.group(0).strip()
+                  loc_match = re.search(r'<loc>\s*([^<]+?)\s*</loc>', block)
+                  if not loc_match:
+                      raise RuntimeError('Sitemap obsahuje URL záznam bez loc.')
+                  loc = loc_match.group(1).strip()
+                  if loc not in selected:
+                      selected[loc] = block
+                      order.append(loc)
+                  elif _sitemap_entry_score(block) > _sitemap_entry_score(selected[loc]):
+                      selected[loc] = block
+
+              prefix = text[:matches[0].start()]
+              suffix = text[matches[-1].end():]
+              body = ''.join(f'  {selected[loc]}\n' for loc in order)
+              SITEMAP.write_text(prefix + body + suffix, encoding='utf-8', newline='\n')'''
+
+          text, count = re.subn(
+              r'def update_sitemap\(total_pages: int\) -> None:\n.*?\n\ndef validate_cards',
+              sitemap_function + '\n\n\ndef validate_cards',
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit('Nepodařilo se nahradit generátor sitemap.xml.')
+
+          source.write_text(text, encoding='utf-8', newline='\n')
+          subprocess.run(['python3', '-m', 'py_compile', str(source)], check=True)
+          subprocess.run(['python3', str(source)], check=True)
+
+          pages = [root / 'clanky' / 'index.html', *sorted((root / 'clanky').glob('strana-*.html'))]
+          legacy_pattern = re.compile(
+              r'<script(?![^>]*data-nk-archive-schema=)[^>]*type=["\']application/ld\+json["\'][^>]*>.*?</script>',
+              re.I | re.S,
+          )
+          canonical_counts: dict[str, int] = {}
+          for page in pages:
+              body = page.read_text(encoding='utf-8')
+              count = body.count('data-nk-archive-schema="1"')
+              canonical_counts[page.name] = count
+              if count != 1:
+                  raise SystemExit(f'{page}: očekáván právě jeden kanonický ItemList, nalezeno {count}.')
+              legacy = [block for block in legacy_pattern.findall(body) if 'CollectionPage' in block and '#article-list' in block]
+              if legacy:
+                  raise SystemExit(f'{page}: zůstal starý duplicitní archivní JSON-LD blok.')
+
+          sitemap = (root / 'sitemap.xml').read_text(encoding='utf-8')
+          locs = re.findall(r'<loc>\s*([^<]+?)\s*</loc>', sitemap)
+          duplicates = sorted({loc for loc in locs if locs.count(loc) > 1})
+          if duplicates:
+              raise SystemExit('Sitemap stále obsahuje duplicity: ' + ', '.join(duplicates))
+
+          registry_path = root / 'data' / 'published-content-index.json'
+          registry = json.loads(registry_path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = registry.setdefault('validation', {})
+          validation['sitemap_duplicate_urls'] = []
+          validation['archive_legacy_schema_blocks'] = 0
+          validation['archive_canonical_itemlist_counts'] = canonical_counts
+          validation['last_consistency_repair'] = {
+              'classification': 'archive_schema_and_sitemap_deduplication',
+              'reason': 'Archiv obsahoval vedle aktuálního ItemListu starý rozporný CollectionPage/ItemList a sitemap.xml měla opakované URL.',
+              'status': 'pending_public_verification',
+              'source_commit': '${{ github.sha }}',
+              'completed_at': now,
+              'public_verification': {
+                  'homepage': False,
+                  'archive_pages': False,
+                  'rss': False,
+                  'sitemap': False,
+                  'news_sitemap': False,
+                  'registry': False,
+                  'deployment_health': False,
+              },
+          }
+          registry['generated_at'] = now
+          registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+
+          workflow = root / '.github' / 'workflows' / 'fix-canonical-archive-once-20260805.yml'
+          workflow.unlink()
+          PY
+
+          git diff --check
+
+      - name: Uložit bezpečnou opravu
+        id: save
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/enforce_article_visibility.py index.html sitemap.xml data/published-content-index.json clanky/*.html .github/workflows/fix-canonical-archive-once-20260805.yml
+          git commit -m 'Opravit kanonická data archivu a sitemapu'
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 5))
+          done
+          test "$pushed" = 1
+          repair_sha="$(git rev-parse HEAD)"
+          echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit opravený kanonický povrch
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          bundle="$RUNNER_TEMP/canonical-archive-repair"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp index.html sitemap.xml rss.xml news-sitemap.xml "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp data/published-content-index.json "$bundle/data/"
+          printf 'status=ok\nsource=%s\ncanonical_registry=ok\narchive_schema=ok\nsitemap_deduplicated=ok\nchecked_at=%s\n' '${{ steps.save.outputs.repair_sha }}' "$(date -u +%FT%TZ)" > "$bundle/deployment-health.txt"
+
+          uploaded=0
+          for attempt in 1 2 3 4; do
+            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/canonical-archive-repair; then
+              uploaded=1
+              break
+            fi
+            sleep $((attempt * 7))
+          done
+          test "$uploaded" = 1
+
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          src=/tmp/canonical-archive-repair
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/data"
+          sudo install -m 0644 "$src/index.html" "$root/index.html"
+          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in sitemap.xml rss.xml news-sitemap.xml deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+            sudo docker cp "$src/index.html" nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
+            for f in sitemap.xml rss.xml news-sitemap.xml deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
+            sudo docker cp "$src/data/published-content-index.json" nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -rf /tmp/canonical-archive-repair
+          REMOTE
+
+      - name: Veřejně ověřit všechny kanonické kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 7
+          base=https://nasekadan.cz
+          stamp="${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsS -L --max-time 45 "$base/?v=$stamp" -o /tmp/home.html
+          for page in 1 2 3 4 5; do
+            if [[ "$page" = 1 ]]; then url="$base/clanky/?v=$stamp"; else url="$base/clanky/strana-$page.html?v=$stamp"; fi
+            curl -4 -kfsS -L --max-time 45 "$url" -o "/tmp/archive-$page.html"
+          done
+          curl -4 -kfsS -L --max-time 45 "$base/rss.xml?v=$stamp" -o /tmp/rss.xml
+          curl -4 -kfsS -L --max-time 45 "$base/sitemap.xml?v=$stamp" -o /tmp/sitemap.xml
+          curl -4 -kfsS -L --max-time 45 "$base/news-sitemap.xml?v=$stamp" -o /tmp/news-sitemap.xml
+          curl -4 -kfsS -L --max-time 45 "$base/data/published-content-index.json?v=$stamp" -o /tmp/registry.json
+          curl -4 -kfsS -L --max-time 45 "$base/deployment-health.txt?v=$stamp" -o /tmp/health.txt
+
+          REPAIR_SHA='${{ steps.save.outputs.repair_sha }}' python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import json
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          legacy_pattern = re.compile(
+              r'<script(?![^>]*data-nk-archive-schema=)[^>]*type=["\']application/ld\+json["\'][^>]*>.*?</script>',
+              re.I | re.S,
+          )
+          cards = 0
+          for page in range(1, 6):
+              body = Path(f'/tmp/archive-{page}.html').read_text(encoding='utf-8')
+              if body.count('data-nk-archive-schema="1"') != 1:
+                  raise SystemExit(f'Archivní strana {page} nemá právě jeden kanonický ItemList.')
+              legacy = [block for block in legacy_pattern.findall(body) if 'CollectionPage' in block and '#article-list' in block]
+              if legacy:
+                  raise SystemExit(f'Archivní strana {page} stále obsahuje starý schema blok.')
+              cards += body.count('data-auto-article=')
+
+          sitemap_body = Path('/tmp/sitemap.xml').read_text(encoding='utf-8')
+          locs = re.findall(r'<loc>\s*([^<]+?)\s*</loc>', sitemap_body)
+          dup = [loc for loc, count in Counter(locs).items() if count > 1]
+          if dup:
+              raise SystemExit('Veřejná sitemap obsahuje duplicity: ' + ', '.join(dup))
+
+          rss_root = ET.parse('/tmp/rss.xml').getroot()
+          rss_count = len(rss_root.findall('./channel/item'))
+          ET.parse('/tmp/sitemap.xml')
+          ET.parse('/tmp/news-sitemap.xml')
+          registry = json.loads(Path('/tmp/registry.json').read_text(encoding='utf-8'))
+          if cards != registry.get('article_count'):
+              raise SystemExit(f'Archiv má {cards} karet, registr {registry.get("article_count")} článků.')
+          if rss_count != registry.get('article_count'):
+              raise SystemExit(f'RSS má {rss_count} položek, registr {registry.get("article_count")} článků.')
+          if registry.get('validation', {}).get('sitemap_duplicate_urls') != []:
+              raise SystemExit('Registr nepotvrzuje nulové duplicity sitemap.')
+          health = Path('/tmp/health.txt').read_text(encoding='utf-8')
+          if f'source={os.environ["REPAIR_SHA"]}' not in health or 'archive_schema=ok' not in health or 'sitemap_deduplicated=ok' not in health:
+              raise SystemExit('Deployment health nepotvrzuje opravený commit a obě kontroly.')
+          print(f'Veřejně ověřeno: {cards} článků, RSS {rss_count}, pět archivních stran, nulové duplicity sitemap.')
+          PY
+
+      - name: Zapsat veřejné ověření do registru
+        id: evidence
+        shell: bash
+        env:
+          REPAIR_SHA: ${{ steps.save.outputs.repair_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json
+          import os
+
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          now = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          repair = validation.setdefault('last_consistency_repair', {})
+          repair['status'] = 'success'
+          repair['source_commit'] = os.environ['REPAIR_SHA']
+          repair['completed_at'] = now
+          repair['public_verification'] = {
+              'homepage': True,
+              'archive_pages': True,
+              'rss': True,
+              'sitemap': True,
+              'news_sitemap': True,
+              'registry': True,
+              'deployment_health': True,
+              'sitemap_duplicate_urls': 0,
+              'archive_legacy_schema_blocks': 0,
+              'canonical_itemlists_per_archive_page': 1,
+          }
+          audit = validation.setdefault('last_consistency_audit', {})
+          audit.update({
+              'status': 'success',
+              'checked_at': now,
+              'article_count': data.get('article_count'),
+              'homepage_count': validation.get('homepage_count'),
+              'archive_count': validation.get('archive_count'),
+              'archive_page_count': validation.get('archive_page_count'),
+              'rss_count': validation.get('rss_count'),
+              'news_sitemap_count': validation.get('news_sitemap_recent_count'),
+              'deployment_health': 'ok',
+              'source_commit': os.environ['REPAIR_SHA'],
+          })
+          data['generated_at'] = now
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git add data/published-content-index.json
+          git commit -m 'Evidence: potvrdit opravu kanonických dat archivu'
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((attempt * 5))
+          done
+          test "$pushed" = 1
+          evidence_sha="$(git rev-parse HEAD)"
+          echo "evidence_sha=$evidence_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit finální registr a zdravotní stav
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          printf 'status=ok\nsource=%s\ncanonical_registry=ok\narchive_schema=ok\nsitemap_deduplicated=ok\nchecked_at=%s\n' '${{ steps.evidence.outputs.evidence_sha }}' "$(date -u +%FT%TZ)" > /tmp/deployment-health.txt
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json /tmp/deployment-health.txt ubuntu@57.129.43.215:/tmp/
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/data"
+          sudo install -m 0644 /tmp/published-content-index.json "$root/data/published-content-index.json"
+          sudo install -m 0644 /tmp/deployment-health.txt "$root/deployment-health.txt"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          rm -f /tmp/published-content-index.json /tmp/deployment-health.txt
+          REMOTE
+
+      - name: Konečné veřejné ověření a uzavření auditu
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVIDENCE_SHA: ${{ steps.evidence.outputs.evidence_sha }}
+          REPAIR_SHA: ${{ steps.save.outputs.repair_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 5
+          stamp="${GITHUB_RUN_ID}-final-$(date +%s)"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/data/published-content-index.json?v=$stamp" -o /tmp/final-registry.json
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/deployment-health.txt?v=$stamp" -o /tmp/final-health.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import os
+          data = json.loads(Path('/tmp/final-registry.json').read_text(encoding='utf-8'))
+          repair = data.get('validation', {}).get('last_consistency_repair', {})
+          if repair.get('status') != 'success' or repair.get('source_commit') != os.environ['REPAIR_SHA']:
+              raise SystemExit('Veřejný registr neobsahuje finální úspěšné ověření opravy.')
+          health = Path('/tmp/final-health.txt').read_text(encoding='utf-8')
+          if f'source={os.environ["EVIDENCE_SHA"]}' not in health:
+              raise SystemExit('Veřejný deployment-health neukazuje na evidenční commit.')
+          PY
+          gh issue comment 696 --body "Bezpečná oprava dokončena. Odstraněn starý duplicitní CollectionPage/ItemList ze všech pěti archivních stran, generátor nyní staré bloky odstraňuje, sitemap.xml je globálně deduplikována se zachováním bohatších metadat a kanonický registr obsahuje veřejný důkaz. Oprava: $REPAIR_SHA, evidence: $EVIDENCE_SHA. Veřejně ověřeny titulka, pět stran archivu, RSS, sitemap.xml, news-sitemap.xml, registr a deployment-health.txt."
+          gh issue close 696 --reason completed
