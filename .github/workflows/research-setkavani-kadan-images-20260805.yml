@@ -1,0 +1,92 @@
+name: OCR obrazových podkladů Setkávání Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/research-setkavani-kadan-images-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Nainstalovat OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ces imagemagick
+      - name: Stáhnout a přečíst všechny obrazové podklady
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf research/setkavani-kadan-images-20260805
+          mkdir -p research/setkavani-kadan-images-20260805/images research/setkavani-kadan-images-20260805/text /tmp/setkavani-kadan
+          python3 - <<'PY'
+          import html, json, re, ssl, subprocess, urllib.request
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin, urlparse
+
+          OUT=Path('research/setkavani-kadan-images-20260805')
+          TMP=Path('/tmp/setkavani-kadan')
+          URL='https://www.setkavanikadan.cz/'
+          CTX=ssl._create_unverified_context()
+          def get(url):
+              req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-image-research/1.0','Accept':'*/*'})
+              with urllib.request.urlopen(req,timeout=90,context=CTX) as r:
+                  return r.read(),dict(r.headers),r.geturl()
+          class P(HTMLParser):
+              def __init__(self): super().__init__(); self.images=[]; self.links=[]
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag.lower()=='img' and d.get('src'): self.images.append({'src':d['src'],'alt':d.get('alt','')})
+                  if tag.lower()=='a' and d.get('href'): self.links.append(d['href'])
+          data,h,final=get(URL)
+          (OUT/'page.html').write_bytes(data)
+          p=P(); p.feed(data.decode('utf-8','replace'))
+          urls=[]
+          for item in p.images:
+              urls.append({'url':urljoin(final,item['src']),'alt':item['alt'],'origin':'img'})
+          for href in p.links:
+              u=urljoin(final,href)
+              if re.search(r'\.(jpe?g|png|webp)(\?|$)',u,re.I): urls.append({'url':u,'alt':'','origin':'link'})
+          seen=set(); unique=[]
+          for item in urls:
+              if item['url'] not in seen: seen.add(item['url']); unique.append(item)
+          results=[]
+          for i,item in enumerate(unique,1):
+              try:
+                  blob,hdrs,real=get(item['url'])
+                  ext=Path(urlparse(real).path).suffix.lower()
+                  if ext not in {'.jpg','.jpeg','.png','.webp'}: ext='.jpg'
+                  img=OUT/'images'/f'image-{i:02d}{ext}'
+                  img.write_bytes(blob)
+                  base=TMP/f'image-{i:02d}'
+                  subprocess.run(['tesseract',str(img),str(base),'-l','ces+eng','--psm','6'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                  txt=base.with_suffix('.txt')
+                  text=txt.read_text(encoding='utf-8',errors='replace') if txt.exists() else ''
+                  (OUT/'text'/f'image-{i:02d}.txt').write_text(text,encoding='utf-8')
+                  results.append({**item,'final_url':real,'bytes':len(blob),'content_type':hdrs.get('Content-Type',''),'saved_image':str(img),'text_file':f'text/image-{i:02d}.txt','ocr_chars':len(text)})
+              except Exception as exc:
+                  results.append({**item,'error':str(exc)})
+          (OUT/'results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2),encoding='utf-8')
+          (OUT/'STATUS.json').write_text(json.dumps({'source':URL,'images':len(unique),'errors':sum('error' in x for x in results)},ensure_ascii=False,indent=2),encoding='utf-8')
+          print('images',len(unique),'errors',sum('error' in x for x in results))
+          PY
+      - name: Uložit výsledky
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň dokumentová rešerše'
+          git config user.email 'info@nasekadan.cz'
+          git add research/setkavani-kadan-images-20260805/
+          git commit -m 'Rešerše: OCR obrazových podkladů Setkávání Kadaň' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
