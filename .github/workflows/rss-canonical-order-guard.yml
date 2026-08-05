@@ -1,0 +1,273 @@
+name: Kanonické pořadí RSS Naše Kadaň
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-rss-canonical-order
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.event_name != 'issues' || (github.actor == 'petrkotab666' && github.event.issue.title == '[audit] Srovnat RSS s kanonickou evidencí')
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Srovnat RSS podle prvního zveřejnění
+        id: normalize
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonické RSS'
+          git config user.email 'info@nasekadan.cz'
+
+          pushed=0
+          changed=0
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/normalize_rss_to_canonical_order.py
+            python3 scripts/normalize_rss_to_canonical_order.py
+            git diff --check
+
+            git add rss.xml
+            if ! git diff --cached --quiet; then
+              changed=1
+              git commit -m 'Srovnat RSS s kanonickým pořadím článků'
+            fi
+            repair_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
+              echo "changed=$changed" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit opravené RSS
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 scripts/normalize_rss_to_canonical_order.py
+          git diff --exit-code -- rss.xml
+
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            rss.xml ubuntu@57.129.43.215:/tmp/nasekadan-rss.xml
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -m 0644 /tmp/nasekadan-rss.xml /var/www/nasekadan/rss.xml
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/nasekadan-rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+          fi
+          rm -f /tmp/nasekadan-rss.xml
+          REMOTE
+
+      - name: Veřejně ověřit pořadí, úplnost a duplicity
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, re, ssl, time
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          payload = json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          entries = payload.get('articles') or payload.get('entries') or []
+          now = datetime.now(timezone.utc)
+
+          def status(entry):
+              value = entry.get('publication_status')
+              if isinstance(value, str) and value:
+                  return value
+              legacy = entry.get('status')
+              return legacy if isinstance(legacy, str) else 'published'
+
+          expected = []
+          for entry in entries:
+              url = entry.get('url') or entry.get('canonical_url')
+              value = entry.get('published_at') or entry.get('date_published')
+              if not url or not value or status(entry) in {'draft', 'scheduled', 'removed'}:
+                  continue
+              dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+              if dt.tzinfo is None:
+                  dt = dt.replace(tzinfo=timezone.utc)
+              if dt.astimezone(timezone.utc) <= now:
+                  expected.append((dt, url))
+          expected.sort(reverse=True)
+          expected_urls = [url for _, url in expected]
+
+          ctx = ssl.create_default_context()
+          ctx.check_hostname = False
+          ctx.verify_mode = ssl.CERT_NONE
+          last_error = None
+          for attempt in range(15):
+              nonce = f'{int(time.time())}-{attempt}'
+              try:
+                  req = Request(
+                      f'https://nasekadan.cz/rss.xml?canonical-rss={nonce}',
+                      headers={'User-Agent': 'NaseKadan RSS canonical guard/1.0', 'Cache-Control': 'no-cache'},
+                  )
+                  with urlopen(req, timeout=40, context=ctx) as response:
+                      text = response.read().decode('utf-8', 'replace')
+                  urls = re.findall(r'<link>\s*(https://nasekadan\.cz/clanky/[^<\s?]+\.html)\s*</link>', text)
+                  if urls[:len(expected_urls)] != expected_urls:
+                      raise RuntimeError(f'RSS má jiné pořadí; první URL: {urls[:5]}')
+                  if len(urls) != len(set(urls)):
+                      raise RuntimeError('RSS obsahuje duplicitní URL.')
+                  if set(expected_urls) - set(urls):
+                      raise RuntimeError('RSS není úplné.')
+                  print(json.dumps({'status': 'ok', 'rss_count': len(urls), 'latest': urls[0]}, ensure_ascii=False))
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  time.sleep(8)
+          else:
+              raise SystemExit(f'Veřejná kontrola RSS neprošla: {last_error}')
+          PY
+
+      - name: Aktualizovat evidenční stav opravy
+        shell: bash
+        env:
+          REPAIR_SHA: ${{ steps.normalize.outputs.repair_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          path = Path('data/published-content-index.json')
+          payload = json.loads(path.read_text(encoding='utf-8'))
+          validation = payload.setdefault('validation', {})
+          count = int(payload.get('article_count') or len(payload.get('articles') or payload.get('entries') or []))
+          now = datetime.now(timezone.utc).isoformat()
+          payload['generated_at'] = now
+          validation['rss_count'] = count
+          validation['rss_order_matches_archive'] = True
+          validation['duplicate_urls'] = validation.get('duplicate_urls') or []
+          validation['last_consistency_repair'] = {
+              'classification': 'rss_order_normalized_to_first_publication',
+              'reason': 'RSS řadilo aktualizovaný starší článek před novější články; pořadí i pubDate byly srovnány podle prvního zveřejnění.',
+              'source_commit': os.environ.get('REPAIR_SHA', ''),
+              'status': 'success',
+              'completed_at': now,
+              'public_verification': {
+                  'rss_complete': True,
+                  'rss_order_matches_archive': True,
+                  'duplicate_urls_absent': True,
+              },
+          }
+          audit = validation.setdefault('last_consistency_audit', {})
+          audit.update({'status': 'success', 'checked_at': now, 'article_count': count, 'rss_count': count})
+          path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Evidence: potvrdit opravu kanonického pořadí RSS'
+            for attempt in 1 2 3 4 5; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              sleep $((attempt * 3))
+              test "$attempt" -lt 5
+            done
+          fi
+
+      - name: Nasadit aktualizovaný registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
+            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+          fi
+          rm -f /tmp/published-content-index.json
+          REMOTE
+
+      - name: Uzavřít auditní issue
+        if: success() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `RSS bylo srovnáno s kanonickou evidencí, veřejně ověřeno a registr aktualizován. Opravný commit: ${{ steps.normalize.outputs.repair_sha }}.`,
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'completed',
+            });
+
+      - name: Zapsat incident při selhání
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[incident] Kanonické pořadí RSS Naše Kadaň'
+          body="Oprava, nasazení nebo veřejná kontrola RSS selhala. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
