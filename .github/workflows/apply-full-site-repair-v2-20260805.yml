@@ -1,0 +1,65 @@
+name: Aplikovat ověřené opravy webu v2
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-apply-full-site-repair-v2-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: apply-full-site-repair-v2
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit, auditovat a bezpečně zapsat zdroj
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – ověřená oprava v2'
+          git config user.email 'info@nasekadan.cz'
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/repair_full_site_findings_20260805.py scripts/full_site_audit_v2_20260805.py
+            python3 scripts/repair_full_site_findings_20260805.py
+            python3 scripts/full_site_audit_v2_20260805.py --static --static-report /tmp/full-site-source-v2.json
+            git add -A
+            if ! git diff --cached --quiet; then
+              git commit -m 'Aplikovat ověřené opravy úplného auditu v2'
+            fi
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [[ "$attempt" == 4 ]]; then exit 1; fi
+            sleep $((attempt*4))
+          done
+
+      - name: Zapsat úspěch
+        if: success()
+        shell: bash
+        run: |
+          issue_url="$(gh issue create --title '[repair] Zdroj celého webu opraven a auditován v2 – success' --body "Ověřené opravy byly zapsány do main a statický audit v2 prošel bez blokující chyby.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Aplikace ověřených oprav webu v2' --body "Zápis oprav do main nebo statický audit v2 selhal.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
