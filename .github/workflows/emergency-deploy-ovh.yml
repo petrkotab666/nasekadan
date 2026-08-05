@@ -16,10 +16,8 @@ on:
       - emergency-deploy-trigger.txt
 
 permissions:
-  contents: read
+  contents: write
 
-# Nouzový i běžný deploy používají stejný kanonický zámek. Nemohou si tedy
-# navzájem přepsat document root jinou nebo starší verzí.
 concurrency:
   group: nasekadan-canonical-production
   cancel-in-progress: true
@@ -40,6 +38,68 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/sync-production.sh
-          sudo env \
-            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            bash deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Veřejně ověřit celý název Naše Kadaň
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          ok=0
+          reason=""
+          for attempt in 1 2 3 4 5 6; do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/slovan-druhy-pokus.html?v=$q" -o /tmp/slovan.html || true
+            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
+            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/footer.css?v=$q" -o /tmp/footer.css || true
+            python3 - <<'PY' && ok=1 && break || true
+          from pathlib import Path
+          html=Path('/tmp/slovan.html').read_text(encoding='utf-8',errors='replace')
+          style=Path('/tmp/style.css').read_text(encoding='utf-8',errors='replace')
+          footer=Path('/tmp/footer.css').read_text(encoding='utf-8',errors='replace')
+          brand='<span>NAŠE <b>KADAŇ</b></span>'
+          rule='.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}'
+          assert brand in html, 'HTML neobsahuje celý název'
+          assert rule in style or rule in footer, 'veřejné CSS neobsahuje barevnou pojistku'
+          style_pos=html.find('href="../style.css"')
+          footer_pos=html.find('href="/footer.css')
+          assert style_pos >= 0 and footer_pos > style_pos, 'footer.css není načten po style.css'
+          print('live header brand verified')
+          PY
+            sleep $((attempt * 4))
+          done
+          if [ "$ok" != 1 ]; then
+            reason="Veřejný HTML/CSS test názvu Naše Kadaň neprošel."
+          fi
+          python3 - <<PY
+          import json,datetime,os
+          data={
+            'status':'passed' if '$ok'=='1' else 'failed',
+            'checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'article':'https://nasekadan.cz/clanky/slovan-druhy-pokus.html',
+            'expectedBrand':'NAŠE KADAŇ',
+            'source':os.environ.get('GITHUB_SHA',''),
+            'reason':'$reason'
+          }
+          open('reports/header-brand-live-status.json','w',encoding='utf-8').write(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          PY
+          test "$ok" = 1
+
+      - name: Uložit výsledek veřejné kontroly
+        if: always() && github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f reports/header-brand-live-status.json || exit 0
+          git config user.name 'Naše Kadaň – veřejná kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/header-brand-live-status.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Zapsat veřejnou kontrolu názvu Naše Kadaň [skip ci]'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          exit 1
