@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-05T16:25:59.004439+00:00",
+  "checkedAt": "2026-08-05T16:47:46.679319+00:00",
   "bootstrap": false,
   "sourceCount": 209,
-  "checkedSources": 193,
-  "failedSources": 16,
-  "itemsParsed": 17040,
-  "uniqueItems": 10825,
+  "checkedSources": 194,
+  "failedSources": 15,
+  "itemsParsed": 17049,
+  "uniqueItems": 10840,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 891,
+    "genericTitle": 886,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 12,
-    "notEditoriallySignificant": 65,
+    "broadWithoutLocalMatch": 7,
+    "notEditoriallySignificant": 51,
     "notFreshOrUndated": 0,
-    "duplicate": 5324,
+    "duplicate": 5323,
     "deferredByCap": 0
   },
   "coverage": {
@@ -223,8 +223,9 @@
       "url": "https://www.tskadan.cz/",
       "category": "Městské služby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 20
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error _ssl.c:983: The handshake operation timed out>"
     },
     {
       "name": "Kabelová televize Kadaň",
@@ -370,7 +371,7 @@
       "category": "Základní školy",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 245
+      "itemsParsed": 244
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -697,7 +698,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 28
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -720,9 +721,8 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 11
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -730,7 +730,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 29
     },
     {
       "name": "Úřad práce ČR – kontaktní pracoviště Kadaň",
@@ -1382,7 +1382,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 161
+      "itemsParsed": 160
     },
     {
       "name": "Louny – oficiální web",
@@ -1661,9 +1661,8 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 11
     },
     {
       "name": "Hasištejn",
@@ -1703,7 +1702,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 37
+      "itemsParsed": 38
     },
     {
       "name": "Google News – široký region 3",
@@ -1719,7 +1718,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 77
+      "itemsParsed": 83
     },
     {
       "name": "Google News – široký region 5",
@@ -1759,7 +1758,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 13
     },
     {
       "name": "Google News – široký region 10",
@@ -1783,7 +1782,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 13
     },
     {
       "name": "Google News – široký region 13",
