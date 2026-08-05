@@ -1,9 +1,9 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-05T17:38:07.863078+00:00",
+  "generated_at": "2026-08-05T20:18:37.643640+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
-  "source_commit": "d1992eb5c0c72667c1e312c11da8fa03d03fdf72",
+  "source_commit": "75a2ba40493e4e922b654f6341c3d654b78c632b",
   "article_count": 52,
   "validation": {
     "homepage_count": 14,
@@ -15,7 +15,7 @@
     "rss_order_matches_archive": true,
     "deployment_health": "ok",
     "deployment_health_status_field_present": true,
-    "deployment_health_source": "22b4c46e34ca215e7e2f802deb2b42ecf8029853",
+    "deployment_health_source": "9c5a04983fba1bc839d25a83f3d30f184264c117",
     "required_fields_complete": true,
     "duplicate_urls": [],
     "duplicate_fingerprints": [],
@@ -27,21 +27,32 @@
       "https://nasekadan.cz/clanky/parts/slovan-04.html",
       "https://nasekadan.cz/clanky/parts/slovan-05.html"
     ],
-    "public_audit_at": "2026-08-05T10:41:13.600874+00:00",
+    "public_audit_at": "2026-08-05T20:18:37.643640+00:00",
     "repair_pending_public_verification": false,
     "public_repair_verification": {
       "status": "success",
-      "method": "live-article-home-archive-rss-sitemap-news-registry-health-weather-verification",
-      "verified_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
-      "article_count": 47,
-      "completed_at": "2026-08-04T12:31:28.102976+00:00"
+      "method": "github-actions-live-canonical-audit-v2",
+      "homepage_articles": 14,
+      "archive_articles": 52,
+      "archive_pages": 5,
+      "rss_articles": 52,
+      "sitemap_articles": 52,
+      "news_sitemap_articles": 10,
+      "all_public_h1_checked": true,
+      "deployment_health_nonempty": true,
+      "completed_at": "2026-08-05T20:18:37.643640+00:00"
     },
     "last_registry_refresh": {
-      "reason": "Publikovaný článek o kritickém nedostatku krve nebyl zapsán do kanonického registru.",
-      "classification": "missing_published_article_safe_registration",
-      "updated_url": "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
-      "source_commit": "b8d06fc74146a20c67f0e2a2779d08944b5b6eae",
-      "started_at": "2026-08-04T12:31:03.164929+00:00"
+      "reason": "Synchronizace kanonického registru se všemi živými publikačními kanály po změně veřejného obsahu.",
+      "classification": "live_canonical_registry_sync",
+      "trigger_commit": "75a2ba40493e4e922b654f6341c3d654b78c632b",
+      "homepage_articles": 14,
+      "archive_articles": 52,
+      "archive_pages": 5,
+      "rss_articles": 52,
+      "sitemap_articles": 52,
+      "news_sitemap_articles": 10,
+      "completed_at": "2026-08-05T20:18:37.643640+00:00"
     },
     "canonical_duplicate_filter": true,
     "live_update_existing_article": true,
@@ -61,7 +72,7 @@
     "news_sitemap_image_namespace_declared": true,
     "last_consistency_audit": {
       "status": "success",
-      "checked_at": "2026-08-05T17:38:07.863078+00:00",
+      "checked_at": "2026-08-05T20:18:37.643640+00:00",
       "article_count": 52,
       "homepage_count": 14,
       "archive_count": 52,
@@ -69,9 +80,14 @@
       "rss_count": 52,
       "news_sitemap_count": 10,
       "deployment_health": "ok",
-      "verified_url": "https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html",
-      "source_commit": "22b4c46e34ca215e7e2f802deb2b42ecf8029853",
-      "metadata_consistent": true
+      "verified_url": "https://nasekadan.cz/clanky/radka-kurzy-corrency-1000-korun-zari-2026.html",
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117",
+      "metadata_consistent": true,
+      "all_public_h1_checked": true,
+      "duplicate_archive_urls": [],
+      "duplicate_rss_urls": [],
+      "duplicate_sitemap_urls": [],
+      "duplicate_news_sitemap_urls": []
     },
     "last_source_enrichment": {
       "status": "success",
@@ -177,7 +193,8 @@
       "article_count": 52,
       "archive_count": 52,
       "rss_count": 52
-    }
+    },
+    "public_audit_sha256": "8ce01585c025372c4686626cc20ac2f9b403a338e0da37f0c4a6d1319b56ae97"
   },
   "articles": [
     {
@@ -220,7 +237,7 @@
       },
       "source_path": "clanky/radka-kurzy-corrency-1000-korun-zari-2026.html",
       "publication_status": "published",
-      "source_commit": "e5a00fc314642f0868823b76b2b618cb2e4de138"
+      "source_commit": "54c8d01419393a574a3521e679f22a408e8399f5"
     },
     {
       "title": "Výluka přes Žatec potrvá do 24. srpna. Autobusy nahrazují vlaky i směrem na Chomutov",
@@ -266,7 +283,7 @@
       },
       "source_path": "clanky/vyluka-zatec-blatno-do-24-srpna-2026.html",
       "publication_status": "published",
-      "source_commit": "21232fe8cb0a2a6aaddc993e71045c78eab04d76"
+      "source_commit": "54c8d01419393a574a3521e679f22a408e8399f5"
     },
     {
       "title": "Na jezeře Most pátrají po dvou lidech. Kvůli bouřce se neměli dostat na břeh",
@@ -306,7 +323,7 @@
       },
       "source_path": "clanky/jezero-most-patrani-dva-lide-bourka-2026.html",
       "publication_status": "published",
-      "source_commit": "29743e3ddbcf5fc96713359334dd10fe666db14e"
+      "source_commit": "37b14346b017d513b95936ec5ba31a931f37fe02"
     },
     {
       "title": "Kadaň vybírá nového stavitele Slovanu za 195 milionů. Účet prvního pokusu stále není veřejný",
@@ -350,7 +367,7 @@
       },
       "source_path": "clanky/slovan-druhy-pokus.html",
       "publication_status": "published",
-      "source_commit": "ff408b38b2695f50af54ff52e94444db770ceb6d"
+      "source_commit": "cefa38e8c5c3b6e751fa4fe5b598f5feb8ce80b5"
     },
     {
       "title": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
@@ -408,7 +425,7 @@
       },
       "source_path": "clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
       "publication_status": "published",
-      "source_commit": "d1992eb5c0c72667c1e312c11da8fa03d03fdf72"
+      "source_commit": "c5749706643289907b941c7d210edf884dfe5ffd"
     },
     {
       "title": "Nemocnice Kadaň prosí o pomoc. Kriticky chybí krev skupiny 0 Rh−",
@@ -445,7 +462,7 @@
       },
       "source_path": "clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html",
       "publication_status": "published",
-      "source_commit": "7aee4b9b4da0e8e3767d3b04f18a8be4f6e9e8bf"
+      "source_commit": "93db0340b1bc00d042ae128bedfae33e6d61c719"
     },
     {
       "title": "Klášterecký Josef Suchý skóroval Kanadě už po 103 sekundách",
@@ -489,14 +506,14 @@
       },
       "source_path": "clanky/josef-suchy-klasterec-u18-kanada-hlinka-2026.html",
       "publication_status": "published",
-      "source_commit": "a8cc7b78f4af3337a96f1114ba375461fe0ac4ef"
+      "source_commit": "ed3acc4a974d5d5948e3366f85168d83d3296f1f"
     },
     {
       "title": "Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti",
       "h1": "Císařský den v Kadani: od návštěvy Karla IV. k největší městské slavnosti",
       "url": "https://nasekadan.cz/clanky/cisarsky-den-kadan-historie-2026.html",
       "published_at": "2026-08-04T05:50:00+02:00",
-      "modified_at": "2026-08-04T05:50:00+02:00",
+      "modified_at": "2026-08-04T06:35:00+02:00",
       "persons": [
         "Karel IV.",
         "Kateřina Mertová",
@@ -531,7 +548,7 @@
       },
       "source_path": "clanky/cisarsky-den-kadan-historie-2026.html",
       "publication_status": "published",
-      "source_commit": "34f802bd5671602aff4cac86c2fe06f0e75a9366"
+      "source_commit": "b8d06fc74146a20c67f0e2a2779d08944b5b6eae"
     },
     {
       "title": "Kadaň otevřela zimní stadion lidem před vedrem. Přijít lze denně od 8 do 18 hodin",
@@ -569,7 +586,7 @@
       },
       "source_path": "clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html",
       "publication_status": "published",
-      "source_commit": "af5e89fc5d1aa17e09767b9936b48ef934c18a6a"
+      "source_commit": "c5749706643289907b941c7d210edf884dfe5ffd"
     },
     {
       "title": "Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna",
@@ -644,7 +661,7 @@
         "archive": true,
         "rss": true,
         "sitemap": true,
-        "news_sitemap": true
+        "news_sitemap": false
       },
       "source_path": "clanky/zaregistrovala-se-v-kadani-darovala-krvetvorne-bunky-2026.html",
       "publication_status": "published",
@@ -684,7 +701,7 @@
         "archive": true,
         "rss": true,
         "sitemap": true,
-        "news_sitemap": true
+        "news_sitemap": false
       },
       "source_path": "clanky/fve-epr-letiste-bess-kadan-2026.html",
       "publication_status": "published",
@@ -725,7 +742,7 @@
         "archive": true,
         "rss": true,
         "sitemap": true,
-        "news_sitemap": true
+        "news_sitemap": false
       },
       "source_path": "clanky/alzbetinsky-klaster-kadan-pacienti-lecebna-1966.html",
       "publication_status": "published",
@@ -736,7 +753,7 @@
       "h1": "Kam v Kadani a okolí od 3. do 9. srpna: med, móda, dixieland, kino a koupání",
       "url": "https://nasekadan.cz/clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
       "published_at": "2026-08-02T12:00:00+02:00",
-      "modified_at": "2026-08-05T13:59:00+02:00",
+      "modified_at": "2026-08-05T22:03:00+02:00",
       "persons": [],
       "organizations": [
         "Naše Kadaň",
@@ -802,11 +819,11 @@
         "archive": true,
         "rss": true,
         "sitemap": true,
-        "news_sitemap": true
+        "news_sitemap": false
       },
       "source_path": "clanky/kam-v-kadani-a-okoli-3-9-srpna-2026.html",
       "publication_status": "published",
-      "source_commit": "b968796d189f56dff8c9824f04a3f8e9e48dba82"
+      "source_commit": "7b9d23aa68cb0bbc0175d7a8e55c91c18f0cc6e1"
     },
     {
       "title": "Od Střelnice po klášter. Co všechno pro Kadaň zajišťuje KZK",
@@ -830,7 +847,7 @@
       ],
       "fingerprint": "21b663b625f2f913fba79fc2",
       "status": {
-        "homepage": true,
+        "homepage": false,
         "archive": true,
         "rss": true,
         "sitemap": true,
@@ -862,7 +879,7 @@
       ],
       "fingerprint": "d036b821cba4cde44870583a",
       "status": {
-        "homepage": true,
+        "homepage": false,
         "archive": true,
         "rss": true,
         "sitemap": true,
@@ -895,7 +912,7 @@
       ],
       "fingerprint": "11c3cc1b387600a9f08ff1e8",
       "status": {
-        "homepage": true,
+        "homepage": false,
         "archive": true,
         "rss": true,
         "sitemap": true,
@@ -931,7 +948,7 @@
       ],
       "fingerprint": "721504b1525748ac7350e52a",
       "status": {
-        "homepage": true,
+        "homepage": false,
         "archive": true,
         "rss": true,
         "sitemap": true,
@@ -1329,7 +1346,7 @@
       },
       "source_path": "clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html",
       "publication_status": "published",
-      "source_commit": "df9dd266b58c306bc23e7653dd7eaba96ddec1ba"
+      "source_commit": "b8d06fc74146a20c67f0e2a2779d08944b5b6eae"
     },
     {
       "title": "Stříkačky ve vchodech a podezřelé byty. Obyvatelé upozorňují na drogový problém v Kadani",
@@ -1531,7 +1548,7 @@
       },
       "source_path": "clanky/nemocnice-kadan-profil-sluzby-budoucnost.html",
       "publication_status": "published",
-      "source_commit": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117"
     },
     {
       "title": "V srpnu omezí provoz více ordinací v Kadani a okolí. Přehled termínů a zástupů",
@@ -1662,7 +1679,7 @@
       },
       "source_path": "clanky/arc-med-nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117"
     },
     {
       "title": "Kadaňští hasiči cvičili na Nechranicích záchranu lidí z vody",
@@ -1796,7 +1813,7 @@
       },
       "source_path": "clanky/avies-nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117"
     },
     {
       "title": "Kam v Kadani a okolí od 27. července do 2. srpna: festival, koupání, kino a výlety",
@@ -1896,7 +1913,7 @@
       },
       "source_path": "clanky/nemocnice-kadan-software-kyberbezpecnost.html",
       "publication_status": "published",
-      "source_commit": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117"
     },
     {
       "title": "Noční výluky vlaků zasáhnou Kadaň, Klášterec i Chomutov",
@@ -1998,7 +2015,7 @@
       },
       "source_path": "clanky/petice-nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117"
     },
     {
       "title": "V Prunéřově se střetlo osobní a nákladní auto. Nehoda byla hlášena se zraněním",
@@ -2101,7 +2118,7 @@
       },
       "source_path": "clanky/nemocnice-kadan.html",
       "publication_status": "published",
-      "source_commit": "61b754b3b5cf9fd946fd0a1773f6f2a429be6455"
+      "source_commit": "9c5a04983fba1bc839d25a83f3d30f184264c117"
     }
   ]
 }
