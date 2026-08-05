@@ -1,0 +1,132 @@
+name: Obnovit všechny veřejné obrázky Naše Kadaň
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-sync-all-public-images-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-public-images
+  cancel-in-progress: true
+
+env:
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  sync_images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Zabalit všechny veřejné obrázky
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/nasekadan-images"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          for dir in social assets images img; do
+            if [[ -d "$dir" ]]; then cp -a "$dir" "$stage/"; fi
+          done
+          find . -maxdepth 1 -type f \( -name '*.png' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.webp' -o -name '*.svg' -o -name '*.ico' \) -exec cp -a {} "$stage/" \;
+          tar -C "$stage" -czf "$RUNNER_TEMP/nasekadan-images.tgz" .
+
+      - name: Synchronizovat obrázky na OVH a do běžícího kontejneru
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/nasekadan-images.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-images.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/nasekadan-images
+          mkdir -p /tmp/nasekadan-images
+          tar -xzf /tmp/nasekadan-images.tgz -C /tmp/nasekadan-images
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          for dir in social assets images img; do
+            if [[ -d "/tmp/nasekadan-images/$dir" ]]; then
+              sudo install -d -m 0755 "/var/www/nasekadan/$dir"
+              sudo cp -a "/tmp/nasekadan-images/$dir/." "/var/www/nasekadan/$dir/"
+              if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+                sudo docker exec nasekadan-web mkdir -p "/usr/share/nginx/html/$dir"
+                sudo docker cp "/tmp/nasekadan-images/$dir/." "nasekadan-web:/usr/share/nginx/html/$dir/"
+              fi
+            fi
+          done
+          find /tmp/nasekadan-images -maxdepth 1 -type f | while read -r file; do
+            name="$(basename "$file")"
+            sudo install -m 0644 "$file" "/var/www/nasekadan/$name"
+            if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp "$file" "nasekadan-web:/usr/share/nginx/html/$name"; fi
+          done
+          rm -rf /tmp/nasekadan-images /tmp/nasekadan-images.tgz
+          REMOTE
+
+      - name: Ověřit všechny obrázky používané články, titulní stranou a archivem
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+          import re, ssl, time
+
+          root=Path('.')
+          texts=[]
+          for path in [root/'index.html', root/'clanky'/'index.html', *sorted((root/'clanky').glob('strana-*.html')), *sorted((root/'clanky').glob('*.html'))]:
+              if path.is_file(): texts.append(path.read_text(encoding='utf-8',errors='replace'))
+          urls=set()
+          pattern=re.compile(r'https://nasekadan\.cz/(?:social|assets|images|img)/[^\"\'\s)<>]+',re.I)
+          for text in texts: urls.update(pattern.findall(text))
+          urls.add('https://nasekadan.cz/social/kam-v-kadani-a-okoli-3-9-srpna-2026-199cb73db2.png')
+          ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+          def check(url):
+              req=Request(url+('?image_sync='+str(time.time_ns())),headers={'User-Agent':'NaseKadan-image-sync/1.0','Cache-Control':'no-cache'})
+              try:
+                  with urlopen(req,timeout=30,context=ctx) as response:
+                      data=response.read()
+                      return url,response.status,response.headers.get_content_type(),len(data),''
+              except Exception as exc:
+                  return url,0,'',0,str(exc)
+          failed=[]
+          with ThreadPoolExecutor(max_workers=24) as pool:
+              futures=[pool.submit(check,url) for url in sorted(urls)]
+              for future in as_completed(futures):
+                  url,status,ctype,size,error=future.result()
+                  if status != 200 or size < 128 or (not ctype.startswith('image/') and not url.endswith('.svg')):
+                      failed.append((url,status,ctype,size,error))
+          if failed:
+              for item in failed[:50]: print('CHYBA',item)
+              raise SystemExit(f'Nedostupných obrázků: {len(failed)} z {len(urls)}')
+          print(f'Ověřeno {len(urls)} veřejných obrázků; všechny jsou dostupné a neprázdné.')
+          PY
+
+      - name: Zapsat úspěch
+        if: success()
+        shell: bash
+        run: |
+          issue_url="$(gh issue create --title '[repair] Všechny veřejné obrázky obnoveny – success' --body "Byl synchronizován celý veřejný obrazový balík a ověřeny všechny obrázky používané články, titulní stranou a archivem. Opraven byl také prázdný náhled kulturního přehledu.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat incident
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Obnova veřejných obrázků Naše Kadaň' --body "Synchronizace nebo veřejná kontrola obrázků selhala.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
