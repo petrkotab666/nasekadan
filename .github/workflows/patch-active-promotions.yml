@@ -10,6 +10,7 @@ on:
       - '.github/active-promotions-trigger.txt'
       - 'scripts/patch-active-promotions.py'
       - 'scripts/patch-vodafone-august-promotion.py'
+      - 'scripts/enforce-verified-promotion-allowlist.py'
       - 'scripts/validate-active-promotions.py'
 
 permissions:
@@ -37,7 +38,9 @@ jobs:
         run: python scripts/patch-active-promotions.py
       - name: Doplnit aktuální srpnovou akci Vodafone
         run: python scripts/patch-vodafone-august-promotion.py
-      - name: Ověřit rozměry a každý veřejný proklik
+      - name: Uzamknout veřejnou rotaci na ověřené položky
+        run: python scripts/enforce-verified-promotion-allowlist.py
+      - name: Ověřit rozměry a každý skutečně použitý veřejný proklik
         run: python scripts/validate-active-promotions.py
       - name: Ověřit syntaxi reklamního skriptu
         run: node --check reklamy.js
