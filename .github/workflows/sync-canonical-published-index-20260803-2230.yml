@@ -47,11 +47,11 @@ jobs:
           import time
           import urllib.request
           import xml.etree.ElementTree as ET
+          from pathlib import Path
 
           BASE = 'https://nasekadan.cz'
-          REGISTRY = 'data/published-content-index.json'
-          STATUS = '.github/canonical-published-index-status.json'
-          WATER_URL = BASE + '/clanky/zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
+          REGISTRY = Path('data/published-content-index.json')
+          STATUS = Path('.github/canonical-published-index-status.json')
           ctx = ssl._create_unverified_context()
 
           def fetch(path_or_url):
@@ -63,7 +63,7 @@ jobs:
                       request = urllib.request.Request(
                           url + sep + 'canonical_audit=' + str(time.time_ns()),
                           headers={
-                              'User-Agent': 'NaseKadanCanonicalAudit/1.5',
+                              'User-Agent': 'NaseKadanCanonicalAudit/2.0',
                               'Cache-Control': 'no-cache, no-store, max-age=0',
                               'Pragma': 'no-cache',
                           },
@@ -75,6 +75,13 @@ jobs:
                       time.sleep(2 + attempt)
               raise last
 
+          def article_paths(page):
+              pattern = re.compile(r'href=["\'](/clanky/[^"\']+\.html)["\']', re.I)
+              return [
+                  path for path in pattern.findall(page)
+                  if '/parts/' not in path and not re.fullmatch(r'/clanky/strana-\d+\.html', path)
+              ]
+
           def unique(values):
               result, seen = [], set()
               for value in values:
@@ -83,29 +90,20 @@ jobs:
                       result.append(value)
               return result
 
-          def article_paths(page):
-              pattern = re.compile(r'href=["\'](/clanky/[^"\']+\.html)["\']', re.I)
-              return unique([
-                  path for path in pattern.findall(page)
-                  if '/parts/' not in path and not re.fullmatch(r'/clanky/strana-\d+\.html', path)
-              ])
-
           def clean_h1(page):
               match = re.search(r'<h1[^>]*>(.*?)</h1>', page, re.I | re.S)
               if not match:
                   return ''
               return ' '.join(html.unescape(re.sub(r'<[^>]+>', '', match.group(1))).split())
 
-          def add_unique(target, values):
-              for value in values:
-                  if value not in target:
-                      target.append(value)
+          def public_article_url(url):
+              return bool(re.fullmatch(r'https://nasekadan\.cz/clanky/(?!parts/)(?!strana-\d+\.html)[^/?#]+\.html', url))
 
-          with open(REGISTRY, encoding='utf-8') as handle:
-              data = json.load(handle)
+          data = json.loads(REGISTRY.read_text(encoding='utf-8'))
           articles = data['articles']
           urls = [article['url'] for article in articles]
           url_set = set(urls)
+          fingerprints = [article['fingerprint'] for article in articles]
 
           home = fetch('/')
           archive_first = fetch('/clanky/')
@@ -114,52 +112,63 @@ jobs:
           news = fetch('/news-sitemap.xml')
           health = fetch('/deployment-health.txt')
 
-          home_urls = [BASE + path for path in article_paths(home)]
-          page_links = unique(re.findall(r'href=["\'](/clanky/strana-(\d+)\.html)["\']', archive_first, re.I))
-          archive_page_paths = ['/clanky/'] + [path for path, _ in sorted(page_links, key=lambda item: int(item[1]))]
-          archive_pages = [archive_first] + [fetch(path) for path in archive_page_paths[1:]]
-          archive_urls = unique([
-              BASE + path
-              for page in archive_pages
-              for path in article_paths(page)
+          home_urls_raw = [BASE + path for path in article_paths(home)]
+          home_urls = unique(home_urls_raw)
+          page_links = unique([
+              match.group(1)
+              for match in re.finditer(r'href=["\'](/clanky/strana-(\d+)\.html)["\']', archive_first, re.I)
           ])
+          page_links.sort(key=lambda path: int(re.search(r'(\d+)', path).group(1)))
+          archive_page_paths = ['/clanky/'] + page_links
+          archive_pages = [archive_first] + [fetch(path) for path in page_links]
+          archive_urls_raw = [BASE + path for page in archive_pages for path in article_paths(page)]
+          archive_urls = unique(archive_urls_raw)
 
           rss_root = ET.fromstring(rss)
-          rss_urls = unique([
+          rss_urls_raw = [
               (node.text or '').strip()
               for node in rss_root.findall('.//item/link')
-              if (node.text or '').strip() in url_set
-          ])
+              if public_article_url((node.text or '').strip())
+          ]
+          rss_urls = unique(rss_urls_raw)
 
           ns = {'s': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
           sitemap_root = ET.fromstring(sitemap)
-          sitemap_urls = unique([
+          sitemap_urls_raw = [
               (node.text or '').strip()
               for node in sitemap_root.findall('.//s:loc', ns)
-              if (node.text or '').strip() in url_set
-          ])
+              if public_article_url((node.text or '').strip())
+          ]
+          sitemap_urls = unique(sitemap_urls_raw)
           news_root = ET.fromstring(news)
-          news_urls = unique([
+          news_urls_raw = [
               (node.text or '').strip()
               for node in news_root.findall('.//s:loc', ns)
-              if (node.text or '').strip() in url_set
-          ])
+              if public_article_url((node.text or '').strip())
+          ]
+          news_urls = unique(news_urls_raw)
 
-          fingerprints = [article['fingerprint'] for article in articles]
           duplicate_urls = sorted(url for url, count in collections.Counter(urls).items() if count > 1)
           duplicate_fingerprints = sorted(fp for fp, count in collections.Counter(fingerprints).items() if count > 1)
+          duplicate_archive_urls = sorted(url for url, count in collections.Counter(archive_urls_raw).items() if count > 1)
+          duplicate_rss_urls = sorted(url for url, count in collections.Counter(rss_urls_raw).items() if count > 1)
+          duplicate_sitemap_urls = sorted(url for url, count in collections.Counter(sitemap_urls_raw).items() if count > 1)
+          duplicate_news_urls = sorted(url for url, count in collections.Counter(news_urls_raw).items() if count > 1)
 
           assert not duplicate_urls, duplicate_urls
           assert not duplicate_fingerprints, duplicate_fingerprints
-          assert set(urls) == set(archive_urls), f'Archive differs: registry={len(urls)}, archive={len(archive_urls)}'
-          assert set(urls) == set(rss_urls), f'RSS differs: registry={len(urls)}, RSS={len(rss_urls)}'
-          assert set(urls) == set(sitemap_urls), f'Sitemap differs: registry={len(urls)}, sitemap={len(sitemap_urls)}'
+          assert not duplicate_archive_urls, duplicate_archive_urls
+          assert not duplicate_rss_urls, duplicate_rss_urls
+          assert not duplicate_sitemap_urls, duplicate_sitemap_urls
+          assert not duplicate_news_urls, duplicate_news_urls
+          assert url_set == set(archive_urls), f'Archive differs: registry={len(url_set)}, archive={len(archive_urls)}'
+          assert url_set == set(rss_urls), f'RSS differs: registry={len(url_set)}, RSS={len(rss_urls)}'
+          assert url_set == set(sitemap_urls), f'Sitemap differs: registry={len(url_set)}, sitemap={len(sitemap_urls)}'
           assert rss_urls == archive_urls, 'RSS order differs from flattened paginated archive order'
-          assert health.strip(), 'deployment-health.txt is empty'
+          assert re.search(r'^status=ok$', health, re.M), 'deployment-health.txt status is not ok'
           assert re.search(r'^source=\S+', health, re.M), 'deployment-health.txt has no source commit'
 
           all_h1_checked = True
-          water_update_confirmed = False
           for article in articles:
               page = fetch(article['url'])
               actual_h1 = clean_h1(page)
@@ -192,27 +201,9 @@ jobs:
               if modified:
                   article['modified_at'] = modified.group(1)
 
-              if article['url'] == WATER_URL:
-                  water_update_confirmed = (
-                      'dalších 11 toků' in page
-                      and 'Prunéřovského potoka' in page
-                      and 'Chomutov' in page
-                  )
-                  assert water_update_confirmed, 'Live water article does not contain the Chomutov update'
-                  add_unique(article['organizations'], ['Městský úřad Chomutov'])
-                  add_unique(article['places'], ['Chomutovsko', 'Prunéřovský potok'])
-                  add_unique(article['cases'], [
-                      'Samostatné opatření Chomutova pro dalších 11 toků',
-                      'Zákaz odběru v horní části Prunéřovského potoka',
-                  ])
-                  add_unique(article['topics'], ['Sucho', 'Vodní hospodářství'])
-
-          assert water_update_confirmed
-
           now = datetime.datetime.now(datetime.timezone.utc).isoformat()
           head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-          health_source_match = re.search(r'^source=(.+)$', health, re.M)
-          health_source = health_source_match.group(1).strip() if health_source_match else ''
+          health_source = re.search(r'^source=(.+)$', health, re.M).group(1).strip()
           audit_material = home + ''.join(archive_pages) + rss + sitemap + news + health
 
           data['generated_at'] = now
@@ -224,9 +215,12 @@ jobs:
               'archive_count': len(archive_urls),
               'archive_page_count': len(archive_page_paths),
               'rss_count': len(rss_urls),
-              'sitemap_all_articles_present': set(urls) == set(sitemap_urls),
+              'sitemap_all_articles_present': url_set == set(sitemap_urls),
               'news_sitemap_recent_count': len(news_urls),
-              'deployment_health': 'verified',
+              'rss_order_matches_archive': rss_urls == archive_urls,
+              'deployment_health': 'ok',
+              'deployment_health_status_field_present': True,
+              'deployment_health_source': health_source,
               'required_fields_complete': all(
                   all(key in article for key in (
                       'title', 'h1', 'url', 'published_at', 'modified_at',
@@ -237,13 +231,43 @@ jobs:
               'duplicate_urls': duplicate_urls,
               'duplicate_fingerprints': duplicate_fingerprints,
               'per_article_source_commits': all(bool(article.get('source_commit')) for article in articles),
-              'deployment_health_source': health_source,
               'public_audit_at': now,
               'public_audit_sha256': hashlib.sha256(audit_material.encode('utf-8')).hexdigest(),
               'repair_pending_public_verification': False,
-              'rss_order_matches_archive': rss_urls == archive_urls,
+              'last_consistency_audit': {
+                  'status': 'success',
+                  'checked_at': now,
+                  'article_count': len(articles),
+                  'homepage_count': len(home_urls),
+                  'archive_count': len(archive_urls),
+                  'archive_page_count': len(archive_page_paths),
+                  'rss_count': len(rss_urls),
+                  'news_sitemap_count': len(news_urls),
+                  'deployment_health': 'ok',
+                  'verified_url': articles[0]['url'] if articles else '',
+                  'source_commit': health_source,
+                  'metadata_consistent': True,
+                  'all_public_h1_checked': all_h1_checked,
+                  'duplicate_archive_urls': duplicate_archive_urls,
+                  'duplicate_rss_urls': duplicate_rss_urls,
+                  'duplicate_sitemap_urls': duplicate_sitemap_urls,
+                  'duplicate_news_sitemap_urls': duplicate_news_urls,
+              },
+              'last_registry_refresh': {
+                  'reason': 'Synchronizace kanonického registru se všemi živými publikačními kanály po změně veřejného obsahu.',
+                  'classification': 'live_canonical_registry_sync',
+                  'trigger_commit': head,
+                  'homepage_articles': len(home_urls),
+                  'archive_articles': len(archive_urls),
+                  'archive_pages': len(archive_page_paths),
+                  'rss_articles': len(rss_urls),
+                  'sitemap_articles': len(sitemap_urls),
+                  'news_sitemap_articles': len(news_urls),
+                  'completed_at': now,
+              },
               'public_repair_verification': {
-                  'method': 'github-actions-live-canonical-audit-paginated-archive-v1.5',
+                  'status': 'success',
+                  'method': 'github-actions-live-canonical-audit-v2',
                   'homepage_articles': len(home_urls),
                   'archive_articles': len(archive_urls),
                   'archive_pages': len(archive_page_paths),
@@ -254,47 +278,33 @@ jobs:
                   'deployment_health_nonempty': bool(health.strip()),
                   'completed_at': now,
               },
-              'last_registry_refresh': {
-                  'reason': 'record the Chomutov expansion as an update of the existing water-ban article and synchronize all live publication channels',
-                  'trigger_commit': head,
-                  'updated_article_url': WATER_URL,
-                  'classification': 'update_existing_article',
-                  'homepage_articles': len(home_urls),
-                  'archive_articles': len(archive_urls),
-                  'archive_pages': len(archive_page_paths),
-                  'rss_articles': len(rss_urls),
-                  'sitemap_articles': len(sitemap_urls),
-                  'news_sitemap_articles': len(news_urls),
-                  'completed_at': now,
-              },
           })
 
-          with open(REGISTRY, 'w', encoding='utf-8') as handle:
-              json.dump(data, handle, ensure_ascii=False, indent=2)
-              handle.write('\n')
-
+          REGISTRY.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           status = {
               'status': 'success',
               'checked_at': now,
+              'source_commit': head,
+              'deployment_health_source': health_source,
               'article_count': len(articles),
               'homepage_count': len(home_urls),
               'archive_count': len(archive_urls),
               'archive_page_count': len(archive_page_paths),
               'rss_count': len(rss_urls),
+              'sitemap_article_count': len(sitemap_urls),
               'news_sitemap_count': len(news_urls),
-              'sitemap_complete': set(urls) == set(sitemap_urls),
+              'sitemap_complete': url_set == set(sitemap_urls),
               'rss_order_matches_archive': rss_urls == archive_urls,
               'duplicate_urls': len(duplicate_urls),
               'duplicate_fingerprints': len(duplicate_fingerprints),
+              'duplicate_archive_urls': len(duplicate_archive_urls),
+              'duplicate_rss_urls': len(duplicate_rss_urls),
+              'duplicate_sitemap_urls': len(duplicate_sitemap_urls),
+              'duplicate_news_sitemap_urls': len(duplicate_news_urls),
               'all_public_h1_checked': all_h1_checked,
               'registry_publicly_verified': True,
-              'updated_existing_article': WATER_URL,
-              'new_facts': 'Chomutov measure: 11 additional streams including the upper Prunerovsky stream',
           }
-          with open(STATUS, 'w', encoding='utf-8') as handle:
-              json.dump(status, handle, ensure_ascii=False, indent=2)
-              handle.write('\n')
-
+          STATUS.write_text(json.dumps(status, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
           print(json.dumps(status, ensure_ascii=False))
           PY
 
@@ -308,7 +318,7 @@ jobs:
           if git diff --cached --quiet; then
             exit 0
           fi
-          git commit -m 'Zapsat chomutovské rozšíření jako aktualizaci článku o vodě [skip ci]'
+          git commit -m 'Synchronizovat kanonický registr s živým webem [skip ci]'
           for attempt in 1 2 3 4 5; do
             if git push origin HEAD:main; then
               exit 0
@@ -328,5 +338,33 @@ jobs:
           opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
           cat data/published-content-index.json | ssh "${opts[@]}" ubuntu@57.129.43.215 'sudo install -d -m 0755 /var/www/nasekadan/data; sudo tee /var/www/nasekadan/data/published-content-index.json >/dev/null; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data; sudo docker cp /var/www/nasekadan/data/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi'
           sleep 4
-          q="${GITHUB_RUN_ID}-$(date +%s)"
-          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/data/published-content-index.json?v=$q" | python3 -c 'import json,sys; d=json.load(sys.stdin); v=d["validation"]; a=next(x for x in d["articles"] if x["url"].endswith("zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html")); assert d["article_count"]==44; assert v["archive_count"]==44; assert v["rss_count"]==44; assert v["sitemap_all_articles_present"]; assert v["rss_order_matches_archive"]; assert not v["duplicate_urls"]; assert not v["duplicate_fingerprints"]; assert "Městský úřad Chomutov" in a["organizations"]; assert "Prunéřovský potok" in a["places"]'
+          python3 <<'PY'
+          import json
+          import ssl
+          import time
+          import urllib.request
+          from pathlib import Path
+
+          expected = json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          url = 'https://nasekadan.cz/data/published-content-index.json?v=' + str(time.time_ns())
+          request = urllib.request.Request(url, headers={'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache'})
+          with urllib.request.urlopen(request, timeout=45, context=ssl._create_unverified_context()) as response:
+              live = json.loads(response.read().decode('utf-8'))
+          assert live['generated_at'] == expected['generated_at']
+          assert live['article_count'] == expected['article_count']
+          assert live['validation']['archive_count'] == expected['validation']['archive_count']
+          assert live['validation']['rss_count'] == expected['validation']['rss_count']
+          assert live['validation']['news_sitemap_recent_count'] == expected['validation']['news_sitemap_recent_count']
+          assert live['validation']['sitemap_all_articles_present']
+          assert live['validation']['rss_order_matches_archive']
+          assert not live['validation']['duplicate_urls']
+          assert not live['validation']['duplicate_fingerprints']
+          print(json.dumps({
+              'status': 'success',
+              'article_count': live['article_count'],
+              'archive_count': live['validation']['archive_count'],
+              'rss_count': live['validation']['rss_count'],
+              'news_sitemap_count': live['validation']['news_sitemap_recent_count'],
+              'generated_at': live['generated_at'],
+          }, ensure_ascii=False))
+          PY
