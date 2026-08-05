@@ -1,0 +1,277 @@
+name: Publikovat RADKA kurzy a Corrency
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-publish-radka-corrency-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-radka-corrency-20260805
+  cancel-in-progress: false
+
+env:
+  SLUG: radka-kurzy-corrency-1000-korun-zari-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/radka-kurzy-corrency-1000-korun-zari-2026.html
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat tvorbu sociální grafiky
+        run: python3 -m pip install --disable-pip-version-check pillow
+
+      - name: Sestavit článek a zapsat ho do všech kanálů
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – publikace'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 -m py_compile scripts/publish_radka_corrency_20260805.py scripts/enforce_all_article_visibility.py
+            python3 scripts/publish_radka_corrency_20260805.py
+            git diff --check
+            git add "clanky/${SLUG}.html" "social/${SLUG}.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+            if ! git diff --cached --quiet; then
+              git commit -m 'Publikovat: RADKA mění kurzy a přijímá Corrency'
+            fi
+            content_sha="$(git rev-parse HEAD)"
+            CONTENT_SHA="$content_sha" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next(item for item in data['articles'] if item['url']==os.environ['ARTICLE_URL'])
+          article['source_commit']=os.environ['CONTENT_SHA']
+          publication=data.setdefault('validation',{}).setdefault('last_publication',{})
+          publication['source_commit']=os.environ['CONTENT_SHA']
+          publication['status']='pending_public_verification'
+          publication['checked_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            printf 'status=ok\nsource=%s\narticle=%s\nchange=publish-radka-corrency\npublished=2026-08-05T18:45:00+02:00\n' "$content_sha" "$ARTICLE_URL" > deployment-health.txt
+            git add data/published-content-index.json deployment-health.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Evidence: připravit ověření článku RADKA a Corrency'
+            fi
+            final_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "content_sha=$content_sha" >> "$GITHUB_OUTPUT"
+              echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit článek a kanonické plochy na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/radka-corrency"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp "social/${SLUG}.png" "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/radka-corrency.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/radka-corrency.tgz" ubuntu@57.129.43.215:/tmp/radka-corrency.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          rm -rf /tmp/radka-corrency
+          mkdir -p /tmp/radka-corrency
+          tar -xzf /tmp/radka-corrency.tgz -C /tmp/radka-corrency
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data
+          sudo install -m 0644 /tmp/radka-corrency/index.html /var/www/nasekadan/index.html
+          sudo install -m 0644 /tmp/radka-corrency/rss.xml /var/www/nasekadan/rss.xml
+          sudo install -m 0644 /tmp/radka-corrency/sitemap.xml /var/www/nasekadan/sitemap.xml
+          sudo install -m 0644 /tmp/radka-corrency/news-sitemap.xml /var/www/nasekadan/news-sitemap.xml
+          sudo install -m 0644 /tmp/radka-corrency/llms.txt /var/www/nasekadan/llms.txt
+          sudo install -m 0644 /tmp/radka-corrency/deployment-health.txt /var/www/nasekadan/deployment-health.txt
+          sudo install -m 0644 /tmp/radka-corrency/data/published-content-index.json /var/www/nasekadan/data/published-content-index.json
+          sudo install -m 0644 /tmp/radka-corrency/data/article-integrity-manifest.json /var/www/nasekadan/data/article-integrity-manifest.json
+          sudo install -m 0644 /tmp/radka-corrency/social/radka-kurzy-corrency-1000-korun-zari-2026.png /var/www/nasekadan/social/radka-kurzy-corrency-1000-korun-zari-2026.png
+          sudo find /var/www/nasekadan/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete
+          for file in /tmp/radka-corrency/clanky/*.html; do sudo install -m 0644 "$file" "/var/www/nasekadan/clanky/$(basename "$file")"; done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /tmp/radka-corrency/index.html nasekadan-web:/usr/share/nginx/html/index.html
+            sudo docker cp /tmp/radka-corrency/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
+            sudo docker cp /tmp/radka-corrency/sitemap.xml nasekadan-web:/usr/share/nginx/html/sitemap.xml
+            sudo docker cp /tmp/radka-corrency/news-sitemap.xml nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
+            sudo docker cp /tmp/radka-corrency/llms.txt nasekadan-web:/usr/share/nginx/html/llms.txt
+            sudo docker cp /tmp/radka-corrency/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
+            sudo docker exec nasekadan-web sh -c "find /usr/share/nginx/html/clanky -maxdepth 1 -type f -name 'strana-*.html' -delete"
+            sudo docker cp /tmp/radka-corrency/clanky/. nasekadan-web:/usr/share/nginx/html/clanky/
+            sudo docker cp /tmp/radka-corrency/social/radka-kurzy-corrency-1000-korun-zari-2026.png nasekadan-web:/usr/share/nginx/html/social/radka-kurzy-corrency-1000-korun-zari-2026.png
+            sudo docker cp /tmp/radka-corrency/data/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
+            sudo docker cp /tmp/radka-corrency/data/article-integrity-manifest.json nasekadan-web:/usr/share/nginx/html/data/article-integrity-manifest.json
+          fi
+          rm -rf /tmp/radka-corrency /tmp/radka-corrency.tgz
+          REMOTE
+
+      - name: Veřejně ověřit úplnou publikaci bez cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import time
+          from urllib.request import Request, urlopen
+          targets = {
+              'article': ('https://nasekadan.cz/clanky/radka-kurzy-corrency-1000-korun-zari-2026.html', 'RADKA od září končí s jednorázovými vstupy'),
+              'home': ('https://nasekadan.cz/', '/clanky/radka-kurzy-corrency-1000-korun-zari-2026.html'),
+              'archive': ('https://nasekadan.cz/clanky/', '/clanky/radka-kurzy-corrency-1000-korun-zari-2026.html'),
+              'rss': ('https://nasekadan.cz/rss.xml', 'radka-kurzy-corrency-1000-korun-zari-2026.html'),
+              'sitemap': ('https://nasekadan.cz/sitemap.xml', 'radka-kurzy-corrency-1000-korun-zari-2026.html'),
+              'news': ('https://nasekadan.cz/news-sitemap.xml', 'radka-kurzy-corrency-1000-korun-zari-2026.html'),
+              'llms': ('https://nasekadan.cz/llms.txt', 'radka-kurzy-corrency-1000-korun-zari-2026.html'),
+              'registry': ('https://nasekadan.cz/data/published-content-index.json', 'family_activity_service_change'),
+              'health': ('https://nasekadan.cz/deployment-health.txt', 'status=ok'),
+          }
+          last = None
+          for attempt in range(20):
+              try:
+                  nonce = f'{int(time.time())}-{attempt}'
+                  for name, (url, needle) in targets.items():
+                      req = Request(url + ('&' if '?' in url else '?') + 'radka=' + nonce, headers={'User-Agent':'NaseKadan-publication-check/1.0','Cache-Control':'no-cache'})
+                      with urlopen(req, timeout=35) as response:
+                          text = response.read().decode('utf-8','replace')
+                      if needle not in text:
+                          raise RuntimeError(f'{name}: chybí {needle}')
+                  req = Request('https://nasekadan.cz/social/radka-kurzy-corrency-1000-korun-zari-2026.png?radka=' + nonce, headers={'User-Agent':'NaseKadan-publication-check/1.0','Cache-Control':'no-cache'})
+                  with urlopen(req, timeout=35) as response:
+                      image = response.read()
+                  if len(image) < 10000 or not image.startswith(b'\x89PNG'):
+                      raise RuntimeError('sociální PNG není platné')
+                  print('Veřejná publikace je úplná a ověřená.')
+                  break
+              except Exception as exc:
+                  last = exc
+                  time.sleep(8)
+          else:
+              raise SystemExit(f'Veřejná kontrola neprošla: {last}')
+          PY
+
+      - name: Uzavřít veřejné ověření v registru
+        id: evidence
+        shell: bash
+        env:
+          CONTENT_SHA: ${{ steps.build.outputs.content_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – evidence'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            CONTENT_SHA="$CONTENT_SHA" ARTICLE_URL="$ARTICLE_URL" python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          article=next(item for item in data['articles'] if item['url']==os.environ['ARTICLE_URL'])
+          article['source_commit']=os.environ['CONTENT_SHA']
+          publication=data.setdefault('validation',{}).setdefault('last_publication',{})
+          publication.update({
+              'status':'success',
+              'article_url':os.environ['ARTICLE_URL'],
+              'classification':'family_activity_service_change',
+              'source_commit':os.environ['CONTENT_SHA'],
+              'public_verified_at':datetime.now(timezone.utc).isoformat(),
+              'public_verification':{
+                  'article':True,'homepage':True,'archive':True,'rss':True,
+                  'sitemap':True,'news_sitemap':True,'llms':True,'registry':True,
+                  'health':True,'social_image':True
+              }
+          })
+          data['validation']['repair_pending_public_verification']=False
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+            git add data/published-content-index.json
+            if ! git diff --cached --quiet; then git commit -m 'Evidence: potvrdit publikaci článku RADKA a Corrency'; fi
+            evidence_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "evidence_sha=$evidence_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Nasadit finální registr a uzavřít evidenci
+        shell: bash
+        env:
+          EVIDENCE_SHA: ${{ steps.evidence.outputs.evidence_sha }}
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json; fi; rm -f /tmp/published-content-index.json'
+          python3 - <<'PY'
+          import json, time
+          from urllib.request import Request, urlopen
+          last=None
+          for attempt in range(12):
+              try:
+                  req=Request(f'https://nasekadan.cz/data/published-content-index.json?radka-evidence={int(time.time())}-{attempt}',headers={'Cache-Control':'no-cache','User-Agent':'NaseKadan-evidence-check/1.0'})
+                  with urlopen(req,timeout=30) as response:
+                      data=json.loads(response.read().decode('utf-8'))
+                  publication=data.get('validation',{}).get('last_publication',{})
+                  if publication.get('status')!='success':
+                      raise RuntimeError('status publikace není success')
+                  if publication.get('classification')!='family_activity_service_change':
+                      raise RuntimeError('chybí klasifikace publikace')
+                  print('Finální registr je veřejně ověřen.')
+                  break
+              except Exception as exc:
+                  last=exc
+                  time.sleep(6)
+          else:
+              raise SystemExit(f'Finální registr nebyl ověřen: {last}')
+          PY
+          issue_url="$(gh issue create --title '[publish] RADKA kurzy a Corrency – success' --body "Článek byl zveřejněn, nasazen a veřejně ověřen.\n\n${ARTICLE_URL}\nObsahový commit: ${{ steps.build.outputs.content_sha }}\nEvidence: ${EVIDENCE_SHA}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat selhání publikace
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Publikace článku RADKA a Corrency' --body "Publikace nebo veřejná kontrola selhala.\n\nČlánek: ${ARTICLE_URL}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
