@@ -203,8 +203,19 @@ def audit_live(articles: list[dict], base: str) -> None:
             raise RuntimeError(f"Veřejný článek není bezpečně dostupný: {item['url']} (HTTP {code})")
 
 
+def normalize_generated_whitespace() -> None:
+    paths = [HOME, ARCHIVE] + sorted(ARTICLES_DIR.glob("strana-*.html"))
+    for path in paths:
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        normalized = "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
+        path.write_text(normalized, encoding="utf-8", newline="\n")
+
+
 def run_generator() -> None:
     subprocess.run([sys.executable, "scripts/enforce_article_visibility.py"], cwd=ROOT, check=True)
+    normalize_generated_whitespace()
 
 
 def main() -> int:
