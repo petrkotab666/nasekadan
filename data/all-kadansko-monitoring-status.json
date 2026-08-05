@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-05T06:36:50.289208+00:00",
+  "checkedAt": "2026-08-05T09:42:47.984397+00:00",
   "bootstrap": false,
   "sourceCount": 209,
-  "checkedSources": 195,
-  "failedSources": 14,
-  "itemsParsed": 17141,
-  "uniqueItems": 10926,
-  "newAlerts": 1,
+  "checkedSources": 190,
+  "failedSources": 19,
+  "itemsParsed": 16834,
+  "uniqueItems": 10759,
+  "newAlerts": 3,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 890,
+    "genericTitle": 873,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 21,
-    "notEditoriallySignificant": 57,
-    "notFreshOrUndated": 1,
-    "duplicate": 5325,
+    "broadWithoutLocalMatch": 30,
+    "notEditoriallySignificant": 78,
+    "notFreshOrUndated": 5,
+    "duplicate": 5202,
     "deferredByCap": 0
   },
   "coverage": {
@@ -313,8 +313,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 42
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -492,7 +493,7 @@
       "category": "Regionální kultura – Most",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 100
+      "itemsParsed": 99
     },
     {
       "name": "Let It Roll – akce",
@@ -591,7 +592,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 30
+      "itemsParsed": 29
     },
     {
       "name": "Povodí Ohře",
@@ -647,8 +648,9 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -665,7 +667,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 121
+      "itemsParsed": 119
     },
     {
       "name": "Chomutovský deník",
@@ -673,7 +675,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 270
+      "itemsParsed": 272
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -697,7 +699,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 27
+      "itemsParsed": 22
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -721,7 +723,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 11
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -808,8 +810,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 85
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -931,7 +934,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -955,7 +958,7 @@
       "category": "Okolní obce",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 157
+      "itemsParsed": 158
     },
     {
       "name": "Klášterec nad Ohří – městský web",
@@ -1004,7 +1007,7 @@
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 4
+      "itemsParsed": 5
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
@@ -1061,7 +1064,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 92
+      "itemsParsed": 93
     },
     {
       "name": "Chbany – oficiální web",
@@ -1229,7 +1232,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 171
+      "itemsParsed": 170
     },
     {
       "name": "Černovice u Chomutova – oficiální web",
@@ -1293,7 +1296,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 113
+      "itemsParsed": 116
     },
     {
       "name": "Hora Svatého Šebestiána – oficiální web",
@@ -1405,7 +1408,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 215
+      "itemsParsed": 216
     },
     {
       "name": "Karlovy Vary – oficiální web",
@@ -1596,8 +1599,9 @@
       "url": "https://www.slavnosticibule.cz/",
       "category": "major-recurring-event",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 5
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Slavnosti cibule Račetice – doplňkový zdroj 1",
@@ -1629,7 +1633,7 @@
       "category": "regional-calendar",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 67
+      "itemsParsed": 68
     },
     {
       "name": "Zámek Krásný Dvůr",
@@ -1661,7 +1665,7 @@
       "category": "culture",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 11
     },
     {
       "name": "Hasištejn",
@@ -1676,8 +1680,9 @@
       "url": "https://hornihrad.cz/",
       "category": "castle-events",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 176
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Dolní Poohří – regionální kalendář",
@@ -1701,7 +1706,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 37
+      "itemsParsed": 38
     },
     {
       "name": "Google News – široký region 3",
@@ -1709,7 +1714,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 12
     },
     {
       "name": "Google News – široký region 4",
@@ -1717,7 +1722,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 74
+      "itemsParsed": 76
     },
     {
       "name": "Google News – široký region 5",
@@ -1749,7 +1754,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 66
+      "itemsParsed": 64
     },
     {
       "name": "Google News – široký region 9",
@@ -1773,7 +1778,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 7
+      "itemsParsed": 8
     },
     {
       "name": "Google News – široký region 12",
@@ -1789,7 +1794,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 9
+      "itemsParsed": 11
     },
     {
       "name": "Google News – široký region 14",
