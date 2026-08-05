@@ -1,0 +1,71 @@
+name: Opravit mezery v generátoru chronologie
+
+"on":
+  push:
+    branches: [main]
+    paths:
+      - 'ops/trigger-fix-visibility-generator-whitespace-20260805.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: fix-visibility-generator-whitespace-20260805
+  cancel-in-progress: true
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit zdroj generátoru a ověřit idempotenci
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – oprava generátoru'
+          git config user.email 'info@nasekadan.cz'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 scripts/patch_visibility_generator_whitespace_20260805.py
+            python3 -m py_compile scripts/enforce_all_article_visibility.py
+            python3 scripts/enforce_all_article_visibility.py
+            git diff --check
+            git add scripts/enforce_all_article_visibility.py index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt
+            if ! git diff --cached --quiet; then
+              git commit -m 'Opravit trvale koncové mezery v generátoru chronologie'
+            fi
+            source_sha="$(git rev-parse HEAD)"
+            if git push origin HEAD:main; then
+              pushed=1
+              echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$pushed" = 1
+
+      - name: Zapsat úspěch
+        if: success()
+        shell: bash
+        run: |
+          issue_url="$(gh issue create --title '[repair] Generátor chronologie bez koncových mezer – success' --body "Centrální generátor titulky, archivu a sitemap byl doplněn o trvalou normalizaci. Opakované sestavení prošlo `git diff --check`.\n\nCommit: ${{ steps.source.outputs.source_sha }}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666)"
+          gh issue close "${issue_url##*/}" --reason completed
+
+      - name: Zapsat incident
+        if: failure()
+        shell: bash
+        run: |
+          gh issue create --title '[incident] Oprava generátoru chronologie a mezer' --body "Oprava zdroje nebo její test selhal.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --assignee petrkotab666 || true
