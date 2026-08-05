@@ -29,15 +29,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Nainstalovat síťový klient
-        run: python3 -m pip install --disable-pip-version-check requests
+      - name: Nainstalovat síťový klient a opravu JSON
+        run: python3 -m pip install --disable-pip-version-check requests json-repair
 
       - name: Projít úplný veřejný seznam projektů
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/probe_epp_pk_slavie_api_20260805.py
-          python3 scripts/probe_epp_pk_slavie_api_20260805.py
+          python3 -m py_compile scripts/probe_epp_pk_slavie_api_compact_20260805.py
+          python3 scripts/probe_epp_pk_slavie_api_compact_20260805.py
           test -s research/epp-pk-slavie-20260805/api-target-result.json
           test -s research/epp-pk-slavie-20260805/api-target-result.md
 
@@ -71,7 +71,7 @@ jobs:
           done
           test "$pushed" = 1
 
-      - name: Zapsat dokončení
+      - name: Uzavřít staré technické incidenty a zapsat dokončení
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,6 +79,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          for number in 711 712; do
+            gh issue comment "$number" --body "Kompaktní parser úspěšně dokončil kontrolu. Původní selhání bylo způsobeno pouze neplatným surrogate znakem při ukládání 69MB mezivýsledku." || true
+            gh issue close "$number" --reason completed || true
+          done
           issue_url="$(gh issue create \
             --title '[research] Veřejné API EPP – PK Slávie vyhodnoceno' \
             --body "Úplný veřejný seznam projektů a aktuální rozhraní EPP byly cíleně prohledány podle názvu klubu, města a plaveckých výrazů.\n\nVýsledek: research/epp-pk-slavie-20260805/api-target-result.md\nData: research/epp-pk-slavie-20260805/api-target-result.json\nCommit: ${RESULT_SHA}\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
@@ -92,6 +96,6 @@ jobs:
         shell: bash
         run: |
           gh issue create \
-            --title '[incident] Kontrola veřejného API EPP' \
-            --body "Cílená kontrola veřejných dat EPP nedoběhla.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --title '[incident] Kompaktní kontrola veřejného API EPP' \
+            --body "Kompaktní kontrola veřejných dat EPP nedoběhla.\n\nRun: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             --assignee petrkotab666 || true
