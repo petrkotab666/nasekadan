@@ -1,0 +1,36 @@
+name: Spustit publikaci článku o jezeře Most
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/jezero-most-publish-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: run-publish-jezero-most-20260805
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Publikovat, nasadit a veřejně ověřit
+        shell: bash
+        run: bash scripts/run_publish_jezero_most_20260805.sh
