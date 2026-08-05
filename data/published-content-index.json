@@ -1,6 +1,6 @@
 {
   "schema_version": "1.5",
-  "generated_at": "2026-08-05T17:05:47.250631+00:00",
+  "generated_at": "2026-08-05T17:37:07.239456+00:00",
   "canonical_source": "https://nasekadan.cz/",
   "repository": "petrkotab666/nasekadan",
   "source_commit": "d1992eb5c0c72667c1e312c11da8fa03d03fdf72",
@@ -61,16 +61,17 @@
     "news_sitemap_image_namespace_declared": true,
     "last_consistency_audit": {
       "status": "success",
-      "checked_at": "2026-08-05T17:05:47.250631+00:00",
+      "checked_at": "2026-08-05T17:37:07.239456+00:00",
       "article_count": 52,
       "homepage_count": 14,
-      "archive_count": 50,
+      "archive_count": 52,
       "archive_page_count": 5,
       "rss_count": 52,
       "news_sitemap_count": 10,
       "deployment_health": "ok",
       "verified_url": "https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html",
-      "source_commit": "22b4c46e34ca215e7e2f802deb2b42ecf8029853"
+      "source_commit": "22b4c46e34ca215e7e2f802deb2b42ecf8029853",
+      "metadata_consistent": true
     },
     "last_source_enrichment": {
       "status": "success",
@@ -167,6 +168,15 @@
         "health": true,
         "social_image": true
       }
+    },
+    "last_registry_metadata_repair": {
+      "status": "success",
+      "classification": "stale_nested_audit_counts_repaired",
+      "reason": "Vnořený záznam auditu uváděl 50 položek archivu, zatímco kanonická evidence již obsahovala 52 článků.",
+      "completed_at": "2026-08-05T17:37:07.239456+00:00",
+      "article_count": 52,
+      "archive_count": 52,
+      "rss_count": 52
     }
   },
   "articles": [
