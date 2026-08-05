@@ -49,6 +49,7 @@ jobs:
               scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
             python3 -m py_compile scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
             python3 scripts/enforce_all_article_visibility.py
+            sed -i 's/[[:space:]]\+$//' index.html sitemap.xml clanky/index.html clanky/strana-*.html
             git diff --check
 
             git add index.html clanky/index.html sitemap.xml
