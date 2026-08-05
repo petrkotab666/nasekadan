@@ -69,7 +69,7 @@ def prepare_article(now: datetime) -> bool:
         "dateModified": iso,
         "author": {"@type": "Organization", "name": "Naše Kadaň"},
         "publisher": {"@type": "Organization", "name": "Naše Kadaň"},
-        "image": "https://nasekadan.cz/assets/slovan-detail-20260724.jpg",
+        "image": "https://nasekadan.cz/social/slovan-druhy-pokus-e2e4356bbb.png",
         "mainEntityOfPage": "https://nasekadan.cz/clanky/slovan-druhy-pokus.html",
     }
     schema_tag = '<script type="application/ld+json">' + json.dumps(schema, ensure_ascii=False, separators=(",", ":")) + "</script>"
@@ -83,7 +83,7 @@ def update_home(now: datetime) -> bool:
     if ".article-card.slovan .visual" not in html:
         html = html.replace(
             ".article-card.service .visual{",
-            ".article-card.slovan .visual{background:linear-gradient(135deg,rgba(18,35,45,.18),rgba(159,38,38,.28)),url('/assets/slovan-detail-20260724.jpg') center/cover}\n"
+            ".article-card.slovan .visual{background:linear-gradient(135deg,rgba(18,35,45,.18),rgba(159,38,38,.28)),url('/social/slovan-druhy-pokus-e2e4356bbb.png') center/cover}\n"
             "    .article-card.service .visual{",
             1,
         )
@@ -92,7 +92,7 @@ def update_home(now: datetime) -> bool:
     aside_date = f"25. 7. 2026 v 20:42"
     hero = f'''  <section class="wrap hero" id="clanky">
     <article class="lead">
-      <div class="photo" style="background:linear-gradient(135deg,rgba(18,35,45,.20),rgba(159,38,38,.28)),url('/assets/slovan-detail-20260724.jpg') center/cover"><span>INVESTICE A BYDLENÍ</span><strong>SLOVAN</strong></div>
+      <div class="photo" style="background:linear-gradient(135deg,rgba(18,35,45,.20),rgba(159,38,38,.28)),url('/social/slovan-druhy-pokus-e2e4356bbb.png') center/cover"><span>INVESTICE A BYDLENÍ</span><strong>SLOVAN</strong></div>
       <div class="copy">
         <small>INVESTICE · BYDLENÍ · VEŘEJNÉ PENÍZE · {display}</small>
         <h1>Slovan podruhé: Kadaň chystá 48 bytů za 195 milionů</h1>
@@ -144,7 +144,7 @@ def update_archive(now: datetime) -> bool:
     if ".archive-item.slovan .archive-visual" not in html:
         html = html.replace(
             ".archive-item.service .archive-visual{",
-            ".archive-item.slovan .archive-visual{background:linear-gradient(135deg,rgba(18,35,45,.18),rgba(159,38,38,.28)),url('/assets/slovan-detail-20260724.jpg') center/cover}\n"
+            ".archive-item.slovan .archive-visual{background:linear-gradient(135deg,rgba(18,35,45,.18),rgba(159,38,38,.28)),url('/social/slovan-druhy-pokus-e2e4356bbb.png') center/cover}\n"
             "    .archive-item.service .archive-visual{",
             1,
         )
@@ -184,7 +184,7 @@ def update_rss(now: datetime) -> bool:
       <category>Bydlení</category>
       <category>Veřejné peníze</category>
       <category>Kadaň</category>
-      <szn:image><szn:url>https://nasekadan.cz/assets/slovan-detail-20260724.jpg</szn:url></szn:image>
+      <szn:image><szn:url>https://nasekadan.cz/social/slovan-druhy-pokus-e2e4356bbb.png</szn:url></szn:image>
       <geo:lat>50.3809</geo:lat>
       <geo:long>13.2660</geo:long>
     </item>
