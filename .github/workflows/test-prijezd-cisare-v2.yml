@@ -1,0 +1,36 @@
+name: Otestovat hru Příjezd císaře v2
+
+on:
+  pull_request:
+    paths:
+      - 'hry/prijezd-karla-iv/**'
+      - 'tests/prijezd-cisare-*.test.mjs'
+      - '.github/workflows/test-prijezd-cisare-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ověřit syntaxi rozhraní
+        run: node --check hry/prijezd-karla-iv/game.js
+      - name: Otestovat engine, vyvážení a pracovní stránku
+        run: node --test tests/prijezd-cisare-engine.test.mjs tests/prijezd-cisare-static.test.mjs
+      - name: Připravit neveřejný náhled hry
+        uses: actions/upload-artifact@v4
+        with:
+          name: prijezd-cisare-preview
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            hry/prijezd-karla-iv
+            style.css
+            footer.css

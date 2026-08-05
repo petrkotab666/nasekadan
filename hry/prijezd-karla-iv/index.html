@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Příjezd císaře: Kadaň 1367 – pracovní verze hry</title>
+  <meta name="description" content="Rozhodovací historická hra z Kadaně roku 1367. Připrav město na příjezd Karla IV. a udrž rovnováhu mezi obyvateli, zásobami, pořádkem, pokladnou a císařskou přízní.">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#36151a">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="./game.css?v=20260802-v3">
+  <link rel="stylesheet" href="/footer.css?v=20260726-event-hotfix-2">
+</head>
+<body class="game-page" data-game-version="3">
+  <a class="skip-link" href="#gameApp">Přeskočit na hru</a>
+  <div class="preview-ribbon" role="status">PRACOVNÍ VERZE · HRA NENÍ VEŘEJNĚ PUBLIKOVANÁ</div>
+
+  <header data-site-header="v1">
+    <div class="wrap head">
+      <a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a>
+      <nav aria-label="Hlavní navigace"><a href="/clanky/">Články</a><a href="/pruvodce/">Průvodce</a><a href="/zapojte-se/">Poslat tip</a></nav>
+    </div>
+  </header>
+
+  <main class="game-main">
+    <section class="game-hero" aria-labelledby="gameTitle">
+      <div class="game-hero__glow" aria-hidden="true"></div>
+      <div class="wrap game-hero__content">
+        <div>
+          <p class="game-kicker">INTERAKTIVNÍ HISTORIE · KADAŇ 1367</p>
+          <h1 id="gameTitle">Příjezd císaře</h1>
+          <p class="game-hero__lead">Karel IV. je na cestě. Osm rozhodnutí určí, zda Kadaň vstoupí do dějin jako sebevědomé královské město, nebo jako místo, které přípravy rozdělily.</p>
+          <div class="hero-features" aria-label="Hlavní vlastnosti hry">
+            <span>8 kapitol</span><span>16 scén</span><span>více konců</span><span>denní výzva</span>
+          </div>
+        </div>
+        <div class="hero-seal" aria-hidden="true"><span>1367</span><b>KADAŇ</b><small>KRÁLOVSKÉ MĚSTO</small></div>
+      </div>
+      <div class="city-scene" aria-hidden="true">
+        <span class="tower tower--one"></span><span class="roof roof--one"></span><span class="gate"></span><span class="roof roof--two"></span><span class="tower tower--two"></span>
+      </div>
+    </section>
+
+    <section class="wrap game-shell" aria-label="Herní plocha">
+      <div class="game-toolbar" aria-label="Nástroje hry">
+        <button type="button" class="tool-button" id="codexButton"><span aria-hidden="true">▤</span> Kronika <b id="codexCount">0/8</b></button>
+        <button type="button" class="tool-button" id="achievementsButton"><span aria-hidden="true">✦</span> Úspěchy <b id="achievementCount">0/9</b></button>
+        <button type="button" class="tool-button" id="settingsButton"><span aria-hidden="true">⚙</span> Nastavení</button>
+      </div>
+
+      <div class="game-layout">
+        <section class="game-card" id="gameApp" tabindex="-1">
+          <noscript><p class="no-script">Pro spuštění hry je potřeba povolit JavaScript.</p></noscript>
+
+          <section class="start-screen" id="startScreen">
+            <div class="start-heading">
+              <span class="chapter-label">TVÁ ROLE</span>
+              <h2>Jsi správce královského města</h2>
+              <p>Pět let po ničivém požáru se obnovená Kadaň chystá na návštěvu Karla IV. Jako správce města budeš rozhodovat, co dokončit, co zaplatit a koho požádat o pomoc. Neexistuje jediná správná cesta – nejvyšší skóre získáš rovnováhou.</p>
+            </div>
+
+            <div class="resume-card" id="resumeCard" hidden>
+              <div><span>ROZEHRANÁ PARTIE</span><strong id="resumeTitle">Kapitola 1 z 8</strong><small id="resumeMeta"></small></div>
+              <button type="button" class="game-button game-button--primary" id="resumeButton">Pokračovat</button>
+            </div>
+
+            <fieldset class="mode-picker">
+              <legend>Zvol režim</legend>
+              <label class="mode-option is-selected">
+                <input type="radio" name="mode" value="story" checked>
+                <span class="mode-option__icon" aria-hidden="true">⌛</span>
+                <span><b>Volná kronika</b><small>Pokaždé jiné varianty scén a událostí.</small></span>
+              </label>
+              <label class="mode-option">
+                <input type="radio" name="mode" value="daily">
+                <span class="mode-option__icon" aria-hidden="true">☀</span>
+                <span><b>Denní výzva</b><small>Stejná hra pro všechny po celý dnešní den.</small></span>
+              </label>
+            </fieldset>
+
+            <fieldset class="difficulty">
+              <legend>Zvol obtížnost</legend>
+              <label class="difficulty-option">
+                <input type="radio" name="difficulty" value="scribe">
+                <span class="difficulty-option__icon" aria-hidden="true">✒</span><span><b>Městský písař</b><small>Klidnější začátek a mírnější následky.</small></span>
+              </label>
+              <label class="difficulty-option is-selected">
+                <input type="radio" name="difficulty" value="burgrave" checked>
+                <span class="difficulty-option__icon" aria-hidden="true">⚔</span><span><b>Purkmistr</b><small>Vyvážená historická výzva.</small></span>
+              </label>
+              <label class="difficulty-option">
+                <input type="radio" name="difficulty" value="royal">
+                <span class="difficulty-option__icon" aria-hidden="true">♛</span><span><b>Královský správce</b><small>Málo prostředků a tvrdší následky.</small></span>
+              </label>
+            </fieldset>
+
+            <div class="start-actions">
+              <button type="button" class="game-button game-button--primary game-button--large" id="startButton">Zahájit přípravy</button>
+              <div class="start-progress"><p id="bestScore">Nejlepší výsledek: zatím žádný</p><p id="dailyStatus" class="daily-status">Denní výzva čeká.</p></div>
+            </div>
+          </section>
+
+          <section class="prologue-screen" id="prologueScreen" hidden aria-labelledby="prologueTitle">
+            <div class="prologue-heading">
+              <p class="chapter-label">PROLOG · KADAŇ, JARO 1367</p>
+              <h2 id="prologueTitle">Město povstává z popela</h2>
+              <p class="prologue-lead">Roku 1362 zachvátil Kadaň rozsáhlý požár. Vyhořelo město, hrad i předměstí. Během následujících pěti let vyrostla velká část centra znovu z kamene a zesílilo opevnění. Obnova však spotřebovala peníze, materiál i síly obyvatel.</p>
+            </div>
+
+            <div class="prologue-timeline" aria-label="Události před příjezdem císaře">
+              <article><time datetime="1362">1362</time><div><h3>Velký požár</h3><p>Oheň ničí město i hrad. Začíná rozsáhlá obnova.</p></div></article>
+              <article><time datetime="1366">1366</time><div><h3>Větší samostatnost</h3><p>Kadaň získává právo úplné samosprávy a o svých záležitostech rozhoduje svobodněji.</p></div></article>
+              <article class="is-current"><time datetime="1367">1367</time><div><h3>Císař je na cestě</h3><p>Posel oznamuje návštěvu Karla IV. Do příjezdu zbývá šest týdnů.</p></div></article>
+            </div>
+
+            <div class="prologue-mission">
+              <span>TVŮJ ÚKOL</span>
+              <h3>Dokončit obnovu a připravit město</h3>
+              <p><strong>Nezačínáš na spáleništi.</strong> Hlavní část města už znovu stojí, ale zbývají poškozené cesty, střechy, brány a veřejná místa. Musíš určit, co dostane přednost, jak zaplatit řemeslníky a kolik dalšího břemene unesou obyvatelé.</p>
+            </div>
+
+            <p class="prologue-disclaimer"><strong>Historický základ:</strong> Požár roku 1362 a Karlova návštěva roku 1367 jsou doložené. Tvá funkce, šestitýdenní odpočet a konkrétní rozhodnutí jsou přiznanou herní rekonstrukcí.</p>
+
+            <div class="prologue-actions">
+              <button type="button" class="game-button game-button--secondary" id="prologueBackButton">Změnit režim</button>
+              <button type="button" class="game-button game-button--primary game-button--large" id="prologueContinueButton">Převzít správu města</button>
+            </div>
+          </section>
+
+          <section class="play-screen" id="playScreen" hidden>
+            <div class="game-topbar">
+              <div class="progress-copy"><span id="chapterNumber">Kapitola 1 z 8</span><b id="chapterTitle">Obnova města</b></div>
+              <div class="progress-track" role="progressbar" aria-label="Průběh hry" aria-valuemin="0" aria-valuemax="8" aria-valuenow="0"><span id="progressBar"></span></div>
+            </div>
+
+            <div class="stats" id="stats" aria-label="Stav města"></div>
+
+            <article class="scene" aria-live="polite">
+              <div class="scene__illustration" id="sceneIllustration" aria-hidden="true"><span></span></div>
+              <div class="scene__body">
+                <p class="scene__eyebrow" id="sceneEyebrow"></p>
+                <h2 id="sceneTitle"></h2>
+                <p class="scene__text" id="sceneText"></p>
+                <div class="choices" id="choices" role="group" aria-label="Možnosti rozhodnutí"></div>
+                <div class="consequence" id="consequence" hidden>
+                  <p class="consequence__result" id="consequenceResult"></p>
+                  <div class="effect-list" id="effectList" aria-label="Změny ukazatelů"></div>
+                  <div class="event-card" id="eventCard" hidden>
+                    <span>NENADÁLÁ UDÁLOST</span><h3 id="eventTitle"></h3><p id="eventText"></p><div class="effect-list" id="eventEffects"></div>
+                  </div>
+                  <div class="history-note"><span>HISTORICKÁ STOPA ODEMČENA</span><p id="historyNote"></p></div>
+                  <button type="button" class="game-button game-button--primary" id="continueButton">Pokračovat</button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="result-screen" id="resultScreen" hidden aria-live="polite">
+            <p class="result-screen__kicker">KRONIKA JE UZAVŘENA</p>
+            <div class="result-medal" id="resultMedal" aria-hidden="true">♛</div>
+            <h2 id="resultTitle"></h2>
+            <p class="result-score"><strong id="resultScore">0</strong><span>bodů ze 100</span></p>
+            <p class="result-description" id="resultDescription"></p>
+            <div class="result-stats" id="resultStats"></div>
+            <section class="new-achievements" id="newAchievements" hidden><span>NOVĚ ODEMČENO</span><div id="newAchievementList"></div></section>
+            <details class="decision-summary"><summary>Prohlédnout všech osm rozhodnutí</summary><ol id="decisionList"></ol></details>
+            <div class="result-actions">
+              <button type="button" class="game-button game-button--primary" id="restartButton">Hrát znovu</button>
+              <button type="button" class="game-button game-button--secondary" id="shareButton">Sdílet výsledek</button>
+            </div>
+            <p class="share-status" id="shareStatus" aria-live="polite"></p>
+          </section>
+        </section>
+
+        <aside class="game-sidebar">
+          <div class="sidebar-card sidebar-card--parchment">
+            <p class="sidebar-label">JAK VYHRÁT</p>
+            <h2>Udrž město pohromadě</h2>
+            <ul>
+              <li>Každá kapitola nabízí tři volby.</li>
+              <li>Červený ukazatel znamená blížící se krizi.</li>
+              <li>Nejnižší ukazatel snižuje celkové skóre.</li>
+              <li>Klávesy <kbd>1</kbd>–<kbd>3</kbd> vybírají odpověď.</li>
+            </ul>
+          </div>
+          <div class="sidebar-card">
+            <p class="sidebar-label">PROČ HRÁT ZNOVU</p>
+            <h2>Jedna kronika nestačí</h2>
+            <p>Každá kapitola má dvě možné scény a průběh mění nenadálé události. Denní výzva je naopak po celý den stejná, takže lze porovnat vlastní pokusy.</p>
+          </div>
+          <div class="sidebar-card sidebar-card--compact privacy-card">
+            <p><strong>Bez registrace a bez osobních údajů.</strong> Rozehraná partie, skóre, kronika a úspěchy se ukládají pouze do tohoto prohlížeče.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="wrap game-after">
+      <div><p class="game-kicker">HISTORIE A HRA</p><h2>Skutečný základ, přiznaná rekonstrukce</h2><p>Karel IV. v Kadani roku 1367 skutečně pobýval a městu udělil privilegium osmidenního výročního trhu. Hra tuto stopu rozvíjí do rozhodovacích situací. Tam, kde nemáme přesný doklad, to historická poznámka výslovně říká.</p></div>
+    </section>
+  </main>
+
+  <dialog class="game-dialog" id="codexDialog" aria-labelledby="codexTitle">
+    <div class="dialog-head"><div><span>ODEMČENÉ STOPY</span><h2 id="codexTitle">Kadaňská kronika</h2></div><button type="button" class="dialog-close" data-close-dialog aria-label="Zavřít">×</button></div>
+    <div class="codex-list" id="codexList"></div>
+  </dialog>
+
+  <dialog class="game-dialog" id="achievementsDialog" aria-labelledby="achievementsTitle">
+    <div class="dialog-head"><div><span>TRVALÝ POSTUP</span><h2 id="achievementsTitle">Úspěchy správce</h2></div><button type="button" class="dialog-close" data-close-dialog aria-label="Zavřít">×</button></div>
+    <div class="achievement-list" id="achievementList"></div>
+  </dialog>
+
+  <dialog class="game-dialog settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+    <div class="dialog-head"><div><span>PŘIZPŮSOBENÍ</span><h2 id="settingsTitle">Nastavení hry</h2></div><button type="button" class="dialog-close" data-close-dialog aria-label="Zavřít">×</button></div>
+    <label class="setting-row"><span><b>Zvukové odezvy</b><small>Jemné tóny bez stahování zvukových souborů.</small></span><input type="checkbox" id="soundSetting"></label>
+    <label class="setting-row"><span><b>Větší text</b><small>Zvětší text scén a voleb.</small></span><input type="checkbox" id="largeTextSetting"></label>
+    <label class="setting-row"><span><b>Omezit pohyb</b><small>Vypne dekorativní animace.</small></span><input type="checkbox" id="motionSetting"></label>
+    <button type="button" class="danger-button" id="resetProgressButton">Smazat uloženou hru a úspěchy</button>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <footer class="site-footer" data-site-footer="v1">
+    <div class="wrap footer-grid">
+      <div class="footer-brand"><a class="logo" href="/"><span class="logo-mark">NK</span><span>NAŠE <b>KADAŇ</b></span></a><p>Nezávislé informace, události a příběhy města.</p></div>
+      <div class="footer-column"><strong>Obsah webu</strong><a href="/">Úvod</a><a href="/clanky/">Články</a><a href="/pruvodce/">Průvodce</a></div>
+      <div class="footer-column"><strong>Kontakt</strong><a href="/zapojte-se/">Poslat tip</a><a href="mailto:redakce@nasekadan.cz">redakce@nasekadan.cz</a></div>
+    </div>
+  </footer>
+
+  <script type="module" src="./prologue.js?v=20260802-v3"></script>
+  <script type="module" src="./game.js?v=20260802-v2"></script>
+</body>
+</html>
