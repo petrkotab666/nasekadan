@@ -15,7 +15,7 @@ MODULE = runpy.run_path(str(ROOT / "scripts" / "patch-active-promotions.py"))
 PROMOS = MODULE["PROMOS"]
 TOWERS = MODULE["TOWERS"]
 REPORT = ROOT / "data" / "active-promotions-validation.json"
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151 Safari/537.36 NaseKadanPromotionAudit/1.1"
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151 Safari/537.36 NaseKadanPromotionAudit/1.2"
 
 
 def is_tracker_url(raw_url: str) -> bool:
@@ -63,9 +63,26 @@ def svg_dimensions(path: Path) -> tuple[int, int] | None:
     return (int(match.group(1)), int(match.group(2))) if match else None
 
 
+def active_urls_from_resulting_js(js: str) -> list[str]:
+    match = re.search(r"/\* ACTIVE_PROMOTIONS_START \*/(.*?)/\* ACTIVE_PROMOTIONS_END \*/", js, re.S)
+    if not match:
+        raise ValueError("V reklamy.js chybí blok ACTIVE_PROMOTIONS")
+    urls = re.findall(r"\burl:'([^']+)'", match.group(1))
+    if not urls:
+        raise ValueError("V aktivním reklamním bloku nebyla nalezena žádná URL")
+    return list(dict.fromkeys(urls))
+
+
 def main() -> int:
     errors: list[str] = []
-    probes = [probe(url) for url in dict.fromkeys(item["url"] for item in PROMOS)]
+    js = (ROOT / "reklamy.js").read_text(encoding="utf-8")
+    try:
+        active_urls = active_urls_from_resulting_js(js)
+    except ValueError as exc:
+        active_urls = []
+        errors.append(str(exc))
+
+    probes = [probe(url) for url in active_urls]
     for row in probes:
         if not row["ok"]:
             errors.append(f"Nefunkční odkaz {row['url']} -> {row.get('status')} {row.get('finalUrl')}")
@@ -82,14 +99,21 @@ def main() -> int:
             if svg_dimensions(path) != (width, height):
                 errors.append(f"Špatný rozměr {path.relative_to(ROOT)}: {svg_dimensions(path)} místo {(width, height)}")
 
-    js = (ROOT / "reklamy.js").read_text(encoding="utf-8")
     if "function isPromoActive(item)" not in js:
         errors.append("reklamy.js neobsahuje kontrolu platnosti kampaně")
     for item in PROMOS:
         if f"id:{item['id']!r}" not in js:
             errors.append(f"reklamy.js neobsahuje {item['id']}")
 
-    report = {"promotions": len(PROMOS), "workingUrls": sum(row["ok"] for row in probes), "testedUrls": len(probes), "errors": errors, "probes": probes}
+    report = {
+        "schemaVersion": 2,
+        "source": "resulting-reklamy.js",
+        "promotions": len(PROMOS),
+        "workingUrls": sum(row["ok"] for row in probes),
+        "testedUrls": len(probes),
+        "errors": errors,
+        "probes": probes,
+    }
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: report[key] for key in ("promotions", "workingUrls", "testedUrls")}, ensure_ascii=False))
