@@ -1,0 +1,102 @@
+name: Oprava článku ESO market Rafanda a doplnění fotografií
+
+on:
+  push:
+    branches: [main, rafanda-photo-fix-20260806]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: rafanda-photo-fix-20260806
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/eso-market-rafanda-kadan-24-7.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sestavit a ověřit fotografie
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$GITHUB_WORKSPACE/.github/tmp/rafanda-photo-fix"
+          out="$RUNNER_TEMP/rafanda-built"
+          mkdir -p "$out/images/clanky/eso-market-rafanda" "$out/social"
+          cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp "$out/images/clanky/eso-market-rafanda/"
+          cat "$src"/navod.part* | base64 -d > "$out/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp"
+          cp images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp "$out/images/clanky/eso-market-rafanda/"
+          cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp "$out/social/eso-market-rafanda-kadan-24-7.webp"
+          cp "$ARTICLE" "$out/article.html"
+          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$out/article.html"
+          file "$out"/images/clanky/eso-market-rafanda/*.webp "$out"/social/*.webp | tee "$RUNNER_TEMP/file-types"
+          test "$(grep -c 'Web/P image' "$RUNNER_TEMP/file-types")" -eq 4
+          for f in "$out"/images/clanky/eso-market-rafanda/*.webp; do test "$(stat -c %s "$f")" -gt 10000; done
+
+      - name: Zapsat výsledné soubory do main
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/rafanda-built"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p images/clanky/eso-market-rafanda social
+          cp "$out/article.html" "$ARTICLE"
+          cp "$out/images/clanky/eso-market-rafanda/"*.webp images/clanky/eso-market-rafanda/
+          cp "$out/social/eso-market-rafanda-kadan-24-7.webp" social/
+          python3 scripts/article_visibility_guard.py
+          git rm -rf --ignore-unmatch .github/tmp/rafanda-photo-fix tmp/rafanda-candidates .github/workflows/rafanda-photo-fix.yml
+          git add -A "$ARTICLE" images/clanky/eso-market-rafanda social/eso-market-rafanda-kadan-24-7.webp data/article-integrity-manifest.json .github tmp
+          git commit -m "Opravit článek o ESO marketu a doplnit redakční fotografie"
+          git push origin HEAD:main
+          echo "final_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Spustit produkční nasazení
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.publish.outputs.final_sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run emergency-deploy-eso-market-push.yml --ref main
+          run_id=""
+          for attempt in $(seq 1 30); do
+            run_id="$(gh run list --workflow emergency-deploy-eso-market-push.yml --branch main --event workflow_dispatch --limit 20 --json databaseId,headSha | jq -r --arg sha "$FINAL_SHA" '.[] | select(.headSha == $sha) | .databaseId' | head -n 1)"
+            test -n "$run_id" && break
+            sleep 4
+          done
+          test -n "$run_id"
+          gh run watch "$run_id" --exit-status
+
+      - name: Veřejně ověřit článek a fotografie
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 15); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 45 "$ARTICLE_URL?v=$q" -o "$RUNNER_TEMP/live.html" || true
+            if grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$RUNNER_TEMP/live.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' "$RUNNER_TEMP/live.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' "$RUNNER_TEMP/live.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' "$RUNNER_TEMP/live.html"; then ok=1; break; fi
+            sleep $((attempt * 3))
+          done
+          test "$ok" = 1
+          for url in images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp; do
+            dest="$RUNNER_TEMP/$(basename "$url")"
+            curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/$url?v=$GITHUB_RUN_ID" -o "$dest"
+            file "$dest" | grep -Fq 'Web/P image'
+            test "$(stat -c %s "$dest")" -gt 10000
+          done

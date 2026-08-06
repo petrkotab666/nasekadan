@@ -1,0 +1,149 @@
+name: Oprava článku ESO market Rafanda a doplnění fotografií
+
+on:
+  push:
+    branches:
+      - rafanda-photo-fix-20260806
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: rafanda-photo-fix-20260806
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/eso-market-rafanda-kadan-24-7.html
+    steps:
+      - name: Načíst opravnou větev
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sestavit a ověřit skutečné fotografie
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$GITHUB_WORKSPACE/.github/tmp/rafanda-photo-fix"
+          out="$RUNNER_TEMP/rafanda-built"
+          mkdir -p "$out/images/clanky/eso-market-rafanda" "$out/social"
+
+          cat "$src"/prodejna.part* | base64 -d > "$out/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp"
+          cat "$src"/navod.part* | base64 -d > "$out/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp"
+          cat "$src"/terminal.part* | base64 -d > "$out/images/clanky/eso-market-rafanda/vstupni-terminal-24-7.webp"
+          cat "$src"/pravidla.part* | base64 -d > "$out/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp"
+          cat "$src"/og.part* | base64 -d > "$out/social/eso-market-rafanda-kadan-24-7.webp"
+          cp "$ARTICLE" "$out/article.html"
+
+          cat > "$RUNNER_TEMP/rafanda-checksums" <<'SUMS'
+          67c9e17614287fa00a035bd80a99ac364521e2aff75fc186f2ab01724a2f9418  images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp
+          6948da6b97214ab2bbfdcc1b52af9cbb5c14cacbdd8f47b7c2f350c87f5e5009  images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp
+          a9b582e568e6101ff3ca3d99d569de572244a7f62d9dab69c799a2b04e28d45e  images/clanky/eso-market-rafanda/vstupni-terminal-24-7.webp
+          7c00f8d86e020abf0d022c6e97471d13443a92ff2dca47f00be72abd9a510d43  images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp
+          0b6384860dff47a5aea5be68c6f372abb34a43df0ed1e3a6a3b269454fd578db  social/eso-market-rafanda-kadan-24-7.webp
+          a89661aabc2591849fa71181640f61d8a3f3935bb1281abce4866f1099dff4f8  article.html
+          SUMS
+          (cd "$out" && sha256sum -c "$RUNNER_TEMP/rafanda-checksums")
+          file "$out"/images/clanky/eso-market-rafanda/*.webp "$out"/social/*.webp | tee "$RUNNER_TEMP/rafanda-file-types"
+          test "$(grep -c 'Web/P image' "$RUNNER_TEMP/rafanda-file-types")" -eq 5
+
+      - name: Zapsat opravu nad nejnovější hlavní větev
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/rafanda-built"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          pushed=0
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git checkout -B rafanda-final origin/main
+
+            mkdir -p images/clanky/eso-market-rafanda social
+            cp "$out/article.html" "$ARTICLE"
+            cp "$out/images/clanky/eso-market-rafanda/"*.webp images/clanky/eso-market-rafanda/
+            cp "$out/social/eso-market-rafanda-kadan-24-7.webp" social/
+
+            python3 scripts/article_visibility_guard.py
+
+            git add "$ARTICLE" images/clanky/eso-market-rafanda social/eso-market-rafanda-kadan-24-7.webp data/article-integrity-manifest.json
+            test -n "$(git diff --cached --name-only)"
+            git commit -m "Opravit článek o ESO marketu a doplnit redakční fotografie"
+
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$pushed" = 1
+          final_sha="$(git rev-parse HEAD)"
+          echo "final_sha=$final_sha" >> "$GITHUB_OUTPUT"
+          echo "Oprava zapsána jako $final_sha"
+
+      - name: Spustit produkční nasazení
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINAL_SHA: ${{ steps.publish.outputs.final_sha }}
+        run: |
+          set -euo pipefail
+          gh workflow run emergency-deploy-eso-market-push.yml --ref main
+
+          run_id=""
+          for attempt in $(seq 1 30); do
+            run_id="$(gh run list --workflow emergency-deploy-eso-market-push.yml --branch main --event workflow_dispatch --limit 20 --json databaseId,headSha,createdAt | jq -r --arg sha "$FINAL_SHA" '.[] | select(.headSha == $sha) | .databaseId' | head -n 1)"
+            if test -n "$run_id"; then
+              break
+            fi
+            sleep 4
+          done
+          test -n "$run_id"
+          echo "Čekám na nasazení $run_id pro $FINAL_SHA"
+          gh run watch "$run_id" --exit-status
+
+      - name: Ověřit úplný článek a všech pět WebP souborů
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in $(seq 1 15); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 45 "$ARTICLE_URL?v=$q" -o "$RUNNER_TEMP/live-article.html" || true
+            if grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$RUNNER_TEMP/live-article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' "$RUNNER_TEMP/live-article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' "$RUNNER_TEMP/live-article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/vstupni-terminal-24-7.webp' "$RUNNER_TEMP/live-article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' "$RUNNER_TEMP/live-article.html"; then
+              ok=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          test "$ok" = 1
+
+          mkdir -p "$RUNNER_TEMP/live-images"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp?v=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-images/prodejna.webp"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp?v=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-images/navod.webp"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/images/clanky/eso-market-rafanda/vstupni-terminal-24-7.webp?v=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-images/terminal.webp"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp?v=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-images/pravidla.webp"
+          curl -4 -kfsS -L --max-time 45 "https://nasekadan.cz/social/eso-market-rafanda-kadan-24-7.webp?v=$GITHUB_RUN_ID" -o "$RUNNER_TEMP/live-images/og.webp"
+
+          cat > "$RUNNER_TEMP/live-checksums" <<'SUMS'
+          67c9e17614287fa00a035bd80a99ac364521e2aff75fc186f2ab01724a2f9418  prodejna.webp
+          6948da6b97214ab2bbfdcc1b52af9cbb5c14cacbdd8f47b7c2f350c87f5e5009  navod.webp
+          a9b582e568e6101ff3ca3d99d569de572244a7f62d9dab69c799a2b04e28d45e  terminal.webp
+          7c00f8d86e020abf0d022c6e97471d13443a92ff2dca47f00be72abd9a510d43  pravidla.webp
+          0b6384860dff47a5aea5be68c6f372abb34a43df0ed1e3a6a3b269454fd578db  og.webp
+          SUMS
+          (cd "$RUNNER_TEMP/live-images" && sha256sum -c "$RUNNER_TEMP/live-checksums")
+          file "$RUNNER_TEMP/live-images"/*.webp
