@@ -57,6 +57,7 @@ jobs:
           cd /opt/nasekadan
           git fetch --prune origin main
           git reset --hard origin/main
+          sudo find /opt/nasekadan -type d -name __pycache__ -prune -exec rm -rf {} +
           git clean -fd
           sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
 
