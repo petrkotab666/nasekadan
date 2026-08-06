@@ -32,12 +32,13 @@ jobs:
           chmod +x deploy/sync-production.sh
           sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh
 
-      - name: Potvrdit zdrojový commit a aktuální článek KTK
+      - name: Potvrdit zdrojový commit a aktualizaci jezera Most
         shell: bash
         run: |
           set -euo pipefail
           source_sha="$(git -C /opt/nasekadan rev-parse HEAD)"
-          article='/opt/nasekadan/clanky/vypadek-internetu-kadan-kradez-kabelu.html'
+          article='/opt/nasekadan/clanky/jezero-most-patrani-dva-lide-bourka-2026.html'
+          expected='Pátrání na jezeře Most má tragický vývoj. Policie našla tělo osmadvacetiletého muže'
           h1="$(python3 - "$article" <<'PY'
           from html import unescape
           from pathlib import Path
@@ -48,6 +49,7 @@ jobs:
           print(re.sub(r'\s+',' ',unescape(re.sub(r'<[^>]+>',' ',match.group(1)))).strip())
           PY
           )"
+          test "$h1" = "$expected"
           modified="$(python3 - "$article" <<'PY'
           from pathlib import Path
           import re, sys
@@ -59,8 +61,14 @@ jobs:
           )"
           stamp="${GITHUB_RUN_ID}-$(date +%s)"
           health="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/deployment-health.txt?manual=$stamp")"
-          live="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/clanky/vypadek-internetu-kadan-kradez-kabelu.html?manual=$stamp")"
+          live="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html?manual=$stamp")"
+          home="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/?manual=$stamp")"
+          archive="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/clanky/?manual=$stamp")"
+          rss="$(curl -kfsSL --max-time 25 "https://nasekadan.cz/rss.xml?manual=$stamp")"
           grep -Fq "source=$source_sha" <<<"$health"
-          grep -Fq "$h1" <<<"$live"
+          grep -Fq "$expected" <<<"$live"
           grep -Fq "$modified" <<<"$live"
-          echo 'Rychlé publikování a obnova i dynamická kontrola KTK prošly.'
+          grep -Fq "$expected" <<<"$home"
+          grep -Fq "$expected" <<<"$archive"
+          grep -Fq "$expected" <<<"$rss"
+          echo 'Rychlé publikování a obnova aktualizace jezera Most prošly.'
