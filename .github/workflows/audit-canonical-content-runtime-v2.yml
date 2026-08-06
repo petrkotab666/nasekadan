@@ -58,12 +58,8 @@ jobs:
           git fetch --prune origin main
           git reset --hard origin/main
           git clean -fd
-          chmod +x deploy/sync-production.sh
           sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
 
-          # Kanonický audit vyžaduje explicitní stav. Starší deploy skript
-          # zapisoval pouze source/mode, proto stav bezpečně doplníme do obou
-          # aktivních document rootů ještě před veřejnou kontrolou.
           if ! sudo grep -Fqx 'status=ok' /var/www/nasekadan/deployment-health.txt; then
             tmp="$(mktemp)"
             printf 'status=ok\n' > "$tmp"
