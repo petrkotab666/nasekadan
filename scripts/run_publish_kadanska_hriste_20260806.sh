@@ -13,7 +13,7 @@ if [[ "${GITHUB_EVENT_NAME:-}" == "schedule" && "$(date -u +%F)" != "2026-08-06"
 fi
 
 public_ok() {
-  local q article home archive rss sitemap news health registry
+  local q article home archive rss sitemap news health registry combined
   q="hriste-preflight-$(date +%s)"
   article="$(curl -4 -kfsS -L --max-time 25 "$ARTICLE_URL?v=$q" 2>/dev/null || true)"
   home="$(curl -4 -kfsS -L --max-time 25 "$BASE/?v=$q" 2>/dev/null || true)"
@@ -23,10 +23,17 @@ public_ok() {
   news="$(curl -4 -kfsS -L --max-time 25 "$BASE/news-sitemap.xml?v=$q" 2>/dev/null || true)"
   health="$(curl -4 -kfsS -L --max-time 25 "$BASE/deployment-health.txt?v=$q" 2>/dev/null || true)"
   registry="$(curl -4 -kfsS -L --max-time 25 "$BASE/data/published-content-index.json?v=$q" 2>/dev/null || true)"
+  combined="$article
+$home
+$archive
+$rss"
   grep -Fq "<h1>${EXPECTED_H1}</h1>" <<<"$article" &&
   grep -Fq '5.4 · Chomutovská u čp. 1229' <<<"$article" &&
   grep -Fq '953&nbsp;359 Kč včetně DPH' <<<"$article" &&
   grep -Fq 'VYSSPA Sports Technology' <<<"$article" &&
+  grep -Fq 'Přehled ukazuje, co se letos mění' <<<"$article" &&
+  grep -Fq '<h2>Zdroje</h2>' <<<"$article" &&
+  ! grep -Eiq 'fulltextové vyhledávání|bez textové vrstvy|naskenované objednávky|české OCR|způsob ověření' <<<"$combined" &&
   grep -Fq "$ARTICLE_REL" <<<"$home" && grep -Fq "$ARTICLE_REL" <<<"$archive" &&
   grep -Fq "$ARTICLE_URL" <<<"$rss" && grep -Fq "$ARTICLE_URL" <<<"$sitemap" &&
   grep -Fq "$ARTICLE_URL" <<<"$news" && grep -Fq 'status=ok' <<<"$health" &&
@@ -45,7 +52,7 @@ src=Path('scripts/run_publish_jezero_most_20260805.sh').read_text(encoding='utf-
 replacements={
 'jezero-most-patrani-dva-lide-bourka-2026':'jak-se-kadan-stara-o-hriste-2026',
 'publish_jezero_most_20260805.py':'publish_kadanska_hriste_20260806.py',
-'  python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py\n  python3 scripts/publish_kadanska_hriste_20260806.py':'  python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py scripts/enrich_kadanska_hriste_20260806.py\n  python3 scripts/publish_kadanska_hriste_20260806.py\n  python3 scripts/enrich_kadanska_hriste_20260806.py\n  python3 scripts/enforce_all_article_visibility.py',
+'  python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py\n  python3 scripts/publish_kadanska_hriste_20260806.py':'  python3 -m py_compile scripts/publish_kadanska_hriste_20260806.py scripts/enrich_kadanska_hriste_20260806.py\n  python3 scripts/publish_kadanska_hriste_20260806.py\n  python3 scripts/enrich_kadanska_hriste_20260806.py\n  python3 scripts/enforce_all_article_visibility.py\n  python3 scripts/enrich_kadanska_hriste_20260806.py',
 'Na jezeře Most pátrají po dvou lidech. Kvůli bouřce se neměli dostat na břeh':'Jak se Kadaň stará o svá hřiště? Nové prvky, opravy i velké rekonstrukce',
 'Proč zprávu přinášíme i v Kadani':'5.4 · Chomutovská u čp. 1229',
 'Výsledek pátrání nebyl v době vydání veřejně potvrzen':'953&nbsp;359 Kč včetně DPH',
@@ -59,14 +66,45 @@ replacements={
 }
 for old,new in replacements.items():
     src=src.replace(old,new)
+
+file_check = '''  grep -Fq '953&nbsp;359 Kč včetně DPH' "$ARTICLE_FILE"'''
+file_guard = '''  grep -Fq '953&nbsp;359 Kč včetně DPH' "$ARTICLE_FILE"
+  grep -Fq 'Přehled ukazuje, co se letos mění' "$ARTICLE_FILE"
+  grep -Fq '<h2>Zdroje</h2>' "$ARTICLE_FILE"
+  if grep -Eiq 'fulltextové vyhledávání|bez textové vrstvy|naskenované objednávky|české OCR|způsob ověření' "$ARTICLE_FILE" index.html clanky/index.html clanky/strana-*.html rss.xml llms.txt; then
+    echo 'Ve veřejných výstupech zůstal interní postup dohledávání.' >&2
+    exit 1
+  fi'''
+if file_check not in src:
+    raise SystemExit('Při sestavení běhu chybí místo pro kontrolu veřejného textu.')
+src=src.replace(file_check,file_guard,1)
+
+live_check = '''grep -Fq '953&nbsp;359 Kč včetně DPH' <<<"$article"'''
+live_guard = '''grep -Fq '953&nbsp;359 Kč včetně DPH' <<<"$article"
+grep -Fq 'Přehled ukazuje, co se letos mění' <<<"$article"
+grep -Fq '<h2>Zdroje</h2>' <<<"$article"
+if grep -Eiq 'fulltextové vyhledávání|bez textové vrstvy|naskenované objednávky|české OCR|způsob ověření' <<<"$article
+$home
+$archive
+$rss"; then
+  echo 'Veřejná kontrola našla interní postup dohledávání.' >&2
+  exit 1
+fi'''
+if live_check not in src:
+    raise SystemExit('Při sestavení běhu chybí místo pro živou kontrolu veřejného textu.')
+src=src.replace(live_check,live_guard,1)
+
 required=(
     'python3 scripts/enrich_kadanska_hriste_20260806.py',
     "grep -Fq '953&nbsp;359 Kč včetně DPH'",
+    "grep -Fq 'Přehled ukazuje, co se letos mění'",
     'jak-se-kadan-stara-o-hriste-2026',
 )
 for item in required:
     if item not in src:
         raise SystemExit(f'Při sestavení běhu chybí povinná pojistka: {item}')
+if src.count('python3 scripts/enrich_kadanska_hriste_20260806.py') < 2:
+    raise SystemExit('Sanitace veřejného textu musí proběhnout před i po obnově publikačních povrchů.')
 Path('/tmp/run-kadanska-hriste.sh').write_text(src,encoding='utf-8')
 PY
 chmod +x /tmp/run-kadanska-hriste.sh
