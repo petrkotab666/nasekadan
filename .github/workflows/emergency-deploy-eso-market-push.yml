@@ -1,0 +1,91 @@
+name: Přímé nouzové nasazení ESO marketu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/emergency-eso-market-push-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emergency-eso-market-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/eso-market-rafanda-kadan-24-7.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Přenést aktuální main na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$ARTICLE"
+          tar --exclude=.git --exclude=.github --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-emergency-eso.tgz
+
+      - name: Spustit produkční synchronizaci na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          work=/tmp/nasekadan-emergency-eso
+          rm -rf "$work"
+          mkdir -p "$work"
+          tar -xzf /tmp/nasekadan-emergency-eso.tgz -C "$work"
+          chmod +x "$work/deploy/sync-production.sh"
+          sudo env GITHUB_WORKSPACE="$work" bash "$work/deploy/sync-production.sh"
+          rm -rf "$work" /tmp/nasekadan-emergency-eso.tgz
+          REMOTE
+
+      - name: Veřejně ověřit článek a publikační výstupy
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" -o /tmp/home.html || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" -o /tmp/archive.html || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" -o /tmp/rss.xml || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" -o /tmp/sitemap.xml || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" -o /tmp/news.xml || true
+            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" -o /tmp/health.txt || true
+            if grep -Fq 'Na Rafandě se nakupuje nonstop' /tmp/article.html \
+              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/home.html \
+              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/archive.html \
+              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/rss.xml \
+              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/sitemap.xml \
+              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/news.xml \
+              && grep -Eiq '(^|[^a-z])ok([^a-z]|$)' /tmp/health.txt; then
+              ok=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$ok" = 1
