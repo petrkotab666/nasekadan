@@ -1,0 +1,224 @@
+name: Připravit serverovou pojistku publikace MP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/prepare-mp-server-timer-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: prepare-mp-server-timer-20260807
+  cancel-in-progress: false
+
+env:
+  SLUG: mestska-policie-kadan-fakta-diskuse-2026
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytvořit záložní publikační balík
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          python3 scripts/publish_mestska_policie_20260807.py
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=server-timer-mestska-policie-publication\n' \
+            "$ARTICLE_SOURCE_COMMIT" "$(date -u +%FT%TZ)" > deployment-health.txt
+          bundle="$RUNNER_TEMP/mp-timer-bundle"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/mp-publication-20260807.tgz" .
+          test "$(stat -c %s "$RUNNER_TEMP/mp-publication-20260807.tgz")" -gt 100000
+
+      - name: Připravit serverový publikační skript a systemd časovač
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/nasekadan-publish-mp-20260807.sh" <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          slug='mestska-policie-kadan-fakta-diskuse-2026'
+          article_url="https://nasekadan.cz/clanky/${slug}.html"
+          root='/var/www/nasekadan'
+          staged='/var/lib/nasekadan-scheduled/mp-20260807/publication.tgz'
+          lock='/var/lock/nasekadan-content.lock'
+          work=''
+          trap '[[ -n "${work:-}" ]] && rm -rf "$work"' EXIT
+
+          get() {
+            curl -4 -kfsS -L --max-time 35 -H 'Cache-Control: no-cache' "$1?verify=mp-timer-$(date +%s%N)" 2>/dev/null || true
+          }
+
+          public_complete() {
+            local article home archive rss sitemap news registry
+            article="$(get "$article_url")"
+            home="$(get 'https://nasekadan.cz/')"
+            archive="$(get 'https://nasekadan.cz/clanky/')"
+            rss="$(get 'https://nasekadan.cz/rss.xml')"
+            sitemap="$(get 'https://nasekadan.cz/sitemap.xml')"
+            news="$(get 'https://nasekadan.cz/news-sitemap.xml')"
+            registry="$(get 'https://nasekadan.cz/data/published-content-index.json')"
+            grep -Fq 'Bouřlivá debata přiměla redakci ověřit fakta' <<<"$article" \
+              && grep -Fq '1 886' <<<"$article" \
+              && grep -Fq '3 840' <<<"$article" \
+              && grep -Fq 'Obyvatelé popisují rychlé reakce hlídek' <<<"$article" \
+              && ! grep -Fiq 'noindex' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$slug.html\"" <<<"$home" \
+              && grep -Fq "$slug.html" <<<"$archive" \
+              && [[ "$(grep -o "$slug.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]] \
+              && [[ "$(grep -o "$slug.html" <<<"$sitemap" | wc -l | tr -d ' ')" == 1 ]] \
+              && [[ "$(grep -o "$slug.html" <<<"$news" | wc -l | tr -d ' ')" == 1 ]] \
+              && grep -Fq "$slug.html" <<<"$registry"
+          }
+
+          if public_complete; then
+            logger -t nasekadan-mp-publisher 'Článek je už veřejně kompletní; serverová pojistka nic nemění.'
+            exit 0
+          fi
+
+          bundle="$staged"
+          work="$(mktemp -d /tmp/nasekadan-mp-build.XXXXXX)"
+          repo="$work/repo"
+          live_bundle="$work/live-publication.tgz"
+
+          if git clone --depth 1 https://github.com/petrkotab666/nasekadan.git "$repo" >/dev/null 2>&1; then
+            if (
+              cd "$repo"
+              export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+              python3 scripts/publish_mestska_policie_20260807.py
+              printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=server-timer-mestska-policie-publication\n' \
+                "$ARTICLE_SOURCE_COMMIT" "$(date -u +%FT%TZ)" > deployment-health.txt
+              tar -czf "$live_bundle" index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky data
+            ); then
+              bundle="$live_bundle"
+            else
+              logger -t nasekadan-mp-publisher 'Sestavení z aktuálního GitHubu selhalo; používá se předem připravený balík.'
+            fi
+          else
+            logger -t nasekadan-mp-publisher 'GitHub nebyl při spuštění dostupný; používá se předem připravený balík.'
+          fi
+
+          test -s "$bundle"
+          sudo install -m 0666 /dev/null "$lock"
+          sudo install -d -m 0755 "$root" "$root/clanky" "$root/data"
+
+          for attempt in 1 2 3 4; do
+            stage="$(mktemp -d /tmp/nasekadan-mp-stage.XXXXXX)"
+            tar -xzf "$bundle" -C "$stage"
+            exec 9>"$lock"
+            flock -x 9
+            sudo cp -a "$stage"/. "$root"/
+            sudo chmod -R a+rX "$root"
+            if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+              sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
+              sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky data \
+                | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
+            fi
+            flock -u 9
+            rm -rf "$stage"
+            sleep $((attempt * 12))
+            if public_complete; then
+              logger -t nasekadan-mp-publisher "Článek byl publikován a veřejně ověřen na pokus $attempt."
+              exit 0
+            fi
+          done
+
+          logger -t nasekadan-mp-publisher 'Serverová pojistka nedokázala potvrdit úplnou veřejnou publikaci.'
+          exit 1
+          SCRIPT
+
+          cat > "$RUNNER_TEMP/nasekadan-publish-mp-20260807.service" <<'UNIT'
+          [Unit]
+          Description=Jednorázová pojistka publikace článku o Městské policii Kadaň
+          Wants=network-online.target docker.service
+          After=network-online.target docker.service
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/nasekadan-publish-mp-20260807.sh
+          TimeoutStartSec=20min
+          UNIT
+
+          cat > "$RUNNER_TEMP/nasekadan-publish-mp-20260807.timer" <<'UNIT'
+          [Unit]
+          Description=Časovač publikace článku o Městské policii Kadaň
+
+          [Timer]
+          OnCalendar=2026-08-07 02:00:10 UTC
+          OnCalendar=2026-08-07 02:05:00 UTC
+          OnCalendar=2026-08-07 02:15:00 UTC
+          OnCalendar=2026-08-07 02:30:00 UTC
+          AccuracySec=1s
+          RandomizedDelaySec=0
+          Persistent=true
+          Unit=nasekadan-publish-mp-20260807.service
+
+          [Install]
+          WantedBy=timers.target
+          UNIT
+          chmod +x "$RUNNER_TEMP/nasekadan-publish-mp-20260807.sh"
+
+      - name: Nahrát záložní balík a aktivovat serverový časovač
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          scp "${opts[@]}" \
+            "$RUNNER_TEMP/mp-publication-20260807.tgz" \
+            "$RUNNER_TEMP/nasekadan-publish-mp-20260807.sh" \
+            "$RUNNER_TEMP/nasekadan-publish-mp-20260807.service" \
+            "$RUNNER_TEMP/nasekadan-publish-mp-20260807.timer" \
+            ubuntu@57.129.43.215:/tmp/
+          ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo install -d -m 0755 /var/lib/nasekadan-scheduled/mp-20260807
+          sudo install -m 0644 /tmp/mp-publication-20260807.tgz /var/lib/nasekadan-scheduled/mp-20260807/publication.tgz
+          sudo install -m 0755 /tmp/nasekadan-publish-mp-20260807.sh /usr/local/sbin/nasekadan-publish-mp-20260807.sh
+          sudo install -m 0644 /tmp/nasekadan-publish-mp-20260807.service /etc/systemd/system/nasekadan-publish-mp-20260807.service
+          sudo install -m 0644 /tmp/nasekadan-publish-mp-20260807.timer /etc/systemd/system/nasekadan-publish-mp-20260807.timer
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now nasekadan-publish-mp-20260807.timer
+          sudo systemctl is-active --quiet nasekadan-publish-mp-20260807.timer
+          sudo systemctl list-timers --all nasekadan-publish-mp-20260807.timer --no-pager
+          rm -f /tmp/mp-publication-20260807.tgz /tmp/nasekadan-publish-mp-20260807.sh \
+            /tmp/nasekadan-publish-mp-20260807.service /tmp/nasekadan-publish-mp-20260807.timer
+          REMOTE
+
+      - name: Založit incident při selhání přípravy
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='[incident] Serverová pojistka publikace MP nebyla připravena'
+          body="Instalace serverového časovače selhala. Hlavní opakovaný GitHub workflow zůstává aktivní. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then gh issue comment "$issue" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
