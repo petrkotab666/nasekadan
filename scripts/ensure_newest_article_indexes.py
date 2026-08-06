@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Opraví zařazení nejnovějších schválených článků do veřejných přehledů.
+"""Opraví zařazení historického článku ePetice ve staré šabloně.
 
-Skript je idempotentní. Slouží jako pojistka proti situaci, kdy vznikne článek,
-ale následný automat přepíše titulní stránku, archiv nebo RSS starší verzí.
-Výslovně stažené či neschválené články sem nepatří; o jejich odstranění se stará
-scripts/remove_unpublished_articles.py.
+Současný web používá automaticky generovanou titulku, stránkovaný archiv a vlastní
+JSON-LD ItemList. V tomto režimu skript nesmí vracet starý článek na titulku ani
+na první stranu archivu; moderní přehledy spravují obecné publikační generátory.
+Podpora staré šablony zůstává zachována pro případ obnovy staršího snapshotu.
 """
 
 from __future__ import annotations
@@ -80,8 +80,18 @@ def write_if_changed(path: Path, text: str) -> bool:
     return True
 
 
+def modern_home(text: str) -> bool:
+    return "data-auto-article=" in text
+
+
+def modern_archive(text: str) -> bool:
+    return 'data-nk-archive-schema="1"' in text or "article-pagination" in text
+
+
 def ensure_home() -> bool:
     text = read(HOME)
+    if modern_home(text):
+        return False
     article_section = text.split('<div class="article-list">', 1)
     if len(article_section) != 2:
         raise RuntimeError("Na titulní stránce chybí seznam článků.")
@@ -95,12 +105,43 @@ def ensure_home() -> bool:
 
 
 def update_archive_jsonld(text: str) -> str:
-    match = re.search(r'<script type="application/ld\+json">\s*(\{.*?\})\s*</script>', text, re.S)
-    if not match:
+    # Moderní archiv má samostatný top-level ItemList v označeném skriptu a je
+    # generován ze všech článků. Historická pojistka jej nesmí ručně přepisovat.
+    if modern_archive(text):
+        return text
+
+    scripts = list(
+        re.finditer(
+            r'<script\b([^>]*)type=["\']application/ld\+json["\']([^>]*)>\s*(.*?)\s*</script>',
+            text,
+            re.I | re.S,
+        )
+    )
+    if not scripts:
         raise RuntimeError("Archiv neobsahuje JSON-LD.")
-    data = json.loads(match.group(1))
-    itemlist = next((item for item in data.get("@graph", []) if item.get("@type") == "ItemList"), None)
-    if itemlist is None:
+
+    selected = None
+    data = None
+    itemlist = None
+    for candidate in scripts:
+        try:
+            parsed = json.loads(candidate.group(3))
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and parsed.get("@type") == "ItemList":
+            selected, data, itemlist = candidate, parsed, parsed
+            break
+        if isinstance(parsed, dict):
+            graph = parsed.get("@graph")
+            if isinstance(graph, list):
+                found = next(
+                    (node for node in graph if isinstance(node, dict) and node.get("@type") == "ItemList"),
+                    None,
+                )
+                if found is not None:
+                    selected, data, itemlist = candidate, parsed, found
+                    break
+    if selected is None or data is None or itemlist is None:
         raise RuntimeError("V JSON-LD archivu chybí ItemList.")
 
     elements = [item for item in itemlist.get("itemListElement", []) if item.get("url") != EPETICE_URL]
@@ -116,12 +157,16 @@ def update_archive_jsonld(text: str) -> str:
     itemlist["itemListElement"] = elements
     itemlist["numberOfItems"] = len(elements)
 
-    replacement = '<script type="application/ld+json">' + json.dumps(data, ensure_ascii=False, indent=2) + "</script>"
-    return text[: match.start()] + replacement + text[match.end() :]
+    attrs = (selected.group(1) + selected.group(2)).strip()
+    prefix = f"<script {attrs} type=\"application/ld+json\">" if attrs else '<script type="application/ld+json">'
+    replacement = prefix + json.dumps(data, ensure_ascii=False, indent=2) + "</script>"
+    return text[: selected.start()] + replacement + text[selected.end() :]
 
 
 def ensure_archive() -> bool:
     text = read(ARCHIVE)
+    if modern_archive(text):
+        return False
     text = update_archive_jsonld(text)
     if EPETICE_PATH not in text.split('<section class="archive-list"', 1)[-1]:
         marker = "    <!-- WEEKLY-EVENTS-END -->"
@@ -161,11 +206,7 @@ def ensure_sitemap() -> bool:
 
 
 def enforce_current_articles() -> None:
-    """Zařadí všechny dnešní schválené články a srovná jejich pořadí.
-
-    Tento krok je součástí stejné pojistky, aby nový článek nemohl existovat jako
-    veřejný HTML soubor a současně chybět na titulce, v archivu nebo RSS.
-    """
+    """Zařadí všechny aktuální schválené články a srovná jejich pořadí."""
     script = ROOT / "scripts" / "enforce_current_article_order.py"
     required = ROOT / "clanky" / "kolobezky-hriste-detektor-kovu-kadan.html"
     if required.is_file() and script.is_file():
