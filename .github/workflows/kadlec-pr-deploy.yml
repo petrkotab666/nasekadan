@@ -20,7 +20,7 @@ jobs:
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       SLUG: apolena-svabikova-mistrovstvi-evropy-birmingham-2026
-      CONTENT_SHA: 739cce60514ead17d8f753240ba5cc9fbeb37616
+      CONTENT_SHA: 0c5b6725b2e49ee560f7154f4a89a16c6fd686df
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +35,7 @@ jobs:
           test -f "clanky/$SLUG.html"
           test -f "social/$SLUG.png"
           grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' "clanky/$SLUG.html"
+          grep -Fq 'Amálie Švábíková naopak v Birminghamu startovat nebude' "clanky/$SLUG.html"
           grep -Fq "$SLUG.html" index.html
           grep -Fq "$SLUG.html" clanky/index.html
           grep -Fq "$SLUG.html" rss.xml
@@ -111,6 +112,7 @@ jobs:
             health="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/deployment-health.txt?verify=$stamp" || true)"
             image_bytes="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/social/$SLUG.png?verify=$stamp" | wc -c | tr -d ' ' || true)"
             if grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' <<<"$article" \
+              && grep -Fq 'Amálie Švábíková naopak v Birminghamu startovat nebude' <<<"$article" \
               && grep -Fq '4,51' <<<"$article" \
               && grep -Fq '20:05' <<<"$article" \
               && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
