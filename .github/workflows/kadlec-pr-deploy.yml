@@ -1,4 +1,4 @@
-name: Okamžitě nasadit článek Martina Kadlece
+name: Okamžitě nasadit článek o Apoleně Švábíkové
 
 on:
   pull_request_target:
@@ -10,59 +10,121 @@ permissions:
   contents: read
 
 concurrency:
-  group: kadlec-pr-deploy
-  cancel-in-progress: true
+  group: apolena-pr-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SLUG: apolena-svabikova-mistrovstvi-evropy-birmingham-2026
+      CONTENT_SHA: 739cce60514ead17d8f753240ba5cc9fbeb37616
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          fetch-depth: 1
 
-      - name: Nahrát hotové soubory přímo na OVH
+      - name: Ověřit připravené zdrojové soubory
         shell: bash
         run: |
           set -euo pipefail
           test -n "$SSH_KEY"
-          test -f clanky/martin-kadlec-navrat-hokej-kadan-2026.html
-          grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' index.html
-          grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' clanky/index.html
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
-          chmod 600 "$RUNNER_TEMP/key"
-          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
-            index.html clanky/index.html clanky/martin-kadlec-navrat-hokej-kadan-2026.html \
-            rss.xml sitemap.xml news-sitemap.xml ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo install -d -m 0755 /var/www/nasekadan/clanky
-          sudo install -m 0644 /tmp/index.html /var/www/nasekadan/index.html
-          sudo install -m 0644 /tmp/martin-kadlec-navrat-hokej-kadan-2026.html /var/www/nasekadan/clanky/
-          sudo install -m 0644 /tmp/rss.xml /tmp/sitemap.xml /tmp/news-sitemap.xml /var/www/nasekadan/
-          # scp zploští oba indexy pod stejným názvem; archiv proto vezmeme přímo z main na serveru
-          cd /opt/nasekadan
-          git fetch --prune origin main
-          git reset --hard origin/main
-          sudo install -m 0644 clanky/index.html /var/www/nasekadan/clanky/index.html
-          REMOTE
+          test -f "clanky/$SLUG.html"
+          test -f "social/$SLUG.png"
+          grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' "clanky/$SLUG.html"
+          grep -Fq "$SLUG.html" index.html
+          grep -Fq "$SLUG.html" clanky/index.html
+          grep -Fq "$SLUG.html" rss.xml
+          grep -Fq "$SLUG.html" sitemap.xml
+          grep -Fq "$SLUG.html" news-sitemap.xml
+          grep -Fq "source=$CONTENT_SHA" deployment-health.txt
 
-      - name: Ověřit živý web bez cache
+      - name: Připravit klíč a malý publikační balík
         shell: bash
         run: |
           set -euo pipefail
-          stamp="${GITHUB_RUN_ID}-$(date +%s)"
-          for n in $(seq 1 20); do
-            page="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/martin-kadlec-navrat-hokej-kadan-2026.html?verify=$stamp-$n" || true)"
-            home="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/?verify=$stamp-$n" || true)"
-            archive="$(curl -4 -kfsS --max-time 20 "https://nasekadan.cz/clanky/?verify=$stamp-$n" || true)"
-            if grep -Fq 'Martin Kadlec po deseti letech' <<<"$page" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$home" && grep -Fq 'martin-kadlec-navrat-hokej-kadan-2026.html' <<<"$archive"; then
-              echo 'Článek je živý na stránce, titulce i v archivu.'
-              exit 0
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          bundle="$RUNNER_TEMP/apolena"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp "clanky/$SLUG.html" clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp "social/$SLUG.png" "$bundle/social/"
+
+      - name: Uvolnit bezpečně dočasné soubory na serveru
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo rm -rf /tmp/article-order* /tmp/eso-direct* /tmp/eso-market* /tmp/apolena* /tmp/nasekadan-deploy* 2>/dev/null || true
+          avail=$(df -Pk / | awk 'NR==2 {print $4}')
+          if [ "${avail:-0}" -lt 102400 ]; then
+            sudo docker builder prune -af >/dev/null 2>&1 || true
+            sudo journalctl --vacuum-size=100M >/dev/null 2>&1 || true
+          fi
+          sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social
+          REMOTE
+
+      - name: Nasadit proudově bez zápisu archivu do tmp
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/apolena"
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo tar -xzf - -C "$root"
+          sudo chmod -R a+rX "$root"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+              sudo docker cp "$root/$f" "nasekadan-web:/usr/share/nginx/html/$f"
+            done
+            sudo docker cp "$root/clanky/apolena-svabikova-mistrovstvi-evropy-birmingham-2026.html" nasekadan-web:/usr/share/nginx/html/clanky/apolena-svabikova-mistrovstvi-evropy-birmingham-2026.html
+            sudo docker cp "$root/clanky/index.html" nasekadan-web:/usr/share/nginx/html/clanky/index.html
+            for f in "$root"/clanky/strana-*.html; do
+              [ -e "$f" ] || continue
+              sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")"
+            done
+            sudo docker cp "$root/social/apolena-svabikova-mistrovstvi-evropy-birmingham-2026.png" nasekadan-web:/usr/share/nginx/html/social/apolena-svabikova-mistrovstvi-evropy-birmingham-2026.png
+          fi
+          REMOTE
+
+      - name: Ověřit živý článek a všechny veřejné kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for n in $(seq 1 15); do
+            stamp="${GITHUB_RUN_ID}-$(date +%s)-$n"
+            article="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/clanky/$SLUG.html?verify=$stamp" || true)"
+            home="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/?verify=$stamp" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/clanky/?verify=$stamp" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/rss.xml?verify=$stamp" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/sitemap.xml?verify=$stamp" || true)"
+            news="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/news-sitemap.xml?verify=$stamp" || true)"
+            health="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/deployment-health.txt?verify=$stamp" || true)"
+            image_bytes="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/social/$SLUG.png?verify=$stamp" | wc -c | tr -d ' ' || true)"
+            if grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' <<<"$article" \
+              && grep -Fq '4,51' <<<"$article" \
+              && grep -Fq '20:05' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+              && grep -Fq "$SLUG.html" <<<"$archive" \
+              && grep -Fq "$SLUG.html" <<<"$rss" \
+              && grep -Fq "$SLUG.html" <<<"$sitemap" \
+              && grep -Fq "$SLUG.html" <<<"$news" \
+              && grep -Fq "source=$CONTENT_SHA" <<<"$health" \
+              && grep -Fq 'mode=direct-apolena-publication' <<<"$health" \
+              && [ "${image_bytes:-0}" -gt 20000 ]; then
+              success=1
+              break
             fi
-            sleep 4
+            sleep $((n * 3))
           done
-          exit 1
+          [ "$success" = 1 ]
+          echo 'Článek Apoleny Švábíkové je veřejně ověřen na všech publikačních površích.'
