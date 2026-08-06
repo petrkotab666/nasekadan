@@ -24,13 +24,12 @@ jobs:
       ARTICLE_PATH: clanky/jak-se-kadan-stara-o-hriste-2026.html
       ARTICLE_URL: https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html
     steps:
-      - name: Stáhnout aktuální main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit ověřené údaje o Rafandě
+      - name: Doplnit psí hřiště
         shell: bash
         run: |
           set -euo pipefail
@@ -42,91 +41,78 @@ jobs:
 
           path = Path('clanky/jak-se-kadan-stara-o-hriste-2026.html')
           text = path.read_text(encoding='utf-8')
+          text = re.sub(r'<meta property="article:modified_time" content="[^"]+">', '<meta property="article:modified_time" content="2026-08-06T08:10:00+02:00">', text, count=1)
+          text = re.sub(r'"dateModified":"[^"]+"', '"dateModified":"2026-08-06T08:10:00+02:00"', text, count=1)
+          text = re.sub(r'AKTUALIZOVÁNO \d{1,2}:\d{2}', 'AKTUALIZOVÁNO 8:10', text, count=1)
 
-          text = re.sub(
-              r'<meta property="article:modified_time" content="[^"]+">',
-              '<meta property="article:modified_time" content="2026-08-06T08:00:00+02:00">',
-              text,
-              count=1,
-          )
-          text = re.sub(
-              r'"dateModified":"[^"]+"',
-              '"dateModified":"2026-08-06T08:00:00+02:00"',
-              text,
-              count=1,
-          )
-          text = re.sub(r'AKTUALIZOVÁNO \d{1,2}:\d{2}', 'AKTUALIZOVÁNO 8:00', text, count=1)
+          anchor = '''<div class="place"><h3>Workout, Lanáček a dopravní hřiště</h3><p>Oficiální městský přehled uvádí dvě workoutová místa: za sportovní halou a v Rooseveltových sadech. V sadech město v roce 2025 objednalo pryžové plochy pod fitness prvky za 43 056 Kč bez DPH. Síť doplňuje bezplatný Lanáček u ZŠ Na Podlesí a dopravní hřiště pro kola, koloběžky a in-line brusle.</p></div>
+          </div>'''
+          replacement = '''<div class="place"><h3>Workout, Lanáček a dopravní hřiště</h3><p>Oficiální městský přehled uvádí dvě workoutová místa: za sportovní halou a v Rooseveltových sadech. V sadech město v roce 2025 objednalo pryžové plochy pod fitness prvky za 43 056 Kč bez DPH. Síť doplňuje bezplatný Lanáček u ZŠ Na Podlesí a dopravní hřiště pro kola, koloběžky a in-line brusle.</p></div>
+          <div class="place"><h3>První psí hřiště</h3><p>Kadaň otevřela své první psí hřiště 28. května 2024 nedaleko autobusového nádraží. Smluvně doložený sponzorský příspěvek společnosti Nestlé Česko v rámci projektu Purina činil 239 459 Kč včetně DPH. Psí hřiště je samostatnou volnočasovou plochou a nezapočítáváme ho do městského údaje o 69 dětských hřištích a sportovištích.</p></div>
+          </div>'''
+          if anchor in text:
+              text = text.replace(anchor, replacement, 1)
+          elif '<h3>První psí hřiště</h3>' not in text:
+              raise SystemExit('Nenalezeno bezpečné místo pro psí hřiště.')
 
-          old = '<p>Investiční plán města uvádí také přípravu softballového hřiště a technické zázemí sportoviště Tatran. Samostatně se připravuje rekonstrukce hřiště na Rafandě. Veřejné smluvní podklady ukazují práci na projektové dokumentaci, ale pro úplný a aktuální popis rozsahu bude potřeba finální projekt a stavební povolení.</p>'
-          new = '''<p>Investiční plán města uvádí také přípravu softballového hřiště a technické zázemí sportoviště Tatran.</p>
-          <h3>Rafanda: projektová dokumentace má více navázaných záznamů</h3>
-          <p><strong>Původní smlouva s ISONOE INVEST na projektovou dokumentaci rekonstrukce hřiště Rafanda byla uzavřena 8. listopadu 2024 za 692&nbsp;000 Kč bez DPH, tedy 837&nbsp;320 Kč včetně DPH.</strong> Registr smluv obsahuje také navázaný záznam uzavřený 25. dubna 2025 za 278&nbsp;400 Kč bez DPH, tedy 336&nbsp;864 Kč včetně DPH. Protože zveřejněná metadata sama nevysvětlují, zda jde o rozšíření, nahrazení části původního plnění nebo jinou smluvní úpravu, částky zatím nesčítáme jako konečnou cenu dokumentace. Pro přesný popis rozsahu i ceny je potřeba úplné znění navazujícího dokumentu, finální projekt a povolení stavby.</p>'''
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif 'Rafanda: projektová dokumentace má více navázaných záznamů' not in text:
-              raise SystemExit('Nenalezen očekávaný odstavec o Rafandě.')
-
-          anchor = '<li><a href="https://smlouvy.gov.cz/smlouva/38419402">Registr smluv: novostavba padelových kurtů v Kadani, kurt č. 1 v tenisovém areálu</a></li>\n'
-          sources = '''<li><a href="https://smlouvy.gov.cz/smlouva/30927420">Registr smluv: projektová dokumentace rekonstrukce hřiště Rafanda, 692 000 Kč bez DPH</a></li>
-          <li><a href="https://smlouvy.gov.cz/smlouva/33037396">Registr smluv: navázaný záznam k dokumentaci hřiště Rafanda, 278 400 Kč bez DPH</a></li>
+          source_anchor = '<li><a href="https://www.prodiscgolf.cz/magazin/2026/03/11/jak-discgolf-vdechl-kadanskemu-lesoparku-zivot/">ProDiscgolf: rozhovor s pracovníkem města o vzniku a rozšíření hřiště</a></li>\n'
+          source_lines = '''<li>Registr smluv: sponzorský finanční příspěvek Nestlé Česko na vybudování psího hřiště v Kadani, 239 459 Kč včetně DPH, zveřejněno 28. března 2024.</li>
+          <li>Chomutovský deník: Kadaň otevřela první psí hřiště 28. května 2024 nedaleko autobusového nádraží.</li>
           '''
-          if 'smlouva/33037396' not in text:
-              if text.count(anchor) != 1:
-                  raise SystemExit('Nelze bezpečně doplnit zdroje k Rafandě.')
-              text = text.replace(anchor, sources + anchor, 1)
+          if 'sponzorský finanční příspěvek Nestlé Česko na vybudování psího hřiště' not in text:
+              if text.count(source_anchor) != 1:
+                  raise SystemExit('Nelze doplnit zdroje k psímu hřišti.')
+              text = text.replace(source_anchor, source_lines + source_anchor, 1)
 
           required = (
-              'AKTUALIZOVÁNO 8:00',
+              'AKTUALIZOVÁNO 8:10',
               'Rafanda: projektová dokumentace má více navázaných záznamů',
-              '692&nbsp;000 Kč bez DPH',
-              '278&nbsp;400 Kč bez DPH',
+              '<h3>První psí hřiště</h3>',
+              '239 459 Kč včetně DPH',
               'Ultimo Wave za 175&nbsp;087 Kč včetně DPH',
               'Součet činí 1 702 503,54 Kč včetně DPH.',
               'Ve dvou doložených lokalitách je 21 košů',
           )
           for item in required:
               if item not in text:
-                  raise SystemExit(f'V článku chybí povinný údaj: {item}')
+                  raise SystemExit(f'Chybí povinný údaj: {item}')
           if text.count('<tr><td>5.20</td>') != 1:
-              raise SystemExit('Řádek hřiště 5.20 není právě jednou.')
-
+              raise SystemExit('Řádek 5.20 není právě jednou.')
           path.write_text(text, encoding='utf-8', newline='\n')
           PY
 
-      - name: Uložit doplnění do main
+      - name: Uložit článek do main
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň – ověřené doplnění'
           git config user.email 'info@nasekadan.cz'
-          if git diff --quiet -- "$ARTICLE_PATH"; then
-            exit 0
+          if ! git diff --quiet -- "$ARTICLE_PATH"; then
+            git add "$ARTICLE_PATH"
+            git commit -m 'Doplnit první psí hřiště do přehledu sportovišť'
+            for attempt in 1 2 3 4 5; do
+              if git push origin HEAD:main; then break; fi
+              git fetch origin main
+              git rebase origin/main
+              sleep $((attempt * 3))
+              test "$attempt" -lt 5
+            done
           fi
-          git add "$ARTICLE_PATH"
-          git commit -m 'Doplnit smluvní údaje k hřišti Rafanda'
-          for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then exit 0; fi
-            git fetch origin main
-            git rebase origin/main
-            sleep $((attempt * 3))
-          done
-          exit 1
 
-      - name: Načíst nejnovější článek a ověřit zdroj
+      - name: Načíst a zkontrolovat nejnovější zdroj
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          grep -Fq 'AKTUALIZOVÁNO 8:00' "$ARTICLE_PATH"
+          grep -Fq 'AKTUALIZOVÁNO 8:10' "$ARTICLE_PATH"
           grep -Fq 'Rafanda: projektová dokumentace má více navázaných záznamů' "$ARTICLE_PATH"
-          grep -Fq '692&nbsp;000 Kč bez DPH' "$ARTICLE_PATH"
-          grep -Fq '278&nbsp;400 Kč bez DPH' "$ARTICLE_PATH"
+          grep -Fq '<h3>První psí hřiště</h3>' "$ARTICLE_PATH"
           grep -Fq 'Ultimo Wave za 175&nbsp;087 Kč včetně DPH' "$ARTICLE_PATH"
           grep -Fq 'Součet činí 1 702 503,54 Kč včetně DPH.' "$ARTICLE_PATH"
           test "$(grep -Fo '<tr><td>5.20</td>' "$ARTICLE_PATH" | wc -l | tr -d ' ')" = "1"
 
-      - name: Nasadit článek přímo na OVH
+      - name: Nasadit článek na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -140,10 +126,9 @@ jobs:
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           src=/tmp/nasekadan-playgrounds-hotfix
-          root=/var/www/nasekadan
           file=jak-se-kadan-stara-o-hriste-2026.html
-          sudo install -d -m 0755 "$root/clanky"
-          sudo install -m 0644 "$src/clanky/$file" "$root/clanky/$file"
+          sudo install -d -m 0755 /var/www/nasekadan/clanky
+          sudo install -m 0644 "$src/clanky/$file" "/var/www/nasekadan/clanky/$file"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
             sudo docker cp "$src/clanky/$file" "nasekadan-web:/usr/share/nginx/html/clanky/$file"
@@ -152,7 +137,7 @@ jobs:
           rm -rf "$src"
           REMOTE
 
-      - name: Veřejně ověřit aktualizovaný článek
+      - name: Veřejně ověřit článek
         shell: bash
         run: |
           set -euo pipefail
@@ -163,28 +148,24 @@ jobs:
             if python3 - <<'PY'
           from pathlib import Path
           text = Path('/tmp/playgrounds-live.html').read_text(encoding='utf-8', errors='replace')
-          required = (
-              'AKTUALIZOVÁNO 8:00',
+          for item in (
+              'AKTUALIZOVÁNO 8:10',
               'Rafanda: projektová dokumentace má více navázaných záznamů',
-              '692&nbsp;000 Kč bez DPH',
-              '278&nbsp;400 Kč bez DPH',
+              '<h3>První psí hřiště</h3>',
+              '239 459 Kč včetně DPH',
               'Ultimo Wave za 175&nbsp;087 Kč včetně DPH',
               'Součet činí 1 702 503,54 Kč včetně DPH.',
               'Ve dvou doložených lokalitách je 21 košů',
-          )
-          for item in required:
+          ):
               assert item in text, item
           assert text.count('<tr><td>5.20</td>') == 1
           PY
-            then
-              ok=1
-              break
-            fi
+            then ok=1; break; fi
             sleep $((attempt * 4))
           done
           test "$ok" = 1
 
-      - name: Zapsat veřejný důkaz
+      - name: Zapsat důkaz veřejného nasazení
         shell: bash
         run: |
           set -euo pipefail
@@ -202,7 +183,7 @@ jobs:
               'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'article': 'https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html',
               'source': os.environ['DEPLOYED_SHA'],
-              'checks': ['updated-0800', 'rafanda-692000', 'rafanda-linked-278400', 'jesen-175087', 'chytre-1702503', 'discgolf-21', 'single-5.20'],
+              'checks': ['updated-0810', 'rafanda', 'dog-playground-239459', 'jesen-175087', 'chytre-1702503', 'discgolf-21', 'single-5.20'],
               'runId': os.environ.get('GITHUB_RUN_ID', ''),
           }
           open('reports/playgrounds-live-status.json', 'w', encoding='utf-8').write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
@@ -210,15 +191,9 @@ jobs:
             git config user.name 'Naše Kadaň – veřejná kontrola'
             git config user.email 'info@nasekadan.cz'
             git add reports/playgrounds-live-status.json
-            if git diff --cached --quiet; then
-              success=1
-              break
-            fi
+            if git diff --cached --quiet; then success=1; break; fi
             git commit -m 'Potvrdit veřejné nasazení článku o hřištích [skip ci]'
-            if git push origin HEAD:main; then
-              success=1
-              break
-            fi
+            if git push origin HEAD:main; then success=1; break; fi
             sleep $((attempt * 3))
           done
           test "$success" = 1
