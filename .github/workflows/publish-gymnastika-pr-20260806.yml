@@ -1,0 +1,156 @@
+name: Nouzově publikovat Gymnastiku Kadaň přes PR
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/gymnastika-pr-trigger.txt'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: gymnastika-pr-publication-20260806
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SLUG: gymnastika-kadan-treneri-prosinec-2026
+      SSH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SSH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vygenerovat článek a publikační kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          python scripts/publish_gymnastika_kadan_20260806.py
+
+      - name: Uložit obsah do hlavní větve
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – publikace gymnastiky'
+          git config user.email 'info@nasekadan.cz'
+          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          git commit -m 'Publikovat nedostatek trenérů Gymnastiky Kadaň'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            test "$attempt" != 4
+            git pull --rebase origin main
+            sleep $((attempt * 3))
+          done
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Připravit health a finální registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+          slug=os.environ['SLUG']; sha=os.environ['CONTENT_SHA']
+          path=Path('data/published-content-index.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          url=f'https://nasekadan.cz/clanky/{slug}.html'
+          for item in data.get('articles', []):
+              if item.get('url') == url:
+                  item['source_commit']=sha
+                  break
+          data['source_commit']=sha
+          data['generated_at']=datetime.now(timezone.utc).isoformat()
+          data.setdefault('validation', {}).setdefault('last_publication', {})['source_commit']=sha
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+          PY
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-gymnastika-publication\n' "$CONTENT_SHA" "$(date -u +%FT%TZ)" > deployment-health.txt
+          git add data/published-content-index.json deployment-health.txt
+          git commit -m 'Evidence: přiřadit publikaci gymnastiky ke zdrojovému commitu'
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            test "$attempt" != 4
+            git pull --rebase origin main
+            sleep $((attempt * 3))
+          done
+
+      - name: Proudově nasadit na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${SSH_KEY_A:-${SSH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          bundle="$RUNNER_TEMP/gymnastika"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp "clanky/$SLUG.html" clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp "social/$SLUG.png" "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo rm -rf /tmp/gymnastika* /tmp/nasekadan-deploy* 2>/dev/null || true; sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky social data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+
+      - name: Veřejně ověřit vše
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for n in $(seq 1 15); do
+            q="$GITHUB_RUN_ID-$(date +%s)-$n"
+            article="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/$SLUG.html?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            registry="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+            image_size="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c | tr -d ' ' || true)"
+            if grep -Fq 'Gymnastice v Kadani chybějí trenéři' <<<"$article" \
+              && grep -Fq 'nové děti' <<<"$article" \
+              && grep -Fq 'prosinec 2026' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+              && grep -Fq "$SLUG.html" <<<"$archive" \
+              && [ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" = 1 ] \
+              && [ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" = 1 ] \
+              && [ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" = 1 ] \
+              && grep -Fq "$SLUG.html" <<<"$registry" \
+              && grep -Fq 'mode=direct-gymnastika-publication' <<<"$health" \
+              && [ "${image_size:-0}" -gt 10000 ]; then
+              success=1
+              break
+            fi
+            sleep $((n * 3))
+          done
+          test "$success" = 1
+
+      - name: Zapsat úspěch do issue monitoringu
+        if: success()
+        shell: bash
+        run: |
+          gh issue comment 746 --body "Článek o nedostatku trenérů Gymnastiky Kadaň byl publikován na jediné kanonické URL a veřejně ověřen na článku, titulce, archivu, RSS, sitemapě, news-sitemapě, sociální grafice a registru. Publikace zároveň potvrzuje regresní případ, který musí opravený monitoring zachytit. Run ${GITHUB_RUN_ID}."
+
+      - name: Založit incident při selhání
+        if: failure()
+        shell: bash
+        run: |
+          title='[incident] Publikace Gymnastiky Kadaň'
+          body="Generování, nasazení nebo veřejná kontrola selhaly. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
