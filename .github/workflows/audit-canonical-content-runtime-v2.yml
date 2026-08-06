@@ -59,6 +59,53 @@ jobs:
           git reset --hard origin/main
           sudo find /opt/nasekadan -type d -name __pycache__ -prune -exec rm -rf {} +
           git clean -fd
+
+          # Produkční skript historicky ověřoval jeden pevně zvolený starší článek
+          # pouze na první straně archivu. Pro stránkovaný archiv se při každém
+          # auditu bezpečně přepne na skutečně nejnovější veřejný článek, který
+          # musí být na titulce i první straně archivu.
+          latest_article="$(python3 - <<'PY'
+          from datetime import datetime
+          from pathlib import Path
+          import re
+
+          candidates = []
+          for path in Path('clanky').glob('*.html'):
+              if path.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', path.name):
+                  continue
+              text = path.read_text(encoding='utf-8', errors='replace')
+              if 'noindex' in text.lower() or 'data-publication-status="draft"' in text:
+                  continue
+              match = re.search(r'<meta\s+property=["\']article:published_time["\']\s+content=["\']([^"\']+)', text, re.I)
+              if not match:
+                  match = re.search(r'"datePublished"\s*:\s*"([^"]+)"', text)
+              if not match:
+                  continue
+              try:
+                  published = datetime.fromisoformat(match.group(1).replace('Z', '+00:00'))
+              except ValueError:
+                  continue
+              candidates.append((published, path.as_posix()))
+          if not candidates:
+              raise SystemExit('Nebyl nalezen žádný veřejný článek pro dynamickou kontrolu deploye.')
+          print(max(candidates)[1])
+          PY
+          )"
+          test -n "$latest_article"
+          python3 - "$latest_article" <<'PY'
+          from pathlib import Path
+          import re, sys
+
+          path = sys.argv[1]
+          script = Path('deploy/sync-production.sh')
+          text = script.read_text(encoding='utf-8')
+          text, count_path = re.subn(r"^KTK_PATH=.*$", f"KTK_PATH='/{path}'", text, count=1, flags=re.M)
+          text, count_file = re.subn(r"^KTK_FILE=.*$", f"KTK_FILE='{path}'", text, count=1, flags=re.M)
+          if count_path != 1 or count_file != 1:
+              raise SystemExit('Nelze přepnout dynamickou kontrolu článku v deploy/sync-production.sh.')
+          script.write_text(text, encoding='utf-8')
+          PY
+
           sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
 
           if ! sudo grep -Fqx 'status=ok' /var/www/nasekadan/deployment-health.txt; then
