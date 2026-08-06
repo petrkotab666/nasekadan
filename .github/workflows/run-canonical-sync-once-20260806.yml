@@ -1,0 +1,21 @@
+name: Jednorázově spustit synchronizaci kanonického registru
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/run-canonical-sync-once-20260806.yml'
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Spustit živou synchronizaci registru
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run sync-canonical-published-index-20260803-2230.yml --ref main
