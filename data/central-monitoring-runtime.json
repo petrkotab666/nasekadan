@@ -1,69 +1,68 @@
 {
-  "version": 1,
-  "updatedAt": "2026-08-03T22:04:53+00:00",
-  "lastQuickCheckAt": "2026-08-03T22:04:53+00:00",
-  "lastDeepCheckAt": "2026-08-03T16:00:50+00:00",
-  "repositoryMainShaObserved": "284ea79c0c92bedacd546060a75cafdadb4e4bfa",
-  "canonicalRegistry": "data/organizations.json",
+  "version": 2,
+  "updatedAt": "2026-08-06T09:03:09+00:00",
+  "lastQuickCheckAt": "2026-08-06T09:03:09+00:00",
+  "lastDeepCheckAt": "2026-08-06T05:37:51.577706+00:00",
+  "repositoryMainShaObserved": "a7c643934f1f5411e8538768872326e601569ef7",
+  "canonicalRegistries": [
+    "data/organizations.json",
+    "data/city-sources.json",
+    "data/regional-sources.json"
+  ],
   "registrySnapshots": {
-    "organizationsSha": "131a573482229f11b57224e56623c1e26fd1dcb2",
-    "citySourcesSha": "e76ed5c513effbf7ef79b0d844da461d71b65f87",
-    "regionalSourcesSha": "c2baf56b8a4fa63fd8064ab6649c0c039fc4d7a3"
+    "organizationsSha": "0f865f69363175fcba37dc0496c5a5fbf56229e3",
+    "citySourcesSha": "429da35f275b6686c1bb6dd22ced69b2af800026",
+    "regionalSourcesSha": "2a58f103fa8dbcff344176e938c06e8836511db0"
   },
   "coverageSnapshot": {
-    "directoryOrganizations": 65,
-    "monitoredDirectoryOrganizations": 65,
-    "coveragePercent": 100.0,
-    "directoryIsCanonicalRegistry": true,
-    "totalUniqueSources": 98,
-    "cityNewsGeneratedAt": "2026-08-03T19:58:39.010442+00:00",
-    "knownFailedSources": 13
+    "cityNewsGeneratedAt": "2026-08-06T03:37:51.577706+00:00",
+    "knownFailedSources": 13,
+    "failedSourcesRemainMonitored": true
   },
   "quickCheck": {
     "newSignificantFindings": 0,
     "newSignificantFingerprints": [],
     "duplicateFindingsSuppressed": [
-      "surface-water-ban-kadan-chomutov-update-20260803",
-      "ii225-zeleznicni-prejezd-smer-kadan-20260803",
-      "zimni-stadion-ochlazeni-klasterec-kadan-20260803"
+      "51bbe982acae479cb67a",
+      "87f1b1ee1a7c0ff72307",
+      "dd9a1589df62e2b1ca97"
     ],
     "unverifiedLeads": [],
     "scopesChecked": [
-      "mimořádné události, Policie ČR, HZS, ZZS a krizové zdroje Ústeckého kraje",
-      "město Kadaň, úřední deska, veřejné dokumenty, smlouvy, zakázky a organizace v kanonickém registru",
-      "dopravní omezení, železnice, elektřina, voda, teplo a KTK",
-      "Nemocnice Kadaň, online petice a známé soudní spisové značky",
-      "Prunéřov, Tušimice, ČEZ, elektrárny, doly a energetické projekty",
-      "Slovan, lávka u Shellu, Alžbětinský klášter, Spolkový dům, koupaliště a optická trasa KTK",
-      "city-news coverage, sourceStatus, změny v repozitáři a kontrola duplicit",
-      "veřejný web, titulní stránka a archiv nejnovějších schválených článků"
+      "kanonické registry organizací, kadaňských zdrojů a širokého regionu",
+      "Policie ČR, HZS Ústeckého kraje, městská policie a rychlé regionální zprávy",
+      "doprava, železnice, voda, elektřina a meteorologická varování",
+      "Kadaň, Chomutovsko, Mostecko, Žatecko a zdroje širokého okolí",
+      "Nemocnice Kadaň, dlouhodobé kauzy a známé soudní pohyby",
+      "nové monitoringové issues, pending nálezy a kontrola duplicit",
+      "stav repozitáře a nejnovější schválený obsah"
     ],
     "observations": {
-      "policeLatestOfficialItemDate": "2026-07-28",
       "newEmergencyFound": false,
       "newCourtMovementFound": false,
       "newInstitutionalDocumentFound": false,
       "hospitalPetitionSignificantChangeFound": false,
       "stateEPetitionFound": false,
-      "homepageDirectFetchAvailable": true,
-      "archiveDirectFetchAvailable": true,
-      "homepageArchiveConsistent": true,
-      "latestPublicArticleTitle": "Dva přejezdy, dva termíny: silnice Žatec–Kadaň se zavře už 4. srpna",
-      "latestPublicArticlePublishedAt": "2026-08-03T18:35:00+02:00",
-      "latestPublicArticleUrl": "https://nasekadan.cz/clanky/silnice-zatec-kadan-prejezd-uzavirka-srpen-2026.html",
+      "jezeroMostOfficialPoliceUpdateFound": false,
+      "jezeroMostSecondPersonStatusConfirmed": false,
+      "latestAlreadyDeliveredFinding": "Pátrání na jezeře Most má tragický vývoj; nález těla osmadvacetiletého muže byl již zachycen, deduplikován a uživateli oznámen.",
+      "latestRepositoryArticleTitle": "Mládež Tatranu Kadaň má za sebou úspěšnou sezonu. V září klub otevře nábor",
+      "latestRepositoryArticlePublishedAt": "2026-08-06T10:50:00+02:00",
+      "latestRepositoryArticleUrl": "https://nasekadan.cz/clanky/mladez-tatranu-kadan-uspesna-sezona-nabor-2026.html",
+      "homepageDirectFetchAvailable": false,
+      "archiveDirectFetchAvailable": false,
       "sitemapDirectFetchAvailable": false,
       "rssDirectFetchAvailable": false,
       "deploymentHealthDirectFetchAvailable": false,
-      "technicalRepairAttemptThisRun": "none; public homepage and archive are current, so no deploy was attempted",
-      "checkedAt": "2026-08-03T22:04:53+00:00"
+      "publicFetchFailure": "DNS resolution of nasekadan.cz was unavailable from the runtime; search-engine results were reachable but were not fresh enough to prove current production state.",
+      "technicalRepairAttemptThisRun": "none; no verified evidence of stale production, therefore no deploy was attempted",
+      "checkedAt": "2026-08-06T09:03:09+00:00"
     },
     "notes": [
-      "Hodinová kontrola neodhalila novou ověřenou mimořádnou událost, soudní pohyb, významný dokument ani zásadní změnu petice.",
-      "Kanonické registry byly načteny; poslední city-news výstup potvrzuje 65/65 organizací, 100% pokrytí a 98 unikátních zdrojů.",
-      "Třináct přímých zdrojů je blokovaných nebo technicky nefunkčních; zůstávají ve sledování a vyžadují náhradní kanály při příštím hlubokém průchodu.",
-      "Veřejná titulní stránka a archiv jsou aktuální a shodně zobrazují nejnovější článek o uzavírce silnice II/225 od 4. srpna.",
-      "RSS, sitemap a deployment-health nebyly dostupným webovým nástrojem přímo načitatelné; nebyl zjištěn důvod k opakovanému deployi.",
-      "Nevznikl nový alert, pending JSON ani GitHub Issue, protože nebyl potvrzen nový významný a neduplicitní nález."
+      "Hodinová kontrola neodhalila nový ověřený a neduplicitní nález nad redakčním prahem.",
+      "Tragický vývoj pátrání na jezeře Most byl již oznámen v předchozím běhu; nové oficiální policejní potvrzení ani potvrzený stav druhé osoby se neobjevily.",
+      "Nevznikl nový alert, pending JSON ani GitHub Issue.",
+      "Přímá veřejná kontrola webu nebyla v tomto prostředí technicky možná; bez důkazu zastaralé produkce nebyl spuštěn opravný deploy."
     ]
   }
 }
