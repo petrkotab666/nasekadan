@@ -1,0 +1,197 @@
+name: Publikovat Apolenu Švábíkovou na ME
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/publish-apolena-svabikova-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-apolena-svabikova-20260806
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SLUG: apolena-svabikova-mistrovstvi-evropy-birmingham-2026
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Připravit článek a všechny publikační povrchy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          python scripts/publish_apolena_svabikova_20260806.py
+
+      - name: Uložit obsahový commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          git commit -m 'Publikovat Apolenu Švábíkovou na seniorském ME'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then break; fi
+            if [[ "$attempt" == 3 ]]; then exit 1; fi
+            git pull --rebase origin main
+          done
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Zapsat zdrojový commit a deployment health
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+          slug = os.environ['SLUG']
+          sha = os.environ['CONTENT_SHA']
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          url = f'https://nasekadan.cz/clanky/{slug}.html'
+          for item in data.get('articles', []):
+              if item.get('url') == url:
+                  item['source_commit'] = sha
+                  break
+          data['source_commit'] = sha
+          data['generated_at'] = datetime.now(timezone.utc).isoformat()
+          validation = data.setdefault('validation', {})
+          last = validation.setdefault('last_publication', {})
+          last['source_commit'] = sha
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-apolena-publication\n' "$CONTENT_SHA" "$(date -u +%FT%TZ)" > deployment-health.txt
+          git add data/published-content-index.json deployment-health.txt
+          git commit -m 'Evidence: přiřadit zdrojový commit článku o Apoleně'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then break; fi
+            if [[ "$attempt" == 3 ]]; then exit 1; fi
+            git pull --rebase origin main
+          done
+
+      - name: Připravit balík pro OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          mkdir -p "$RUNNER_TEMP/publish/clanky" "$RUNNER_TEMP/publish/social"
+          cp "clanky/$SLUG.html" "$RUNNER_TEMP/publish/clanky/"
+          cp "social/$SLUG.png" "$RUNNER_TEMP/publish/social/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$RUNNER_TEMP/publish/"
+          cp -a clanky/index.html clanky/strana-*.html "$RUNNER_TEMP/publish/clanky/"
+          tar -C "$RUNNER_TEMP/publish" -czf "$RUNNER_TEMP/apolena-publication.tgz" .
+
+      - name: Nasadit na produkční server a do kontejneru
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/apolena-publication.tgz" ubuntu@57.129.43.215:/tmp/apolena-publication.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          stage=/tmp/apolena-publication
+          root=/var/www/nasekadan
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          tar -xzf /tmp/apolena-publication.tgz -C "$stage"
+          sudo install -d -m 0755 "$root" "$root/clanky" "$root/social"
+          sudo cp -a "$stage"/. "$root"/
+          sudo chmod -R a+rX "$root"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp "$stage"/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf "$stage" /tmp/apolena-publication.tgz
+          REMOTE
+
+      - name: Veřejně ověřit článek a všechny kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            q="$GITHUB_RUN_ID-$(date +%s)-$attempt"
+            article="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/$SLUG.html?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+            image_size="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c || true)"
+            rss_count="$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')"
+            sitemap_count="$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')"
+            news_count="$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')"
+            if grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' <<<"$article" \
+              && grep -Fq '4,51' <<<"$article" \
+              && grep -Fq '20:05' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+              && grep -Fq "$SLUG.html" <<<"$archive" \
+              && [[ "$rss_count" == 1 ]] \
+              && [[ "$sitemap_count" == 1 ]] \
+              && [[ "$news_count" == 1 ]] \
+              && [[ "${image_size:-0}" -gt 20000 ]] \
+              && grep -Fq 'mode=direct-apolena-publication' <<<"$health" \
+              && grep -Fq "source=$CONTENT_SHA" <<<"$health"; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          [[ "$success" == 1 ]]
+          echo "PUBLIC_VERIFIED_AT=$(date -u +%FT%TZ)" >> "$GITHUB_ENV"
+
+      - name: Uzavřít kanonickou evidenci úspěšné publikace
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+          slug = os.environ['SLUG']; sha = os.environ['CONTENT_SHA']; verified = os.environ['PUBLIC_VERIFIED_AT']
+          url = f'https://nasekadan.cz/clanky/{slug}.html'
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          validation = data.setdefault('validation', {})
+          validation['repair_pending_public_verification'] = False
+          validation['public_audit_at'] = verified
+          validation['last_publication'] = {
+              'status': 'success', 'checked_at': verified, 'article_url': url,
+              'classification': 'local_athlete_european_championship',
+              'source_commit': sha, 'public_verified_at': verified,
+              'public_verification': {'article': True, 'homepage': True, 'archive': True, 'rss': True, 'sitemap': True, 'news_sitemap': True, 'social_image': True, 'deployment_health': True, 'registry': True},
+          }
+          data['generated_at'] = datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          report = {'status': 'success', 'article_url': url, 'source_commit': sha, 'verified_at': verified, 'surfaces': ['article','homepage','archive','rss','sitemap','news-sitemap','social-image','deployment-health']}
+          Path('reports/publication-apolena-svabikova-20260806.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git add data/published-content-index.json reports/publication-apolena-svabikova-20260806.json
+          git commit -m 'Evidence: veřejně ověřit článek o Apoleně Švábíkové'
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then break; fi
+            if [[ "$attempt" == 3 ]]; then exit 1; fi
+            git pull --rebase origin main
+          done
