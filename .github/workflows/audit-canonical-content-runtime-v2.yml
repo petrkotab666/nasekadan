@@ -96,7 +96,7 @@ jobs:
           PY
           )"
           test -n "$latest_article"
-          python3 - "$latest_article" <<'PY'
+          sudo python3 - "$latest_article" <<'PY'
           from pathlib import Path
           import re, sys
 
