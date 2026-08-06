@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import sys
@@ -14,60 +13,52 @@ SCRIPT_RE = re.compile(
     r'\s*<script\s+src=["\']/horko-feed\.js(?:\?[^"\']*)?["\'][^>]*></script>\s*',
     re.IGNORECASE,
 )
-GYMNASTIKA_ARTICLE = ROOT / 'clanky' / 'gymnastika-kadan-treneri-prosinec-2026.html'
-GYMNASTIKA_SOCIAL = ROOT / 'social' / 'gymnastika-kadan-treneri-prosinec-2026.png'
-GYMNASTIKA_GENERATOR = ROOT / 'scripts' / 'publish_gymnastika_kadan_20260806.py'
+GYMNASTIKA_SLUG = 'gymnastika-kadan-treneri-prosinec-2026'
+GYMNASTIKA_ARTICLE = ROOT / 'clanky' / f'{GYMNASTIKA_SLUG}.html'
+GYMNASTIKA_SOCIAL = ROOT / 'social' / f'{GYMNASTIKA_SLUG}.png'
+GYMNASTIKA_FINALIZER = ROOT / 'scripts' / 'rebuild_gymnastika_surfaces.py'
 
 
-def ensure_pillow() -> None:
-    try:
-        __import__('PIL')
-        return
-    except ImportError:
-        pass
-
-    attempts = (
-        [sys.executable, '-m', 'pip', 'install', '--user', 'Pillow'],
-        [sys.executable, '-m', 'pip', 'install', '--user', '--break-system-packages', 'Pillow'],
-    )
-    for command in attempts:
-        result = subprocess.run(command, cwd=ROOT, check=False)
-        if result.returncode == 0:
-            __import__('PIL')
-            return
-    raise RuntimeError('Pillow se nepodařilo nainstalovat pro sociální grafiku Gymnastiky Kadaň.')
+def surface_contains(path: Path, needle: str) -> bool:
+    return path.is_file() and needle in path.read_text(encoding='utf-8', errors='replace')
 
 
 def ensure_gymnastika_publication() -> None:
-    """Vytvoří schválený článek na vlastním runneru po resetu na aktuální main.
+    """Dopočítá publikační kanály z hotového HTML a PNG bez Pillow.
 
-    Hook je idempotentní. Jakmile budou hotové soubory jednou uloženy přímo v
-    hlavní větvi, už nic negeneruje. Do té doby zajistí, že každý kanonický
-    produkční deploy článek znovu vytvoří ještě před validací a Docker buildem.
+    Článek i grafika jsou od 6. srpna součástí hlavní větve. Produkční runner
+    proto už nemá nic kreslit ani instalovat; pouze z aktuálního úplného seznamu
+    článků bezpečně přegeneruje titulku, archiv, RSS, sitemapy a registry.
     """
-    if GYMNASTIKA_ARTICLE.is_file() and GYMNASTIKA_SOCIAL.is_file():
-        return
-    if not GYMNASTIKA_GENERATOR.is_file():
-        raise RuntimeError('Chybí generátor publikace Gymnastiky Kadaň.')
+    if not GYMNASTIKA_ARTICLE.is_file():
+        raise RuntimeError('Chybí hotový článek Gymnastiky Kadaň v hlavní větvi.')
+    if not GYMNASTIKA_SOCIAL.is_file() or GYMNASTIKA_SOCIAL.stat().st_size < 10000:
+        raise RuntimeError('Chybí hotová sociální grafika Gymnastiky Kadaň.')
+    if not GYMNASTIKA_FINALIZER.is_file():
+        raise RuntimeError('Chybí dokončovací skript Gymnastiky Kadaň.')
 
-    ensure_pillow()
-    env = os.environ.copy()
-    try:
-        source_commit = subprocess.check_output(
-            ['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True
-        ).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        source_commit = 'canonical-self-hosted-deploy'
-    env['ARTICLE_SOURCE_COMMIT'] = source_commit
+    expected = GYMNASTIKA_SLUG + '.html'
+    surfaces = (
+        ROOT / 'index.html',
+        ROOT / 'clanky' / 'index.html',
+        ROOT / 'rss.xml',
+        ROOT / 'sitemap.xml',
+        ROOT / 'news-sitemap.xml',
+        ROOT / 'data' / 'published-content-index.json',
+        ROOT / 'data' / 'article-integrity-manifest.json',
+    )
+    if all(surface_contains(path, expected) for path in surfaces):
+        return
+
     subprocess.run(
-        [sys.executable, str(GYMNASTIKA_GENERATOR)],
+        [sys.executable, str(GYMNASTIKA_FINALIZER)],
         cwd=ROOT,
-        env=env,
         check=True,
     )
-    if not GYMNASTIKA_ARTICLE.is_file() or not GYMNASTIKA_SOCIAL.is_file():
-        raise RuntimeError('Generátor nevytvořil úplnou publikaci Gymnastiky Kadaň.')
-    print('Připraven článek Gymnastiky Kadaň pro kanonický produkční deploy.')
+    if not all(surface_contains(path, expected) for path in surfaces):
+        missing = [str(path.relative_to(ROOT)) for path in surfaces if not surface_contains(path, expected)]
+        raise RuntimeError('Neúplné textové kanály Gymnastiky Kadaň: ' + ', '.join(missing))
+    print('Dokončeny všechny textové kanály Gymnastiky Kadaň bez grafických závislostí.')
 
 
 def is_public_article(path: Path, text: str) -> bool:
@@ -124,9 +115,6 @@ def main() -> int:
         if path.exists() and '/horko-feed.js' in path.read_text(encoding='utf-8'):
             raise RuntimeError(f'Feed zůstal na nečlánkové stránce: {path.relative_to(ROOT)}')
 
-    # Tento skript volá produkční deploy i Docker build. Po každém vložení feedu
-    # proto zároveň sjednotit cache verzi hlavního reklamního balíku na všech
-    # veřejných stránkách, nikoli jen v článcích.
     subprocess.run(
         [
             sys.executable,
