@@ -65,7 +65,7 @@ jobs:
           # auditu bezpečně přepne na skutečně nejnovější veřejný článek, který
           # musí být na titulce i první straně archivu.
           latest_article="$(python3 - <<'PY'
-          from datetime import datetime
+          from datetime import datetime, timezone
           from pathlib import Path
           import re
 
@@ -85,6 +85,10 @@ jobs:
                   published = datetime.fromisoformat(match.group(1).replace('Z', '+00:00'))
               except ValueError:
                   continue
+              if published.tzinfo is None:
+                  published = published.replace(tzinfo=timezone.utc)
+              else:
+                  published = published.astimezone(timezone.utc)
               candidates.append((published, path.as_posix()))
           if not candidates:
               raise SystemExit('Nebyl nalezen žádný veřejný článek pro dynamickou kontrolu deploye.')
