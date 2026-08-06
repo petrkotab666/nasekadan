@@ -38,6 +38,9 @@
     .evidence-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:34px 0}
     figure{margin:0} figure img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:#fff}
     figcaption{font-size:13px;line-height:1.5;color:var(--muted);margin-top:9px}
+    .evidence-card{padding:24px;border:1px solid var(--line);border-radius:12px;background:#f8fafc;box-shadow:0 6px 18px rgba(15,35,55,.06)}
+    .evidence-card p{margin:14px 0 0;font-size:17px;line-height:1.6}
+    .evidence-name{font-weight:800;font-size:19px;color:#143c5e}.evidence-role{font-size:13px;color:var(--muted);margin-top:2px}
     blockquote{margin:28px 0;padding:20px 24px;border-left:4px solid #78a9be;background:var(--quote);font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.5;color:#28485f}
     .table-wrap{overflow-x:auto;margin:28px 0 12px;border:1px solid var(--line);border-radius:10px}
     table{border-collapse:collapse;width:100%;min-width:720px;background:#fff}
@@ -92,14 +95,16 @@
         <p>Na vyjádření veřejně reagoval ředitel Městské policie Kadaň Jindřich Drozd. Uvedl, že informativní radary mají preventivní funkci, místa pro měření rychlosti určuje dopravní inspektorát a strážníci se nemohou soustředit pouze na dopravu. Současně napsal, že za předchozí rok řešili <strong>3 840 přestupků v dopravě</strong>, a upozornil na široký rozsah dalších povinností i personální podstav.</p>
 
         <div class="evidence-grid">
-          <figure>
-            <img src="../assets/images/mestska-policie-debata-sona.webp" alt="Veřejné facebookové vyjádření Soni Pusztakürti k práci Městské policie Kadaň">
-            <figcaption>Vyjádření Soni Pusztakürti, které spustilo debatu o dopravě a práci městské policie. Snímek z veřejné diskuse.</figcaption>
-          </figure>
-          <figure>
-            <img src="../assets/images/mestska-policie-debata-reditel.webp" alt="Veřejná reakce ředitele Městské policie Kadaň Jindřicha Drozda">
-            <figcaption>Reakce ředitele Městské policie Kadaň Jindřicha Drozda. Uvedl mimo jiné 3 840 dopravních přestupků a upozornil na další povinnosti hlídek.</figcaption>
-          </figure>
+          <div class="evidence-card">
+            <div class="evidence-name">Soňa Pusztakürti</div>
+            <div class="evidence-role">Dáme Kadani novou šanci · veřejná diskuse</div>
+            <p>„Nejsme spokojeni s tím, že městská policie nepracuje tak, jak by měla a nepostihuje dopravní přestupky,“ uvedla mimo jiné v odpovědi, která otevřela debatu.</p>
+          </div>
+          <div class="evidence-card">
+            <div class="evidence-name">Jindřich Drozd</div>
+            <div class="evidence-role">ředitel Městské policie Kadaň · veřejná reakce</div>
+            <p>Uvedl, že hlídky za předchozí rok řešily 3 840 dopravních přestupků, popsal další úkoly sboru a upozornil na personální podstav.</p>
+          </div>
         </div>
 
         <p>Kandidátka následně upřesnila, že nechce práci strážníků znevažovat a chápe, že nemohou obsáhnout celé město. Jejím cílem je podle dalšího komentáře dostat hlídky více do ulic a řešit konkrétní místa, například parkování u nemocnice. To je legitimní podnět. Z konkrétního problému ale ještě nelze vyvodit, že celý sbor dopravu neřeší.</p>
