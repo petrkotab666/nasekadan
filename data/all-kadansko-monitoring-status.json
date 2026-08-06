@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-06T14:59:41.699461+00:00",
+  "checkedAt": "2026-08-06T15:26:40.363179+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 197,
-  "failedSources": 16,
-  "itemsParsed": 17177,
-  "uniqueItems": 10875,
+  "checkedSources": 196,
+  "failedSources": 17,
+  "itemsParsed": 17018,
+  "uniqueItems": 10820,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 887,
+    "genericTitle": 847,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 24,
-    "notEditoriallySignificant": 51,
+    "broadWithoutLocalMatch": 2,
+    "notEditoriallySignificant": 48,
     "notFreshOrUndated": 1,
-    "duplicate": 5415,
+    "duplicate": 5351,
     "deferredByCap": 0
   },
   "coverage": {
@@ -566,8 +566,9 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 81
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -591,7 +592,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 30
     },
     {
       "name": "Povodí Ohře",
@@ -705,7 +706,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 28
     },
     {
       "name": "Liďák Kadaň – oficiální web",
@@ -720,9 +721,8 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 11
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -898,8 +898,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 24
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -954,8 +955,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 72
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -1414,7 +1416,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 161
+      "itemsParsed": 160
     },
     {
       "name": "Louny – oficiální web",
@@ -1693,9 +1695,8 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 11
     },
     {
       "name": "Hasištejn",
@@ -1735,7 +1736,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 37
+      "itemsParsed": 36
     },
     {
       "name": "Google News – široký region 3",
@@ -1751,7 +1752,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 85
+      "itemsParsed": 81
     },
     {
       "name": "Google News – široký region 5",
@@ -1783,7 +1784,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 70
+      "itemsParsed": 71
     },
     {
       "name": "Google News – široký region 9",
@@ -1823,7 +1824,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 14
     },
     {
       "name": "Google News – široký region 14",
