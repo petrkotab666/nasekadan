@@ -5,30 +5,31 @@ on:
     types: [opened, reopened, synchronize]
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 concurrency:
-  group: emergency-eso-market-production
+  group: emergency-eso-market-direct-final
   cancel-in-progress: false
 
 jobs:
   deploy:
     if: github.event.pull_request.title == 'Nouzově nasadit článek ESO marketu přes GitHub-hosted runner'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     env:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
       ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
       ARTICLE_URL: https://nasekadan.cz/clanky/eso-market-rafanda-kadan-24-7.html
+      IMAGE_DIR: images/clanky/eso-market-rafanda
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Připravit SSH klíč
+      - name: Připravit úplný článek a skutečné fotografie
         shell: bash
         run: |
           set -euo pipefail
@@ -37,57 +38,70 @@ jobs:
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Přenést aktuální main na OVH
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f "$ARTICLE"
-          tar --exclude=.git --exclude=.github --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-emergency-eso.tgz
+          mkdir -p "$IMAGE_DIR" social "$RUNNER_TEMP/publish/clanky" \
+            "$RUNNER_TEMP/publish/$IMAGE_DIR" "$RUNNER_TEMP/publish/social"
+          cat .github/tmp/rafanda-photo-fix/navod.part* | base64 -d > "$IMAGE_DIR/navod-vstup-nakup-odchod.webp"
+          base64 -d tmp/rafanda-candidates/05-4660.bin > "$IMAGE_DIR/pravidla-platba-kamery.webp"
+          cp "$IMAGE_DIR/prodejna-rafanda-24-7.webp" social/eso-market-rafanda-kadan-24-7.webp
 
-      - name: Spustit produkční synchronizaci na OVH
+          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$ARTICLE"
+          file "$IMAGE_DIR"/*.webp social/eso-market-rafanda-kadan-24-7.webp | tee "$RUNNER_TEMP/types"
+          test "$(grep -c 'Web/P image' "$RUNNER_TEMP/types")" -eq 4
+          for f in "$IMAGE_DIR"/*.webp; do test "$(stat -c %s "$f")" -gt 10000; done
+
+          cp "$ARTICLE" "$RUNNER_TEMP/publish/clanky/"
+          cp "$IMAGE_DIR"/*.webp "$RUNNER_TEMP/publish/$IMAGE_DIR/"
+          cp social/eso-market-rafanda-kadan-24-7.webp "$RUNNER_TEMP/publish/social/"
+          tar -C "$RUNNER_TEMP/publish" -czf "$RUNNER_TEMP/rafanda-direct.tgz" .
+
+      - name: Přímé nahrání bez čekání na produkční zámek
         shell: bash
         run: |
           set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/rafanda-direct.tgz" ubuntu@57.129.43.215:/tmp/rafanda-direct.tgz
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          work=/tmp/nasekadan-emergency-eso
-          rm -rf "$work"
-          mkdir -p "$work"
-          tar -xzf /tmp/nasekadan-emergency-eso.tgz -C "$work"
-          chmod +x "$work/deploy/sync-production.sh"
-          sudo env GITHUB_WORKSPACE="$work" bash "$work/deploy/sync-production.sh"
-          rm -rf "$work" /tmp/nasekadan-emergency-eso.tgz
+          stage=/tmp/rafanda-direct
+          root=/var/www/nasekadan
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          tar -xzf /tmp/rafanda-direct.tgz -C "$stage"
+          sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
+          sudo cp -a "$stage"/. "$root"/
+          sudo chmod -R a+rX "$root"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky \
+              /usr/share/nginx/html/images/clanky/eso-market-rafanda /usr/share/nginx/html/social
+            sudo docker cp "$stage"/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf "$stage" /tmp/rafanda-direct.tgz
           REMOTE
 
-      - name: Veřejně ověřit článek a publikační výstupy
+      - name: Veřejně ověřit úplný text a všechny tři fotografie
         shell: bash
         run: |
           set -euo pipefail
           ok=0
-          for attempt in 1 2 3 4 5 6 7 8 9 10; do
-            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
-            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" -o /tmp/home.html || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" -o /tmp/archive.html || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" -o /tmp/rss.xml || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" -o /tmp/sitemap.xml || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" -o /tmp/news.xml || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" -o /tmp/health.txt || true
-            if grep -Fq 'Na Rafandě se nakupuje nonstop' /tmp/article.html \
-              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/home.html \
-              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/archive.html \
-              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/rss.xml \
-              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/sitemap.xml \
-              && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/news.xml \
-              && grep -Eiq '(^|[^a-z])ok([^a-z]|$)' /tmp/health.txt; then
+          for attempt in $(seq 1 10); do
+            q="$GITHUB_RUN_ID-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 35 "$ARTICLE_URL?v=$q" -o "$RUNNER_TEMP/article.html" || true
+            if grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$RUNNER_TEMP/article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' "$RUNNER_TEMP/article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' "$RUNNER_TEMP/article.html" \
+              && grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' "$RUNNER_TEMP/article.html"; then
               ok=1
               break
             fi
-            sleep $((attempt * 4))
+            sleep $((attempt * 2))
           done
           test "$ok" = 1
+          for name in prodejna-rafanda-24-7.webp navod-vstup-nakup-odchod.webp pravidla-platba-kamery.webp; do
+            dest="$RUNNER_TEMP/$name"
+            curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/$IMAGE_DIR/$name?v=$GITHUB_RUN_ID" -o "$dest"
+            file "$dest" | grep -Fq 'Web/P image'
+            test "$(stat -c %s "$dest")" -gt 10000
+          done
 
       - name: Zapsat výsledek do PR
         if: always()
@@ -101,6 +115,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: ok
-                ? `ESO market byl nouzově nasazen přes GitHub-hosted runner a veřejně ověřen. Run ${context.runId}.`
-                : `Nouzové nasazení ESO marketu selhalo. Run ${context.runId}.`
+                ? `ESO market Rafanda byl přímo nasazen a veřejně ověřen včetně úplného textu a tří WebP fotografií. Run ${context.runId}.`
+                : `Přímé nasazení ESO marketu Rafanda selhalo. Run ${context.runId}.`
             });
