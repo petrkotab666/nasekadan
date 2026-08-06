@@ -105,7 +105,8 @@ RUN python scripts/normalize_search_snippets.py
 RUN python scripts/clean_sitemap_technical_entries.py
 
 # Kritická SEO/AI chyba musí zastavit sestavení ještě před přepnutím produkce.
-RUN python scripts/seo_ai_audit.py --strict
+# Stránkované archivní stránky jsou webové přehledy, nikoli NewsArticle.
+RUN python scripts/seo_ai_audit_runtime.py --strict
 
 # Ověření vlastnictví služby https://nasekadan.cz/ v Google Search Console.
 # Značka musí zůstat v produkčním <head>, jinak se vlastnictví časem ztratí.
