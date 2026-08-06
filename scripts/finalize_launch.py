@@ -81,11 +81,17 @@ def is_noindex(text: str) -> bool:
     ))
 
 
+def is_archive_page(path: Path) -> bool:
+    return path.parent == ROOT / "clanky" and (
+        path.name == "index.html" or bool(re.fullmatch(r"strana-\d+\.html", path.name))
+    )
+
+
 def ensure_head_meta(text: str, path: Path) -> str:
     title = title_from_html(text)
     description = desc_from_html(text)
     canonical = canonical_for(path)
-    is_article = path.parent == ROOT / "clanky" and path.name != "index.html"
+    is_article = path.parent == ROOT / "clanky" and not is_archive_page(path)
     is_404 = path.name == "404.html"
     additions: list[str] = []
 
@@ -273,8 +279,10 @@ def audit_changed_articles() -> None:
     paths = [
         line.strip()
         for line in output.splitlines()
-        if line.startswith("clanky/") and line.endswith(".html")
+        if line.startswith("clanky/")
+        and line.endswith(".html")
         and line != "clanky/index.html"
+        and not re.fullmatch(r"clanky/strana-\d+\.html", line)
     ]
     if not paths:
         return
