@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy:
@@ -54,9 +54,29 @@ jobs:
           set -euo pipefail
           sleep 8
           q="${GITHUB_RUN_ID}-$(date +%s)"
-          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" | grep -Fq "source=$(git rev-parse HEAD)"
+          health="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q")"
+          article="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html?v=$q")"
+          grep -Fq "source=$(git rev-parse HEAD)" <<<"$health"
+          grep -Fq 'AKTUALIZOVÁNO 7:00' <<<"$article"
+          grep -Fq 'Ve dvou doložených lokalitách je 21 košů' <<<"$article"
+          test "$(grep -Fo '<tr><td>5.20</td>' <<<"$article" | wc -l | tr -d ' ')" = "1"
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html?v=$q" | grep -Fq 'Kriticky chybí skupina 0 Rh−'
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?v=$q" | grep -Fq 'zimní stadion'
 
+      - name: Zapsat potvrzené nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          printf 'status=ok\nsource=%s\ndeployed_at=%s\narticle=https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html\nchecks=discgolf-21,updated-0700,single-5.20\n' "$sha" "$(date -u +%FT%TZ)" > deployment-health.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment-health.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Potvrď veřejné nasazení aktualizace hřišť"
+            git push origin HEAD:main
+          fi
+
 # Redeploy requested 2026-08-04 20:55 Europe/Prague to restore the temporary homepage pin.
 # Redeploy requested 2026-08-06 07:06 Europe/Prague for the verified discgolf update and duplicate-row fix.
+# Verification strengthened 2026-08-06 07:10 Europe/Prague for the playground article.
