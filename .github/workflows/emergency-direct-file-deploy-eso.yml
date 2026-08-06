@@ -1,0 +1,96 @@
+name: Přímé souborové nasazení ESO marketu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/emergency-direct-file-deploy-eso-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: emergency-direct-file-eso
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      SLUG: eso-market-rafanda-kadan-24-7.html
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Připravit balík a SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          test -f "clanky/$SLUG"
+          mkdir -p "$RUNNER_TEMP/publish/clanky" "$RUNNER_TEMP/publish/social"
+          cp "clanky/$SLUG" "$RUNNER_TEMP/publish/clanky/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml deployment-health.txt "$RUNNER_TEMP/publish/"
+          cp -a clanky/index.html clanky/strana-*.html "$RUNNER_TEMP/publish/clanky/"
+          for f in social/eso-market-rafanda-kadan-24-7-de839056f8.png social/eso-market-rafanda-24-7-20260806.svg; do
+            if [[ -f "$f" ]]; then cp "$f" "$RUNNER_TEMP/publish/social/"; fi
+          done
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=emergency-direct-file\n' "$GITHUB_SHA" "$(date -u +%FT%TZ)" > "$RUNNER_TEMP/publish/deployment-health.txt"
+          tar -C "$RUNNER_TEMP/publish" -czf "$RUNNER_TEMP/eso-direct.tgz" .
+
+      - name: Nahrát a aktivovat soubory na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/eso-direct.tgz" ubuntu@57.129.43.215:/tmp/eso-direct.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          stage=/tmp/eso-direct-publish
+          root=/var/www/nasekadan
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          tar -xzf /tmp/eso-direct.tgz -C "$stage"
+          sudo install -d -m 0755 "$root" "$root/clanky" "$root/social"
+          sudo cp -a "$stage"/. "$root"/
+          sudo chmod -R a+rX "$root"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp "$stage"/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf "$stage" /tmp/eso-direct.tgz
+          REMOTE
+
+      - name: Veřejně ověřit všechny povrchy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5 6 7 8; do
+            q="$GITHUB_RUN_ID-$(date +%s)-$attempt"
+            article="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/$SLUG?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+            if grep -Fq 'Na Rafandě se nakupuje nonstop' <<<"$article" \
+              && grep -Fq "$SLUG" <<<"$home" \
+              && grep -Fq "$SLUG" <<<"$archive" \
+              && grep -Fq "$SLUG" <<<"$rss" \
+              && grep -Fq "$SLUG" <<<"$sitemap" \
+              && grep -Fq "$SLUG" <<<"$news" \
+              && grep -Fq 'mode=emergency-direct-file' <<<"$health"; then
+              exit 0
+            fi
+            sleep $((attempt * 3))
+          done
+          exit 1
