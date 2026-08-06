@@ -1,4 +1,4 @@
-name: Okamžitě nasadit aktuální main
+name: Nouzově nasadit článek o hřištích
 
 on:
   push:
@@ -11,123 +11,98 @@ permissions:
   contents: write
 
 concurrency:
-  group: emergency-deploy-current-main
+  group: deploy-playgrounds-article
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_PATH: clanky/jak-se-kadan-stara-o-hriste-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html
     steps:
-      - uses: actions/checkout@v4
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Doplnit ověřené údaje do článku
+      - name: Doplnit úplnější historii Chytrého hřiště
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          success=0
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git reset --hard origin/main
-            python3 - <<'PY'
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
           from pathlib import Path
 
           path = Path('clanky/jak-se-kadan-stara-o-hriste-2026.html')
           text = path.read_text(encoding='utf-8')
 
-          text = text.replace(
-              '<meta property="article:modified_time" content="2026-08-06T07:00:00+02:00">',
-              '<meta property="article:modified_time" content="2026-08-06T07:20:00+02:00">',
-          )
-          text = text.replace(
-              '"dateModified":"2026-08-06T07:00:00+02:00"',
-              '"dateModified":"2026-08-06T07:20:00+02:00"',
-          )
-          text = text.replace('AKTUALIZOVÁNO 7:00', 'AKTUALIZOVÁNO 7:20')
+          text = text.replace('2026-08-06T07:35:00+02:00', '2026-08-06T07:45:00+02:00')
+          text = text.replace('AKTUALIZOVÁNO 7:35', 'AKTUALIZOVÁNO 7:45')
 
-          anchor = '<p>Samostatně se připravuje také rekonstrukce hřiště na Rafandě. Veřejné smluvní podklady ukazují práci na projektové dokumentaci, ale pro úplný a aktuální popis rozsahu bude potřeba finální projekt a stavební povolení.</p>\n'
-          block = '''<h3>První padelový kurt v tenisovém areálu</h3>
-          <p><strong>Stavební úřad v květnu povolil novostavbu padelových kurtů a město následně objednalo realizaci kurtu č. 1.</strong> Smlouva zveřejněná 18. června 2026 uvádí jako zhotovitele společnost BAGROS a cenu 1&nbsp;915&nbsp;202 Kč bez DPH, tedy 2&nbsp;317&nbsp;394,42 Kč včetně DPH. Už v březnu město objednalo projektovou dokumentaci u společnosti MESSOR za 122&nbsp;000 Kč bez DPH. Známé smluvní náklady na projekt a realizaci prvního kurtu tak činí 2&nbsp;037&nbsp;202 Kč bez DPH.</p>
-          <h3>Nové dětské hřiště v Pokuticích</h3>
-          <p><strong>Objednávka z 27. března 2026 dokládá přípravu nového hřiště v Pokuticích, nikoli cenu celé stavby.</strong> Společnost KU-KU měla za nejvýše 254&nbsp;100 Kč včetně DPH provést terénní úpravy, základy pro herní prvky, výkopy dopadových zón, dovoz písku a odvoz odpadu. Červnová reportáž TV Focus popsala plochu o rozloze přibližně 220 metrů čtverečních, velkou herní sestavu a dětské trampolíny a počítala s červencovým zprovozněním. Veřejné podklady ale zatím neumožňují bezpečně určit celkovou cenu hřiště, dodavatele herních prvků ani datum formálního předání.</p>
-          '''
-          if 'První padelový kurt v tenisovém areálu' not in text:
-              if text.count(anchor) != 1:
-                  raise SystemExit('Nelze bezpečně najít místo pro padel a Pokutice.')
-              text = text.replace(anchor, anchor + block, 1)
-
-          source_anchor = '<li><a href="https://udisc.com/courses/discgolf-kadanska-jesen-0TNS">UDisc: Kadaňská Jeseň, tři koše a čtyři výhoziště</a></li>\n'
-          source_block = '''<li><a href="https://smlouvy.gov.cz/smlouva/38419402">Registr smluv: novostavba padelových kurtů v Kadani, kurt č. 1 v tenisovém areálu</a></li>
-          <li>Registr smluv: projektová dokumentace novostavby padelových kurtů v areálu tenisu, MESSOR, zveřejněno 10. března 2026.</li>
-          <li><a href="https://smlouvy.gov.cz/smlouva/soubor/45214573/226%20-%20podeps%C3%A1no.pdf">Objednávka 226/Jan/2026: terénní práce a příprava základů budoucího hřiště v Pokuticích</a></li>
-          <li>TV Focus: Nové dětské hřiště v Pokuticích u Kadaně, reportáž z 9. června 2026.</li>
-          '''
-          if 'Objednávka 226/Jan/2026: terénní práce' not in text:
-              if text.count(source_anchor) != 1:
-                  raise SystemExit('Nelze bezpečně doplnit zdroje.')
-              text = text.replace(source_anchor, source_anchor + source_block, 1)
-
-          old_facts = '<li>21 doložených discgolfových košů ve dvou lokalitách</li><li>objednávky obsahují konkrétní čísla a lokality</li>'
-          new_facts = '<li>21 doložených discgolfových košů ve dvou lokalitách</li><li>první padelový kurt je smluvně zadaný</li><li>v Pokuticích vzniklo nové dětské hřiště</li><li>objednávky obsahují konkrétní čísla a lokality</li>'
-          text = text.replace(old_facts, new_facts)
-          text = text.replace(
-              'oficiální inventář discgolfových prvků a dokončené předávací dokumenty k letošním instalacím.',
-              'oficiální inventář discgolfových prvků, celkovou cenu a předání hřiště v Pokuticích a dokončené předávací dokumenty k letošním instalacím.',
-          )
+          old = '''<div class="place"><h3>Chytré hřiště</h3><p>Areál otevřený v létě 2018 spojuje hru a poznávání. Má vodní model Nechranické přehrady a Kadaňského stupně, pískoviště s bagrem, amfiteátr, zvukové prvky i fotbalovou plochu. Později přibyla kuličková dráha za 101 515 Kč, prvek Hopsinky za 213 782 Kč a šest skákacích balónů za 138 509 Kč, vše včetně DPH. Tři doložená rozšíření tak stála dohromady 453 806 Kč.</p></div>'''
+          new = '''<div class="place"><h3>Chytré hřiště</h3><p>Areál otevřený v létě 2018 spojuje hru a poznávání. Má vodní model Nechranické přehrady a Kadaňského stupně, pískoviště s bagrem, amfiteátr, zvukové prvky i fotbalovou plochu. Veřejné dokumenty dokládají nejméně osm přesně oceněných pozdějších zásahů: naučné prvky za 83 212 Kč, úpravu podzemní chodby za 497 582,08 Kč, skluzavku za 130 196 Kč, kuličkové hřiště za 101 515 Kč, tři herní prvky za 175 281 Kč, Hopsinky za 213 782 Kč, dřevěné bludiště za 362 426,46 Kč a šest skákacích balónů za 138 509 Kč. Součet činí 1 702 503,54 Kč včetně DPH. Nezahrnuje další dohledané práce bez bezpečně potvrzené ceny, například drenáž a tři posilovací prvky.</p></div>'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'Součet činí 1 702 503,54 Kč včetně DPH.' not in text:
+              raise SystemExit('Nenalezen očekávaný blok Chytrého hřiště.')
 
           required = (
-              'AKTUALIZOVÁNO 7:20',
+              'AKTUALIZOVÁNO 7:45',
+              'Modernizace fotbalového areálu má dvě velké stavební části',
               'První padelový kurt v tenisovém areálu',
-              '2&nbsp;037&nbsp;202 Kč bez DPH',
               'Nové dětské hřiště v Pokuticích',
-              '254&nbsp;100 Kč včetně DPH',
+              'Jak se síť hřišť rozvíjela dlouhodobě',
+              'Součet činí 1 702 503,54 Kč včetně DPH.',
               'Ve dvou doložených lokalitách je 21 košů',
           )
           for item in required:
               if item not in text:
-                  raise SystemExit(f'Po aktualizaci chybí: {item}')
+                  raise SystemExit(f'V článku chybí povinný údaj: {item}')
           if text.count('<tr><td>5.20</td>') != 1:
               raise SystemExit('Řádek hřiště 5.20 není právě jednou.')
 
           path.write_text(text, encoding='utf-8', newline='\n')
           PY
-            if git diff --quiet -- clanky/jak-se-kadan-stara-o-hriste-2026.html; then
-              success=1
-              break
-            fi
-            git add clanky/jak-se-kadan-stara-o-hriste-2026.html
-            git commit -m 'Doplnit padelový kurt a ověřené údaje o Pokuticích'
-            if git push origin HEAD:main; then
-              success=1
-              break
-            fi
-            sleep $((attempt * 4))
-          done
-          test "$success" = 1
 
-      - name: Načíst nejnovější main a zkontrolovat článek
+      - name: Uložit doplnění do main
         shell: bash
         run: |
           set -euo pipefail
-          sleep 10
+          git config user.name 'Naše Kadaň – ověřené doplnění'
+          git config user.email 'info@nasekadan.cz'
+          if git diff --quiet -- "$ARTICLE_PATH"; then
+            exit 0
+          fi
+          git add "$ARTICLE_PATH"
+          git commit -m 'Doplnit úplnější historii Chytrého hřiště'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          exit 1
+
+      - name: Načíst nejnovější článek a ověřit zdroj
+        shell: bash
+        run: |
+          set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          article='clanky/jak-se-kadan-stara-o-hriste-2026.html'
-          grep -Fq 'AKTUALIZOVÁNO 7:20' "$article"
-          grep -Fq 'První padelový kurt v tenisovém areálu' "$article"
-          grep -Fq 'Nové dětské hřiště v Pokuticích' "$article"
-          grep -Fq 'Ve dvou doložených lokalitách je 21 košů' "$article"
-          test "$(grep -Fo '<tr><td>5.20</td>' "$article" | wc -l | tr -d ' ')" = "1"
+          grep -Fq 'AKTUALIZOVÁNO 7:45' "$ARTICLE_PATH"
+          grep -Fq 'Součet činí 1 702 503,54 Kč včetně DPH.' "$ARTICLE_PATH"
+          grep -Fq 'Ve dvou doložených lokalitách je 21 košů' "$ARTICLE_PATH"
+          grep -Fq 'První padelový kurt v tenisovém areálu' "$ARTICLE_PATH"
+          grep -Fq 'Nové dětské hřiště v Pokuticích' "$ARTICLE_PATH"
+          test "$(grep -Fo '<tr><td>5.20</td>' "$ARTICLE_PATH" | wc -l | tr -d ' ')" = "1"
 
-      - name: Nasadit aktuální obsah
+      - name: Nasadit článek přímo na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -135,61 +110,78 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          sha="$(git rev-parse HEAD)"
-          printf 'status=ok\nsource=%s\ndeployed_at=%s\n' "$sha" "$(date -u +%FT%TZ)" > deployment-health.txt
-          tar --exclude='.git' --exclude='.github' --exclude='scripts' --exclude='deploy' -czf "$RUNNER_TEMP/site.tgz" .
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/site.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-site.tgz
+          mkdir -p "$RUNNER_TEMP/playgrounds-hotfix/clanky"
+          cp "$ARTICLE_PATH" "$RUNNER_TEMP/playgrounds-hotfix/clanky/"
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/playgrounds-hotfix" ubuntu@57.129.43.215:/tmp/nasekadan-playgrounds-hotfix
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          rm -rf /tmp/nasekadan-site
-          mkdir -p /tmp/nasekadan-site
-          tar -xzf /tmp/nasekadan-site.tgz -C /tmp/nasekadan-site
-          sudo mkdir -p /var/www/nasekadan
-          sudo cp -a /tmp/nasekadan-site/. /var/www/nasekadan/
+          src=/tmp/nasekadan-playgrounds-hotfix
+          root=/var/www/nasekadan
+          file=jak-se-kadan-stara-o-hriste-2026.html
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 "$src/clanky/$file" "$root/clanky/$file"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp /tmp/nasekadan-site/. nasekadan-web:/usr/share/nginx/html/
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp "$src/clanky/$file" "nasekadan-web:/usr/share/nginx/html/clanky/$file"
           fi
-          rm -rf /tmp/nasekadan-site /tmp/nasekadan-site.tgz
+          rm -rf "$src"
           REMOTE
 
-      - name: Ověřit veřejný web
+      - name: Veřejně ověřit aktualizovaný článek
         shell: bash
         run: |
           set -euo pipefail
-          sleep 8
-          q="${GITHUB_RUN_ID}-$(date +%s)"
-          health="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q")"
-          article="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html?v=$q")"
-          grep -Fq "source=$(git rev-parse HEAD)" <<<"$health"
-          grep -Fq 'AKTUALIZOVÁNO 7:20' <<<"$article"
-          grep -Fq 'Ve dvou doložených lokalitách je 21 košů' <<<"$article"
-          grep -Fq 'První padelový kurt v tenisovém areálu' <<<"$article"
-          grep -Fq 'Nové dětské hřiště v Pokuticích' <<<"$article"
-          test "$(grep -Fo '<tr><td>5.20</td>' <<<"$article" | wc -l | tr -d ' ')" = "1"
-          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html?v=$q" | grep -Fq 'Kriticky chybí skupina 0 Rh−'
-          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?v=$q" | grep -Fq 'zimní stadion'
-
-      - name: Zapsat potvrzené nasazení
-        shell: bash
-        run: |
-          set -euo pipefail
-          deployed_sha="$(git rev-parse HEAD)"
-          success=0
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git reset --hard origin/main
-            printf 'status=ok\nsource=%s\ndeployed_at=%s\narticle=https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html\nchecks=discgolf-21,padel,pokutice,updated-0720,single-5.20\n' "$deployed_sha" "$(date -u +%FT%TZ)" > deployment-health.txt
-            git add deployment-health.txt
-            git commit -m "Potvrď veřejné nasazení aktualizace hřišť"
-            if git push origin HEAD:main; then
-              success=1
+          ok=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/playgrounds-live.html || true
+            if python3 - <<'PY'
+          from pathlib import Path
+          text = Path('/tmp/playgrounds-live.html').read_text(encoding='utf-8', errors='replace')
+          required = (
+              'AKTUALIZOVÁNO 7:45',
+              'Modernizace fotbalového areálu má dvě velké stavební části',
+              'První padelový kurt v tenisovém areálu',
+              'Nové dětské hřiště v Pokuticích',
+              'Jak se síť hřišť rozvíjela dlouhodobě',
+              'Součet činí 1 702 503,54 Kč včetně DPH.',
+              'Ve dvou doložených lokalitách je 21 košů',
+          )
+          for item in required:
+              assert item in text, item
+          assert text.count('<tr><td>5.20</td>') == 1
+          PY
+            then
+              ok=1
               break
             fi
             sleep $((attempt * 4))
           done
-          test "$success" = 1
+          test "$ok" = 1
 
-# Redeploy requested 2026-08-04 20:55 Europe/Prague to restore the temporary homepage pin.
-# Redeploy requested 2026-08-06 07:06 Europe/Prague for the verified discgolf update and duplicate-row fix.
-# Verification strengthened 2026-08-06 07:10 Europe/Prague for the playground article.
-# Enrichment and guarded redeploy requested 2026-08-06 07:20 Europe/Prague for padel and Pokutice.
+      - name: Zapsat veřejný důkaz
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          mkdir -p reports
+          python3 - <<'PY'
+          import datetime, json, os
+          data = {
+              'status': 'passed',
+              'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'article': 'https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html',
+              'source': os.environ['SOURCE_SHA'],
+              'checks': ['updated-0745', 'football', 'padel', 'pokutice', 'long-term', 'discgolf-21', 'single-5.20'],
+              'runId': os.environ.get('GITHUB_RUN_ID', ''),
+          }
+          open('reports/playgrounds-live-status.json', 'w', encoding='utf-8').write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+          PY
+          git config user.name 'Naše Kadaň – veřejná kontrola'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/playgrounds-live-status.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'Potvrdit veřejné nasazení článku o hřištích [skip ci]'
+          git push origin HEAD:main
+        env:
+          SOURCE_SHA: ${{ github.sha }}
