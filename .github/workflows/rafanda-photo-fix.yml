@@ -57,7 +57,7 @@ jobs:
           cp "$out/social/eso-market-rafanda-kadan-24-7.webp" social/
           python3 scripts/article_visibility_guard.py
           git rm -rf --ignore-unmatch .github/tmp/rafanda-photo-fix tmp/rafanda-candidates .github/workflows/rafanda-photo-fix.yml
-          git add -A "$ARTICLE" images/clanky/eso-market-rafanda social/eso-market-rafanda-kadan-24-7.webp data/article-integrity-manifest.json .github tmp
+          git add -A
           git commit -m "Opravit článek o ESO marketu a doplnit redakční fotografie"
           git push origin HEAD:main
           echo "final_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
@@ -101,4 +101,4 @@ jobs:
             test "$(stat -c %s "$dest")" -gt 10000
           done
 
-# Trigger 2026-08-06T22:24:00+02:00
+# Trigger 2026-08-06T22:28:00+02:00
