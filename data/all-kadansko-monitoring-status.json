@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-06T04:35:02.622931+00:00",
+  "checkedAt": "2026-08-06T06:40:06.641029+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 192,
-  "failedSources": 21,
-  "itemsParsed": 16879,
-  "uniqueItems": 10709,
-  "newAlerts": 0,
+  "checkedSources": 196,
+  "failedSources": 17,
+  "itemsParsed": 17023,
+  "uniqueItems": 10809,
+  "newAlerts": 1,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 876,
+    "genericTitle": 893,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 6,
-    "notEditoriallySignificant": 47,
+    "broadWithoutLocalMatch": 15,
+    "notEditoriallySignificant": 50,
     "notFreshOrUndated": 0,
-    "duplicate": 5294,
+    "duplicate": 5321,
     "deferredByCap": 0
   },
   "coverage": {
@@ -313,9 +313,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -648,9 +647,8 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -675,7 +673,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 274
+      "itemsParsed": 276
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -732,7 +730,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 27
     },
     {
       "name": "Volby.cz – oficiální volební výsledky a kandidáti",
@@ -843,9 +841,8 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 85
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -967,7 +964,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -990,8 +987,9 @@
       "url": "https://www.obecbrezno.cz/",
       "category": "Okolní obce",
       "tier": "municipality",
-      "status": "checked",
-      "itemsParsed": 158
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 503: Service Unavailable"
     },
     {
       "name": "Klášterec nad Ohří – městský web",
@@ -1016,7 +1014,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 24
+      "itemsParsed": 22
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -1024,7 +1022,7 @@
       "category": "Média – jižní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 3
+      "itemsParsed": 2
     },
     {
       "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
@@ -1040,7 +1038,7 @@
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 4
+      "itemsParsed": 3
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
@@ -1048,7 +1046,7 @@
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 2
+      "itemsParsed": 1
     },
     {
       "name": "Google News – kadaňské organizace a služby",
@@ -1353,7 +1351,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 268
+      "itemsParsed": 269
     },
     {
       "name": "Hrušovany – oficiální web",
@@ -1632,9 +1630,8 @@
       "url": "https://www.slavnosticibule.cz/",
       "category": "major-recurring-event",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 5
     },
     {
       "name": "Slavnosti cibule Račetice – doplňkový zdroj 1",
@@ -1714,9 +1711,8 @@
       "url": "https://hornihrad.cz/",
       "category": "castle-events",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 176
     },
     {
       "name": "Dolní Poohří – regionální kalendář",
@@ -1732,7 +1728,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 4
+      "itemsParsed": 3
     },
     {
       "name": "Google News – široký region 2",
@@ -1740,7 +1736,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 38
+      "itemsParsed": 35
     },
     {
       "name": "Google News – široký region 3",
@@ -1756,7 +1752,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 89
+      "itemsParsed": 91
     },
     {
       "name": "Google News – široký region 5",
@@ -1804,7 +1800,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 11
+      "itemsParsed": 10
     },
     {
       "name": "Google News – široký region 11",
@@ -1828,7 +1824,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 14
     },
     {
       "name": "Google News – široký region 14",
