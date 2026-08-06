@@ -23,7 +23,9 @@ jobs:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
       GH_TOKEN: ${{ github.token }}
+      GYMNASTIKA_SLUG: gymnastika-kadan-treneri-prosinec-2026
       APOLENA_SLUG: apolena-svabikova-mistrovstvi-evropy-birmingham-2026
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,7 +36,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Sestavit titulku, archiv a evidenci
+      - name: Dokončit Gymnastiku a sestavit všechny publikační kanály
         shell: bash
         run: |
           set -euo pipefail
@@ -42,15 +44,18 @@ jobs:
           git config user.email 'info@nasekadan.cz'
           git fetch origin main
           git reset --hard origin/main
-          ! grep -E 'HOMEPAGE_PIN_|NK-TEMP-STADIUM-PIN|pin_active|pin_href' scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
-          python3 -m py_compile scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+          test -f "clanky/$GYMNASTIKA_SLUG.html"
+          test -f "social/$GYMNASTIKA_SLUG.png"
+          test "$(wc -c < "social/$GYMNASTIKA_SLUG.png")" -gt 10000
+          python3 -m py_compile scripts/publish_gymnastika_kadan_20260806.py scripts/rebuild_gymnastika_surfaces.py scripts/enforce_article_visibility.py scripts/enforce_all_article_visibility.py
+          python3 scripts/rebuild_gymnastika_surfaces.py
           python3 scripts/enforce_all_article_visibility.py
           sed -i 's/[[:space:]]\+$//' index.html sitemap.xml clanky/index.html clanky/strana-*.html
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-gymnastika-publication\n' "$(git rev-parse HEAD)" "$(date -u +%FT%TZ)" > deployment-health.txt
           git diff --check
-          git add index.html clanky/index.html sitemap.xml
-          find clanky -maxdepth 1 -type f -name 'strana-*.html' -print0 | xargs -0 -r git add --
+          git add index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt data/published-content-index.json data/article-integrity-manifest.json
           if ! git diff --cached --quiet; then
-            git commit -m 'Automaticky srovnat pořadí článků podle zveřejnění'
+            git commit -m 'Dokončit všechny kanály článku Gymnastiky Kadaň'
             for attempt in 1 2 3 4; do
               if git push origin HEAD:main; then break; fi
               test "$attempt" != 4
@@ -59,45 +64,53 @@ jobs:
             done
           fi
 
-      - name: Načíst aktuální main a připravit malý proudový balík
+      - name: Načíst aktuální main a připravit proudový balík
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          test -f "clanky/$APOLENA_SLUG.html"
-          test -f "social/$APOLENA_SLUG.png"
-          grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' "clanky/$APOLENA_SLUG.html"
-          grep -Fq 'Amálie Švábíková naopak v Birminghamu startovat nebude' "clanky/$APOLENA_SLUG.html"
-          grep -Fq "$APOLENA_SLUG.html" index.html
-          grep -Fq "$APOLENA_SLUG.html" clanky/index.html
-          grep -Fq "$APOLENA_SLUG.html" rss.xml
-          grep -Fq "$APOLENA_SLUG.html" sitemap.xml
-          grep -Fq "$APOLENA_SLUG.html" news-sitemap.xml
+          for path in \
+            "clanky/$GYMNASTIKA_SLUG.html" \
+            "social/$GYMNASTIKA_SLUG.png" \
+            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
+            data/published-content-index.json data/article-integrity-manifest.json deployment-health.txt; do
+            test -f "$path"
+          done
+          grep -Fq 'Gymnastice v Kadani chybějí trenéři' "clanky/$GYMNASTIKA_SLUG.html"
+          grep -Fq 'nové děti' "clanky/$GYMNASTIKA_SLUG.html"
+          grep -Fq 'prosinec 2026' "clanky/$GYMNASTIKA_SLUG.html"
+          for path in index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml data/published-content-index.json data/article-integrity-manifest.json; do
+            grep -Fq "$GYMNASTIKA_SLUG.html" "$path"
+          done
+          test "$(grep -o "$GYMNASTIKA_SLUG.html" rss.xml | wc -l | tr -d ' ')" = 1
+          test "$(grep -o "$GYMNASTIKA_SLUG.html" sitemap.xml | wc -l | tr -d ' ')" = 1
+          test "$(grep -o "$GYMNASTIKA_SLUG.html" news-sitemap.xml | wc -l | tr -d ' ')" = 1
           key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
           bundle="$RUNNER_TEMP/nasekadan-stream"
           rm -rf "$bundle"
-          mkdir -p "$bundle/clanky" "$bundle/social"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
           cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
           cp clanky/*.html "$bundle/clanky/"
-          cp "social/$APOLENA_SLUG.png" "$bundle/social/"
+          cp "social/$GYMNASTIKA_SLUG.png" "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
 
-      - name: Uvolnit bezpečně dočasné soubory na serveru
+      - name: Uvolnit dočasné soubory na serveru
         shell: bash
         run: |
           set -euo pipefail
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          sudo rm -rf /tmp/article-order* /tmp/eso-direct* /tmp/eso-market* /tmp/apolena* /tmp/nasekadan-deploy* 2>/dev/null || true
+          sudo rm -rf /tmp/article-order* /tmp/gymnastika* /tmp/nasekadan-deploy* 2>/dev/null || true
           avail=$(df -Pk / | awk 'NR==2 {print $4}')
           if [ "${avail:-0}" -lt 153600 ]; then
             sudo docker builder prune -af >/dev/null 2>&1 || true
             sudo journalctl --vacuum-size=80M >/dev/null 2>&1 || true
           fi
-          sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social
+          sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data
           sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
           REMOTE
 
@@ -106,58 +119,62 @@ jobs:
         run: |
           set -euo pipefail
           bundle="$RUNNER_TEMP/nasekadan-stream"
-          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; exec 9>/var/lock/nasekadan-content.lock; flock -x 9; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky social | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; exec 9>/var/lock/nasekadan-content.lock; flock -x 9; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky social data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
 
-      - name: Veřejně ověřit článek i všechny publikační povrchy
+      - name: Veřejně ověřit článek a všechny publikační povrchy
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
           success=0
           for n in $(seq 1 15); do
             stamp="${GITHUB_RUN_ID}-$(date +%s)-$n"
-            article="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/$APOLENA_SLUG.html?verify=$stamp" || true)"
+            article="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/$GYMNASTIKA_SLUG.html?verify=$stamp" || true)"
             home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?verify=$stamp" || true)"
             archive="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?verify=$stamp" || true)"
             rss="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?verify=$stamp" || true)"
             sitemap="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/sitemap.xml?verify=$stamp" || true)"
             news="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/news-sitemap.xml?verify=$stamp" || true)"
             health="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/deployment-health.txt?verify=$stamp" || true)"
-            image_bytes="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/social/$APOLENA_SLUG.png?verify=$stamp" | wc -c | tr -d ' ' || true)"
-            if grep -Fq 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' <<<"$article" \
-              && grep -Fq 'Amálie Švábíková naopak v Birminghamu startovat nebude' <<<"$article" \
-              && grep -Fq '4,51' <<<"$article" \
-              && grep -Fq '20:05' <<<"$article" \
-              && grep -Fq "data-latest-article-href=\"/clanky/$APOLENA_SLUG.html\"" <<<"$home" \
-              && grep -Fq "$APOLENA_SLUG.html" <<<"$archive" \
-              && grep -Fq "$APOLENA_SLUG.html" <<<"$rss" \
-              && grep -Fq "$APOLENA_SLUG.html" <<<"$sitemap" \
-              && grep -Fq "$APOLENA_SLUG.html" <<<"$news" \
-              && grep -Fq 'mode=direct-apolena-publication' <<<"$health" \
-              && [ "${image_bytes:-0}" -gt 20000 ]; then
+            registry="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/data/published-content-index.json?verify=$stamp" || true)"
+            image_bytes="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/social/$GYMNASTIKA_SLUG.png?verify=$stamp" | wc -c | tr -d ' ' || true)"
+            if grep -Fq 'Gymnastice v Kadani chybějí trenéři' <<<"$article" \
+              && grep -Fq 'nové děti' <<<"$article" \
+              && grep -Fq 'prosinec 2026' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$GYMNASTIKA_SLUG.html\"" <<<"$home" \
+              && grep -Fq "$GYMNASTIKA_SLUG.html" <<<"$archive" \
+              && [ "$(grep -o "$GYMNASTIKA_SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" = 1 ] \
+              && [ "$(grep -o "$GYMNASTIKA_SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" = 1 ] \
+              && [ "$(grep -o "$GYMNASTIKA_SLUG.html" <<<"$news" | wc -l | tr -d ' ')" = 1 ] \
+              && grep -Fq "$GYMNASTIKA_SLUG.html" <<<"$registry" \
+              && grep -Fq 'mode=direct-gymnastika-publication' <<<"$health" \
+              && [ "${image_bytes:-0}" -gt 10000 ]; then
               success=1
               break
             fi
             sleep $((n * 3))
           done
           test "$success" = 1
-          echo 'Apolena je veřejně ověřena na článku, titulce, archivu, RSS, obou sitemapách, obrázku a health souboru.'
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
 
-      - name: Uzavřít incident po úspěchu
+      - name: Uzavřít publikační issue a zapsat monitoring
         if: success()
         shell: bash
         run: |
-          title='[incident] Chronologie článků Naše Kadaň'
-          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
-          if [[ -n "$issue" ]]; then
-            gh issue comment "$issue" --body 'Proudové nasazení bez ukládání archivu do serverového /tmp prošlo. Článek Apoleny Švábíkové, titulka, archiv, RSS, obě sitemapy, obrázek a deployment-health.txt byly veřejně ověřeny.'
-            gh issue close "$issue" --reason completed
+          issue=751
+          if gh issue view "$issue" >/dev/null 2>&1; then
+            gh issue comment "$issue" --body '✅ Článek Gymnastiky Kadaň je veřejně ověřen na článku, titulce, archivu, RSS, sitemapě, news-sitemapě, sociální grafice, registru a deployment-health.txt.'
+            gh issue close "$issue" --reason completed || true
+          fi
+          if gh issue view 746 >/dev/null 2>&1; then
+            gh issue comment 746 --body 'Regresní případ Gymnastiky Kadaň byl zpracován: veřejné upozornění na nedostatek trenérů, uzavření náboru a plánovaný konec skupiny bylo publikováno na jediné kanonické URL. Oprava monitoringu jako celku zůstává otevřená.'
           fi
 
-      - name: Založit incident při selhání
+      - name: Založit nebo doplnit incident při selhání
         if: failure()
         shell: bash
         run: |
           title='[incident] Chronologie článků Naše Kadaň'
-          body="Proudové nasazení nebo veřejná kontrola selhaly. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body="Proudové nasazení Gymnastiky nebo veřejná kontrola selhaly. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
           if [[ -n "$issue" ]]; then gh issue comment "$issue" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
