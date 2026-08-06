@@ -1,0 +1,331 @@
+name: Publikovat článek o Městské policii Kadaň
+
+on:
+  schedule:
+    - cron: '0,10,20,30,40,50 2 7 8 *'
+    - cron: '0,10,20,30,40,50 3 7 8 *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/publish-mestska-policie-repair-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-mestska-policie-kadan-20260807
+  cancel-in-progress: false
+
+env:
+  SLUG: mestska-policie-kadan-fakta-diskuse-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Povolit pouze jednorázový termín roku 2026
+        id: due
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "schedule" && "$(date -u +%Y-%m-%d)" != "2026-08-07" ]]; then
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.due.outputs.run == 'true'
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        if: steps.due.outputs.run == 'true'
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit, zda už je vše veřejně hotové
+        if: steps.due.outputs.run == 'true'
+        id: precheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          complete=0
+          q="precheck-${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 30 "$ARTICLE_URL?v=$q" || true)"
+          home="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/?v=$q" || true)"
+          archive="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/clanky/?v=$q" || true)"
+          rss="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+          sitemap="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+          news="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+          registry="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+          if grep -Fq 'Bouřlivá debata přiměla redakci ověřit fakta' <<<"$article" \
+            && grep -Fq '1 886' <<<"$article" \
+            && grep -Fq '3 840' <<<"$article" \
+            && ! grep -Fiq 'noindex' <<<"$article" \
+            && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+            && grep -Fq "$SLUG.html" <<<"$archive" \
+            && [[ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]] \
+            && [[ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" == 1 ]] \
+            && [[ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" == 1 ]] \
+            && grep -Fq "$SLUG.html" <<<"$registry"; then
+            complete=1
+          fi
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit článek a všechny publikační povrchy
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          python3 scripts/publish_mestska_policie_20260807.py
+          git diff --check
+
+      - name: Uložit zdrojovou publikaci s opakovaným push
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – publikace MP'
+          git config user.email 'info@nasekadan.cz'
+          git add "clanky/$SLUG.html" index.html clanky/index.html clanky/strana-*.html \
+            rss.xml sitemap.xml news-sitemap.xml llms.txt \
+            data/published-content-index.json data/article-integrity-manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publikovat ověření práce Městské policie Kadaň'
+          fi
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then break; fi
+            if [[ "$attempt" == 5 ]]; then exit 1; fi
+            git pull --rebase origin main
+            sleep $((attempt * 3))
+          done
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Zapsat zdrojový commit a stav nasazování
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+
+          slug = os.environ['SLUG']
+          sha = os.environ['CONTENT_SHA']
+          url = f'https://nasekadan.cz/clanky/{slug}.html'
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          for item in data.get('articles', []):
+              if item.get('url') == url:
+                  item['source_commit'] = sha
+                  break
+          else:
+              raise SystemExit('Článek chybí v publikačním registru.')
+          now = datetime.now(timezone.utc).isoformat()
+          data['source_commit'] = sha
+          data['generated_at'] = now
+          validation = data.setdefault('validation', {})
+          validation['repair_pending_public_verification'] = True
+          validation['last_publication'] = {
+              'status': 'deploying',
+              'checked_at': now,
+              'article_url': url,
+              'classification': 'municipal_police_fact_check',
+              'source_commit': sha,
+              'public_verified_at': None,
+          }
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-mestska-policie-publication\n' \
+            "$CONTENT_SHA" "$(date -u +%FT%TZ)" > deployment-health.txt
+          git add data/published-content-index.json deployment-health.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'Evidence: zahájit nasazení článku o městské policii'
+            for attempt in 1 2 3 4 5; do
+              if git push origin HEAD:main; then break; fi
+              if [[ "$attempt" == 5 ]]; then exit 1; fi
+              git pull --rebase origin main
+              sleep $((attempt * 3))
+            done
+          fi
+
+      - name: Připravit proudový balík pro OVH
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          bundle="$RUNNER_TEMP/mp-publication"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp clanky/*.html "$bundle/clanky/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+
+      - name: Nasadit se zámkem přímo do webu a kontejneru
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo rm -rf /tmp/mp-publication* /tmp/nasekadan-deploy* 2>/dev/null || true
+          avail=$(df -Pk / | awk 'NR==2 {print $4}')
+          if [ "${avail:-0}" -lt 153600 ]; then
+            sudo docker builder prune -af >/dev/null 2>&1 || true
+            sudo journalctl --vacuum-size=80M >/dev/null 2>&1 || true
+          fi
+          sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/data
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          REMOTE
+          tar -C "$RUNNER_TEMP/mp-publication" -czf - . | \
+            ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 \
+            'set -euo pipefail; exec 9>/var/lock/nasekadan-content.lock; flock -x 9; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+
+      - name: Veřejně ověřit článek i všechny kanály
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for attempt in $(seq 1 15); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            article="$(curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            llms="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/llms.txt?v=$q" || true)"
+            health="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+            registry="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            if grep -Fq 'Bouřlivá debata přiměla redakci ověřit fakta' <<<"$article" \
+              && grep -Fq '1 886' <<<"$article" \
+              && grep -Fq '3 840' <<<"$article" \
+              && grep -Fq 'Obyvatelé popisují rychlé reakce hlídek' <<<"$article" \
+              && grep -Fq "<link rel=\"canonical\" href=\"$ARTICLE_URL\">" <<<"$article" \
+              && ! grep -Fiq 'noindex' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+              && grep -Fq "$SLUG.html" <<<"$archive" \
+              && [[ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]] \
+              && [[ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" == 1 ]] \
+              && [[ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" == 1 ]] \
+              && grep -Fq "$SLUG.html" <<<"$llms" \
+              && grep -Fq 'mode=direct-mestska-policie-publication' <<<"$health" \
+              && grep -Fq "source=$CONTENT_SHA" <<<"$health" \
+              && grep -Fq "$SLUG.html" <<<"$registry" \
+              && grep -Fq "$CONTENT_SHA" <<<"$registry"; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          [[ "$success" == 1 ]]
+          echo "PUBLIC_VERIFIED_AT=$(date -u +%FT%TZ)" >> "$GITHUB_ENV"
+
+      - name: Uzavřít kanonickou evidenci úspěchu
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+
+          slug = os.environ['SLUG']
+          sha = os.environ['CONTENT_SHA']
+          verified = os.environ['PUBLIC_VERIFIED_AT']
+          url = f'https://nasekadan.cz/clanky/{slug}.html'
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          validation = data.setdefault('validation', {})
+          validation['repair_pending_public_verification'] = False
+          validation['public_audit_at'] = verified
+          validation['last_publication'] = {
+              'status': 'success',
+              'checked_at': verified,
+              'article_url': url,
+              'classification': 'municipal_police_fact_check',
+              'source_commit': sha,
+              'public_verified_at': verified,
+              'public_verification': {
+                  'article': True, 'homepage': True, 'archive': True,
+                  'rss': True, 'sitemap': True, 'news_sitemap': True,
+                  'llms': True, 'deployment_health': True, 'registry': True,
+              },
+          }
+          data['generated_at'] = datetime.now(timezone.utc).isoformat()
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          report = {
+              'status': 'success', 'article_url': url, 'source_commit': sha,
+              'verified_at': verified,
+              'surfaces': ['article','homepage','archive','rss','sitemap','news-sitemap','llms','deployment-health','registry'],
+          }
+          Path('reports/publication-mestska-policie-20260807.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git add data/published-content-index.json reports/publication-mestska-policie-20260807.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Evidence: veřejně ověřit článek o Městské policii Kadaň'
+            for attempt in 1 2 3 4 5; do
+              if git push origin HEAD:main; then break; fi
+              if [[ "$attempt" == 5 ]]; then exit 1; fi
+              git pull --rebase origin main
+              sleep $((attempt * 3))
+            done
+          fi
+
+      - name: Nasadit finální veřejný registr
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          tar -C . -czf - data/published-content-index.json | \
+            ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 \
+            'set -euo pipefail; exec 9>/var/lock/nasekadan-content.lock; flock -x 9; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data; sudo tar -C "$root" -czf - data/published-content-index.json | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+
+      - name: Uzavřít předchozí incident po úspěchu
+        if: success() && steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='[incident] Publikace článku o Městské policii Kadaň'
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "Publikace byla opravena a veřejně ověřena v běhu ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+            gh issue close "$issue" --reason completed
+          fi
+
+      - name: Založit incident při selhání
+        if: failure() && steps.due.outputs.run == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='[incident] Publikace článku o Městské policii Kadaň'
+          body="Naplánovaná publikace nebo veřejná kontrola selhala. Další plánovaný běh ji zkusí znovu. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          issue="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then gh issue comment "$issue" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
