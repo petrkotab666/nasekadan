@@ -1,0 +1,167 @@
+name: Dokončit kanonickou aktualizaci jezera Most
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-jezero-most-canonical-20260806.yml'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-production
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      ARTICLE_URL: https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html
+      HEADLINE: Pátrání na jezeře Most má tragický vývoj. Policie našla tělo osmadvacetiletého muže
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Srovnat cílový záznam registru se zdrojovým článkem
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          import json, re, subprocess
+          from html import unescape
+          from pathlib import Path
+          article_path=Path('clanky/jezero-most-patrani-dva-lide-bourka-2026.html')
+          registry_path=Path('data/published-content-index.json')
+          html=article_path.read_text(encoding='utf-8')
+          h1m=re.search(r'<h1\b[^>]*>(.*?)</h1>', html, re.I|re.S)
+          mm=re.search(r'<meta[^>]*property=["\']article:modified_time["\'][^>]*content=["\']([^"\']+)', html, re.I|re.S) or re.search(r'"dateModified"\s*:\s*"([^"]+)"', html)
+          if not h1m or not mm:
+              raise SystemExit('Zdrojový článek nemá H1 nebo dateModified.')
+          h1=' '.join(unescape(re.sub(r'<[^>]+>', ' ', h1m.group(1))).split())
+          expected='Pátrání na jezeře Most má tragický vývoj. Policie našla tělo osmadvacetiletého muže'
+          if h1 != expected:
+              raise SystemExit(f'Neočekávaný H1: {h1!r}')
+          data=json.loads(registry_path.read_text(encoding='utf-8'))
+          matches=[a for a in data['articles'] if a.get('url')=='https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html']
+          if len(matches)!=1:
+              raise SystemExit(f'Očekáván právě jeden záznam, nalezeno {len(matches)}.')
+          entry=matches[0]
+          entry['title']=h1
+          entry['h1']=h1
+          entry['modified_at']=mm.group(1)
+          entry['source_commit']=subprocess.check_output(['git','log','-1','--format=%H','--',str(article_path)],text=True).strip()
+          data.setdefault('validation',{})['repair_pending_public_verification']=True
+          registry_path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Srovnat registr s aktualizovaným článkem o jezeře Most'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              git fetch origin main
+              git reset --hard origin/main
+              python3 - <<'PY'
+          import json, re, subprocess
+          from html import unescape
+          from pathlib import Path
+          p=Path('clanky/jezero-most-patrani-dva-lide-bourka-2026.html'); r=Path('data/published-content-index.json')
+          t=p.read_text(encoding='utf-8'); h=' '.join(unescape(re.sub(r'<[^>]+>',' ',re.search(r'<h1\b[^>]*>(.*?)</h1>',t,re.I|re.S).group(1))).split())
+          m=re.search(r'<meta[^>]*property=["\']article:modified_time["\'][^>]*content=["\']([^"\']+)',t,re.I|re.S) or re.search(r'"dateModified"\s*:\s*"([^"]+)"',t)
+          d=json.loads(r.read_text(encoding='utf-8')); e=[a for a in d['articles'] if a.get('url')=='https://nasekadan.cz/clanky/jezero-most-patrani-dva-lide-bourka-2026.html'][0]
+          e.update(title=h,h1=h,modified_at=m.group(1),source_commit=subprocess.check_output(['git','log','-1','--format=%H','--',str(p)],text=True).strip()); d.setdefault('validation',{})['repair_pending_public_verification']=True
+          r.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+              git add data/published-content-index.json
+              git commit -m 'Srovnat registr s aktualizovaným článkem o jezeře Most'
+              if [ "$attempt" = 5 ]; then exit 1; fi
+            done
+          fi
+
+      - name: Nasadit aktuální main kanonickým postupem
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; cd /opt/nasekadan; git fetch --prune origin main; git reset --hard origin/main; git clean -fd; chmod +x deploy/sync-production.sh; sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh'
+
+      - name: Veřejně auditovat a doplnit kanonický registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          for attempt in 1 2 3 4 5 6; do
+            if python3 scripts/run_canonical_audit_runtime_v2.py; then break; fi
+            if [ "$attempt" = 6 ]; then exit 1; fi
+            sleep $((attempt * 5))
+          done
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/published-content-index.json .github/canonical-content-audit-status.json .github/canonical-published-index-status.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Veřejně ověřit kanonickou aktualizaci jezera Most [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              if [ "$attempt" = 5 ]; then exit 1; fi
+            done
+          fi
+
+      - name: Znovu nasadit finální registr a ověřit všechny povrchy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; cd /opt/nasekadan; git fetch --prune origin main; git reset --hard origin/main; git clean -fd; chmod +x deploy/sync-production.sh; sudo env GITHUB_WORKSPACE=/opt/nasekadan bash deploy/sync-production.sh'
+          python3 <<'PY'
+          import json, ssl, time, urllib.request, xml.etree.ElementTree as ET
+          BASE='https://nasekadan.cz'; HEADLINE='Pátrání na jezeře Most má tragický vývoj. Policie našla tělo osmadvacetiletého muže'; URL=BASE+'/clanky/jezero-most-patrani-dva-lide-bourka-2026.html'
+          ctx=ssl._create_unverified_context()
+          def get(path):
+              u=path if path.startswith('http') else BASE+path
+              req=urllib.request.Request(u+('?' if '?' not in u else '&')+'verify='+str(time.time_ns()),headers={'User-Agent':'NaseKadanJezeroRepair/1.0','Cache-Control':'no-cache, no-store','Pragma':'no-cache'})
+              with urllib.request.urlopen(req,timeout=45,context=ctx) as r: return r.read().decode('utf-8','replace')
+          article=get(URL); home=get('/'); archive=get('/clanky/'); rss=get('/rss.xml'); sitemap=get('/sitemap.xml'); news=get('/news-sitemap.xml'); health=get('/deployment-health.txt'); registry=json.loads(get('/data/published-content-index.json'))
+          assert f'<h1>{HEADLINE}</h1>' in article
+          assert HEADLINE in home and HEADLINE in archive and HEADLINE in rss
+          assert home.count('/clanky/jezero-most-patrani-dva-lide-bourka-2026.html')==1
+          assert archive.count('/clanky/jezero-most-patrani-dva-lide-bourka-2026.html')==1
+          assert rss.count(URL)==1
+          assert sitemap.count(URL)==1
+          assert news.count(URL)==1
+          entries=[a for a in registry['articles'] if a.get('url')==URL]
+          assert len(entries)==1 and entries[0]['title']==HEADLINE and entries[0]['h1']==HEADLINE
+          assert registry.get('validation',{}).get('repair_pending_public_verification') is False
+          assert 'status=ok' in health
+          ET.fromstring(rss); ET.fromstring(sitemap); ET.fromstring(news)
+          print('Veřejná kontrola aktualizace jezera Most prošla.')
+          PY
+
+      - name: Uzavřít zpracovaný monitoring a incidenty
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh issue comment 734 --body 'Nález byl zapracován jako aktualizace existujícího článku na stejné URL. Nový H1, titulka, archiv, RSS, sitemap, news-sitemap, kanonický registr i deployment-health byly veřejně ověřeny.'
+          gh issue close 734 --reason completed
+          gh issue comment 735 --body 'Nešlo o smazaný článek, ale o souběh generátoru s aktualizací. Finální povrchy byly znovu nasazeny a veřejně ověřeny.'
+          gh issue close 735 --reason completed
+          gh issue comment 736 --body 'Kanonické nasazení je dokončeno. URL zůstala beze změny a všechny veřejné publikační povrchy i registr jsou konzistentní.'
+          gh issue close 736 --reason completed
