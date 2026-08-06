@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="${GITHUB_WORKSPACE:-$(pwd)}"
+cd "$ROOT"
+
+# Dočasná idempotentní oprava dvou fotografií, které byly dříve omylem
+# uloženy jako textový Base64 místo binárního WebP. Běží před každým buildem,
+# takže živý web vždy dostane skutečné obrázky, i než se uklidí pomocné soubory.
+RAFANDA_DIR="images/clanky/eso-market-rafanda"
+NAVOD_PARTS=".github/tmp/rafanda-photo-fix"
+PRAVIDLA_B64="tmp/rafanda-candidates/05-4660.bin"
+if [[ -d "$NAVOD_PARTS" && -f "$PRAVIDLA_B64" && -f "$RAFANDA_DIR/prodejna-rafanda-24-7.webp" ]]; then
+  mkdir -p "$RAFANDA_DIR" social
+  cat "$NAVOD_PARTS"/navod.part* | base64 -d > "$RAFANDA_DIR/navod-vstup-nakup-odchod.webp"
+  base64 -d "$PRAVIDLA_B64" > "$RAFANDA_DIR/pravidla-platba-kamery.webp"
+  cp "$RAFANDA_DIR/prodejna-rafanda-24-7.webp" social/eso-market-rafanda-kadan-24-7.webp
+  file "$RAFANDA_DIR"/*.webp social/eso-market-rafanda-kadan-24-7.webp | grep -q 'Web/P image'
+  test "$(stat -c %s "$RAFANDA_DIR/prodejna-rafanda-24-7.webp")" -gt 10000
+  test "$(stat -c %s "$RAFANDA_DIR/navod-vstup-nakup-odchod.webp")" -gt 10000
+  test "$(stat -c %s "$RAFANDA_DIR/pravidla-platba-kamery.webp")" -gt 10000
+  echo "Rafanda: tři redakční fotografie byly před buildem ověřeny jako WebP."
+fi
+
 ENV_FILE=/etc/nasekadan-newsletter.env
 SERVICE=nasekadan-newsletter.service
 
