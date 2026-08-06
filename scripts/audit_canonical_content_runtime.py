@@ -23,7 +23,7 @@ def fetch(path: str) -> str:
     sep = "&" if "?" in path else "?"
     url = f"{BASE}{path}{sep}audit={int(time.time() * 1000)}"
     # HTTP hlavičky se v Pythonu serializují přes latin-1. User-Agent proto
-    # musí zůat čistě ASCII; diakritika zde dříve shazovala celý audit až
+    # musí zůstat čistě ASCII; diakritika zde dříve shazovala celý audit až
     # po úspěšném nasazení webu a vytvářela falešný incident.
     req = Request(
         url,
@@ -115,15 +115,15 @@ def current_registry_urls(entries: list[dict]) -> list[str]:
     return [url for _, url in items]
 
 
-def archive_pages(first_page: str) -> list[str]:
+def archive_pages(page_text: str) -> list[str]:
     pages = ["/clanky/"]
     # Generátor archivu používá podle šablony absolutní URL, kořenové odkazy
     # /clanky/strana-N.html nebo relativní strana-N.html. Audit musí umět
-    # všechny tři varianty, jinak zkontroluje jen první stránku a falešně
-    # označí všechny starší články za chybějící.
+    # všechny tři varianty. Stránkování je navíc průběžné (další/předchozí),
+    # proto se odkazy z každé načtené stránky následně procházejí rekurzivně.
     for page in re.findall(
         r'href=["\']((?:https://nasekadan\.cz)?(?:/clanky/)?strana-\d+\.html)["\']',
-        first_page,
+        page_text,
     ):
         if page.startswith(BASE):
             normalized = page[len(BASE):]
@@ -155,10 +155,27 @@ def main() -> int:
         raise RuntimeError("Registr neobsahuje žádný aktuální článek.")
 
     home_text = fetch("/")
-    archive_first = fetch("/clanky/")
-    archive_texts = [archive_first]
-    for page in archive_pages(archive_first)[1:]:
-        archive_texts.append(fetch(page))
+
+    # Archiv se prochází jako malý graf odkazů. První stránka často odkazuje
+    # jen na stranu 2; teprve ta odkazuje na stranu 3 atd. Jednorázové čtení
+    # navigace z první stránky proto falešně označovalo starší články za
+    # chybějící. Limit chrání audit před nekonečným cyklem nebo chybnou šablonou.
+    archive_texts: list[str] = []
+    archive_queue = ["/clanky/"]
+    archive_seen: set[str] = set()
+    while archive_queue:
+        page = archive_queue.pop(0)
+        if page in archive_seen:
+            continue
+        if len(archive_seen) >= 100:
+            raise RuntimeError("Archiv má neočekávaně více než 100 stran.")
+        archive_seen.add(page)
+        page_text = fetch(page)
+        archive_texts.append(page_text)
+        for linked_page in archive_pages(page_text):
+            if linked_page not in archive_seen and linked_page not in archive_queue:
+                archive_queue.append(linked_page)
+
     rss_text = fetch("/rss.xml")
     sitemap_text = fetch("/sitemap.xml")
     news_text = fetch("/news-sitemap.xml")
