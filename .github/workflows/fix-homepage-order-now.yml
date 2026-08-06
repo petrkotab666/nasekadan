@@ -1,4 +1,4 @@
-name: Opravit pořadí titulní stránky
+name: Publikovat Apolenu Švábíkovou na ME
 
 on:
   push:
@@ -8,54 +8,148 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: fix-homepage-order-now
-  cancel-in-progress: true
+  group: publish-apolena-existing-route
+  cancel-in-progress: false
 
 jobs:
-  fix:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     env:
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      SLUG: apolena-svabikova-mistrovstvi-evropy-birmingham-2026
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
-      - name: Připravit SSH klíč
-        shell: bash
-        run: |
-          set -euo pipefail
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
-      - name: Opravit a nasadit titulní stránku
-        shell: bash
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytvořit článek a publikační povrchy
         run: |
           set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          python -m pip install --quiet Pillow
+          python scripts/publish_apolena_svabikova_20260806.py
+
+      - name: Uložit publikaci do main
+        run: |
           set -euo pipefail
-          cd /opt/nasekadan
-          git fetch --prune origin main
-          git reset --hard origin/main
-          python3 scripts/enforce_homepage_latest_order.py
-          sudo install -m 0644 index.html /var/www/nasekadan/index.html
+          git config user.name 'Naše Kadaň – publikace'
+          git config user.email 'info@nasekadan.cz'
+          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          git commit -m 'Publikovat Apolenu Švábíkovou na seniorském ME'
+          git push origin HEAD:main
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Doplnit zdrojový commit a health
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+          sha = os.environ['CONTENT_SHA']
+          slug = os.environ['SLUG']
+          url = f'https://nasekadan.cz/clanky/{slug}.html'
+          path = Path('data/published-content-index.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          for item in data.get('articles', []):
+              if item.get('url') == url:
+                  item['source_commit'] = sha
+                  break
+          data['source_commit'] = sha
+          data['generated_at'] = datetime.now(timezone.utc).isoformat()
+          last = data.setdefault('validation', {}).setdefault('last_publication', {})
+          last['source_commit'] = sha
+          path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-apolena-publication\n' "$CONTENT_SHA" "$(date -u +%FT%TZ)" > deployment-health.txt
+          git add data/published-content-index.json deployment-health.txt
+          git commit -m 'Evidence: přiřadit zdrojový commit článku o Apoleně'
+          git push origin HEAD:main
+
+      - name: Připravit SSH a balík
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          mkdir -p "$RUNNER_TEMP/publish/clanky" "$RUNNER_TEMP/publish/social"
+          cp "clanky/$SLUG.html" "$RUNNER_TEMP/publish/clanky/"
+          cp "social/$SLUG.png" "$RUNNER_TEMP/publish/social/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$RUNNER_TEMP/publish/"
+          cp -a clanky/index.html clanky/strana-*.html "$RUNNER_TEMP/publish/clanky/"
+          tar -C "$RUNNER_TEMP/publish" -czf "$RUNNER_TEMP/apolena.tgz" .
+
+      - name: Nasadit na OVH a do webového kontejneru
+        run: |
+          set -euo pipefail
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/apolena.tgz" ubuntu@57.129.43.215:/tmp/apolena.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          stage=/tmp/apolena-publish
+          root=/var/www/nasekadan
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          tar -xzf /tmp/apolena.tgz -C "$stage"
+          sudo install -d -m 0755 "$root" "$root/clanky" "$root/social"
+          sudo cp -a "$stage"/. "$root"/
+          sudo chmod -R a+rX "$root"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp "$stage"/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          rm -rf "$stage" /tmp/apolena.tgz
           REMOTE
 
-      - name: Ověřit živé pořadí
-        shell: bash
+      - name: Veřejně ověřit úplnou publikaci
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 18); do
-            page="$(curl -fsS --max-time 20 "https://nasekadan.cz/index.html?order=${GITHUB_SHA}-${attempt}" || true)"
-            arc="$(grep -bo 'arc-med-nemocnice-kadan.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
-            fire="$(grep -bo 'hasici-kadan-vycvik-zachrana-voda-nechranice.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
-            beds="$(grep -bo 'nemocnice-kadan-darovala-82-luzek-ukrajine.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
-            culture="$(grep -bo 'kam-v-kadani-a-okoli-27-cervence-2-srpna-2026.html' <<<"$page" | head -1 | cut -d: -f1 || true)"
-            if [[ -n "$arc" && -n "$fire" && -n "$beds" && -n "$culture" && "$arc" -lt "$fire" && "$fire" -lt "$beds" && "$beds" -lt "$culture" ]]; then
-              echo 'Pořadí je správně: ARC-MED, hasiči, 82 lůžek, kultura.'
-              exit 0
-            fi
-            sleep 5
-          done
-          echo 'Živé pořadí stále není správné.' >&2
-          exit 1
+          python - <<'PY'
+          import os, time, urllib.request
+          slug = os.environ['SLUG']
+          sha = os.environ['CONTENT_SHA']
+          base = 'https://nasekadan.cz/'
+          def fetch(path, token):
+              request = urllib.request.Request(base + path + ('&' if '?' in path else '?') + 'v=' + token, headers={'User-Agent': 'NaseKadan publication verifier'})
+              with urllib.request.urlopen(request, timeout=40) as response:
+                  return response.read()
+          last = None
+          for attempt in range(1, 9):
+              try:
+                  token = f"{int(time.time())}-{attempt}"
+                  article = fetch(f'clanky/{slug}.html', token).decode('utf-8', 'replace')
+                  home = fetch('', token).decode('utf-8', 'replace')
+                  archive = fetch('clanky/', token).decode('utf-8', 'replace')
+                  rss = fetch('rss.xml', token).decode('utf-8', 'replace')
+                  sitemap = fetch('sitemap.xml', token).decode('utf-8', 'replace')
+                  news = fetch('news-sitemap.xml', token).decode('utf-8', 'replace')
+                  health = fetch('deployment-health.txt', token).decode('utf-8', 'replace')
+                  image = fetch(f'social/{slug}.png', token)
+                  checks = {
+                      'article': 'Kadaňská tyčkařka Apolena Švábíková míří na první seniorské ME' in article and '4,51' in article and '20:05' in article,
+                      'homepage': f'data-latest-article-href="/clanky/{slug}.html"' in home,
+                      'archive': f'/clanky/{slug}.html' in archive,
+                      'rss': rss.count(slug + '.html') == 2,
+                      'sitemap': sitemap.count(slug + '.html') == 1,
+                      'news': news.count(slug + '.html') == 1,
+                      'image': len(image) > 20000,
+                      'health': 'mode=direct-apolena-publication' in health and f'source={sha}' in health,
+                  }
+                  if all(checks.values()):
+                      print(checks)
+                      raise SystemExit(0)
+                  last = checks
+              except Exception as exc:
+                  last = repr(exc)
+              time.sleep(attempt * 4)
+          raise SystemExit(f'Veřejná kontrola selhala: {last}')
+          PY
