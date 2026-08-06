@@ -115,12 +115,8 @@ def current_registry_urls(entries: list[dict]) -> list[str]:
     return [url for _, url in items]
 
 
-def archive_pages(page_text: str) -> list[str]:
-    pages = ["/clanky/"]
-    # Generátor archivu používá podle šablony absolutní URL, kořenové odkazy
-    # /clanky/strana-N.html nebo relativní strana-N.html. Audit musí umět
-    # všechny tři varianty. Stránkování je navíc průběžné (další/předchozí),
-    # proto se odkazy z každé načtené stránky následně procházejí rekurzivně.
+def _archive_page_links(page_text: str) -> list[str]:
+    pages: list[str] = []
     for page in re.findall(
         r'href=["\']((?:https://nasekadan\.cz)?(?:/clanky/)?strana-\d+\.html)["\']',
         page_text,
@@ -133,6 +129,33 @@ def archive_pages(page_text: str) -> list[str]:
             normalized = f"/clanky/{page}"
         if normalized not in pages:
             pages.append(normalized)
+    return pages
+
+
+def archive_pages(first_page: str) -> list[str]:
+    """Return every reachable archive page, not only links visible on page one.
+
+    Pagination is sequential: page one may link only to page two, page two to
+    page three, and so on. Both the verifier and registry synchronizer call
+    this helper, so discovery must be complete here rather than only in one
+    caller. A hard cap prevents a malformed navigation loop from running
+    indefinitely.
+    """
+    pages = ["/clanky/"]
+    queue = _archive_page_links(first_page)
+    seen = {"/clanky/"}
+    while queue:
+        page = queue.pop(0)
+        if page in seen:
+            continue
+        if len(seen) >= 100:
+            raise RuntimeError("Archiv má neočekávaně více než 100 stran.")
+        seen.add(page)
+        pages.append(page)
+        page_text = fetch(page)
+        for linked_page in _archive_page_links(page_text):
+            if linked_page not in seen and linked_page not in queue:
+                queue.append(linked_page)
     return pages
 
 
@@ -155,27 +178,10 @@ def main() -> int:
         raise RuntimeError("Registr neobsahuje žádný aktuální článek.")
 
     home_text = fetch("/")
-
-    # Archiv se prochází jako malý graf odkazů. První stránka často odkazuje
-    # jen na stranu 2; teprve ta odkazuje na stranu 3 atd. Jednorázové čtení
-    # navigace z první stránky proto falešně označovalo starší články za
-    # chybějící. Limit chrání audit před nekonečným cyklem nebo chybnou šablonou.
-    archive_texts: list[str] = []
-    archive_queue = ["/clanky/"]
-    archive_seen: set[str] = set()
-    while archive_queue:
-        page = archive_queue.pop(0)
-        if page in archive_seen:
-            continue
-        if len(archive_seen) >= 100:
-            raise RuntimeError("Archiv má neočekávaně více než 100 stran.")
-        archive_seen.add(page)
-        page_text = fetch(page)
-        archive_texts.append(page_text)
-        for linked_page in archive_pages(page_text):
-            if linked_page not in archive_seen and linked_page not in archive_queue:
-                archive_queue.append(linked_page)
-
+    archive_first = fetch("/clanky/")
+    archive_texts = [archive_first]
+    for page in archive_pages(archive_first)[1:]:
+        archive_texts.append(fetch(page))
     rss_text = fetch("/rss.xml")
     sitemap_text = fetch("/sitemap.xml")
     news_text = fetch("/news-sitemap.xml")
