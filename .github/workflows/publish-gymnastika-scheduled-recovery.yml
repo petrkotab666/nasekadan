@@ -1,0 +1,188 @@
+name: Časovaně dokončit publikaci Gymnastiky Kadaň
+
+on:
+  schedule:
+    - cron: '*/5 19-22 6 8 *'
+    - cron: '*/5 0-1 7 8 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: scheduled-gymnastika-publication-20260806
+  cancel-in-progress: false
+
+env:
+  SLUG: gymnastika-kadan-treneri-prosinec-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/gymnastika-kadan-treneri-prosinec-2026.html
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+  OVH_KEY_D: ${{ secrets.SSH_PRIVATE_KEY }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Povolit jen 6.–7. srpna 2026
+        id: due
+        shell: bash
+        run: |
+          set -euo pipefail
+          today="$(date -u +%Y-%m-%d)"
+          if [[ "${{ github.event_name }}" == workflow_dispatch || "$today" == 2026-08-06 || "$today" == 2026-08-07 ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.due.outputs.run == 'true'
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        if: steps.due.outputs.run == 'true'
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit, zda už je publikace úplná
+        if: steps.due.outputs.run == 'true'
+        id: precheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="precheck-${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 30 "$ARTICLE_URL?v=$q" || true)"
+          home="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/?v=$q" || true)"
+          archive="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/clanky/?v=$q" || true)"
+          rss="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+          sitemap="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+          news="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+          registry="$(curl -4 -kfsS -L --max-time 30 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+          complete=0
+          if grep -Fq 'Gymnastice v Kadani chybějí trenéři' <<<"$article" \
+            && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+            && grep -Fq "$SLUG.html" <<<"$archive" \
+            && [[ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]] \
+            && [[ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" == 1 ]] \
+            && [[ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" == 1 ]] \
+            && grep -Fq "$SLUG.html" <<<"$registry"; then complete=1; fi
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+
+      - name: Připravit článek a publikační kanály
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          python scripts/publish_gymnastika_kadan_20260806.py
+          git diff --check
+
+      - name: Uložit obsah se souběžnou ochranou
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – recovery Gymnastiky'
+          git config user.email 'info@nasekadan.cz'
+          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          git commit -m 'Publikovat nedostatek trenérů Gymnastiky Kadaň'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then break; fi
+            test "$attempt" != 5
+            git pull --rebase origin main
+            sleep $((attempt * 3))
+          done
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Zapsat health a zdrojový commit
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          python - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+          slug=os.environ['SLUG']; sha=os.environ['CONTENT_SHA']; url=f'https://nasekadan.cz/clanky/{slug}.html'
+          p=Path('data/published-content-index.json'); d=json.loads(p.read_text(encoding='utf-8'))
+          for item in d.get('articles', []):
+              if item.get('url') == url:
+                  item['source_commit']=sha
+                  break
+          else: raise SystemExit('Článek chybí v registru.')
+          d['source_commit']=sha; d['generated_at']=datetime.now(timezone.utc).isoformat()
+          d.setdefault('validation', {})['repair_pending_public_verification']=True
+          p.write_text(json.dumps(d, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+          PY
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-gymnastika-publication\n' "$CONTENT_SHA" "$(date -u +%FT%TZ)" > deployment-health.txt
+          git add data/published-content-index.json deployment-health.txt
+          git commit -m 'Evidence: zahájit nasazení Gymnastiky Kadaň'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then break; fi
+            test "$attempt" != 5
+            git pull --rebase origin main
+            sleep $((attempt * 3))
+          done
+
+      - name: Připravit SSH a proudový balík
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-${OVH_KEY_D:-}}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          bundle="$RUNNER_TEMP/gymnastika"
+          rm -rf "$bundle"; mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp "clanky/$SLUG.html" clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp "social/$SLUG.png" "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+
+      - name: Nasadit na OVH a kontejner
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/gymnastika"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo rm -rf /tmp/gymnastika* /tmp/nasekadan-deploy* 2>/dev/null || true; sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data; sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock'
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; exec 9>/var/lock/nasekadan-content.lock; flock -x 9; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky social data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+
+      - name: Veřejně ověřit
+        if: steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for n in $(seq 1 15); do
+            q="$GITHUB_RUN_ID-$(date +%s)-$n"
+            article="$(curl -4 -kfsS -L --max-time 35 "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            registry="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            image_size="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c | tr -d ' ' || true)"
+            if grep -Fq 'Gymnastice v Kadani chybějí trenéři' <<<"$article" && grep -Fq 'nové děti' <<<"$article" && grep -Fq 'prosinec 2026' <<<"$article" && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" && grep -Fq "$SLUG.html" <<<"$archive" && [[ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]] && [[ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" == 1 ]] && [[ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" == 1 ]] && grep -Fq "$SLUG.html" <<<"$registry" && [[ "${image_size:-0}" -gt 10000 ]]; then ok=1; break; fi
+            sleep 5
+          done
+          test "$ok" = 1
+          gh issue comment 751 --body "✅ Článek o Gymnastice Kadaň byl publikován a veřejně ověřen na článku, titulce, archivu, RSS, obou sitemapách, sociální grafice a registru. Běh ${GITHUB_RUN_ID}."
+          gh issue close 751 --reason completed
+
+      - name: Zapsat selhání
+        if: failure() && steps.due.outputs.run == 'true' && steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          gh issue comment 751 --body "❌ Časovaný recovery běh publikace selhal. Běh: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
