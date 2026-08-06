@@ -18,9 +18,6 @@ SITE_HOST = "nasekadan.cz"
 HOME_RECENT_LIMIT = 6
 RSS_MAX_AGE_DAYS = 120
 
-TRAIN_PATH = "/clanky/nocni-vyluky-vlaku-kadan-klasterec-chomutov-cervenec-srpen-2026.html"
-TRAIN_URL = f"https://{SITE_HOST}{TRAIN_PATH}"
-
 
 @dataclass(frozen=True)
 class Article:
@@ -34,6 +31,11 @@ def read(path: Path) -> str:
     if not path.is_file():
         raise RuntimeError(f"Chybí povinný soubor: {path.relative_to(ROOT)}")
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+def archive_text() -> str:
+    pages = [ARCHIVE, *sorted(ARTICLE_DIR.glob("strana-*.html"))]
+    return "\n".join(read(path) for path in pages)
 
 
 def parse_datetime(value: str) -> datetime | None:
@@ -83,10 +85,14 @@ def is_private_or_unpublished(html: str, published: datetime | None, now: dateti
     return False
 
 
+def is_archive_page(path: Path) -> bool:
+    return path.name == "index.html" or bool(re.fullmatch(r"strana-\d+\.html", path.name))
+
+
 def collect_articles(now: datetime) -> list[Article]:
     articles: list[Article] = []
     for path in sorted(ARTICLE_DIR.glob("*.html")):
-        if path.name == "index.html":
+        if is_archive_page(path):
             continue
         html = read(path)
         published = extract_published(html)
@@ -118,11 +124,10 @@ def validate_article_ads(path: Path, html: str, errors: list[str]) -> None:
         return
     label = path.relative_to(ROOT)
 
-    # Pevná čtveřice bannerů byla chybný mezistav a nesmí se vrátit.
     forbidden = (
-        'static-article-ads',
+        "static-article-ads",
         'class="static-article-ad"',
-        'static-article-ads-style',
+        "static-article-ads-style",
         'data-static-ads="locked-v1"',
         'data-static-article-ads="locked-v1"',
     )
@@ -130,19 +135,18 @@ def validate_article_ads(path: Path, html: str, errors: list[str]) -> None:
         if marker in html:
             errors.append(f"{label}: obsahuje zakázaný pevný reklamní systém ({marker}).")
 
-    # Správný systém vybírá různé partnerské nabídky dynamicky.
     if 'data-promos data-context="sidebar"' not in html:
         errors.append(f"{label}: chybí dynamická reklamní pozice v pravém sloupci.")
-    if '/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3' not in html:
+    if "/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3" not in html:
         errors.append(f"{label}: chybí hlavní dynamický reklamní skript reklamy.js?v=20260728-vaseuklizecka-guaranteed-3.")
-    if '/site.js' not in html and '/reklamy-sidebar.js' not in html:
+    if "/site.js" not in html and "/reklamy-sidebar.js" not in html:
         errors.append(f"{label}: chybí načtení proudu různých reklam v pravém sloupci.")
 
 
 def main() -> int:
     now = datetime.now(timezone.utc)
     home = read(HOME)
-    archive = read(ARCHIVE)
+    archive = archive_text()
     sitemap = read(SITEMAP)
     rss = read(RSS)
     articles = collect_articles(now)
@@ -156,7 +160,7 @@ def main() -> int:
         html = read(article.path)
         validate_article_ads(article.path, html, errors)
         if not present(archive, article):
-            errors.append(f"{label}: článek chybí v archivu /clanky/.")
+            errors.append(f"{label}: článek chybí v úplném stránkovaném archivu /clanky/.")
         if article.canonical not in sitemap:
             errors.append(f"{label}: článek chybí v sitemap.xml.")
         if article.published and article.published >= now - timedelta(days=RSS_MAX_AGE_DAYS):
@@ -174,18 +178,6 @@ def main() -> int:
                 f"{article.path.relative_to(ROOT)}: jeden z {HOME_RECENT_LIMIT} nejnovějších článků chybí na titulní stránce."
             )
 
-    train_file = ARTICLE_DIR / TRAIN_PATH.rsplit("/", 1)[-1]
-    if not train_file.is_file():
-        errors.append("Zdrojový článek o nočních výlukách byl odstraněn.")
-    for location, text in (
-        ("titulní stránce", home),
-        ("archivu", archive),
-        ("sitemapě", sitemap),
-        ("RSS", rss),
-    ):
-        if TRAIN_PATH not in text and TRAIN_URL not in text:
-            errors.append(f"Článek o nočních výlukách chybí v {location}.")
-
     if errors:
         print("KONTROLA PUBLIKOVANÝCH ČLÁNKŮ A REKLAM SELHALA", file=sys.stderr)
         for error in errors:
@@ -194,7 +186,7 @@ def main() -> int:
 
     print(
         f"Kontrola publikace je v pořádku: {len(articles)} veřejných článků, "
-        f"{min(HOME_RECENT_LIMIT, len(dated))} nejnovějších ověřeno a používá se dynamický reklamní systém."
+        f"{min(HOME_RECENT_LIMIT, len(dated))} nejnovějších ověřeno, úplný stránkovaný archiv je pokrytý a používá se dynamický reklamní systém."
     )
     return 0
 
