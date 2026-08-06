@@ -10,6 +10,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: emergency-deploy-current-main
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -22,6 +26,106 @@ jobs:
         with:
           ref: main
           fetch-depth: 1
+
+      - name: Doplnit ověřené údaje do článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          success=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('clanky/jak-se-kadan-stara-o-hriste-2026.html')
+          text = path.read_text(encoding='utf-8')
+
+          text = text.replace(
+              '<meta property="article:modified_time" content="2026-08-06T07:00:00+02:00">',
+              '<meta property="article:modified_time" content="2026-08-06T07:20:00+02:00">',
+          )
+          text = text.replace(
+              '"dateModified":"2026-08-06T07:00:00+02:00"',
+              '"dateModified":"2026-08-06T07:20:00+02:00"',
+          )
+          text = text.replace('AKTUALIZOVÁNO 7:00', 'AKTUALIZOVÁNO 7:20')
+
+          anchor = '<p>Samostatně se připravuje také rekonstrukce hřiště na Rafandě. Veřejné smluvní podklady ukazují práci na projektové dokumentaci, ale pro úplný a aktuální popis rozsahu bude potřeba finální projekt a stavební povolení.</p>\n'
+          block = '''<h3>První padelový kurt v tenisovém areálu</h3>
+          <p><strong>Stavební úřad v květnu povolil novostavbu padelových kurtů a město následně objednalo realizaci kurtu č. 1.</strong> Smlouva zveřejněná 18. června 2026 uvádí jako zhotovitele společnost BAGROS a cenu 1&nbsp;915&nbsp;202 Kč bez DPH, tedy 2&nbsp;317&nbsp;394,42 Kč včetně DPH. Už v březnu město objednalo projektovou dokumentaci u společnosti MESSOR za 122&nbsp;000 Kč bez DPH. Známé smluvní náklady na projekt a realizaci prvního kurtu tak činí 2&nbsp;037&nbsp;202 Kč bez DPH.</p>
+          <h3>Nové dětské hřiště v Pokuticích</h3>
+          <p><strong>Objednávka z 27. března 2026 dokládá přípravu nového hřiště v Pokuticích, nikoli cenu celé stavby.</strong> Společnost KU-KU měla za nejvýše 254&nbsp;100 Kč včetně DPH provést terénní úpravy, základy pro herní prvky, výkopy dopadových zón, dovoz písku a odvoz odpadu. Červnová reportáž TV Focus popsala plochu o rozloze přibližně 220 metrů čtverečních, velkou herní sestavu a dětské trampolíny a počítala s červencovým zprovozněním. Veřejné podklady ale zatím neumožňují bezpečně určit celkovou cenu hřiště, dodavatele herních prvků ani datum formálního předání.</p>
+          '''
+          if 'První padelový kurt v tenisovém areálu' not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit('Nelze bezpečně najít místo pro padel a Pokutice.')
+              text = text.replace(anchor, anchor + block, 1)
+
+          source_anchor = '<li><a href="https://udisc.com/courses/discgolf-kadanska-jesen-0TNS">UDisc: Kadaňská Jeseň, tři koše a čtyři výhoziště</a></li>\n'
+          source_block = '''<li><a href="https://smlouvy.gov.cz/smlouva/38419402">Registr smluv: novostavba padelových kurtů v Kadani, kurt č. 1 v tenisovém areálu</a></li>
+          <li>Registr smluv: projektová dokumentace novostavby padelových kurtů v areálu tenisu, MESSOR, zveřejněno 10. března 2026.</li>
+          <li><a href="https://smlouvy.gov.cz/smlouva/soubor/45214573/226%20-%20podeps%C3%A1no.pdf">Objednávka 226/Jan/2026: terénní práce a příprava základů budoucího hřiště v Pokuticích</a></li>
+          <li>TV Focus: Nové dětské hřiště v Pokuticích u Kadaně, reportáž z 9. června 2026.</li>
+          '''
+          if 'Objednávka 226/Jan/2026: terénní práce' not in text:
+              if text.count(source_anchor) != 1:
+                  raise SystemExit('Nelze bezpečně doplnit zdroje.')
+              text = text.replace(source_anchor, source_anchor + source_block, 1)
+
+          old_facts = '<li>21 doložených discgolfových košů ve dvou lokalitách</li><li>objednávky obsahují konkrétní čísla a lokality</li>'
+          new_facts = '<li>21 doložených discgolfových košů ve dvou lokalitách</li><li>první padelový kurt je smluvně zadaný</li><li>v Pokuticích vzniklo nové dětské hřiště</li><li>objednávky obsahují konkrétní čísla a lokality</li>'
+          text = text.replace(old_facts, new_facts)
+          text = text.replace(
+              'oficiální inventář discgolfových prvků a dokončené předávací dokumenty k letošním instalacím.',
+              'oficiální inventář discgolfových prvků, celkovou cenu a předání hřiště v Pokuticích a dokončené předávací dokumenty k letošním instalacím.',
+          )
+
+          required = (
+              'AKTUALIZOVÁNO 7:20',
+              'První padelový kurt v tenisovém areálu',
+              '2&nbsp;037&nbsp;202 Kč bez DPH',
+              'Nové dětské hřiště v Pokuticích',
+              '254&nbsp;100 Kč včetně DPH',
+              'Ve dvou doložených lokalitách je 21 košů',
+          )
+          for item in required:
+              if item not in text:
+                  raise SystemExit(f'Po aktualizaci chybí: {item}')
+          if text.count('<tr><td>5.20</td>') != 1:
+              raise SystemExit('Řádek hřiště 5.20 není právě jednou.')
+
+          path.write_text(text, encoding='utf-8', newline='\n')
+          PY
+            if git diff --quiet -- clanky/jak-se-kadan-stara-o-hriste-2026.html; then
+              success=1
+              break
+            fi
+            git add clanky/jak-se-kadan-stara-o-hriste-2026.html
+            git commit -m 'Doplnit padelový kurt a ověřené údaje o Pokuticích'
+            if git push origin HEAD:main; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$success" = 1
+
+      - name: Načíst nejnovější main a zkontrolovat článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 10
+          git fetch origin main
+          git reset --hard origin/main
+          article='clanky/jak-se-kadan-stara-o-hriste-2026.html'
+          grep -Fq 'AKTUALIZOVÁNO 7:20' "$article"
+          grep -Fq 'První padelový kurt v tenisovém areálu' "$article"
+          grep -Fq 'Nové dětské hřiště v Pokuticích' "$article"
+          grep -Fq 'Ve dvou doložených lokalitách je 21 košů' "$article"
+          test "$(grep -Fo '<tr><td>5.20</td>' "$article" | wc -l | tr -d ' ')" = "1"
 
       - name: Nasadit aktuální obsah
         shell: bash
@@ -57,8 +161,10 @@ jobs:
           health="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q")"
           article="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html?v=$q")"
           grep -Fq "source=$(git rev-parse HEAD)" <<<"$health"
-          grep -Fq 'AKTUALIZOVÁNO 7:00' <<<"$article"
+          grep -Fq 'AKTUALIZOVÁNO 7:20' <<<"$article"
           grep -Fq 'Ve dvou doložených lokalitách je 21 košů' <<<"$article"
+          grep -Fq 'První padelový kurt v tenisovém areálu' <<<"$article"
+          grep -Fq 'Nové dětské hřiště v Pokuticích' <<<"$article"
           test "$(grep -Fo '<tr><td>5.20</td>' <<<"$article" | wc -l | tr -d ' ')" = "1"
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html?v=$q" | grep -Fq 'Kriticky chybí skupina 0 Rh−'
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html?v=$q" | grep -Fq 'zimní stadion'
@@ -67,16 +173,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha="$(git rev-parse HEAD)"
-          printf 'status=ok\nsource=%s\ndeployed_at=%s\narticle=https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html\nchecks=discgolf-21,updated-0700,single-5.20\n' "$sha" "$(date -u +%FT%TZ)" > deployment-health.txt
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add deployment-health.txt
-          if ! git diff --cached --quiet; then
+          deployed_sha="$(git rev-parse HEAD)"
+          success=0
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            printf 'status=ok\nsource=%s\ndeployed_at=%s\narticle=https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html\nchecks=discgolf-21,padel,pokutice,updated-0720,single-5.20\n' "$deployed_sha" "$(date -u +%FT%TZ)" > deployment-health.txt
+            git add deployment-health.txt
             git commit -m "Potvrď veřejné nasazení aktualizace hřišť"
-            git push origin HEAD:main
-          fi
+            if git push origin HEAD:main; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          test "$success" = 1
 
 # Redeploy requested 2026-08-04 20:55 Europe/Prague to restore the temporary homepage pin.
 # Redeploy requested 2026-08-06 07:06 Europe/Prague for the verified discgolf update and duplicate-row fix.
 # Verification strengthened 2026-08-06 07:10 Europe/Prague for the playground article.
+# Enrichment and guarded redeploy requested 2026-08-06 07:20 Europe/Prague for padel and Pokutice.
