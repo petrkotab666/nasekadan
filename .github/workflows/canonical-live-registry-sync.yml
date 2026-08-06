@@ -1,0 +1,55 @@
+name: Synchronizovat kanonickou evidenci podle živého webu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/canonical-live-registry-sync-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-live-registry-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Načíst živý web a synchronizovat registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+          python3 scripts/run_canonical_audit_runtime_v2.py
+          git add data/published-content-index.json .github/canonical-content-audit-status.json
+          if git diff --cached --quiet; then
+            echo 'Živý web a kanonický registr jsou již shodné.'
+            exit 0
+          fi
+          git commit -m 'Evidence: synchronizovat registr podle živého webu'
+          pushed=0
+          for attempt in 1 2 3 4; do
+            if git push origin HEAD:main; then
+              pushed=1
+              break
+            fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 2))
+          done
+          test "$pushed" = 1
