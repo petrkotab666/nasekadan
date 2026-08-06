@@ -38,12 +38,12 @@ jobs:
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Přenést aktuální main na OVH
+      - name: Přenést úplný git checkout na OVH
         shell: bash
         run: |
           set -euo pipefail
           test -f "$ARTICLE"
-          tar --exclude=.git --exclude=.github --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
+          tar --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
             "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-emergency-eso.tgz
 
@@ -57,6 +57,7 @@ jobs:
           rm -rf "$work"
           mkdir -p "$work"
           tar -xzf /tmp/nasekadan-emergency-eso.tgz -C "$work"
+          test -d "$work/.git"
           chmod +x "$work/deploy/sync-production.sh"
           sudo env GITHUB_WORKSPACE="$work" bash "$work/deploy/sync-production.sh"
           rm -rf "$work" /tmp/nasekadan-emergency-eso.tgz
@@ -82,7 +83,7 @@ jobs:
               && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/rss.xml \
               && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/sitemap.xml \
               && grep -Fq 'eso-market-rafanda-kadan-24-7.html' /tmp/news.xml \
-              && grep -Eiq '(^|[^a-z])ok([^a-z]|$)' /tmp/health.txt; then
+              && grep -Fq 'source=' /tmp/health.txt; then
               ok=1
               break
             fi
