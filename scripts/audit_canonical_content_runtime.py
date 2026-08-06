@@ -117,15 +117,20 @@ def current_registry_urls(entries: list[dict]) -> list[str]:
 
 def archive_pages(first_page: str) -> list[str]:
     pages = ["/clanky/"]
-    # Generátor archivu používá podle šablony buď absolutní odkazy
-    # /clanky/strana-N.html, nebo relativní strana-N.html. Audit musí umět
-    # obě varianty, jinak zkontroluje jen první stránku a falešně označí
-    # všechny starší články za chybějící.
+    # Generátor archivu používá podle šablony absolutní URL, kořenové odkazy
+    # /clanky/strana-N.html nebo relativní strana-N.html. Audit musí umět
+    # všechny tři varianty, jinak zkontroluje jen první stránku a falešně
+    # označí všechny starší články za chybějící.
     for page in re.findall(
-        r'href=["\']((?:/clanky/)?strana-\d+\.html)["\']',
+        r'href=["\']((?:https://nasekadan\.cz)?(?:/clanky/)?strana-\d+\.html)["\']',
         first_page,
     ):
-        normalized = page if page.startswith("/") else f"/clanky/{page}"
+        if page.startswith(BASE):
+            normalized = page[len(BASE):]
+        elif page.startswith("/"):
+            normalized = page
+        else:
+            normalized = f"/clanky/{page}"
         if normalized not in pages:
             pages.append(normalized)
     return pages
