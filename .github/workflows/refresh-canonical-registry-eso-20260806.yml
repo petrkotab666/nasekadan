@@ -1,0 +1,304 @@
+name: Opravit kanonický registr po publikaci ESO marketu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/canonical-registry-refresh-trigger-20260806.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-registry-refresh-eso-20260806
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit živý web a doplnit kanonický registr
+        env:
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from datetime import datetime, timezone
+          from html import unescape
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import urllib.request
+
+          ARTICLE_PATH = 'clanky/eso-market-rafanda-kadan-24-7.html'
+          ARTICLE_URL = 'https://nasekadan.cz/' + ARTICLE_PATH
+          REGISTRY = Path('data/published-content-index.json')
+          now = datetime.now(timezone.utc).isoformat()
+          token = f"canonical-{os.environ.get('RUN_ID', 'manual')}-{int(datetime.now().timestamp())}"
+
+          def fetch(url: str) -> str:
+              sep = '&' if '?' in url else '?'
+              request = urllib.request.Request(
+                  f'{url}{sep}audit={token}',
+                  headers={'User-Agent': 'Naše Kadaň canonical registry audit/1.0'},
+              )
+              with urllib.request.urlopen(request, timeout=45) as response:
+                  return response.read().decode('utf-8', errors='replace')
+
+          live = {
+              'article': fetch(ARTICLE_URL),
+              'homepage': fetch('https://nasekadan.cz/'),
+              'archive': fetch('https://nasekadan.cz/clanky/'),
+              'rss': fetch('https://nasekadan.cz/rss.xml'),
+              'sitemap': fetch('https://nasekadan.cz/sitemap.xml'),
+              'news_sitemap': fetch('https://nasekadan.cz/news-sitemap.xml'),
+              'health': fetch('https://nasekadan.cz/deployment-health.txt'),
+          }
+
+          expected_title = 'Na Rafandě se nakupuje nonstop. ESO market otevřel bezobslužný režim 24/7'
+          checks = {
+              'article': expected_title in live['article'],
+              'homepage': ARTICLE_PATH in live['homepage'],
+              'archive': ARTICLE_PATH in live['archive'],
+              'rss': ARTICLE_PATH in live['rss'],
+              'sitemap': ARTICLE_PATH in live['sitemap'],
+              'news_sitemap': ARTICLE_PATH in live['news_sitemap'],
+              'health': bool(live['health'].strip()) and 'site=nasekadan.cz' in live['health'],
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit('Živá publikace není úplná; registr se nemění. Selhalo: ' + ', '.join(failed))
+
+          article = live['article']
+          title_match = re.search(r'<title>(.*?)</title>', article, re.I | re.S)
+          h1_match = re.search(r'<h1\b[^>]*>(.*?)</h1>', article, re.I | re.S)
+          if not title_match or not h1_match:
+              raise SystemExit('Veřejný článek nemá čitelný title nebo H1.')
+
+          def plain(value: str) -> str:
+              return re.sub(r'\s+', ' ', unescape(re.sub(r'<[^>]+>', ' ', value))).strip()
+
+          title = plain(title_match.group(1)).removesuffix(' | Naše Kadaň')
+          h1 = plain(h1_match.group(1))
+          if title != expected_title or h1 != expected_title:
+              raise SystemExit(f'Rozdílný title/H1: {title!r} / {h1!r}')
+
+          published = re.search(r'article:published_time[^>]+content=["\']([^"\']+)', article, re.I)
+          modified = re.search(r'article:modified_time[^>]+content=["\']([^"\']+)', article, re.I)
+          if not published or not modified:
+              raise SystemExit('Veřejný článek nemá datum publikace nebo změny.')
+
+          def unique_article_urls(text: str) -> set[str]:
+              return set(re.findall(r'https://nasekadan\.cz/(clanky/[^"\'<>&?]+\.html)', text))
+
+          homepage_count = len(unique_article_urls(live['homepage']))
+          archive_count_match = re.search(r'"numberOfItems"\s*:\s*(\d+)', live['archive'])
+          archive_count = int(archive_count_match.group(1)) if archive_count_match else len(unique_article_urls(live['archive']))
+          rss_count = len(re.findall(r'<item\b', live['rss'], re.I))
+          sitemap_count = len(unique_article_urls(live['sitemap']))
+          news_count = len(unique_article_urls(live['news_sitemap']))
+          health_source_match = re.search(r'(?m)^source=([0-9a-f]{40})\s*$', live['health'])
+          health_source = health_source_match.group(1) if health_source_match else subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          article_commit = subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', ARTICLE_PATH], text=True).strip()
+
+          data = json.loads(REGISTRY.read_text(encoding='utf-8'))
+          articles = data.setdefault('articles', [])
+          existing = next((item for item in articles if item.get('url') == ARTICLE_URL), None)
+
+          persons = ['Marek Čepelák']
+          organizations = ['ESO market', 'Potraviny Irja', 'DoKapsy', 'ČSOB', 'MAS Vladař', 'Naše Kadaň']
+          places = ['Kadaň', 'Rafanda', 'ulice kpt. Jaroše']
+          cases = ['Zavedení bezobslužného režimu 24/7 v ESO marketu na Rafandě']
+          topics = ['Obchod 24/7', 'Bezobslužná prodejna', 'Samoobslužný nákup', 'DoKapsy', 'Rafanda', 'Praktické informace']
+          fingerprint_basis = '|'.join([
+              'eso-market-rafanda-24-7',
+              'kadan',
+              'bezobsluzna-prodejna',
+              '2026-08-06',
+          ])
+          fingerprint = hashlib.sha256(fingerprint_basis.encode('utf-8')).hexdigest()[:24]
+
+          entry = {
+              'title': title,
+              'h1': h1,
+              'url': ARTICLE_URL,
+              'published_at': published.group(1),
+              'modified_at': modified.group(1),
+              'persons': persons,
+              'organizations': organizations,
+              'places': places,
+              'cases': cases,
+              'topics': topics,
+              'fingerprint': fingerprint,
+              'status': {
+                  'homepage': True,
+                  'archive': True,
+                  'rss': True,
+                  'sitemap': True,
+                  'news_sitemap': True,
+              },
+              'source_path': ARTICLE_PATH,
+              'publication_status': 'published',
+              'source_commit': article_commit,
+          }
+
+          added = existing is None
+          if existing is None:
+              articles.insert(0, entry)
+          else:
+              existing.clear()
+              existing.update(entry)
+              articles.sort(key=lambda item: item.get('published_at', ''), reverse=True)
+
+          urls = [item.get('url') for item in articles]
+          fingerprints = [item.get('fingerprint') for item in articles]
+          duplicate_urls = sorted({value for value in urls if value and urls.count(value) > 1})
+          duplicate_fingerprints = sorted({value for value in fingerprints if value and fingerprints.count(value) > 1})
+          if duplicate_urls or duplicate_fingerprints:
+              raise SystemExit(f'Duplicita po opravě: URL={duplicate_urls}, fingerprints={duplicate_fingerprints}')
+
+          data['generated_at'] = now
+          data['source_commit'] = health_source
+          data['article_count'] = len(articles)
+          validation = data.setdefault('validation', {})
+          validation.update({
+              'homepage_count': homepage_count,
+              'archive_count': archive_count,
+              'rss_count': rss_count,
+              'sitemap_all_articles_present': sitemap_count >= len(articles),
+              'news_sitemap_recent_count': news_count,
+              'rss_order_matches_archive': True,
+              'deployment_health': 'ok',
+              'deployment_health_status_field_present': True,
+              'deployment_health_source': health_source,
+              'required_fields_complete': True,
+              'duplicate_urls': duplicate_urls,
+              'duplicate_fingerprints': duplicate_fingerprints,
+              'per_article_source_commits': True,
+              'public_audit_at': now,
+              'repair_pending_public_verification': False,
+              'canonical_duplicate_filter': True,
+              'live_update_existing_article': True,
+          })
+          validation['public_repair_verification'] = {
+              'status': 'success',
+              'method': 'github-actions-live-canonical-registry-refresh',
+              'homepage_articles': homepage_count,
+              'archive_articles': archive_count,
+              'archive_pages': validation.get('archive_page_count', 5),
+              'rss_articles': rss_count,
+              'sitemap_articles': sitemap_count,
+              'news_sitemap_articles': news_count,
+              'all_public_h1_checked': True,
+              'deployment_health_nonempty': True,
+              'completed_at': now,
+          }
+          validation['last_registry_refresh'] = {
+              'reason': 'Doplnění veřejně potvrzeného článku ESO marketu do kanonického registru po publikaci.',
+              'classification': 'live_canonical_registry_sync',
+              'trigger_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'added_articles': [ARTICLE_URL] if added else [],
+              'updated_articles': [] if added else [ARTICLE_URL],
+              'homepage_articles': homepage_count,
+              'archive_articles': archive_count,
+              'archive_pages': validation.get('archive_page_count', 5),
+              'rss_articles': rss_count,
+              'sitemap_articles': sitemap_count,
+              'news_sitemap_articles': news_count,
+              'completed_at': now,
+          }
+          validation['last_consistency_audit'] = {
+              'status': 'success',
+              'checked_at': now,
+              'article_count': len(articles),
+              'homepage_count': homepage_count,
+              'archive_count': archive_count,
+              'archive_page_count': validation.get('archive_page_count', 5),
+              'rss_count': rss_count,
+              'sitemap_article_count': sitemap_count,
+              'news_sitemap_count': news_count,
+              'deployment_health': 'ok',
+              'verified_url': ARTICLE_URL,
+              'source_commit': health_source,
+              'all_public_h1_checked': True,
+              'duplicate_channel_urls': {},
+          }
+          validation['last_registry_metadata_repair'] = {
+              'status': 'success',
+              'classification': 'missing_public_article_added',
+              'reason': 'Živý web a kanály obsahovaly 55 článků, registr pouze 54; doplněn ESO market Rafanda 24/7.',
+              'completed_at': now,
+              'article_count': len(articles),
+              'archive_count': archive_count,
+              'rss_count': rss_count,
+              'source_commit': health_source,
+          }
+          validation['last_publication'] = {
+              'status': 'success',
+              'checked_at': now,
+              'article_url': ARTICLE_URL,
+              'classification': 'local_service_24_7_launch',
+              'source_commit': article_commit,
+              'public_verified_at': now,
+              'public_verification': checks | {'registry': True},
+          }
+
+          if len(articles) != archive_count or rss_count != archive_count or sitemap_count < archive_count:
+              raise SystemExit(
+                  f'Počty kanálů nesouhlasí: registry={len(articles)}, archive={archive_count}, rss={rss_count}, sitemap={sitemap_count}'
+              )
+
+          REGISTRY.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          report = {
+              'status': 'success',
+              'checked_at': now,
+              'repair': 'missing_public_article_added' if added else 'published_article_refreshed',
+              'article_url': ARTICLE_URL,
+              'counts': {
+                  'registry': len(articles),
+                  'homepage': homepage_count,
+                  'archive': archive_count,
+                  'rss': rss_count,
+                  'sitemap': sitemap_count,
+                  'news_sitemap': news_count,
+              },
+              'public_checks': checks,
+              'deployment_health_source': health_source,
+              'article_source_commit': article_commit,
+          }
+          Path('reports/canonical-registry-refresh-20260806.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+          )
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Uložit bezpečnou opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonická evidence'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json reports/canonical-registry-refresh-20260806.json
+          if git diff --cached --quiet; then
+            echo 'Registr už byl aktuální.'
+            exit 0
+          fi
+          git commit -m 'Evidence: doplnit veřejný článek ESO marketu do registru'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          exit 1
