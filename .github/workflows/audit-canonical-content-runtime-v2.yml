@@ -105,8 +105,11 @@ jobs:
           text = script.read_text(encoding='utf-8')
           text, count_path = re.subn(r"^KTK_PATH=.*$", f"KTK_PATH='/{path}'", text, count=1, flags=re.M)
           text, count_file = re.subn(r"^KTK_FILE=.*$", f"KTK_FILE='{path}'", text, count=1, flags=re.M)
-          if count_path != 1 or count_file != 1:
-              raise SystemExit('Nelze přepnout dynamickou kontrolu článku v deploy/sync-production.sh.')
+          old_source = "Path('clanky/vypadek-internetu-kadan-kradez-kabelu.html')"
+          count_source = text.count(old_source)
+          text = text.replace(old_source, f"Path('{path}')")
+          if count_path != 1 or count_file != 1 or count_source != 2:
+              raise SystemExit('Nelze úplně přepnout dynamickou kontrolu článku v deploy/sync-production.sh.')
           script.write_text(text, encoding='utf-8')
           PY
 
