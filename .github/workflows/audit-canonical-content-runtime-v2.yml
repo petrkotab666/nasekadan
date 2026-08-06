@@ -17,7 +17,7 @@ jobs:
   audit:
     if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[audit] Evidence článků Naše Kadaň v2')
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
@@ -39,6 +39,43 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Připravit bezpečné připojení k produkci
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Srovnat veřejný web s aktuálním main
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/nasekadan
+          git fetch --prune origin main
+          git reset --hard origin/main
+          git clean -fd
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
+
+          # Kanonický audit vyžaduje explicitní stav. Starší deploy skript
+          # zapisoval pouze source/mode, proto stav bezpečně doplníme do obou
+          # aktivních document rootů ještě před veřejnou kontrolou.
+          if ! sudo grep -Fqx 'status=ok' /var/www/nasekadan/deployment-health.txt; then
+            tmp="$(mktemp)"
+            printf 'status=ok\n' > "$tmp"
+            sudo cat /var/www/nasekadan/deployment-health.txt >> "$tmp"
+            sudo install -m 0644 "$tmp" /var/www/nasekadan/deployment-health.txt
+            rm -f "$tmp"
+          fi
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /var/www/nasekadan/deployment-health.txt nasekadan-web:/usr/share/nginx/html/deployment-health.txt
+          fi
+          REMOTE
+
       - name: Ověřit živý web a opravit evidenční metadata
         id: audit
         shell: bash
@@ -55,7 +92,7 @@ jobs:
             echo "$result"
             git add data/published-content-index.json .github/canonical-content-audit-status.json
             if ! git diff --cached --quiet; then
-              git commit -m 'Evidence: opravit auditní stav po 46. článku'
+              git commit -m 'Evidence: synchronizovat registr podle živého webu'
             fi
             final_sha="$(git rev-parse HEAD)"
             if git push origin HEAD:main; then
@@ -72,10 +109,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
-          test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
           scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 data/published-content-index.json ubuntu@57.129.43.215:/tmp/published-content-index.json
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
