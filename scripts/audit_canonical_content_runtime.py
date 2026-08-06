@@ -117,9 +117,17 @@ def current_registry_urls(entries: list[dict]) -> list[str]:
 
 def archive_pages(first_page: str) -> list[str]:
     pages = ["/clanky/"]
-    for page in re.findall(r'href=["\'](/clanky/strana-\d+\.html)["\']', first_page):
-        if page not in pages:
-            pages.append(page)
+    # Generátor archivu používá podle šablony buď absolutní odkazy
+    # /clanky/strana-N.html, nebo relativní strana-N.html. Audit musí umět
+    # obě varianty, jinak zkontroluje jen první stránku a falešně označí
+    # všechny starší články za chybějící.
+    for page in re.findall(
+        r'href=["\']((?:/clanky/)?strana-\d+\.html)["\']',
+        first_page,
+    ):
+        normalized = page if page.startswith("/") else f"/clanky/{page}"
+        if normalized not in pages:
+            pages.append(normalized)
     return pages
 
 
