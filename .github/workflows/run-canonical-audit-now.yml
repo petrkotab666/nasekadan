@@ -1,0 +1,56 @@
+name: Spustit kanonický audit evidence nyní
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/canonical-audit-now-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-audit-now
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Načíst živý web a synchronizovat kanonický registr
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+          python3 scripts/run_canonical_audit_runtime_v2.py --write-status
+
+      - name: Uložit bezpečnou opravu evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json .github/canonical-content-audit-status.json
+          if git diff --cached --quiet; then
+            echo 'Kanonická evidence už odpovídá živému webu.'
+            exit 0
+          fi
+          git commit -m 'Evidence: synchronizovat kanonický registr podle živého webu'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git fetch origin main
+            git rebase origin/main
+            sleep $((attempt * 3))
+          done
+          exit 1
