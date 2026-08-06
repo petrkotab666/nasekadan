@@ -1,6 +1,6 @@
 # Kanonický publikační zásobník Naše Kadaň
 
-Aktualizováno: 6. srpna 2026, 20:50 CEST
+Aktualizováno: 6. srpna 2026, 21:15 CEST
 
 Tento soubor je jediný pracovní přehled skutečně otevřených publikačních projektů. Samotná existence starého draftu, skriptu nebo výzkumné složky neznamená, že článek čeká na vydání.
 
@@ -22,13 +22,14 @@ Tento soubor je jediný pracovní přehled skutečně otevřených publikačníc
 ## Aktivně rozpracované
 
 ### 4. Městská policie Kadaň
-- Stav: aktivní rešerše; samostatný finální článek zatím v repozitáři není.
-- Nalezené podklady:
-  - `research/kadanska-hriste-20260805/official-mp-kadan.txt`
-  - `research/kadanska-hriste-20260805/official-mp-zpravy.txt`
-  - `research/kadanska-hriste-20260805/official-mp-kamery.txt`
-- Ověřený publikační úhel: stránka kamerového systému uvádí 21 kamer, ale obsahuje 28 kamerových řádků; domovská stránka navíc samostatně oznamuje nový kamerový bod na Strážišti. Veřejné podklady tedy ukazují nejméně 29 bodů, aniž je vysvětlen rozdíl proti číslu 21.
-- Další krok: dohledat statistiku činnosti za rok 2025, náklady a případné dotační podklady; pokud souhrnná statistika nebude veřejná, připravit užší článek o kamerovém systému, personálním stavu a nesouladu veřejných údajů.
+- Stav: hotový neveřejný náhled, zatím nezveřejněno.
+- Kanonický pracovní soubor: `nahled/mestska-policie-kadan-fakta-diskuse-2026.html` (`noindex`).
+- Aktuální úhel: bouřlivá facebooková debata pod vyjádřením Soni Pusztakürti z Dáme Kadani novou šanci byla podnětem k ověření faktů. Článek je veden převážně pochvalně vůči práci kadaňských strážníků a rozlišuje konkrétní stížnost na parkování od celkového hodnocení sboru.
+- Klíčová data za rok 2025: z 2 120 přestupků vyřešených na místě nebo oznámených správnímu orgánu připadalo 1 886 na dopravu, tedy 89,0 %. Nejde o podíl všech zásahů ani pracovní doby, ale o evidované přestupkové výsledky v těchto dvou ministerských kategoriích.
+- Ředitel MP Jindřich Drozd ve veřejné diskusi uvedl 3 840 dopravních přestupků. Číslo je v článku jasně označeno jako jeho tvrzení bez zveřejněné metodiky a není přímo porovnáváno s užší ministerskou statistikou.
+- Vedle dopravy článek uvádí 24 vykázaných strážníků, 22 podezření z trestného činu předaných Policii ČR, 246 opatření na žádost Policie ČR a tři fyzické útoky na strážníky.
+- Hlavní doložená výhrada: neaktualizovaný web MP uvádí 21 kamer a čtyři dispečery, přestože seznam obsahuje 28 kamerových položek a personální stránka pět operátorek; stránka také stále odkazuje na zákon č. 283/1991 Sb., zrušený od 1. ledna 2009.
+- Další krok: finální redakční kontrola, rozhodnutí o titulku a termínu publikace; před veřejným nasazením nahradit pracovní citátové karty připravenými výřezy veřejné diskuse nebo zvolit definitivní obrazový doprovod.
 
 ### 5. Hra pro Císařský den – „Příjezd císaře: Kadaň 1367“
 - Stav: otevřený projekt; samostatný herní HTML/JS soubor ani funkční kvíz v repozitáři nejsou.
