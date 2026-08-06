@@ -30,7 +30,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Doplnit úplnější historii Chytrého hřiště
+      - name: Doplnit cenu discgolfového hřiště v Jeseni
         shell: bash
         run: |
           set -euo pipefail
@@ -42,23 +42,38 @@ jobs:
           path = Path('clanky/jak-se-kadan-stara-o-hriste-2026.html')
           text = path.read_text(encoding='utf-8')
 
-          text = text.replace('2026-08-06T07:35:00+02:00', '2026-08-06T07:45:00+02:00')
-          text = text.replace('AKTUALIZOVÁNO 7:35', 'AKTUALIZOVÁNO 7:45')
+          text = text.replace('2026-08-06T07:45:00+02:00', '2026-08-06T07:55:00+02:00')
+          text = text.replace('AKTUALIZOVÁNO 7:45', 'AKTUALIZOVÁNO 7:55')
 
-          old = '''<div class="place"><h3>Chytré hřiště</h3><p>Areál otevřený v létě 2018 spojuje hru a poznávání. Má vodní model Nechranické přehrady a Kadaňského stupně, pískoviště s bagrem, amfiteátr, zvukové prvky i fotbalovou plochu. Později přibyla kuličková dráha za 101 515 Kč, prvek Hopsinky za 213 782 Kč a šest skákacích balónů za 138 509 Kč, vše včetně DPH. Tři doložená rozšíření tak stála dohromady 453 806 Kč.</p></div>'''
-          new = '''<div class="place"><h3>Chytré hřiště</h3><p>Areál otevřený v létě 2018 spojuje hru a poznávání. Má vodní model Nechranické přehrady a Kadaňského stupně, pískoviště s bagrem, amfiteátr, zvukové prvky i fotbalovou plochu. Veřejné dokumenty dokládají nejméně osm přesně oceněných pozdějších zásahů: naučné prvky za 83 212 Kč, úpravu podzemní chodby za 497 582,08 Kč, skluzavku za 130 196 Kč, kuličkové hřiště za 101 515 Kč, tři herní prvky za 175 281 Kč, Hopsinky za 213 782 Kč, dřevěné bludiště za 362 426,46 Kč a šest skákacích balónů za 138 509 Kč. Součet činí 1 702 503,54 Kč včetně DPH. Nezahrnuje další dohledané práce bez bezpečně potvrzené ceny, například drenáž a tři posilovací prvky.</p></div>'''
-          if old in text:
-              text = text.replace(old, new, 1)
+          old_chytre = '''<div class="place"><h3>Chytré hřiště</h3><p>Areál otevřený v létě 2018 spojuje hru a poznávání. Má vodní model Nechranické přehrady a Kadaňského stupně, pískoviště s bagrem, amfiteátr, zvukové prvky i fotbalovou plochu. Později přibyla kuličková dráha za 101 515 Kč, prvek Hopsinky za 213 782 Kč a šest skákacích balónů za 138 509 Kč, vše včetně DPH. Tři doložená rozšíření tak stála dohromady 453 806 Kč.</p></div>'''
+          new_chytre = '''<div class="place"><h3>Chytré hřiště</h3><p>Areál otevřený v létě 2018 spojuje hru a poznávání. Má vodní model Nechranické přehrady a Kadaňského stupně, pískoviště s bagrem, amfiteátr, zvukové prvky i fotbalovou plochu. Veřejné dokumenty dokládají nejméně osm přesně oceněných pozdějších zásahů: naučné prvky za 83 212 Kč, úpravu podzemní chodby za 497 582,08 Kč, skluzavku za 130 196 Kč, kuličkové hřiště za 101 515 Kč, tři herní prvky za 175 281 Kč, Hopsinky za 213 782 Kč, dřevěné bludiště za 362 426,46 Kč a šest skákacích balónů za 138 509 Kč. Součet činí 1 702 503,54 Kč včetně DPH. Nezahrnuje další dohledané práce bez bezpečně potvrzené ceny, například drenáž a tři posilovací prvky.</p></div>'''
+          if old_chytre in text:
+              text = text.replace(old_chytre, new_chytre, 1)
           elif 'Součet činí 1 702 503,54 Kč včetně DPH.' not in text:
               raise SystemExit('Nenalezen očekávaný blok Chytrého hřiště.')
 
+          old_jesen = '''<p><strong>Menší hřiště je také v parčíku v Kadaňské Jeseni.</strong> Pracovník odboru životního prostředí města potvrdil, že vzniklo na přání místních obyvatel, přesný počet košů však v rozhovoru uváděl jen odhadem. Aktuální mapový záznam UDisc rozlišuje tři fyzické koše a čtyři výhoziště, z nichž je sestaven krátký devítijamkový okruh. Hřiště leží přibližně na souřadnicích 50.36655, 13.26480.</p>'''
+          new_jesen = '''<p><strong>Menší hřiště je také v parčíku v Kadaňské Jeseni.</strong> Pracovník odboru životního prostředí města potvrdil, že vzniklo na přání místních obyvatel, přesný počet košů však v rozhovoru uváděl jen odhadem. Aktuální mapový záznam UDisc rozlišuje tři fyzické koše a čtyři výhoziště, z nichž je sestaven krátký devítijamkový okruh. Samotné vybudování hřiště město objednalo v říjnu 2024 u společnosti Ultimo Wave za 175&nbsp;087 Kč včetně DPH. Hřiště leží přibližně na souřadnicích 50.36655, 13.26480.</p>'''
+          if old_jesen in text:
+              text = text.replace(old_jesen, new_jesen, 1)
+          elif 'Ultimo Wave za 175&nbsp;087 Kč včetně DPH' not in text:
+              raise SystemExit('Nenalezen očekávaný odstavec Kadaňské Jeseně.')
+
+          source_anchor = '<li><a href="https://udisc.com/courses/discgolf-kadanska-jesen-0TNS">UDisc: Kadaňská Jeseň, tři koše a čtyři výhoziště</a></li>\n'
+          source_line = '<li>Registr smluv: vybudování discgolfového hřiště v Kadaňské Jeseni, Ultimo Wave, zveřejněno 23. října 2024, 175 087 Kč včetně DPH.</li>\n'
+          if source_line not in text:
+              if text.count(source_anchor) != 1:
+                  raise SystemExit('Nelze bezpečně doplnit zdroj k discgolfu v Jeseni.')
+              text = text.replace(source_anchor, source_anchor + source_line, 1)
+
           required = (
-              'AKTUALIZOVÁNO 7:45',
+              'AKTUALIZOVÁNO 7:55',
               'Modernizace fotbalového areálu má dvě velké stavební části',
               'První padelový kurt v tenisovém areálu',
               'Nové dětské hřiště v Pokuticích',
               'Jak se síť hřišť rozvíjela dlouhodobě',
               'Součet činí 1 702 503,54 Kč včetně DPH.',
+              'Ultimo Wave za 175&nbsp;087 Kč včetně DPH',
               'Ve dvou doložených lokalitách je 21 košů',
           )
           for item in required:
@@ -80,7 +95,7 @@ jobs:
             exit 0
           fi
           git add "$ARTICLE_PATH"
-          git commit -m 'Doplnit úplnější historii Chytrého hřiště'
+          git commit -m 'Doplnit cenu discgolfového hřiště v Kadaňské Jeseni'
           for attempt in 1 2 3 4 5; do
             if git push origin HEAD:main; then exit 0; fi
             git fetch origin main
@@ -95,8 +110,9 @@ jobs:
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          grep -Fq 'AKTUALIZOVÁNO 7:45' "$ARTICLE_PATH"
+          grep -Fq 'AKTUALIZOVÁNO 7:55' "$ARTICLE_PATH"
           grep -Fq 'Součet činí 1 702 503,54 Kč včetně DPH.' "$ARTICLE_PATH"
+          grep -Fq 'Ultimo Wave za 175&nbsp;087 Kč včetně DPH' "$ARTICLE_PATH"
           grep -Fq 'Ve dvou doložených lokalitách je 21 košů' "$ARTICLE_PATH"
           grep -Fq 'První padelový kurt v tenisovém areálu' "$ARTICLE_PATH"
           grep -Fq 'Nové dětské hřiště v Pokuticích' "$ARTICLE_PATH"
@@ -139,12 +155,13 @@ jobs:
           from pathlib import Path
           text = Path('/tmp/playgrounds-live.html').read_text(encoding='utf-8', errors='replace')
           required = (
-              'AKTUALIZOVÁNO 7:45',
+              'AKTUALIZOVÁNO 7:55',
               'Modernizace fotbalového areálu má dvě velké stavební části',
               'První padelový kurt v tenisovém areálu',
               'Nové dětské hřiště v Pokuticích',
               'Jak se síť hřišť rozvíjela dlouhodobě',
               'Součet činí 1 702 503,54 Kč včetně DPH.',
+              'Ultimo Wave za 175&nbsp;087 Kč včetně DPH',
               'Ve dvou doložených lokalitách je 21 košů',
           )
           for item in required:
@@ -164,6 +181,7 @@ jobs:
         run: |
           set -euo pipefail
           source_sha="$(git rev-parse HEAD)"
+          export SOURCE_SHA_NOW="$source_sha"
           mkdir -p reports
           python3 - <<'PY'
           import datetime, json, os
@@ -171,8 +189,8 @@ jobs:
               'status': 'passed',
               'checkedAt': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'article': 'https://nasekadan.cz/clanky/jak-se-kadan-stara-o-hriste-2026.html',
-              'source': os.environ['SOURCE_SHA'],
-              'checks': ['updated-0745', 'football', 'padel', 'pokutice', 'long-term', 'discgolf-21', 'single-5.20'],
+              'source': os.environ['SOURCE_SHA_NOW'],
+              'checks': ['updated-0755', 'football', 'padel', 'pokutice', 'long-term', 'chytre-1702503', 'jesen-175087', 'discgolf-21', 'single-5.20'],
               'runId': os.environ.get('GITHUB_RUN_ID', ''),
           }
           open('reports/playgrounds-live-status.json', 'w', encoding='utf-8').write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
@@ -183,5 +201,3 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m 'Potvrdit veřejné nasazení článku o hřištích [skip ci]'
           git push origin HEAD:main
-        env:
-          SOURCE_SHA: ${{ github.sha }}
