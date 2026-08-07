@@ -10,7 +10,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: nasekadan-mp-facebook-preview-diagnostic-v2
+  group: nasekadan-mp-facebook-preview-diagnostic-v3
   cancel-in-progress: true
 
 jobs:
@@ -32,70 +32,59 @@ jobs:
         with:
           ref: main
 
-      - name: Změřit přesnou shodu titulku
-        id: title
-        shell: bash
+      - name: 1 Kandidát
+        id: candidate
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import html,sys
-          from pathlib import Path
+          import sys
           sys.path.insert(0,'scripts')
-          import process_facebook_queue as q
-          import publish_facebook
+          import refresh_facebook_previews_on_change as r
           p='clanky/mestska-policie-kadan-fakta-diskuse-2026.html'
-          article=publish_facebook.parse_article(Path(p))
-          status,_,body=q.fetch_bytes(article['url'],'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)')
-          parser=publish_facebook.MetaParser(); parser.feed(body.decode('utf-8','replace'))
-          source=html.unescape(article['title']).strip()
-          live=html.unescape(parser.meta.get('og:title') or ' '.join(parser.title_parts).strip()).strip()
-          print('SOURCE_TITLE='+repr(source))
-          print('LIVE_TITLE='+repr(live))
-          print('TITLE_EQUAL='+str(source==live))
-          if source != live: raise SystemExit('TITLE_MISMATCH')
+          rows=r.detect_candidates(set(),[p])
+          print('CANDIDATES='+str(len(rows)))
+          assert len(rows)==1, rows
+          assert rows[0]['article_path']==p
+          print('CANDIDATE_OK=1')
           PY
 
-      - name: Jednorázově ověřit živý článek, obrázek a Facebook scrape
-        id: diag
-        shell: bash
+      - name: 2 Přesný živý web
+        id: live
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import hashlib,sys
+          import sys
           from pathlib import Path
           sys.path.insert(0,'scripts')
-          import process_facebook_queue as q
-          import process_facebook_queue_live as live
+          import refresh_facebook_previews_on_change as r
           import publish_facebook
-          article_path='clanky/mestska-policie-kadan-fakta-diskuse-2026.html'
-          article=publish_facebook.parse_article(Path(article_path))
-          q.validate_source_article(article_path,article)
-          status,_,body=q.fetch_bytes(article['url'],'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)')
-          parser=publish_facebook.MetaParser(); parser.feed(body.decode('utf-8','replace'))
-          live_image=parser.meta.get('og:image','').strip()
-          istatus,iheaders,idata=q.fetch_bytes(live_image,'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)')
-          dims=q.png_dimensions(idata)
-          local=Path('social/mestska-policie-kadan-fakta-diskuse-2026-v2.png').read_bytes()
-          local_hash=hashlib.sha256(local).hexdigest(); live_hash=hashlib.sha256(idata).hexdigest()
-          print('SOURCE_OG_IMAGE='+article['image'])
-          print('LIVE_OG_IMAGE='+live_image)
-          print('IMAGE_HTTP='+str(istatus))
-          print('IMAGE_CONTENT_TYPE='+iheaders.get('content-type',''))
-          print('IMAGE_DIMS='+repr(dims))
-          print('LOCAL_SHA256='+local_hash)
-          print('LIVE_SHA256='+live_hash)
-          if status!=200 or live_image!=article['image'] or istatus!=200 or dims!=(1200,630) or live_hash!=local_hash:
-              raise SystemExit('LIVE_IMAGE_NOT_EXACT')
-          live.refresh_facebook_preview(article['url'])
+          p='clanky/mestska-policie-kadan-fakta-diskuse-2026.html'
+          a=publish_facebook.parse_article(Path(p))
+          result=r.wait_until_exact_live(p,a,5)
+          print('LIVE_RESULT='+repr(result))
+          print('EXACT_LIVE_OK=1')
+          PY
+
+      - name: 3 Facebook rescrape jednou
+        id: facebook
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'scripts')
+          import refresh_facebook_previews_on_change as r
+          import publish_facebook
+          creds=publish_facebook.validate_page_access()
+          print('FACEBOOK_ACCESS_OK='+str(bool(creds.get('page_id'))))
+          r.refresh_facebook_once('https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html')
           print('FACEBOOK_SCRAPE_OK=1')
           PY
 
-      - name: Ověřit systémový guard po opravě
+      - name: 4 Celý guard s tvrdým limitem
         id: guard
-        shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/refresh_facebook_previews_on_change.py --article clanky/mestska-policie-kadan-fakta-diskuse-2026.html --timeout 30
+          timeout 20s python3 -u scripts/refresh_facebook_previews_on_change.py --article clanky/mestska-policie-kadan-fakta-diskuse-2026.html --timeout 5
           grep -Fq '"state": "preview_refreshed"' .github/facebook-preview-refresh-status.json
           grep -Fq '"facebook_rescrape": true' .github/facebook-preview-refresh-status.json
           echo 'SYSTEM_GUARD_OK=1'
@@ -104,12 +93,13 @@ jobs:
         if: always()
         uses: actions/github-script@v7
         env:
-          TITLE: ${{ steps.title.outcome }}
-          DIAG: ${{ steps.diag.outcome }}
+          CANDIDATE: ${{ steps.candidate.outcome }}
+          LIVE: ${{ steps.live.outcome }}
+          FACEBOOK: ${{ steps.facebook.outcome }}
           GUARD: ${{ steps.guard.outcome }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const ok=process.env.TITLE==='success' && process.env.DIAG==='success' && process.env.GUARD==='success';
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`TITLE=${process.env.TITLE}; MP_FACEBOOK_DIAGNOSTIC=${process.env.DIAG}; SYSTEM_GUARD=${process.env.GUARD}`});
-            if(!ok) core.setFailed('Diagnostika nebo systémový FB guard selhal.');
+            const ok=[process.env.CANDIDATE,process.env.LIVE,process.env.FACEBOOK,process.env.GUARD].every(x=>x==='success');
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`CANDIDATE=${process.env.CANDIDATE}; LIVE=${process.env.LIVE}; FACEBOOK=${process.env.FACEBOOK}; SYSTEM_GUARD=${process.env.GUARD}`});
+            if(!ok) core.setFailed('Některá fáze systémového FB guardu selhala.');
