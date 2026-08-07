@@ -20,38 +20,55 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Přepnout článek na nové binární soubory v4
+
+      - name: Složit správnou druhou fotografii a připravit článek
         run: |
           set -euo pipefail
+          cat .tmp/od-hlubin/stena-v4-00.b64 \
+              .tmp/od-hlubin/stena-v4-01.b64 \
+              .tmp/od-hlubin/stena-v4-02.b64 \
+              .tmp/od-hlubin/stena-v4-03.b64 \
+              .tmp/od-hlubin/stena-v4-04.b64 \
+              .tmp/od-hlubin/stena-v4-05.b64 | tr -d '\r\n\t ' > /tmp/stena-v4.b64
+          base64 -d /tmp/stena-v4.b64 > /tmp/stena-v4.webp
+          echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  /tmp/stena-v4.webp' | sha256sum -c -
+          cp /tmp/stena-v4.webp images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp
+          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068d  images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp' | sha256sum -c -
+          echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp' | sha256sum -c -
           python3 - <<'PY'
           from pathlib import Path
           import re
           p=Path('clanky/od-hlubin-k-nebi-kadan.html')
           t=p.read_text(encoding='utf-8')
-          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec(?:-v\d+)?\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?v=20260807-2220', t)
-          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena(?:-v\d+)?\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?v=20260807-2220', t)
+          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec(?:-v\d+)?\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?v=20260807-2235', t)
+          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena(?:-v\d+)?\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?v=20260807-2235', t)
           t=re.sub(r'(<img class="article-photo" src="/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4\.webp[^>]*?)width="\d+" height="\d+"', r'\1width="640" height="480"', t)
           t=re.sub(r'(<img class="article-photo" src="/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4\.webp[^>]*?)width="\d+" height="\d+"', r'\1width="640" height="480"', t)
-          assert 'ptaci-ara-zoborozec-v4.webp' in t
-          assert 'ptaci-cela-stena-v4.webp' in t
+          assert 'ptaci-ara-zoborozec-v4.webp?v=20260807-2235' in t
+          assert 'ptaci-cela-stena-v4.webp?v=20260807-2235' in t
+          assert 'Jak jsme informace ověřovali' not in t
           p.write_text(t,encoding='utf-8')
           PY
-          git config user.name 'Naše Kadaň – skutečné fotografie'
-          git config user.email 'info@nasekadan.cz'
-          git add clanky/od-hlubin-k-nebi-kadan.html
-          if ! git diff --cached --quiet; then
-            git commit -m 'Přepnout Od hlubin k nebi na skutečné fotografie v4 [skip ci]'
-            for n in 1 2 3 4 5; do
-              git pull --rebase origin main || true
-              if git push origin HEAD:main; then break; fi
-              sleep $((n*2))
-            done
-          fi
-      - name: Ověřit lokální binární obsah
+
+      - name: Trvale uložit opravený binární soubor a HTML
         run: |
           set -euo pipefail
-          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068d  images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp' | sha256sum -c -
-          echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp' | sha256sum -c -
+          git config user.name 'Naše Kadaň – skutečné fotografie'
+          git config user.email 'info@nasekadan.cz'
+          git add \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit skutečné fotografie Od hlubin k nebi v4 [skip ci]'
+            pushed=false
+            for n in 1 2 3 4 5; do
+              git pull --rebase origin main || true
+              if git push origin HEAD:main; then pushed=true; break; fi
+              sleep $((n*2))
+            done
+            test "$pushed" = true
+          fi
+
       - name: Připravit SSH
         run: |
           set -euo pipefail
@@ -59,9 +76,12 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
           chmod 600 "$RUNNER_TEMP/key"
-      - name: Nahrát článek a v4 fotky přímo na OVH
+
+      - name: Nahrát článek a správné fotografie přímo na OVH
         run: |
           set -euo pipefail
+          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068d  images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp' | sha256sum -c -
+          echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp' | sha256sum -c -
           tar -czf "$RUNNER_TEMP/real-v4.tgz" \
             clanky/od-hlubin-k-nebi-kadan.html \
             images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp \
@@ -82,21 +102,23 @@ jobs:
           fi
           rm -f /tmp/real-v4.tgz
           REMOTE
-      - name: Veřejně ověřit přesný obsah v4
+
+      - name: Veřejně ověřit přesný obrazový obsah
         id: verify
         run: |
           set -euo pipefail
           stamp="$(date +%s%N)"
-          curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html?verify=$stamp" -o /tmp/article.html
-          grep -q 'ptaci-ara-zoborozec-v4.webp?v=20260807-2220' /tmp/article.html
-          grep -q 'ptaci-cela-stena-v4.webp?v=20260807-2220' /tmp/article.html
-          curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?verify=$stamp" -o /tmp/a.webp
-          curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?verify=$stamp" -o /tmp/b.webp
+          curl -fsSL -A 'NaseKadanRealPhotoCheck/2.0' "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html?verify=$stamp" -o /tmp/article.html
+          grep -q 'ptaci-ara-zoborozec-v4.webp?v=20260807-2235' /tmp/article.html
+          grep -q 'ptaci-cela-stena-v4.webp?v=20260807-2235' /tmp/article.html
+          curl -fsSL -A 'NaseKadanRealPhotoCheck/2.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?verify=$stamp" -o /tmp/a.webp
+          curl -fsSL -A 'NaseKadanRealPhotoCheck/2.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?verify=$stamp" -o /tmp/b.webp
           echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068d  /tmp/a.webp' | sha256sum -c -
           echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  /tmp/b.webp' | sha256sum -c -
           printf 'ara=%s bytes sha=%s\n' "$(wc -c </tmp/a.webp)" "$(sha256sum /tmp/a.webp | cut -d' ' -f1)" | tee /tmp/result.txt
           printf 'stena=%s bytes sha=%s\n' "$(wc -c </tmp/b.webp)" "$(sha256sum /tmp/b.webp | cut -d' ' -f1)" | tee -a /tmp/result.txt
           echo 'ok=true' >> "$GITHUB_OUTPUT"
+
       - name: Zapsat výsledek
         if: always() && github.event_name == 'issues'
         uses: actions/github-script@v7
@@ -104,5 +126,5 @@ jobs:
           script: |
             const fs=require('fs'); let r=''; try{r=fs.readFileSync('/tmp/result.txt','utf8')}catch{}
             const ok='${{ steps.verify.outputs.ok }}'==='true';
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?`✅ Živý článek používá nové skutečné fotografie v4 a jejich veřejné SHA přesně sedí s původními JPEG převody.\n\n\`\`\`\n${r}\n\`\`\``:`❌ Kontrola skutečných fotografií v4 neprošla.`});
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?`✅ Živý článek používá skutečné fotografie z původních JPEGů; veřejné soubory mají přesně očekávané SHA-256.\n\n\`\`\`\n${r}\n\`\`\``:`❌ Veřejná kontrola skutečných fotografií stále neprošla.`});
             if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
