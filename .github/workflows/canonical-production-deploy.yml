@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nasekadan-canonical-production
@@ -105,3 +105,35 @@ jobs:
           done
           test "$ok" = 1
           echo 'OK: produkce podává aktuální MP + Gymnastiku a všechny tři fotografie Rafandy.'
+
+      - name: Zapsat potvrzení úplného nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – kanonický deploy'
+          git config user.email 'info@nasekadan.cz'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p reports
+          cat > reports/canonical-production-20260807.json <<EOF
+          {
+            "status": "success",
+            "verified_at": "$(date -u +%FT%TZ)",
+            "workflow_run": "$GITHUB_RUN_ID",
+            "homepage_latest": "/clanky/mestska-policie-kadan-fakta-diskuse-2026.html",
+            "homepage_second": "/clanky/gymnastika-kadan-treneri-prosinec-2026.html",
+            "rafanda_images": [
+              "/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp",
+              "/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp",
+              "/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp"
+            ]
+          }
+          EOF
+          git add reports/canonical-production-20260807.json
+          git commit -m 'Potvrdit úplný kanonický deploy a fotografie Rafandy [skip ci]'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep $((attempt * 2))
+          done
+          exit 1
