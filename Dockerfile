@@ -49,6 +49,7 @@ RUN python scripts/ensure_summer_ad_rotation.py --write --check
 # Každý článek dostane vlastní Facebook/OG obrázek s novou URL odvozenou
 # z názvu a metadat. Generický social-card.png se u článků nepoužívá.
 RUN python scripts/generate_social_cards.py --write --check
+RUN python scripts/harden_facebook_meta.py --write --check
 
 # Nejnovější týdenní přehled akcí se automaticky stane hlavním článkem,
 # zapíše se do archivu, RSS a sitemap. Skript používá metadata přímo z článku.
@@ -111,6 +112,8 @@ RUN python scripts/normalize_search_snippets.py
 # Fragmenty článků a ověřovací HTML Googlu nejsou samostatné veřejné stránky.
 # Generátory je proto před auditem odstraní z hlavní sitemapy.
 RUN python scripts/clean_sitemap_technical_entries.py
+
+RUN python scripts/harden_facebook_meta.py --write --check
 
 # MONOTONIC-PUBLICATION-GUARD-V1
 # Kandidát buildu musí stále obsahovat úplně všechny články z předbuildového
