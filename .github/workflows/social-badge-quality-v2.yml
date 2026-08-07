@@ -1,302 +1,69 @@
-name: Autoritativní kontrola červených štítků v2
+name: Autoritativní kontrola sociálních grafik – pouze audit
 
+# Kontrola nesmí generovat, commitovat ani nasazovat HTML či grafiky.
+# Opravy patří do explicitní publikační změny a následného kanonického deploye.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'social/*.png'
+      - 'social/**'
       - 'clanky/*.html'
       - 'scripts/generate_social_cards.py'
       - 'scripts/normalize_social_badges.py'
       - 'scripts/normalize_social_badges_v2.py'
       - '.github/workflows/social-badge-quality-v2.yml'
-      - '.github/social-badge-quality-v2-trigger.txt'
   schedule:
     - cron: '27 2 * * *'
 
 permissions:
-  contents: write
+  contents: read
+  issues: write
 
 concurrency:
-  group: social-badge-quality-v2
-  cancel-in-progress: false
-
-env:
-  KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
-  KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  group: social-badge-quality-v2-audit
+  cancel-in-progress: true
 
 jobs:
-  audit-fix-deploy:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
-      - name: Načíst aktuální main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Nainstalovat obrazové nástroje
+        run: python3 -m pip install --disable-pip-version-check --quiet Pillow numpy
+
+      - name: Provést pouze kontrolu sociálních grafik
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m pip install --disable-pip-version-check --quiet Pillow numpy
-
-      - name: Provést obrazový audit všech publikovaných článků
-        shell: bash
-        run: |
-          set +e
-          mkdir -p data
-          python3 -m py_compile scripts/normalize_social_badges.py scripts/normalize_social_badges_v2.py > /tmp/badge-v2-compile.log 2>&1
-          compile_status=$?
-
-          if [[ "$compile_status" == 0 ]]; then
-            python3 scripts/normalize_social_badges_v2.py \
-              --patch-generator \
-              --write \
-              --report data/social-badge-audit.json > /tmp/badge-v2-run.log 2>&1
-            run_status=$?
-          else
-            run_status=98
-            printf 'Přeskočeno kvůli chybě kompilace.\n' > /tmp/badge-v2-run.log
-          fi
-
-          if [[ "$run_status" == 0 ]]; then
-            python3 scripts/enforce_article_visibility.py > /tmp/badge-v2-enforce.log 2>&1
-            enforce_status=$?
-            python3 scripts/prepare_discovery.py > /tmp/badge-v2-discovery.log 2>&1
-            discovery_status=$?
-            python3 scripts/normalize_social_badges_v2.py \
-              --check \
-              --report data/social-badge-audit.json > /tmp/badge-v2-check.log 2>&1
-            check_status=$?
-          else
-            enforce_status=97
-            discovery_status=97
-            check_status=97
-            printf 'Přeskočeno kvůli chybě hlavního běhu.\n' > /tmp/badge-v2-enforce.log
-            cp /tmp/badge-v2-enforce.log /tmp/badge-v2-discovery.log
-            cp /tmp/badge-v2-enforce.log /tmp/badge-v2-check.log
-          fi
-
-          {
-            printf 'generated_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            printf 'compile_status=%s\n' "$compile_status"
-            printf 'run_status=%s\n' "$run_status"
-            printf 'enforce_status=%s\n' "$enforce_status"
-            printf 'discovery_status=%s\n' "$discovery_status"
-            printf 'check_status=%s\n\n' "$check_status"
-            printf '%s\n' '===== COMPILE ====='
-            cat /tmp/badge-v2-compile.log
-            printf '%s\n' '===== MAIN RUN ====='
-            cat /tmp/badge-v2-run.log
-            printf '%s\n' '===== ENFORCE ====='
-            cat /tmp/badge-v2-enforce.log
-            printf '%s\n' '===== DISCOVERY ====='
-            cat /tmp/badge-v2-discovery.log
-            printf '%s\n' '===== FINAL CHECK ====='
-            cat /tmp/badge-v2-check.log
-          } > data/social-badge-v2-debug.txt
-
-          if [[ "$compile_status" != 0 || "$run_status" != 0 || "$enforce_status" != 0 || "$discovery_status" != 0 || "$check_status" != 0 ]]; then
-            exit 1
-          fi
-
+          python3 -m py_compile scripts/normalize_social_badges.py scripts/normalize_social_badges_v2.py
+          mkdir -p "$RUNNER_TEMP/social-audit"
+          python3 scripts/normalize_social_badges_v2.py \
+            --check \
+            --report "$RUNNER_TEMP/social-audit/report.json"
           python3 - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
-          report = json.loads(Path('data/social-badge-audit.json').read_text(encoding='utf-8'))
-          assert report['imagesScanned'] >= 44, report['imagesScanned']
-          assert report['badgesFound'] > 0, 'Opravený detektor nenašel žádný červený štítek.'
-          assert report['issuesAfter'] == 0, report
-          print(
-              f"Audit dokončen: {report['imagesScanned']} obrázků, "
-              f"{report['badgesFound']} štítků, "
-              f"{report['issuesBefore']} závad před opravou, "
-              f"{report['imagesChanged']} přegenerovaných obrázků."
-          )
+          p=Path(os.environ['RUNNER_TEMP'])/'social-audit/report.json'
+          d=json.loads(p.read_text(encoding='utf-8'))
+          assert d.get('issuesAfter', 0) == 0, d
+          print(f"OK: zkontrolováno {d.get('imagesScanned', 0)} sociálních grafik; nic nebylo změněno.")
           PY
+          git diff --exit-code
 
-      - name: Uložit opravy do main bez opakovaného spuštění
+      - name: Nahlásit grafickou regresi bez samoopravy
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'Naše Kadaň grafický audit'
-          git config user.email 'info@nasekadan.cz'
-
-          for attempt in 1 2 3 4 5; do
-            git add -A -- \
-              scripts/generate_social_cards.py \
-              scripts/normalize_social_badges.py \
-              scripts/normalize_social_badges_v2.py \
-              data/social-badge-audit.json \
-              data/social-badge-v2-debug.txt \
-              social \
-              index.html \
-              clanky \
-              rss.xml sitemap.xml news-sitemap.xml llms.txt
-
-            if git diff --cached --quiet; then
-              echo 'Všechny štítky už splňují pojistku.'
-              break
-            fi
-
-            git commit -m 'Sjednotit červené štítky sociálních grafik [skip ci]'
-            if git push origin HEAD:main; then
-              break
-            fi
-            [[ "$attempt" == 5 ]] && exit 1
-
-            git fetch origin main
-            git reset --hard origin/main
-            python3 scripts/normalize_social_badges_v2.py --patch-generator --write --report data/social-badge-audit.json
-            python3 scripts/enforce_article_visibility.py
-            python3 scripts/prepare_discovery.py
-            python3 scripts/normalize_social_badges_v2.py --check --report data/social-badge-audit.json
-            sleep $((attempt * 7))
-          done
-
-          git fetch origin main
-          git reset --hard origin/main
-          python3 scripts/normalize_social_badges_v2.py --check --report data/social-badge-audit.json
-
-      - name: Připravit SSH klíč
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -n "${KEY1:-}" ]]; then
-            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          elif [[ -n "${KEY2:-}" ]]; then
-            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          else
-            echo 'Chybí SSH klíč pro OVH.' >&2
-            exit 1
-          fi
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-
-      - name: Připravit produkční balíček
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha="$(git rev-parse HEAD)"
-          deployed="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          bundle="$RUNNER_TEMP/nk-social-badges-v2"
-          rm -rf "$bundle"
-          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
-
-          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
-          cp clanky/*.html "$bundle/clanky/"
-          cp data/social-badge-audit.json "$bundle/data/"
-          find social -maxdepth 1 -type f -name '*-badgefix-*.png' -exec cp {} "$bundle/social/" \;
-          printf 'source=%s\ndeployed_at=%s\ndeployer=social-badge-quality-v2\n' "$sha" "$deployed" > "$bundle/deployment-health.txt"
-          tar -C "$bundle" -czf "$RUNNER_TEMP/nk-social-badges-v2.tgz" .
-
-      - name: Nasadit opravy na OVH
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            if scp -i "$RUNNER_TEMP/ovh_key" \
-              -o BatchMode=yes \
-              -o StrictHostKeyChecking=accept-new \
-              -o ConnectTimeout=25 \
-              "$RUNNER_TEMP/nk-social-badges-v2.tgz" \
-              ubuntu@57.129.43.215:/tmp/nk-social-badges-v2.tgz; then
-              break
-            fi
-            [[ "$attempt" == 3 ]] && exit 1
-            sleep $((attempt * 8))
-          done
-
-          ssh -i "$RUNNER_TEMP/ovh_key" \
-            -o BatchMode=yes \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=25 \
-            ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo -n true
-          stage=/tmp/nk-social-badges-v2-stage
-          sudo rm -rf "$stage"
-          sudo install -d -m 0755 "$stage" /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data
-          sudo tar -xzf /tmp/nk-social-badges-v2.tgz -C "$stage"
-          sudo cp -a "$stage"/. /var/www/nasekadan/
-          sudo find /var/www/nasekadan -type f \( -name '*.html' -o -name '*.xml' -o -name '*.txt' -o -name '*.json' -o -name '*.png' \) -exec chmod 0644 {} +
-
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data
-            sudo docker cp "$stage/index.html" nasekadan-web:/usr/share/nginx/html/index.html
-            sudo docker cp "$stage/rss.xml" nasekadan-web:/usr/share/nginx/html/rss.xml
-            sudo docker cp "$stage/sitemap.xml" nasekadan-web:/usr/share/nginx/html/sitemap.xml
-            sudo docker cp "$stage/news-sitemap.xml" nasekadan-web:/usr/share/nginx/html/news-sitemap.xml
-            sudo docker cp "$stage/llms.txt" nasekadan-web:/usr/share/nginx/html/llms.txt
-            sudo docker cp "$stage/deployment-health.txt" nasekadan-web:/usr/share/nginx/html/deployment-health.txt
-            sudo docker cp "$stage/data/social-badge-audit.json" nasekadan-web:/usr/share/nginx/html/data/social-badge-audit.json
-            for file in "$stage"/clanky/*.html; do
-              sudo docker cp "$file" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$file")"
-            done
-            for file in "$stage"/social/*-badgefix-*.png; do
-              [[ -e "$file" ]] || continue
-              sudo docker cp "$file" "nasekadan-web:/usr/share/nginx/html/social/$(basename "$file")"
-            done
-          fi
-
-          sudo rm -rf "$stage" /tmp/nk-social-badges-v2.tgz
-          REMOTE
-
-      - name: Veřejně ověřit opravené grafiky
-        shell: bash
-        run: |
-          set -euo pipefail
-          sha="$(git rev-parse HEAD)"
-          stamp="${GITHUB_RUN_ID}-$(date +%s)"
-          success=false
-
-          for attempt in $(seq 1 25); do
-            if python3 - "$stamp-$attempt" "$sha" <<'PY'
-          import json
-          import ssl
-          import sys
-          import urllib.request
-          from pathlib import Path
-
-          stamp, sha = sys.argv[1:]
-          context = ssl._create_unverified_context()
-
-          def fetch(url, binary=False):
-              sep = '&' if '?' in url else '?'
-              request = urllib.request.Request(url + sep + 'v=' + stamp, headers={'User-Agent': 'NašeKadaňBadgeAudit/2.0'})
-              with urllib.request.urlopen(request, timeout=25, context=context) as response:
-                  data = response.read()
-                  if response.status != 200:
-                      raise RuntimeError(f'{url}: HTTP {response.status}')
-                  return data if binary else data.decode('utf-8', errors='replace')
-
-          report = json.loads(Path('data/social-badge-audit.json').read_text(encoding='utf-8'))
-          assert report['issuesAfter'] == 0
-          health = fetch('https://nasekadan.cz/deployment-health.txt')
-          assert f'source={sha}' in health
-          home = fetch('https://nasekadan.cz/')
-
-          checked = 0
-          for result in report['results']:
-              new_image = result.get('new_image')
-              if not new_image:
-                  continue
-              image_url = 'https://nasekadan.cz/' + new_image
-              data = fetch(image_url, binary=True)
-              assert data.startswith(b'\x89PNG\r\n\x1a\n')
-              for article_path in result['articles']:
-                  article = fetch('https://nasekadan.cz/' + article_path)
-                  assert image_url in article
-              checked += 1
-          assert checked == report['imagesChanged']
-          print(f'Veřejně ověřeno {checked} opravených grafik; titulka má {home.count("data-auto-article=")} karet.')
-          PY
-            then
-              success=true
-              break
-            fi
-            sleep 8
-          done
-          [[ "$success" == true ]]
+          title='[incident] Sociální grafika nesplnila audit – bez samoopravy'
+          body="Grafický audit nalezl problém. Workflow záměrně nic negeneruje, necommitne ani nenasazuje. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
