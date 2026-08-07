@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-07T10:31:31.664494+00:00",
+  "checkedAt": "2026-08-07T11:01:11.758581+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 197,
-  "failedSources": 16,
-  "itemsParsed": 17164,
-  "uniqueItems": 10872,
+  "checkedSources": 194,
+  "failedSources": 19,
+  "itemsParsed": 16871,
+  "uniqueItems": 10720,
   "newAlerts": 1,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 885,
+    "genericTitle": 868,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 16,
-    "notEditoriallySignificant": 54,
+    "broadWithoutLocalMatch": 9,
+    "notEditoriallySignificant": 43,
     "notFreshOrUndated": 0,
-    "duplicate": 5407,
+    "duplicate": 5283,
     "deferredByCap": 0
   },
   "coverage": {
@@ -313,8 +313,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 42
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -647,8 +648,9 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -697,7 +699,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 29
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -720,9 +722,8 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 12
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -730,7 +731,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 15
     },
     {
       "name": "Volby.cz – oficiální volební výsledky a kandidáti",
@@ -841,8 +842,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 85
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -964,7 +966,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -1013,7 +1015,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 11
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -1021,7 +1023,7 @@
       "category": "Média – jižní část Kadaňska",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 1
+      "itemsParsed": 2
     },
     {
       "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
@@ -1053,7 +1055,7 @@
       "category": "Média – organizace a služby",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 2
+      "itemsParsed": 3
     },
     {
       "name": "Chomutov – oficiální web",
@@ -1366,7 +1368,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 53
+      "itemsParsed": 55
     },
     {
       "name": "Bílence – oficiální web",
@@ -1414,7 +1416,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 161
+      "itemsParsed": 160
     },
     {
       "name": "Louny – oficiální web",
@@ -1629,8 +1631,9 @@
       "url": "https://www.slavnosticibule.cz/",
       "category": "major-recurring-event",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 5
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Slavnosti cibule Račetice – doplňkový zdroj 1",
@@ -1693,9 +1696,8 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 12
     },
     {
       "name": "Hasištejn",
@@ -1710,8 +1712,9 @@
       "url": "https://hornihrad.cz/",
       "category": "castle-events",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 176
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Dolní Poohří – regionální kalendář",
@@ -1743,7 +1746,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 23
+      "itemsParsed": 24
     },
     {
       "name": "Google News – široký region 4",
@@ -1783,7 +1786,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 76
+      "itemsParsed": 77
     },
     {
       "name": "Google News – široký region 9",
