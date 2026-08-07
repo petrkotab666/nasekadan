@@ -31,8 +31,8 @@ jobs:
         id: server
         shell: bash
         run: |
-          set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set +e
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/zzs-server.log" 2>&1 <<'REMOTE'
           set -euo pipefail
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
           git -C /opt/nasekadan fetch --prune origin main
@@ -45,9 +45,16 @@ jobs:
           sudo test -x /usr/local/sbin/nasekadan-regression-check
           sudo /usr/local/sbin/nasekadan-regression-check
           REMOTE
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/zzs-server.log"
+          exit 0
 
       - name: Ověřit veřejnou titulku a článek ZZS externě
         id: external
+        if: steps.server.outputs.rc == '0'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -57,30 +64,50 @@ jobs:
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html?$q" -o /tmp/zzs.html
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?$q" -o /tmp/rss.xml
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?$q" -o /tmp/sitemap.xml
+          echo 'check: current articles on homepage'
           grep -Fq 'mestska-policie-kadan-fakta-diskuse-2026.html' /tmp/home.html
           grep -Fq 'gymnastika-kadan-treneri-prosinec-2026.html' /tmp/home.html
+          echo 'check: ZZS article surfaces'
           grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/home.html
           grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/archive.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/rss.xml
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/sitemap.xml
+          echo 'check: ZZS article content'
           grep -Fq '<h1>Kadaňská záchranka dostane novou garáž a myčku. Kraj stanovil strop 16,5 milionu</h1>' /tmp/zzs.html
           grep -Fq '16,5 milionu korun bez DPH' /tmp/zzs.html
           grep -Fq '049/45R/2026' /tmp/zzs.html
           ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' /tmp/zzs.html
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/rss.xml
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/sitemap.xml
           grep -Fq 'https://www.zzsuk.cz/wp-content/uploads/2026/03/DSC00125-scaled.jpg' /tmp/zzs.html
 
-      - name: Zapsat výsledek
+      - name: Zapsat výsledek a diagnostiku
         if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const ok = '${{ job.status }}' === 'success';
-            const sshprep = '${{ steps.sshprep.outcome }}';
-            const server = '${{ steps.server.outcome }}';
+            const fs = require('fs');
+            const path = `${process.env.RUNNER_TEMP}/zzs-server.log`;
+            let log = '';
+            try { log = fs.readFileSync(path, 'utf8'); } catch (_) {}
+            const tail = log.split('\n').slice(-70).join('\n').slice(-6000);
+            const serverRc = '${{ steps.server.outputs.rc }}';
             const external = '${{ steps.external.outcome }}';
-            const body = ok
-              ? `✅ Produkční deploy aktuálního mainu proběhl. Veřejně jsou ověřené titulka, archiv, RSS, sitemap a článek ZZS Kadaň včetně OG fotografie a bez interních postupů dohledávání. Kroky: SSH=${sshprep}, server=${server}, externí kontrola=${external}.`
-              : `❌ Produkční deploy nebo veřejná kontrola článku ZZS Kadaň selhaly. Kroky: SSH=${sshprep}, server=${server}, externí kontrola=${external}.`;
+            const ok = serverRc === '0' && external === 'success';
+            let body;
+            if (ok) {
+              body = '✅ Produkční deploy aktuálního mainu proběhl. Veřejně jsou ověřené titulka, archiv, RSS, sitemap a článek ZZS Kadaň včetně OG fotografie a bez interních postupů dohledávání.';
+            } else if (serverRc !== '0') {
+              body = `❌ Serverový deploy selhal (exit ${serverRc}). Poslední část logu:\n\n\`\`\`text\n${tail}\n\`\`\``;
+            } else {
+              body = `❌ Serverový deploy prošel, ale externí veřejná kontrola skončila: ${external}.`;
+            }
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
+
+      - name: Ukončit běh chybou při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.server.outputs.rc }}" = '0'
+          test "${{ steps.external.outcome }}" = 'success'
