@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-07T07:42:22.381631+00:00",
+  "generatedAt": "2026-08-07T13:40:13.528527+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
@@ -75,7 +75,7 @@
     "Sociální monitoring – Pivnice U Soudku Kadaň (15)",
     "Sociální monitoring – ARG a hudba v Kadani (15)",
     "Liďák Kadaň – oficiální web (5)",
-    "Liďák Kadaň – Instagram (5)",
+    "Liďák Kadaň – Instagram (0)",
     "Sociální monitoring – Liďák Kadaň a nové akce (15)",
     "Volby.cz – oficiální volební výsledky a kandidáti (15)",
     "Volby.cz – otevřená data pro volební výsledky (14)",
@@ -118,6 +118,7 @@
     "Povodí Ohře: HTTPError: HTTP Error 403: Forbidden",
     "Dopravníinfo.cz: URLError: <urlopen error timed out>",
     "Severočeské vodovody a kanalizace – události: HTTPError: HTTP Error 404: Not Found",
+    "Liďák Kadaň – Instagram: HTTPError: HTTP Error 429: Too Many Requests",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
     "Římskokatolická farnost Kadaň: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
@@ -730,8 +731,9 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak/",
       "category": "Kultura a volný čas – sociální zdroje",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 5
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -1049,17 +1051,8 @@
       "title": "Pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více  Herní sada s brýlemi simulujícími účinky drog a alkoholu .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"ht",
+      "description": "ř akcí Materiály Facebook zobrazit více  ANGLICKÁ DVOJJAZYČNÁ LITERATURA PRO 1. A 2. STUPEŇ ZŠ .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: <a href=\"https:",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
-      "sourceName": "Vzdělávání na Kadaňsku"
-    },
-    {
-      "id": "289e9294845e",
-      "title": "Herní sada s brýlemi simulujícími účinky drog a alkoholu",
-      "date": "2026-08-26",
-      "category": "Školství",
-      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-for",
-      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=1",
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
@@ -1072,11 +1065,20 @@
       "sourceName": "Vzdělávání na Kadaňsku"
     },
     {
+      "id": "7c1304306933",
+      "title": "ANGLICKÁ DVOJJAZYČNÁ LITERATURA PRO 1. A 2. STUPEŇ ZŠ",
+      "date": "2026-08-26",
+      "category": "Školství",
+      "description": "0px; margin: 20px;\"\"> Pomůcky k zapůjčení  .. další pomůcky k zapůjčení Kalendář 26.8.202610:00:00: Pozvánka na praktický seminář Noční vaření s důrazem na bezpečnost a ekonomiku provozu (GASTRO Konrád, Vodních staveb 5471, Chomutov) 23.9.202609:00:00: <a href=\"https://www.vzdelavani-kadansko.cz/pozvanka-na-seminar-od-phdr-libora-kyncla-formati",
+      "source": "https://www.vzdelavani-kadansko.cz/pomucky.php?id=22",
+      "sourceName": "Vzdělávání na Kadaňsku"
+    },
+    {
       "id": "156f0e19ced0",
       "title": ".. další pomůcky k zapůjčení",
       "date": "2026-08-26",
       "category": "Školství",
-      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení Herní sada s brýlemi simulujícími účinky drog a alkoholu  Kalendář 26.8.202610:00:00: <a href=\"ht",
+      "description": "ř akcí Materiály Facebook zobrazit více Pomůcky k zapůjčení ANGLICKÁ DVOJJAZYČNÁ LITERATURA PRO 1. A 2. STUPEŇ ZŠ  Kalendář 26.8.202610:00:00: <a href=\"https:",
       "source": "https://www.vzdelavani-kadansko.cz/pomucky.php",
       "sourceName": "Vzdělávání na Kadaňsku"
     },
@@ -1085,7 +1087,7 @@
       "title": "❮ Předchozí",
       "date": "2026-08-03",
       "category": "Smlouvy a hospodaření",
-      "description": "ss=\"4\"> 03.08.2026 124 600 CZK bez DPH BAGROS s. r. o. Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "> 03.08.2026 169 700 CZK bez DPH L. Hainz spol. s.r.o. Detail Na začátek <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp%3Bdo=searchResultList-setOffset&amp%3Bcontract_id=&amp%3Bversion_id=&amp%3Bpublication_date%5Bfrom%5D=&amp%3Bpublication_date%5Bto%5D=&amp%3Bsubject_box=uaybdrx&amp%3Bsubject_name=&amp%3Bsubject_idnum=&amp%3Bsubject_address=&amp%3Bparty_box=&amp%3Bparty_name=&amp%3Bparty_idnum=&amp%3Bparty_address=&amp%3Bcontr_num=&amp%3Bcontract_reference_number=&amp%3Bsign_date%5Bfrom%5D=&amp%3Bsign_date%5Bto%5D=&amp%3Bcontract_descr=&amp%3Bsign_person_name=&amp%3Bvalue_no_vat%5Bfrom%5D=&amp%3Bvalue_no_vat%5Bto%5D=&amp%3Bvalue_vat%5Bfrom%5D=&amp%3Bvalue_vat%5Bto%5D=&amp%3Bvalue_foreign%5Bfrom%5D=&amp%3Bvalue_foreign%5Bto%5D=&amp%3Bforeign_currency=&amp%3Bfile_text=&amp%3Bsearch_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1094,7 +1096,7 @@
       "title": "Na začátek",
       "date": "2026-08-03",
       "category": "Smlouvy a hospodaření",
-      "description": "ss=\"4\"> 03.08.2026 124 600 CZK bez DPH BAGROS s. r. o. Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
+      "description": "> 03.08.2026 169 700 CZK bez DPH L. Hainz spol. s.r.o. Detail  <a href=\"/vyhledavani?searchResultList-offset=0&do=searchResultList-setOffset&contract_id=&version_id=&publication_date[from]=&publication_date[to]=&subject_box=uaybdrx&subject_name=&subject_idnum=&subject_address=&party_box=&party_name=&party_idnum=&party_address=&contr_num=&contract_reference_number=&sign_date[from]=&sign_",
       "source": "https://smlouvy.gov.cz/vyhledavani?searchResultList-offset=0&amp%3Bdo=searchResultList-setOffset&amp%3Bcontract_id=&amp%3Bversion_id=&amp%3Bpublication_date%5Bfrom%5D=&amp%3Bpublication_date%5Bto%5D=&amp%3Bsubject_box=uaybdrx&amp%3Bsubject_name=&amp%3Bsubject_idnum=&amp%3Bsubject_address=&amp%3Bparty_box=&amp%3Bparty_name=&amp%3Bparty_idnum=&amp%3Bparty_address=&amp%3Bcontr_num=&amp%3Bcontract_reference_number=&amp%3Bsign_date%5Bfrom%5D=&amp%3Bsign_date%5Bto%5D=&amp%3Bcontract_descr=&amp%3Bsign_person_name=&amp%3Bvalue_no_vat%5Bfrom%5D=&amp%3Bvalue_no_vat%5Bto%5D=&amp%3Bvalue_vat%5Bfrom%5D=&amp%3Bvalue_vat%5Bto%5D=&amp%3Bvalue_foreign%5Bfrom%5D=&amp%3Bvalue_foreign%5Bto%5D=&amp%3Bforeign_currency=&amp%3Bfile_text=&amp%3Bsearch_type=0",
       "sourceName": "Registr smluv – Město Kadaň"
     },
@@ -1490,7 +1492,7 @@
       "title": "Přidat zde pivočáru",
       "date": "2022-09-09",
       "category": "Kultura a volný čas",
-      "description": "62662264522\" data-ad-slot=\"5357729984\" data-ad-format=\"horizontal\" data-full-width-responsive=\"true\" > (adsbygoogle = window.adsbygoogle || []).push({}); U Soudku  Název U Soudku Adresa Poštovní 842, Kadaň Web Přidat internetovou adresu... Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Zavřeno Co se tu čepuje",
+      "description": "62662264522\" data-ad-slot=\"5357729984\" data-ad-format=\"horizontal\" data-full-width-responsive=\"true\" > (adsbygoogle = window.adsbygoogle || []).push({}); U Soudku  Název U Soudku Adresa Poštovní 842, Kadaň Web Přidat internetovou adresu... Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Otevřeno Co se tu čepuj",
       "source": "https://www.pivnidenicek.cz/pivocary?pub=47163-u-soudku",
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
     },
@@ -1499,7 +1501,7 @@
       "title": "Přidat internetovou adresu...",
       "date": "2022-09-09",
       "category": "Kultura a volný čas",
-      "description": "ve pub-detail-table no-hover mb2\"> Název U Soudku Adresa Poštovní 842, Kadaň Web  Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Zavřeno Co se tu čepuje Pivo Poslední cena Aktualizace před 0 <td title=\"Celkem vypito 3 piv",
+      "description": "ve pub-detail-table no-hover mb2\"> Název U Soudku Adresa Poštovní 842, Kadaň Web  Objeveno Hospodu objevil 09. 09. 2022 pivní prospektor Gregis . Od té doby zde byli 2 pivníci. Kolik se toho vypilo 5 piv Nyní je Otevřeno Co se tu čepuje Pivo Poslední cena Aktualizace před 0 <td title=\"Celkem vypito 3 pi",
       "source": "https://www.pivnidenicek.cz/restaurace-a-hospody/upravit/47163-u-soudku",
       "sourceName": "Pivnice U Soudku Kadaň – veřejné informace"
     },
@@ -1783,15 +1785,6 @@
       "sourceName": "Městské divadlo Most – program"
     },
     {
-      "id": "3728d6d0b8d2",
-      "title": "Řada seniorů nechce být preferována na úkor svých vnuků, říká Lenka Desatová",
-      "date": "",
-      "category": "Regionální média",
-      "description": "article> play_fill 06:12 <img src=\"/images/api/image/210x140/147/14767291-fbdd-4ba0-98e6-146442411d01.webp\" alt=\"\" title=\"Řada seniorů nechce být preferována na úkor",
-      "source": "https://www.denik.cz/cesko/rada-senioru-nechce-byt-preferovana-na-ukor-svych-vnuku-rika-lenka-desatova",
-      "sourceName": "Chomutovský deník"
-    },
-    {
       "id": "159bd158d08c",
       "title": "Čtyřlístkový měsíčník",
       "date": "",
@@ -1808,6 +1801,15 @@
       "description": "t submenu815198092__menuItem itemShared2352141355__menuItem\" tabindex=\"0\"> Online katalog  Prodloužení výpůjčky <a data-item-label=\"t",
       "source": "https://katalog.knihovna-litvinov.cz/MyResearch/Home",
       "sourceName": "Městská knihovna Litvínov"
+    },
+    {
+      "id": "f306ff12aaa8",
+      "title": "Čtenář reportér",
+      "date": "",
+      "category": "Regionální média",
+      "description": "ata-app-name=\"ux\" > Speciály Soutěže  menu <i class=\"icon icon--xl absolute top-1/2 left-1/2 -translate-x",
+      "source": "https://chomutovsky.denik.cz/ctenar-reporter",
+      "sourceName": "Chomutovský deník"
     },
     {
       "id": "ed94d9c8bbe7",
