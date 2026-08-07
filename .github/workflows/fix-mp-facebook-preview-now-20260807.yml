@@ -1,0 +1,173 @@
+name: Opravit aktuální Facebook náhled článku MP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-mp-facebook-preview-now-20260807.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-facebook
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ARTICLE_PATH: clanky/mestska-policie-kadan-fakta-diskuse-2026.html
+      ARTICLE_URL: https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html
+      IMAGE_PATH: social/mestska-policie-kadan-fakta-diskuse-2026-v2.png
+      IMAGE_URL: https://nasekadan.cz/social/mestska-policie-kadan-fakta-diskuse-2026-v2.png
+      FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+      FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+      FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+      FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+      FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+
+      - name: Ověřit zdroj článku a přesný obrázek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,re,struct
+          from pathlib import Path
+          article=Path('clanky/mestska-policie-kadan-fakta-diskuse-2026.html').read_text(encoding='utf-8')
+          m=re.search(r'<meta\b[^>]*property=["\x27]og:image["\x27][^>]*content=["\x27]([^"\x27]+)',article,re.I)
+          assert m and m.group(1)=='https://nasekadan.cz/social/mestska-policie-kadan-fakta-diskuse-2026-v2.png', m.group(1) if m else 'missing og:image'
+          data=Path('social/mestska-policie-kadan-fakta-diskuse-2026-v2.png').read_bytes()
+          assert data.startswith(b'\x89PNG\r\n\x1a\n') and len(data)>10000
+          w,h=struct.unpack('>II',data[16:24])
+          assert (w,h)==(1200,630),(w,h)
+          print('LOCAL_SHA256='+hashlib.sha256(data).hexdigest())
+          PY
+
+      - name: Zajistit stejný článek a obrázek na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          tar -czf - "$ARTICLE_PATH" "$IMAGE_PATH" | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo mkdir -p /var/www/nasekadan/clanky /var/www/nasekadan/social && sudo tar -xzf - -C /var/www/nasekadan && sudo chmod -R a+rX /var/www/nasekadan'
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 "ARTICLE_PATH='$ARTICLE_PATH' IMAGE_PATH='$IMAGE_PATH' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cid="$(sudo docker ps --filter name=^/nasekadan-web$ -q | head -n1)"
+          [[ -n "$cid" ]] || cid="$(sudo docker ps --filter publish=3224 -q | head -n1)"
+          if [[ -n "$cid" ]]; then
+            sudo docker exec "$cid" mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp "/var/www/nasekadan/$ARTICLE_PATH" "$cid:/usr/share/nginx/html/$ARTICLE_PATH"
+            sudo docker cp "/var/www/nasekadan/$IMAGE_PATH" "$cid:/usr/share/nginx/html/$IMAGE_PATH"
+          fi
+          REMOTE
+
+      - name: Ověřit veřejný výstup přesně jako Facebook crawler
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,re,struct,time,urllib.request
+          from pathlib import Path
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          expected=Path('social/mestska-policie-kadan-fakta-diskuse-2026-v2.png').read_bytes()
+          expected_hash=hashlib.sha256(expected).hexdigest()
+          def get(url):
+              sep='&' if '?' in url else '?'
+              req=urllib.request.Request(url+sep+'fbfix='+str(time.time_ns()),headers={'User-Agent':ua,'Cache-Control':'no-cache','Pragma':'no-cache'})
+              with urllib.request.urlopen(req,timeout=40) as r:return r.status,{k.lower():v for k,v in r.headers.items()},r.read()
+          status,headers,body=get('https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html')
+          assert status==200
+          text=body.decode('utf-8','replace')
+          m=re.search(r'<meta\b[^>]*property=["\x27]og:image["\x27][^>]*content=["\x27]([^"\x27]+)',text,re.I)
+          assert m and m.group(1)=='https://nasekadan.cz/social/mestska-policie-kadan-fakta-diskuse-2026-v2.png',m.group(1) if m else 'missing'
+          status,headers,data=get(m.group(1))
+          assert status==200
+          assert headers.get('content-type','').split(';',1)[0].strip().lower()=='image/png'
+          assert len(data)>10000 and data.startswith(b'\x89PNG\r\n\x1a\n')
+          assert struct.unpack('>II',data[16:24])==(1200,630)
+          live_hash=hashlib.sha256(data).hexdigest()
+          assert live_hash==expected_hash,(live_hash,expected_hash)
+          print('LIVE_OK',len(data),live_hash)
+          PY
+
+      - name: Přinutit Facebook znovu načíst aktuální Open Graph
+        id: facebook
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/fb-response.json"
+          import json,sys
+          sys.path.insert(0,'scripts')
+          import publish_facebook
+          creds=publish_facebook.validate_page_access()
+          _,token,_=publish_facebook.resolve_page_credentials()
+          response=publish_facebook.request_json(
+              publish_facebook.graph_endpoint(''),
+              params={'id':'https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html','scrape':'true','access_token':token},
+              method='POST',
+          )
+          if response.get('error'):
+              raise SystemExit(response['error'])
+          print(json.dumps({'page_id':creds.get('page_id'),'response':response},ensure_ascii=False))
+          PY
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('/home/runner/work/_temp/fb-response.json').read_text()) if Path('/home/runner/work/_temp/fb-response.json').exists() else None
+          print('Facebook scrape dokončen.')
+          PY
+
+      - name: Zapsat potvrzený stav a opravit marker
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json
+          from datetime import datetime,timezone
+          from pathlib import Path
+          marker=Path('.github/facebook-published/mestska-policie-kadan-fakta-diskuse-2026-44a9daef7b.json')
+          data=json.loads(marker.read_text(encoding='utf-8'))
+          image=Path('social/mestska-policie-kadan-fakta-diskuse-2026-v2.png').read_bytes()
+          now=datetime.now(timezone.utc).isoformat()
+          data['og_image']='https://nasekadan.cz/social/mestska-policie-kadan-fakta-diskuse-2026-v2.png'
+          data['preview_refreshed_at']=now
+          data['preview_refresh_reason']=['og_image_changed','manual_repair_20260807']
+          marker.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          status={
+            'status':'success',
+            'checked_at':now,
+            'article':'https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html',
+            'og_image':data['og_image'],
+            'image_sha256':hashlib.sha256(image).hexdigest(),
+            'dimensions':[1200,630],
+            'facebook_rescrape':True,
+            'facebook_post_id':data.get('facebook_post_id')
+          }
+          Path('.github/mp-facebook-preview-status.json').write_text(json.dumps(status,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň Facebook preview repair'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/facebook-published/mestska-policie-kadan-fakta-diskuse-2026-44a9daef7b.json .github/mp-facebook-preview-status.json
+          git commit -m 'Potvrdit opravený Facebook náhled článku MP [skip ci]'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin main; then exit 0; fi
+            [[ "$attempt" = 5 ]] && exit 1
+            git rebase --abort >/dev/null 2>&1 || true
+            sleep $((attempt*2))
+          done
