@@ -1,5 +1,7 @@
-name: Pojistka proti mizení článků
+name: Pojistka viditelnosti článků – pouze audit
 
+# DŮLEŽITÉ: tento workflow NESMÍ měnit main ani produkční /var/www.
+# Jediným zdrojem produkčního obsahu je kanonický deploy aktuálního main.
 on:
   workflow_dispatch:
   push:
@@ -7,184 +9,100 @@ on:
     paths:
       - 'clanky/**'
       - 'index.html'
+      - 'rss.xml'
       - 'sitemap.xml'
-      - 'data/published-content-index.json'
+      - 'news-sitemap.xml'
+      - 'images/clanky/**'
+      - 'social/**'
       - 'scripts/enforce_article_visibility.py'
-      - 'scripts/article_visibility_guard.py'
       - '.github/workflows/article-visibility-guard.yml'
   schedule:
     - cron: '17 * * * *'
 
 permissions:
-  contents: write
+  contents: read
   issues: write
 
 concurrency:
-  group: article-visibility-guard
-  cancel-in-progress: false
+  group: article-visibility-audit
+  cancel-in-progress: true
 
 jobs:
-  protect:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
-    env:
-      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
-      BLOOD_REL: /clanky/nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-2026.html
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Obnovit smazané články a znovu sestavit všechny přehledy
+      - name: Ověřit zdroj bez jakéhokoli zápisu
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/article_visibility_guard.py scripts/enforce_article_visibility.py
-          python3 scripts/article_visibility_guard.py --repair
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          eso='eso-market-rafanda-kadan-24-7.html'
 
-          # Pouhý čas kontroly nesmí každou hodinu vytvářet nový commit.
-          if git show HEAD:data/article-integrity-manifest.json >/tmp/old-manifest.json 2>/dev/null; then
-            python3 - <<'PY'
-          import json
-          from pathlib import Path
-          old=json.loads(Path('/tmp/old-manifest.json').read_text())
-          path=Path('data/article-integrity-manifest.json')
-          new=json.loads(path.read_text())
-          if old.get('articles') == new.get('articles') and not new.get('restored_in_this_run'):
-              new['generated_at'] = old.get('generated_at', new.get('generated_at'))
-              new['restored_in_this_run'] = []
-              path.write_text(json.dumps(new, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-          PY
-          fi
+          test -f "clanky/$mp"
+          test -f "clanky/$gym"
+          test -f "clanky/$eso"
+          test -f images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp
+          test -f images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp
+          test -f images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp
 
-          git diff --check
-          grep -Fq "$BLOOD_REL" index.html
-          grep -Fq "$BLOOD_REL" clanky/index.html
-          grep -Fq "https://nasekadan.cz$BLOOD_REL" sitemap.xml
+          grep -Fq "data-latest-article-href=\"/clanky/$mp\"" index.html
+          grep -Fq "/clanky/$gym" index.html
+          grep -Fq "/clanky/$eso" index.html
+          grep -Fq "/clanky/$mp" clanky/index.html
+          grep -Fq "/clanky/$gym" clanky/index.html
+          grep -Fq "/clanky/$eso" clanky/index.html
+          grep -Fq "https://nasekadan.cz/clanky/$mp" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/$gym" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/$eso" rss.xml
 
-      - name: Uložit samoopravu do main
-        id: save
+          python3 -m py_compile scripts/enforce_article_visibility.py
+          git diff --exit-code
+          echo 'OK: zdrojový main je konzistentní. Audit nic nemění.'
+
+      - name: Ověřit veřejný web bez opravování
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'Naše Kadaň – pojistka článků'
-          git config user.email 'info@nasekadan.cz'
-          git add index.html sitemap.xml data/article-integrity-manifest.json clanky/*.html
-          if ! git diff --cached --quiet; then
-            git commit -m '[visibility-guard] Obnovit úplný seznam publikovaných článků'
-            pushed=0
-            for attempt in 1 2 3 4 5; do
-              if git pull --rebase origin main && git push origin HEAD:main; then
-                pushed=1
-                break
-              fi
-              git rebase --abort 2>/dev/null || true
-              sleep $((attempt * 5))
-            done
-            test "$pushed" = 1
-          fi
-          git fetch origin main
-          git reset --hard origin/main
-          python3 scripts/article_visibility_guard.py --repair
-          git diff --check
-          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          base='https://nasekadan.cz'
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          eso='eso-market-rafanda-kadan-24-7.html'
+          q="audit-${GITHUB_RUN_ID}-$(date +%s)"
 
-      - name: Nasadit kompletní článkový povrch na OVH
-        shell: bash
-        run: |
-          set -euo pipefail
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
-          test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
+          curl -4 -kfsSL --max-time 40 "$base/?$q" -o /tmp/home.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/?$q" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/$eso?$q" -o /tmp/eso.html
+          curl -4 -kfsSL --max-time 40 "$base/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp?$q" -o /tmp/eso1.webp
+          curl -4 -kfsSL --max-time 40 "$base/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp?$q" -o /tmp/eso2.webp
+          curl -4 -kfsSL --max-time 40 "$base/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp?$q" -o /tmp/eso3.webp
 
-          bundle="$RUNNER_TEMP/article-visibility-guard"
-          rm -rf "$bundle"
-          mkdir -p "$bundle/clanky" "$bundle/data"
-          cp index.html sitemap.xml rss.xml news-sitemap.xml llms.txt robots.txt "$bundle/"
-          cp clanky/*.html "$bundle/clanky/"
-          cp data/article-integrity-manifest.json "$bundle/data/"
-          printf 'status=ok\nsource=%s\narticle_guard=ok\nchecked_at=%s\n' '${{ steps.save.outputs.source_sha }}' "$(date -u +%FT%TZ)" > "$bundle/deployment-health.txt"
+          grep -Fq "data-latest-article-href=\"/clanky/$mp\"" /tmp/home.html
+          grep -Fq "/clanky/$gym" /tmp/home.html
+          grep -Fq "/clanky/$eso" /tmp/archive.html
+          grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' /tmp/eso.html
+          grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' /tmp/eso.html
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' /tmp/eso.html
+          test -s /tmp/eso1.webp
+          test -s /tmp/eso2.webp
+          test -s /tmp/eso3.webp
+          echo 'OK: veřejný web je aktuální a všechny tři fotografie Rafandy jsou dostupné.'
 
-          uploaded=0
-          for attempt in 1 2 3 4; do
-            if scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$bundle" ubuntu@57.129.43.215:/tmp/article-visibility-guard; then
-              uploaded=1
-              break
-            fi
-            sleep $((attempt * 7))
-          done
-          test "$uploaded" = 1
-
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          src=/tmp/article-visibility-guard
-          root=/var/www/nasekadan
-          sudo install -d -m 0755 "$root/clanky" "$root/data"
-          sudo install -m 0644 "$src/index.html" "$root/index.html"
-          for f in "$src"/clanky/*.html; do sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
-          for f in sitemap.xml rss.xml news-sitemap.xml llms.txt robots.txt deployment-health.txt; do sudo install -m 0644 "$src/$f" "$root/$f"; done
-          sudo install -m 0644 "$src/data/article-integrity-manifest.json" "$root/data/article-integrity-manifest.json"
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data
-            sudo docker cp "$src/index.html" nasekadan-web:/usr/share/nginx/html/index.html
-            sudo docker cp "$src/clanky/." nasekadan-web:/usr/share/nginx/html/clanky/
-            for f in sitemap.xml rss.xml news-sitemap.xml llms.txt robots.txt deployment-health.txt; do sudo docker cp "$src/$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
-            sudo docker cp "$src/data/article-integrity-manifest.json" nasekadan-web:/usr/share/nginx/html/data/article-integrity-manifest.json
-          fi
-          rm -rf /tmp/article-visibility-guard
-          REMOTE
-
-      - name: Veřejně zkontrolovat všechny články
-        shell: bash
-        run: |
-          set -euo pipefail
-          sleep 6
-          base=https://nasekadan.cz
-          stamp="${GITHUB_RUN_ID}-$(date +%s)"
-          curl -4 -kfsS -L --max-time 40 "$base/?v=$stamp" -o /tmp/home.html
-          curl -4 -kfsS -L --max-time 40 "$base/clanky/?v=$stamp" -o /tmp/archive.html
-          curl -4 -kfsS -L --max-time 40 "$base/sitemap.xml?v=$stamp" -o /tmp/sitemap.xml
-          curl -4 -kfsS -L --max-time 40 "$base/data/article-integrity-manifest.json?v=$stamp" -o /tmp/manifest.json
-          curl -4 -kfsS -L --max-time 40 "$base/deployment-health.txt?v=$stamp" -o /tmp/health.txt
-
-          grep -Fq "$BLOOD_REL" /tmp/home.html
-          grep -Fq "$BLOOD_REL" /tmp/archive.html
-          grep -Fq "https://nasekadan.cz$BLOOD_REL" /tmp/sitemap.xml
-          grep -Fq 'article_guard=ok' /tmp/health.txt
-          grep -Fq 'source=${{ steps.save.outputs.source_sha }}' /tmp/health.txt
-
-          python3 - <<'PY'
-          import json, subprocess, sys
-          data=json.load(open('/tmp/manifest.json', encoding='utf-8'))
-          failed=[]
-          for item in data['articles']:
-              url=item['url']+'?visibility_guard=all'
-              r=subprocess.run(['curl','-4','-kfsS','-L','--max-time','35',url],capture_output=True)
-              body=r.stdout.decode('utf-8','replace')
-              if r.returncode or '<h1' not in body or 'noindex' in body.lower():
-                  failed.append(item['url'])
-          if failed:
-              print('Nedostupné články:', *failed, sep='\n', file=sys.stderr)
-              raise SystemExit(1)
-          print(f"Veřejně ověřeno {len(data['articles'])} článků.")
-          PY
-
-      - name: Založit nebo doplnit incident
+      - name: Nahlásit regresi bez zásahu do produkce
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          title='[incident] Pojistka zjistila chybějící článek'
-          body="Pojistka proti mizení článků selhala nebo nalezla nedostupný článek.\n\nWorkflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\nCommit: ${GITHUB_SHA}"
+          title='[incident] Regrese článků nebo fotografií – audit only'
+          body="Audit zjistil rozdíl mezi kanonickým main a živým webem. Tento workflow produkci záměrně neopravuje ani nepřepisuje. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
           if [[ -n "$existing" ]]; then
             gh issue comment "$existing" --body "$body"
