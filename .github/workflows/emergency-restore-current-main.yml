@@ -1,0 +1,122 @@
+name: Nouzově obnovit aktuální main na živý web
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/restore-latest-live-trigger.txt'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      MP: mestska-policie-kadan-fakta-diskuse-2026
+      GYM: gymnastika-kadan-treneri-prosinec-2026
+      APO: apolena-svabikova-mistrovstvi-evropy-birmingham-2026
+      ESO: eso-market-rafanda-kadan-24-7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit aktuální zdroj
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(git rev-parse HEAD)"
+          echo "MAIN_SHA=$MAIN_SHA" >> "$GITHUB_ENV"
+          for slug in "$MP" "$GYM" "$APO" "$ESO"; do
+            test -s "clanky/$slug.html"
+            grep -Fq "$slug.html" index.html
+            grep -Fq "$slug.html" clanky/index.html
+            grep -Fq "$slug.html" rss.xml
+          done
+          grep -Fq "data-latest-article-href=\"/clanky/$MP.html\"" index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          slugs=['mestska-policie-kadan-fakta-diskuse-2026','gymnastika-kadan-treneri-prosinec-2026','apolena-svabikova-mistrovstvi-evropy-birmingham-2026','eso-market-rafanda-kadan-24-7']
+          for name in ('clanky/index.html','rss.xml'):
+              text=Path(name).read_text(encoding='utf-8')
+              pos=[text.find(s+'.html') for s in slugs]
+              assert all(p>=0 for p in pos), (name,pos)
+              assert pos==sorted(pos), (name,pos)
+          PY
+
+      - name: Připravit balík
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          stage="$RUNNER_TEMP/restore"
+          mkdir -p "$stage/clanky" "$stage/social" "$stage/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$stage/"
+          cp clanky/*.html "$stage/clanky/"
+          cp -a social/. "$stage/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$stage/data/"
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=emergency-current-main-restore\n' "$MAIN_SHA" "$(date -u +%FT%TZ)" > "$stage/deployment-health.txt"
+          tar -C "$stage" -czf "$RUNNER_TEMP/restore.tgz" .
+
+      - name: Nasadit na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          scp "${opts[@]}" "$RUNNER_TEMP/restore.tgz" ubuntu@57.129.43.215:/tmp/nk-current-main.tgz
+          ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          work="$(mktemp -d /tmp/nk-current-main.XXXXXX)"
+          root=/var/www/nasekadan
+          trap 'rm -rf "$work" /tmp/nk-current-main.tgz' EXIT
+          tar -xzf /tmp/nk-current-main.tgz -C "$work"
+          sudo install -d -m 0755 "$root" "$root/clanky" "$root/social" "$root/data"
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          sudo cp -a "$work"/. "$root"/
+          sudo chmod -R a+rX "$root"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp "$work"/. nasekadan-web:/usr/share/nginx/html/
+          fi
+          REMOTE
+
+      - name: Veřejně ověřit
+        shell: bash
+        run: |
+          set -euo pipefail
+          ok=0
+          for n in $(seq 1 12); do
+            q="restore-${GITHUB_RUN_ID}-$(date +%s)-$n"
+            home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            if grep -Fq "data-latest-article-href=\"/clanky/$MP.html\"" <<<"$home" \
+              && grep -Fq "$GYM.html" <<<"$home" \
+              && grep -Fq "$MP.html" <<<"$archive" \
+              && grep -Fq "$GYM.html" <<<"$archive" \
+              && grep -Fq "$MP.html" <<<"$rss" \
+              && grep -Fq "$GYM.html" <<<"$rss"; then
+              ok=1; break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ok='${{ job.status }}'==='success';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?'✅ Aktuální články byly obnoveny na titulce, v archivu a RSS.':'❌ Obnova aktuálních článků selhala.'});
+            if(ok) await github.rest.pulls.update({owner:context.repo.owner,repo:context.repo.repo,pull_number:context.issue.number,state:'closed'});
