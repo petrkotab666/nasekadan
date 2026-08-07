@@ -19,6 +19,7 @@ jobs:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Připravit SSH
+        id: sshprep
         shell: bash
         run: |
           set -euo pipefail
@@ -27,6 +28,7 @@ jobs:
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
       - name: Nasadit aktuální main a nainstalovat ochranu na OVH
+        id: server
         shell: bash
         run: |
           set -euo pipefail
@@ -45,6 +47,7 @@ jobs:
           REMOTE
 
       - name: Ověřit veřejnou titulku a článek ZZS externě
+        id: external
         shell: bash
         run: |
           set -euo pipefail
@@ -73,8 +76,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const ok = '${{ job.status }}' === 'success';
+            const sshprep = '${{ steps.sshprep.outcome }}';
+            const server = '${{ steps.server.outcome }}';
+            const external = '${{ steps.external.outcome }}';
             const body = ok
-              ? '✅ Produkční deploy aktuálního mainu proběhl. Veřejně jsou ověřené titulka, archiv, RSS, sitemap a článek ZZS Kadaň včetně OG fotografie a bez interních postupů dohledávání.'
-              : '❌ Produkční deploy nebo veřejná kontrola článku ZZS Kadaň selhaly.';
+              ? `✅ Produkční deploy aktuálního mainu proběhl. Veřejně jsou ověřené titulka, archiv, RSS, sitemap a článek ZZS Kadaň včetně OG fotografie a bez interních postupů dohledávání. Kroky: SSH=${sshprep}, server=${server}, externí kontrola=${external}.`
+              : `❌ Produkční deploy nebo veřejná kontrola článku ZZS Kadaň selhaly. Kroky: SSH=${sshprep}, server=${server}, externí kontrola=${external}.`;
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
