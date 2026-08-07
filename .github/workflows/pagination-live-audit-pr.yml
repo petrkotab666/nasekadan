@@ -1,0 +1,37 @@
+name: Měřitelný read-only audit stránkování
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/pagination-live-repair.trigger'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pagination-live-audit-20260807
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix-archive-pagination-live'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ověřit živé stránkování 1 až 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz/clanky'
+          code=$(curl -4 -ksSL --max-time 35 -o /tmp/p1.html -w '%{http_code}' "$base/?audit=${GITHUB_RUN_ID}")
+          test "$code" = 200
+          grep -Fq 'href="/clanky/strana-2.html"' /tmp/p1.html
+          for n in 2 3 4 5; do
+            code=$(curl -4 -ksSL --max-time 35 -o "/tmp/p$n.html" -w '%{http_code}' "$base/strana-$n.html?audit=${GITHUB_RUN_ID}")
+            echo "PAGE_$n HTTP=$code bytes=$(wc -c < /tmp/p$n.html)"
+            test "$code" = 200
+            grep -Fq "Všechny články – strana $n" "/tmp/p$n.html"
+            grep -Fq 'article-card' "/tmp/p$n.html"
+          done
+          echo 'PAGINATION_LIVE_OK pages=1,2,3,4,5'
