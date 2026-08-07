@@ -49,7 +49,7 @@ jobs:
       - name: Ověřit lokální binární obsah
         run: |
           set -euo pipefail
-          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068  images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp' | sha256sum -c -
+          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068d  images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp' | sha256sum -c -
           echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp' | sha256sum -c -
       - name: Připravit SSH
         run: |
@@ -91,7 +91,7 @@ jobs:
           grep -q 'ptaci-cela-stena-v4.webp?v=20260807-2220' /tmp/article.html
           curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?verify=$stamp" -o /tmp/a.webp
           curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?verify=$stamp" -o /tmp/b.webp
-          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068  /tmp/a.webp' | sha256sum -c -
+          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068d  /tmp/a.webp' | sha256sum -c -
           echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  /tmp/b.webp' | sha256sum -c -
           printf 'ara=%s bytes sha=%s\n' "$(wc -c </tmp/a.webp)" "$(sha256sum /tmp/a.webp | cut -d' ' -f1)" | tee /tmp/result.txt
           printf 'stena=%s bytes sha=%s\n' "$(wc -c </tmp/b.webp)" "$(sha256sum /tmp/b.webp | cut -d' ' -f1)" | tee -a /tmp/result.txt
