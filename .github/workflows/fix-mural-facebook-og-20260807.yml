@@ -1,0 +1,99 @@
+name: Opravit Facebook obrázek článku Od hlubin k nebi
+run-name: Přímá oprava OG obrázku pro Facebook
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-mural-facebook-og-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-fix-mural-facebook-og
+  cancel-in-progress: true
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Vytvořit a nasadit přesný OG obrázek
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          cd /opt/nasekadan
+          python3 scripts/materialize_mural_assets.py
+          python3 - <<'PY'
+from pathlib import Path
+from PIL import Image, ImageOps
+src = Path('images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp')
+out = Path('social/od-hlubin-k-nebi-kadan-31d3fafbaa.png')
+out.parent.mkdir(parents=True, exist_ok=True)
+with Image.open(src) as im:
+    im = ImageOps.exif_transpose(im).convert('RGB')
+    im = ImageOps.fit(im, (1200, 630), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5))
+    im.save(out, 'PNG', optimize=True)
+with Image.open(out) as check:
+    assert check.format == 'PNG'
+    assert check.size == (1200, 630)
+assert out.stat().st_size > 20000
+print(out, out.stat().st_size)
+PY
+          ROOT=/var/www/nasekadan
+          sudo mkdir -p "$ROOT/social"
+          sudo install -m 0644 social/od-hlubin-k-nebi-kadan-31d3fafbaa.png "$ROOT/social/od-hlubin-k-nebi-kadan-31d3fafbaa.png"
+          sudo chmod a+r "$ROOT/social/od-hlubin-k-nebi-kadan-31d3fafbaa.png"
+          REMOTE
+
+      - name: Ověřit Facebook OG z veřejného webu
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          q="fb-og-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "$base/clanky/od-hlubin-k-nebi-kadan.html?$q" -o /tmp/article.html
+          grep -Fq 'https://nasekadan.cz/social/od-hlubin-k-nebi-kadan-31d3fafbaa.png' /tmp/article.html
+          curl -4 -kfsSL --max-time 40 "$base/social/od-hlubin-k-nebi-kadan-31d3fafbaa.png?$q" -o /tmp/og.png
+          file /tmp/og.png | grep -Fq 'PNG image data, 1200 x 630'
+          test "$(stat -c %s /tmp/og.png)" -gt 20000
+          curl -4 -kfsSI --max-time 40 "$base/social/od-hlubin-k-nebi-kadan-31d3fafbaa.png?$q" | tr -d '\r' | grep -Eqi '^content-type: image/png$'
+
+      - name: Zapsat potvrzení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-deploy-bot'
+          git config user.email 'info@nasekadan.cz'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          status=".github/deploy-status/od-hlubin-k-nebi-facebook-og-${GITHUB_RUN_ID}.txt"
+          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nog_image=social/od-hlubin-k-nebi-kadan-31d3fafbaa.png\nsize=1200x630\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
+          git add "$status"
+          git commit -m 'Potvrdit opravu Facebook OG obrázku Od hlubin k nebi [skip ci]'
+          git push origin HEAD:main
