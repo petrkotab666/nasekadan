@@ -1,0 +1,241 @@
+name: Finální oprava fotek podchodu a Facebook náhledů
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-final-live-media-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 813
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+      FB_TOKEN_1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      FB_TOKEN_3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vytvořit skutečné WebP fotografie podchodu a zpevnit OG metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          rm -f images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          python scripts/materialize_mural_assets.py
+          python scripts/harden_facebook_meta.py --write --check
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          paths=[
+            Path('images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp'),
+            Path('images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp'),
+          ]
+          for p in paths:
+            assert p.is_file() and p.stat().st_size>10000,p
+            with Image.open(p) as im:
+              im.load(); assert im.format=='WEBP' and im.width>=800 and im.height>=600,(p,im.format,im.size)
+              print('WEBP OK',p,im.size,p.stat().st_size)
+          html=Path('clanky/od-hlubin-k-nebi-kadan.html').read_text(encoding='utf-8')
+          for p in paths: assert '/'+str(p) in html
+          PY
+
+      - name: Trvale uložit fotky a případné OG opravy do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- images/clanky/od-hlubin-k-nebi clanky; then
+            echo 'Repo již obsahuje správné fotky a metadata.'
+          else
+            git config user.name 'Naše Kadaň – média'
+            git config user.email 'info@nasekadan.cz'
+            git add images/clanky/od-hlubin-k-nebi clanky
+            git commit -m 'Trvale uložit fotografie podchodu a Facebook metadata [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              sleep $((attempt*2))
+            done
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          test -s images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp
+          test -s images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nahrát opravu přímo na živý web pod produkčním zámkem
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > "$RUNNER_TEMP/media-files.txt"
+          from pathlib import Path
+          import re
+          files=[
+            'clanky/od-hlubin-k-nebi-kadan.html',
+            'images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp',
+            'images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp',
+            'clanky/zzs-kadan-garaz-mycka-2026.html',
+            'clanky/slavie-kadan-epp-plavci-120-tisic-2026.html',
+          ]
+          for article in files[-2:]:
+            text=Path(article).read_text(encoding='utf-8')
+            m=re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I); assert m
+            clean=m.group(1).replace('&amp;','&').split('?',1)[0]
+            rel=clean.removeprefix('https://nasekadan.cz/').lstrip('/')
+            assert Path(rel).is_file(),rel
+            files.append(rel)
+          print('\n'.join(dict.fromkeys(files)))
+          PY
+          mapfile -t files < "$RUNNER_TEMP/media-files.txt"
+          tar -czf "$RUNNER_TEMP/media-fix.tgz" "${files[@]}"
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/media-fix.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-media-fix.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"; sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"; flock -w 300 9
+          sudo tar -xzf /tmp/nasekadan-media-fix.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/clanky/zzs-kadan-garaz-mycka-2026.html nasekadan-web:/usr/share/nginx/html/clanky/zzs-kadan-garaz-mycka-2026.html
+            sudo docker cp /var/www/nasekadan/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html nasekadan-web:/usr/share/nginx/html/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi /usr/share/nginx/html/social
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/. nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/
+            sudo docker cp /var/www/nasekadan/social/. nasekadan-web:/usr/share/nginx/html/social/
+          fi
+          rm -f /tmp/nasekadan-media-fix.tgz
+          REMOTE
+
+      - name: Ověřit fotografie podchodu z veřejného internetu
+        id: photos
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import time,urllib.request
+          from io import BytesIO
+          from PIL import Image
+          base='https://nasekadan.cz'
+          ua='Mozilla/5.0 NašeKadaň-media-audit'
+          article=base+'/clanky/od-hlubin-k-nebi-kadan.html?fresh='+str(time.time_ns())
+          req=urllib.request.Request(article,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=35) as r: text=r.read().decode('utf-8','replace')
+          for name in ('ptaci-ara-zoborozec.webp','ptaci-cela-stena.webp'):
+            path='/images/clanky/od-hlubin-k-nebi/'+name
+            assert path in text
+            req=urllib.request.Request(base+path+'?fresh='+str(time.time_ns()),headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+            with urllib.request.urlopen(req,timeout=35) as r:
+              assert r.status==200
+              ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); data=r.read()
+            assert ctype=='image/webp' and len(data)>10000,(name,ctype,len(data))
+            with Image.open(BytesIO(data)) as im:
+              im.load(); assert im.format=='WEBP' and im.width>=800 and im.height>=600
+              print('PUBLIC PHOTO OK',name,im.size,len(data))
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Vynutit nový scrape Facebooku přes Meta Graph API
+        id: fb
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${FB_TOKEN_1:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
+          test -n "$token"
+          : > "$RUNNER_TEMP/meta-results.jsonl"
+          for url in \
+            'https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html' \
+            'https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html'; do
+            response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' --data-urlencode "id=$url" --data-urlencode 'scrape=true' --data-urlencode "access_token=$token")"
+            python3 - "$url" "$response" <<'PY' | tee -a "$RUNNER_TEMP/meta-results.jsonl"
+          import json,sys
+          url,raw=sys.argv[1],sys.argv[2]
+          data=json.loads(raw)
+          if 'error' in data: raise SystemExit(str(data['error']))
+          print(json.dumps({'url':url,'response':data},ensure_ascii=False))
+          PY
+            sleep 4
+          done
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Ověřit v nginx logu skutečné Meta požadavky
+        id: logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          sleep 4
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' > "$RUNNER_TEMP/facebook-access.log" <<'REMOTE'
+          set -euo pipefail
+          sudo sh -c "zgrep -hiE 'facebookexternalhit|meta-externalagent|Facebot' /var/log/nginx/access.log* 2>/dev/null | tail -n 100" || true
+          REMOTE
+          cat "$RUNNER_TEMP/facebook-access.log"
+          python3 - <<'PY'
+          from pathlib import Path
+          log=Path(__import__('os').environ['RUNNER_TEMP']+'/facebook-access.log').read_text(encoding='utf-8',errors='replace')
+          needles=('zzs-kadan-garaz-mycka-2026','slavie-kadan-epp-plavci-120-tisic-2026')
+          missing=[n for n in needles if n not in log]
+          if missing:
+            print('Upozornění: v běžném nginx logu zatím nejsou všechny Meta requesty:',missing)
+          else:
+            print('Skutečné Meta requesty nalezeny pro oba články.')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek do issue 813
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PHOTOS: ${{ steps.photos.outputs.ok }}
+          FB: ${{ steps.fb.outputs.ok }}
+          LOGS: ${{ steps.logs.outputs.ok }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs');
+            let meta='',logs='';
+            try{meta=fs.readFileSync(process.env.RUNNER_TEMP+'/meta-results.jsonl','utf8').slice(-5000)}catch{}
+            try{logs=fs.readFileSync(process.env.RUNNER_TEMP+'/facebook-access.log','utf8').split('\n').slice(-30).join('\n').slice(-5000)}catch{}
+            const ok=process.env.PHOTOS==='true'&&process.env.FB==='true';
+            const body=ok
+              ? `✅ Fotografie podchodu jsou fyzicky veřejné a ověřené jako WebP. Meta Graph API znovu seškráblo ZZS i Slávii.\n\nMeta odpovědi:\n\`\`\`json\n${meta}\n\`\`\`\n\nPoslední Meta požadavky v nginx logu:\n\`\`\`text\n${logs}\n\`\`\``
+              : `❌ Oprava médií není kompletní. photos=${process.env.PHOTOS||'false'}, facebook=${process.env.FB||'false'}, logs=${process.env.LOGS||'false'}.\n\nMeta:\n\`\`\`\n${meta}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:813,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:813,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.photos.outputs.ok }}" = 'true'
+          test "${{ steps.fb.outputs.ok }}" = 'true'
