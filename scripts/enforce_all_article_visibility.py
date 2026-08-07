@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Jednorázový publikační most pro opravený článek o Apoleně Švábíkové.
+"""Kanonická pojistka úplné viditelnosti publikovaných článků.
 
-Proudový deploy obchází zaplněný serverový /tmp. Po úspěšném veřejném
-ověření se tento soubor sám obnoví na kanonickou verzi.
+Tento vstupní bod nesmí obsahovat ani volat žádný jednorázový historický deploy.
+Vždy pouze znovu sestaví titulku a stránkovaný archiv ze skutečných článkových
+souborů pomocí obecného generátoru ``enforce_article_visibility``.
 """
 from __future__ import annotations
 
-from deploy_current_apolena_streamed import main
+from enforce_article_visibility import main
 
 
 if __name__ == "__main__":
