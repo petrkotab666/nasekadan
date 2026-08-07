@@ -56,8 +56,9 @@ jobs:
       - name: Spustit jediný kanonický produkční skript
         shell: bash
         run: |
-          set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set +e
+          log="$RUNNER_TEMP/canonical-deploy.log"
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$log" 2>&1 <<'REMOTE'
           set -euo pipefail
           work=/tmp/nasekadan-pagination-repair
           rm -rf "$work"
@@ -68,6 +69,15 @@ jobs:
           sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
           rm -rf "$work" /tmp/nasekadan-pagination-repair.tgz
           REMOTE
+          rc=$?
+          echo "CANONICAL_DEPLOY_EXIT=$rc"
+          echo '--- posledních 160 řádků kanonického deploye ---'
+          tail -n 160 "$log" || true
+          if [[ $rc -ne 0 ]]; then
+            echo '--- filtrované chybové řádky ---'
+            grep -Ein 'traceback|runtimeerror|error|chyb|selhal|fail|missing|nenalezen|neúpl|kontrola' "$log" | tail -n 80 || true
+          fi
+          exit "$rc"
 
       - name: Veřejně ověřit klikatelné stránky archivu
         shell: bash
