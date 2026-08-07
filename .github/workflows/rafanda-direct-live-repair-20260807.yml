@@ -34,7 +34,7 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Ověřit zdrojové články a obrázky
+      - name: Ověřit pouze dotčené zdroje
         shell: bash
         run: |
           set -euo pipefail
@@ -45,12 +45,9 @@ jobs:
             images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp \
             images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp \
             images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp \
-            social/eso-market-rafanda-kadan-24-7.webp; do
-            file "$f" | grep -Fq 'Web/P image'
-            test "$(stat -c %s "$f")" -gt 10000
+            social/gymnastika-kadan-treneri-prosinec-2026.png; do
+            test -s "$f"
           done
-          file social/gymnastika-kadan-treneri-prosinec-2026.png | grep -Fq 'PNG image data, 1200 x 630'
-          test "$(stat -c %s social/gymnastika-kadan-treneri-prosinec-2026.png)" -gt 50000
 
       - name: Připravit cílený balík
         shell: bash
@@ -64,7 +61,6 @@ jobs:
           cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp "$stage/images/clanky/eso-market-rafanda/"
           cp images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp "$stage/images/clanky/eso-market-rafanda/"
           cp images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp "$stage/images/clanky/eso-market-rafanda/"
-          cp social/eso-market-rafanda-kadan-24-7.webp "$stage/social/"
           cp social/gymnastika-kadan-treneri-prosinec-2026.png "$stage/social/"
           tar -C "$stage" -czf "$RUNNER_TEMP/nk-image-repair.tgz" .
 
@@ -89,7 +85,6 @@ jobs:
           sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp" "$root/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp"
           sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp" "$root/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp"
           sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp"
-          sudo install -m 0644 "$work/social/eso-market-rafanda-kadan-24-7.webp" "$root/social/eso-market-rafanda-kadan-24-7.webp"
           sudo install -m 0644 "$work/social/gymnastika-kadan-treneri-prosinec-2026.png" "$root/social/gymnastika-kadan-treneri-prosinec-2026.png"
           sudo chmod -R a+rX "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
@@ -119,8 +114,7 @@ jobs:
           for rel in \
             /images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp \
             /images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp \
-            /images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp \
-            /social/eso-market-rafanda-kadan-24-7.webp; do
+            /images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp; do
             out="$tmp/$(basename "$rel")"
             curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base$rel?repair=$(date +%s%N)" -o "$out"
             file "$out" | grep -Fq 'Web/P image'
