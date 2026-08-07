@@ -1,0 +1,107 @@
+name: Nasadit skutečné fotky v4 Od hlubin k nebi
+on:
+  issues:
+    types: [opened, reopened]
+permissions:
+  contents: write
+  issues: write
+jobs:
+  deploy:
+    if: github.event.issue.title == 'Nasadit skutečné fotky v4 Od hlubin k nebi'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      KEY_C: ${{ secrets.OVH_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Přepnout článek na nové binární soubory v4
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('clanky/od-hlubin-k-nebi-kadan.html')
+          t=p.read_text(encoding='utf-8')
+          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec(?:-v\d+)?\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?v=20260807-2220', t)
+          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena(?:-v\d+)?\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?v=20260807-2220', t)
+          t=re.sub(r'(<img class="article-photo" src="/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4\.webp[^>]*?)width="\d+" height="\d+"', r'\1width="640" height="480"', t)
+          t=re.sub(r'(<img class="article-photo" src="/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4\.webp[^>]*?)width="\d+" height="\d+"', r'\1width="640" height="480"', t)
+          assert 'ptaci-ara-zoborozec-v4.webp' in t
+          assert 'ptaci-cela-stena-v4.webp' in t
+          p.write_text(t,encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – skutečné fotografie'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/od-hlubin-k-nebi-kadan.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Přepnout Od hlubin k nebi na skutečné fotografie v4 [skip ci]'
+            for n in 1 2 3 4 5; do
+              git pull --rebase origin main || true
+              if git push origin HEAD:main; then break; fi
+              sleep $((n*2))
+            done
+          fi
+      - name: Ověřit lokální binární obsah
+        run: |
+          set -euo pipefail
+          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068  images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp' | sha256sum -c -
+          echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp' | sha256sum -c -
+      - name: Připravit SSH
+        run: |
+          set -euo pipefail
+          key="${KEY_A:-${KEY_B:-${KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+      - name: Nahrát článek a v4 fotky přímo na OVH
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/real-v4.tgz" \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$RUNNER_TEMP/real-v4.tgz" ubuntu@57.129.43.215:/tmp/real-v4.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"; sudo chmod a+rw "$LOCK"; exec 9>"$LOCK"; flock -w 300 9
+          sudo mkdir -p /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky/od-hlubin-k-nebi
+          sudo tar -xzf /tmp/real-v4.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp
+          fi
+          rm -f /tmp/real-v4.tgz
+          REMOTE
+      - name: Veřejně ověřit přesný obsah v4
+        id: verify
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s%N)"
+          curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html?verify=$stamp" -o /tmp/article.html
+          grep -q 'ptaci-ara-zoborozec-v4.webp?v=20260807-2220' /tmp/article.html
+          grep -q 'ptaci-cela-stena-v4.webp?v=20260807-2220' /tmp/article.html
+          curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec-v4.webp?verify=$stamp" -o /tmp/a.webp
+          curl -fsSL -A 'NaseKadanRealPhotoCheck/1.0' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena-v4.webp?verify=$stamp" -o /tmp/b.webp
+          echo '7d5aa5677140739305b12d389214cfeac4a8105895471ac0a030e9bdb3c9068  /tmp/a.webp' | sha256sum -c -
+          echo '83f6653dcf3ebb61840f0615058421c14123de2652b2ebfedad5b6c1dfddc9a3  /tmp/b.webp' | sha256sum -c -
+          printf 'ara=%s bytes sha=%s\n' "$(wc -c </tmp/a.webp)" "$(sha256sum /tmp/a.webp | cut -d' ' -f1)" | tee /tmp/result.txt
+          printf 'stena=%s bytes sha=%s\n' "$(wc -c </tmp/b.webp)" "$(sha256sum /tmp/b.webp | cut -d' ' -f1)" | tee -a /tmp/result.txt
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let r=''; try{r=fs.readFileSync('/tmp/result.txt','utf8')}catch{}
+            const ok='${{ steps.verify.outputs.ok }}'==='true';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?`✅ Živý článek používá nové skutečné fotografie v4 a jejich veřejné SHA přesně sedí s původními JPEG převody.\n\n\`\`\`\n${r}\n\`\`\``:`❌ Kontrola skutečných fotografií v4 neprošla.`});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
