@@ -90,14 +90,39 @@ jobs:
                   raise SystemExit(f'Článek Rafandy neodkazuje na {rel}')
               hashes.append(sha256(path.read_bytes()).hexdigest())
 
+          archive=(root/'clanky/index.html').read_text(encoding='utf-8')
+          pages=sorted(
+              set(re.findall(r'href=["\'](/clanky/strana-\d+\.html)["\']', archive)),
+              key=lambda value: int(re.search(r'(\d+)', value).group(1)),
+          )
+          if not pages:
+              raise SystemExit('Archiv neobsahuje žádné odkazy na starší stránky.')
+          expected=list(range(2, len(pages)+2))
+          actual=[int(re.search(r'(\d+)', value).group(1)) for value in pages]
+          if actual != expected:
+              raise SystemExit(f'Stránkování archivu není souvislé: {actual}, očekáváno {expected}.')
+          for url in pages:
+              path=root/url.lstrip('/')
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f'Chybí cílový soubor stránkování: {path}')
+              text=path.read_text(encoding='utf-8', errors='replace')
+              n=int(re.search(r'(\d+)', url).group(1))
+              if f'Všechny články – strana {n}' not in text:
+                  raise SystemExit(f'Cílová stránka {url} nemá očekávaný nadpis.')
+              if 'article-card' not in text:
+                  raise SystemExit(f'Cílová stránka {url} neobsahuje články.')
+
           env=Path(os.environ['GITHUB_ENV'])
           with env.open('a', encoding='utf-8') as f:
               f.write(f'EXPECTED_LATEST={latest}\n')
               f.write(f'EXPECTED_SECOND={second}\n')
+              f.write(f'ARCHIVE_PAGES={",".join(pages)}\n')
+              f.write(f'ARCHIVE_PAGE_COUNT={len(pages)+1}\n')
               for i,h in enumerate(hashes,1):
                   f.write(f'RAFANDA_SHA{i}={h}\n')
           print('Nejnovější:', latest)
           print('Druhý:', second)
+          print('Archivní stránky:', '/clanky/,', ', '.join(pages))
           print('Rafanda SHA-256:', *hashes)
           PY
 
@@ -134,7 +159,7 @@ jobs:
           rm -rf "$work" /tmp/nasekadan-canonical-main.tgz
           REMOTE
 
-      - name: Veřejně ověřit dynamické pořadí a všechny fotografie Rafandy
+      - name: Veřejně ověřit pořadí, stránkování a fotografie Rafandy
         shell: bash
         run: |
           set -euo pipefail
@@ -143,6 +168,7 @@ jobs:
           for attempt in $(seq 1 12); do
             q="canonical-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
             curl -4 -kfsSL --max-time 40 "$base/?v=$q" -o /tmp/home.html || true
+            curl -4 -kfsSL --max-time 40 "$base/clanky/?v=$q" -o /tmp/archive.html || true
             curl -4 -kfsSL --max-time 40 "$base/clanky/eso-market-rafanda-kadan-24-7.html?v=$q" -o /tmp/rafanda.html || true
             img1=$(curl -4 -kfsSL --max-time 40 -o /tmp/rafanda1.webp -w '%{http_code}' "$base/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp?v=$q" || true)
             img2=$(curl -4 -kfsSL --max-time 40 -o /tmp/rafanda2.webp -w '%{http_code}' "$base/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp?v=$q" || true)
@@ -150,8 +176,28 @@ jobs:
             live1=$(sha256sum /tmp/rafanda1.webp 2>/dev/null | awk '{print $1}' || true)
             live2=$(sha256sum /tmp/rafanda2.webp 2>/dev/null | awk '{print $1}' || true)
             live3=$(sha256sum /tmp/rafanda3.webp 2>/dev/null | awk '{print $1}' || true)
+
+            pagination_ok=1
+            IFS=',' read -r -a archive_pages <<< "$ARCHIVE_PAGES"
+            page_index=0
+            for page in "${archive_pages[@]}"; do
+              page_index=$((page_index + 1))
+              tmp="/tmp/archive-page-${page_index}.html"
+              code=$(curl -4 -ksSL --max-time 40 -o "$tmp" -w '%{http_code}' "$base$page?v=$q" || true)
+              page_no="${page##*strana-}"
+              page_no="${page_no%.html}"
+              if [[ "$code" != 200 ]] \
+                || ! grep -Fq "Všechny články – strana $page_no" "$tmp" \
+                || ! grep -Fq 'article-card' "$tmp"; then
+                pagination_ok=0
+                break
+              fi
+            done
+
             if grep -Fq "data-latest-article-href=\"$EXPECTED_LATEST\"" /tmp/home.html \
               && grep -Fq "$EXPECTED_SECOND" /tmp/home.html \
+              && grep -Fq 'href="/clanky/strana-2.html"' /tmp/archive.html \
+              && [[ "$pagination_ok" == 1 ]] \
               && grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' /tmp/rafanda.html \
               && grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' /tmp/rafanda.html \
               && grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' /tmp/rafanda.html \
@@ -165,7 +211,7 @@ jobs:
             sleep 5
           done
           test "$ok" = 1
-          echo "OK: produkce má $EXPECTED_LATEST, $EXPECTED_SECOND a bitově správné tři fotografie Rafandy."
+          echo "OK: produkce má $EXPECTED_LATEST, $EXPECTED_SECOND, všech $ARCHIVE_PAGE_COUNT stran archivu a bitově správné tři fotografie Rafandy."
 
       - name: Zapsat potvrzení úplného nasazení
         shell: bash
@@ -183,11 +229,13 @@ jobs:
             "workflow_run": "$GITHUB_RUN_ID",
             "homepage_latest": "$EXPECTED_LATEST",
             "homepage_second": "$EXPECTED_SECOND",
+            "archive_page_count": $ARCHIVE_PAGE_COUNT,
+            "archive_pages": "$ARCHIVE_PAGES",
             "rafanda_sha256": ["$RAFANDA_SHA1", "$RAFANDA_SHA2", "$RAFANDA_SHA3"]
           }
           EOF
           git add reports/canonical-production-20260807.json
-          git commit -m 'Potvrdit úplný kanonický deploy a fotografie Rafandy [skip ci]'
+          git commit -m 'Potvrdit kanonický deploy včetně stránkování archivu [skip ci]'
           for attempt in 1 2 3 4 5; do
             if git push origin HEAD:main; then exit 0; fi
             git pull --rebase origin main
