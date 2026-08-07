@@ -1,7 +1,7 @@
 name: Přímá obnova aktuálních článků z main
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
     paths:
       - '.github/repair-current-articles-direct.trigger'
