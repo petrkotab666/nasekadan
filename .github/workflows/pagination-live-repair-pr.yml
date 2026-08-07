@@ -1,7 +1,7 @@
 name: Jednorázová měřitelná oprava stránkování
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
     paths:
       - '.github/pagination-live-repair.trigger'
