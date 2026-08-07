@@ -1,0 +1,126 @@
+name: Přímé PR nasazení nové grafiky MP
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/render-mp-hero-pr-trigger.txt'
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: render-mp-hero-pr-20260807
+  cancel-in-progress: false
+
+env:
+  SRC: social/mestska-policie-kadan-fakta-diskuse-2026-source.svg
+  OLD: mestska-policie-kadan-fakta-diskuse-2026.png
+  NEW: mestska-policie-kadan-fakta-diskuse-2026-v2.png
+  ARTICLE: clanky/mestska-policie-kadan-fakta-diskuse-2026.html
+  SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+
+jobs:
+  render-deploy:
+    if: github.actor == 'petrkotab666'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vyrenderovat tematickou grafiku 1200x630
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$SRC"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq librsvg2-bin >/dev/null
+          rsvg-convert -w 1200 -h 630 -o "social/$NEW" "$SRC"
+          file "social/$NEW" | grep -Fq 'PNG image data, 1200 x 630'
+          test "$(stat -c %s "social/$NEW")" -gt 20000
+
+      - name: Přepnout všechny náhledy na novou grafiku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          old='mestska-policie-kadan-fakta-diskuse-2026.png'
+          new='mestska-policie-kadan-fakta-diskuse-2026-v2.png'
+          files=[Path('index.html'),Path('rss.xml'),Path('news-sitemap.xml'),Path('llms.txt'),Path('data/published-content-index.json'),Path('data/article-integrity-manifest.json')]
+          files += list(Path('clanky').glob('*.html'))
+          for p in files:
+              if not p.is_file(): continue
+              text=p.read_text(encoding='utf-8')
+              if old in text:
+                  p.write_text(text.replace(old,new),encoding='utf-8',newline='\n')
+          article=Path('clanky/mestska-policie-kadan-fakta-diskuse-2026.html').read_text(encoding='utf-8')
+          home=Path('index.html').read_text(encoding='utf-8')
+          assert new in article
+          assert new in home
+          PY
+          git diff --check
+
+      - name: Uložit opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – grafika MP'
+          git config user.email 'info@nasekadan.cz'
+          git add "social/$NEW" "$ARTICLE" index.html clanky/*.html rss.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Nahradit textovou kartu MP tematickou grafikou'
+          fi
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then break; fi
+            if [[ "$attempt" = 5 ]]; then exit 1; fi
+            git pull --rebase origin main
+            sleep $((attempt * 2))
+          done
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Nasadit obrázek a dotčené stránky na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          stage="$RUNNER_TEMP/mp-v2"
+          rm -rf "$stage"; mkdir -p "$stage/social" "$stage/clanky" "$stage/data"
+          cp "social/$NEW" "$stage/social/"
+          cp index.html rss.xml news-sitemap.xml llms.txt "$stage/"
+          cp clanky/*.html "$stage/clanky/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$stage/data/"
+          opts=(-i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          tar -C "$stage" -czf - . | ssh "${opts[@]}" ubuntu@57.129.43.215 \
+            'set -euo pipefail; sudo install -d -m 0755 /var/www/nasekadan/{social,clanky,data}; sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock; exec 9>/var/lock/nasekadan-content.lock; flock -x 9; sudo tar -xzf - -C /var/www/nasekadan; sudo chmod -R a+rX /var/www/nasekadan; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo tar -C /var/www/nasekadan -czf - social clanky index.html rss.xml news-sitemap.xml llms.txt data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+
+      - name: Veřejně ověřit a uzavřít servisní PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          q="mp-v2-${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html?v=$q")"
+          home="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q")"
+          curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/social/$NEW?v=$q" -o "$RUNNER_TEMP/mp.png"
+          grep -Fq "$NEW" <<<"$article"
+          grep -Fq "$NEW" <<<"$home"
+          file "$RUNNER_TEMP/mp.png" | grep -Fq 'PNG image data, 1200 x 630'
+          test "$(stat -c %s "$RUNNER_TEMP/mp.png")" -gt 20000
+          gh pr comment "${{ github.event.pull_request.number }}" --body '✅ Nová tematická grafika MP 1200×630 je na živém webu. Článek i titulka používají novou URL bez staré textové karty.'
+          gh pr close "${{ github.event.pull_request.number }}"
+
+      - name: Zapsat selhání
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body '❌ Nasazení nové grafiky MP selhalo; starý stav nepovažovat za opravený.' || true
