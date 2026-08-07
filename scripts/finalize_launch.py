@@ -6,6 +6,7 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 import importlib.util
+import os
 import re
 import subprocess
 import sys
@@ -114,9 +115,7 @@ def ensure_head_meta(text: str, path: Path) -> str:
     }
     for prop, value in defaults.items():
         if not has_meta(text, prop=prop):
-            additions.append(
-                f'<meta property="{prop}" content="{escape(value, quote=True)}">'
-            )
+            additions.append(f'<meta property="{prop}" content="{escape(value, quote=True)}">')
 
     twitter = {
         "twitter:card": "summary_large_image",
@@ -126,9 +125,7 @@ def ensure_head_meta(text: str, path: Path) -> str:
     }
     for name, value in twitter.items():
         if not has_meta(text, name=name):
-            additions.append(
-                f'<meta name="{name}" content="{escape(value, quote=True)}">'
-            )
+            additions.append(f'<meta name="{name}" content="{escape(value, quote=True)}">')
 
     if additions:
         text = text.replace("</head>", "".join(additions) + "</head>", 1)
@@ -137,9 +134,7 @@ def ensure_head_meta(text: str, path: Path) -> str:
 
 def add_analytics(text: str) -> str:
     if "/analytics.js" not in text:
-        text = text.replace(
-            "</body>", '<script src="/analytics.js" defer></script></body>', 1
-        )
+        text = text.replace("</body>", '<script src="/analytics.js" defer></script></body>', 1)
     return text
 
 
@@ -152,17 +147,13 @@ def add_footer_links(text: str) -> str:
     if "/o-webu/" in text and "/navstevnost/" in text:
         return text
     if "</footer>" in text:
-        return text.replace(
-            "</footer>", f'<div class="wrap footer-legal">{links}</div></footer>', 1
-        )
+        return text.replace("</footer>", f'<div class="wrap footer-legal">{links}</div></footer>', 1)
     return text
 
 
 def process_html(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
-    text = text.replace(
-        "/pruvodce/mirove-namesti.html", "/pruvodce/mestske-namesti.html"
-    )
+    text = text.replace("/pruvodce/mirove-namesti.html", "/pruvodce/mestske-namesti.html")
     text = ensure_head_meta(text, path)
     text = normalize_favicon_html(text)
     text = add_analytics(text)
@@ -171,7 +162,6 @@ def process_html(path: Path) -> None:
 
 
 def ensure_support_files() -> None:
-
     error = ROOT / "404.html"
     if not error.exists():
         error.write_text(
@@ -250,10 +240,7 @@ def ensure_robots() -> None:
         agent = block.splitlines()[0]
         if agent not in text:
             text = text.rstrip() + "\n\n" + block + "\n"
-    for line in (
-        f"Sitemap: {BASE}/sitemap.xml",
-        f"Sitemap: {BASE}/news-sitemap.xml",
-    ):
+    for line in (f"Sitemap: {BASE}/sitemap.xml", f"Sitemap: {BASE}/news-sitemap.xml"):
         if line not in text:
             text = text.rstrip() + "\n" + line + "\n"
     path.write_text(text.lstrip(), encoding="utf-8")
@@ -269,21 +256,29 @@ def run_discovery() -> None:
     module.main()
 
 
-def audit_changed_articles() -> None:
+def _filter_article_paths(values: list[str]) -> list[str]:
+    return sorted({
+        value.strip().replace("\\", "/").lstrip("./")
+        for value in values
+        if value.strip().startswith("clanky/")
+        and value.strip().endswith(".html")
+        and value.strip() != "clanky/index.html"
+        and not re.fullmatch(r"clanky/strana-\d+\.html", value.strip())
+    })
+
+
+def input_changed_articles() -> list[str]:
+    explicit = os.environ.get("NASEKADAN_AUDIT_PATHS", "").strip()
+    if explicit:
+        return _filter_article_paths(re.split(r"[,;\n]+", explicit))
     try:
-        output = subprocess.check_output(
-            ["git", "diff", "--name-only"], cwd=ROOT, text=True
-        )
+        output = subprocess.check_output(["git", "diff", "--name-only"], cwd=ROOT, text=True)
     except (OSError, subprocess.CalledProcessError):
-        return
-    paths = [
-        line.strip()
-        for line in output.splitlines()
-        if line.startswith("clanky/")
-        and line.endswith(".html")
-        and line != "clanky/index.html"
-        and not re.fullmatch(r"clanky/strana-\d+\.html", line)
-    ]
+        return []
+    return _filter_article_paths(output.splitlines())
+
+
+def audit_changed_articles(paths: list[str]) -> None:
     if not paths:
         return
     command = [
@@ -297,6 +292,11 @@ def audit_changed_articles() -> None:
 
 
 def main() -> None:
+    # Zachytit skutečné vstupní změny ještě před tím, než finalizace idempotentně
+    # normalizuje celý web. Jinak by git diff po normalizaci mylně označil desítky
+    # historických článků za právě změněné a jejich staré SEO nedostatky by
+    # blokovaly publikaci nového, jinak bezchybného textu.
+    changed_articles = input_changed_articles()
     ensure_support_files()
     update_privacy_and_style()
     for path in sorted(ROOT.rglob("*.html")):
@@ -305,7 +305,7 @@ def main() -> None:
     ensure_robots()
     run_discovery()
     count = write_sitemap()
-    audit_changed_articles()
+    audit_changed_articles(changed_articles)
     print(f"Finalizováno {count} indexovatelných stránek bez přepisování článkových metadat.")
 
 
