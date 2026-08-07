@@ -1,5 +1,6 @@
 name: Nasadit skutečné fotky v4 Od hlubin k nebi
 on:
+  workflow_dispatch:
   issues:
     types: [opened, reopened]
 permissions:
@@ -7,7 +8,7 @@ permissions:
   issues: write
 jobs:
   deploy:
-    if: github.event.issue.title == 'Nasadit skutečné fotky v4 Od hlubin k nebi'
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == 'Nasadit skutečné fotky v4 Od hlubin k nebi'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -97,7 +98,7 @@ jobs:
           printf 'stena=%s bytes sha=%s\n' "$(wc -c </tmp/b.webp)" "$(sha256sum /tmp/b.webp | cut -d' ' -f1)" | tee -a /tmp/result.txt
           echo 'ok=true' >> "$GITHUB_OUTPUT"
       - name: Zapsat výsledek
-        if: always()
+        if: always() && github.event_name == 'issues'
         uses: actions/github-script@v7
         with:
           script: |
