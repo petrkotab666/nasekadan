@@ -48,17 +48,73 @@ jobs:
             'https://nasekadan.cz/clanky/?selfhosted=1' \
             | grep -Fq 'zakaz-odberu-povrchovych-vod-kadansko-cervenec-2026.html'
 
+      - name: Ověřit nový článek o ZZS Kadaň
+        id: verify_zzs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTICLE='/clanky/zzs-kadan-garaz-mycka-2026.html'
+          TITLE='Kadaňská záchranka dostane novou garáž a myčku. Kraj stanovil strop 16,5 milionu'
+          q="zzs-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz${ARTICLE}?${q}" -o /tmp/zzs-article.html
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/?${q}" -o /tmp/zzs-home.html
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/clanky/?${q}" -o /tmp/zzs-archive.html
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/rss.xml?${q}" -o /tmp/zzs-rss.xml
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/sitemap.xml?${q}" -o /tmp/zzs-sitemap.xml
+          grep -Fq "<h1>${TITLE}</h1>" /tmp/zzs-article.html
+          grep -Fq '16,5 milionu korun bez DPH' /tmp/zzs-article.html
+          grep -Fq '049/45R/2026' /tmp/zzs-article.html
+          ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' /tmp/zzs-article.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/zzs-home.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/zzs-archive.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/zzs-rss.xml
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/zzs-sitemap.xml
+          grep -Fq 'https://www.zzsuk.cz/wp-content/uploads/2026/03/DSC00125-scaled.jpg' /tmp/zzs-article.html
+
+      - name: Zapsat doklad veřejného nasazení ZZS článku
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p research/zzs-kadan-publication-20260807
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          data = {
+              'status': 'success',
+              'verified_at': datetime.now(timezone.utc).isoformat(),
+              'trigger_commit': os.environ.get('GITHUB_SHA'),
+              'url': 'https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html',
+              'checks': ['article', 'homepage', 'archive', 'rss', 'sitemap', 'og-image', 'no-internal-research-methods'],
+          }
+          Path('research/zzs-kadan-publication-20260807/STATUS.json').write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň produkční audit'
+          git config user.email 'info@nasekadan.cz'
+          git add research/zzs-kadan-publication-20260807/STATUS.json
+          git commit -m 'Veřejná kontrola článku ZZS Kadaň: OK' || exit 0
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            sleep $((attempt * 3))
+          done
+          exit 1
+
       - name: Zapsat stav vlastního nasazení do souhrnu běhu
         if: always()
         shell: bash
         env:
           DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
           WATER_OUTCOME: ${{ steps.verify_water.outcome }}
+          ZZS_OUTCOME: ${{ steps.verify_zzs.outcome }}
         run: |
           {
             echo '## Kanonické nasazení Naše Kadaň'
             echo "- Deploy: ${DEPLOY_OUTCOME:-unknown}"
-            echo "- Veřejná kontrola: ${WATER_OUTCOME:-unknown}"
+            echo "- Veřejná kontrola vody: ${WATER_OUTCOME:-unknown}"
+            echo "- Veřejná kontrola ZZS článku: ${ZZS_OUTCOME:-unknown}"
             echo "- Trigger commit: $GITHUB_SHA"
             echo "- Run ID: $GITHUB_RUN_ID"
           } >> "$GITHUB_STEP_SUMMARY"
