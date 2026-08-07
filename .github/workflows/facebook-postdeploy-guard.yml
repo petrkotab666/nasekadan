@@ -1,0 +1,136 @@
+name: Facebook post-deploy guard
+
+on:
+  workflow_run:
+    workflows: ['Kanonický úplný produkční deploy']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-facebook-postdeploy
+  cancel-in-progress: true
+
+env:
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  guard:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Opravit a ověřit Facebook metadata přímo na produkci
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo python3 -' <<'PY'
+          from pathlib import Path
+          import hashlib, html, re
+          ROOT=Path('/var/www/nasekadan')
+          SITE='https://nasekadan.cz'
+          def get(text,key,prop=True):
+              attr='property' if prop else 'name'
+              m=re.search(rf'<meta\b[^>]*{attr}=["\']{re.escape(key)}["\'][^>]*content=["\']([^"\']*)["\'][^>]*>',text,re.I)
+              return html.unescape(m.group(1)).strip() if m else ''
+          def put(text,key,value,prop=True):
+              attr='property' if prop else 'name'
+              pat=re.compile(rf'<meta\b[^>]*{attr}=["\']{re.escape(key)}["\'][^>]*>',re.I)
+              tag=f'<meta {attr}="{key}" content="{html.escape(value,quote=True)}">'
+              if pat.search(text): return pat.sub(tag,text,count=1)
+              m=re.search(r'</head>',text,re.I)
+              if not m: raise RuntimeError('chybí </head>')
+              return text[:m.start()]+tag+'\n'+text[m.start():]
+          changed=[]
+          errors=[]
+          for path in sorted((ROOT/'clanky').glob('*.html')):
+              text=path.read_text(encoding='utf-8',errors='replace')
+              if 'NewsArticle' not in text or 'article-shell' not in text: continue
+              image=get(text,'og:image')
+              if not image.startswith(SITE+'/social/'):
+                  errors.append(f'{path.name}: og:image není lokální')
+                  continue
+              clean=image.split('?',1)[0]
+              asset=ROOT/clean.removeprefix(SITE).lstrip('/')
+              if not asset.is_file() or asset.stat().st_size<10000:
+                  errors.append(f'{path.name}: chybí {asset.relative_to(ROOT)}')
+                  continue
+              head=asset.read_bytes()[:24]
+              if not head.startswith(b'\x89PNG\r\n\x1a\n'):
+                  errors.append(f'{path.name}: sociální obrázek není PNG')
+                  continue
+              w=int.from_bytes(head[16:20],'big'); h=int.from_bytes(head[20:24],'big')
+              if (w,h)!=(1200,630):
+                  errors.append(f'{path.name}: {w}x{h}')
+                  continue
+              digest=hashlib.sha256(asset.read_bytes()).hexdigest()[:16]
+              versioned=f'{clean}?fb={digest}'
+              new=text
+              for key,val in [('og:image',versioned),('og:image:secure_url',versioned),('og:image:type','image/png'),('og:image:width','1200'),('og:image:height','630')]:
+                  new=put(new,key,val)
+              new=put(new,'twitter:image',versioned,False)
+              new=re.sub(r'"image"\s*:\s*\[\s*"[^"]+"\s*\]',f'"image":["{versioned}"]',new,count=1)
+              if new!=text:
+                  path.write_text(new,encoding='utf-8')
+                  changed.append(path)
+          if errors:
+              raise SystemExit('Facebook post-deploy chyby:\n- '+'\n- '.join(errors))
+          print('Opraveno článků:',len(changed))
+          PY
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            for f in /var/www/nasekadan/clanky/*.html; do
+              sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")" >/dev/null
+            done
+            sudo docker cp /var/www/nasekadan/social/. nasekadan-web:/usr/share/nginx/html/social/ >/dev/null
+          fi
+          REMOTE
+
+      - name: Otestovat pět nejnovějších článků jako Facebook crawler
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, struct, urllib.request
+          from datetime import datetime
+          base='https://nasekadan.cz'
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          req=urllib.request.Request(base+'/rss.xml?fbguard=1',headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          rss=urllib.request.urlopen(req,timeout=35).read().decode('utf-8','replace')
+          links=re.findall(r'<link>(https://nasekadan\.cz/clanky/[^<]+)</link>',rss)[:5]
+          assert links, 'RSS neobsahuje články'
+          for url in links:
+              req=urllib.request.Request(url+'?fbguard=1',headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r: text=r.read().decode('utf-8','replace')
+              def meta(k):
+                  m=re.search(rf'<meta\b[^>]*property=["\']{re.escape(k)}["\'][^>]*content=["\']([^"\']+)',text,re.I)
+                  return m.group(1) if m else ''
+              image=meta('og:image'); secure=meta('og:image:secure_url')
+              assert image.startswith(base+'/social/') and '?fb=' in image, (url,image)
+              assert secure==image
+              req=urllib.request.Request(image,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r:
+                  ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); data=r.read()
+              assert ctype=='image/png' and data[:8]==b'\x89PNG\r\n\x1a\n'
+              assert struct.unpack('>II',data[16:24])==(1200,630)
+              print('FB OK:',url,image)
+          PY
