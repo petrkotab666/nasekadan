@@ -1,0 +1,171 @@
+name: Opravit Facebook náhledy ZZS a Slávie
+
+on:
+  issues:
+    types: [reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-facebook-preview-fix
+  cancel-in-progress: false
+
+env:
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  fix:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 812
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit metadata v kanonickém main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/harden_facebook_meta.py --write --check --paths \
+            clanky/zzs-kadan-garaz-mycka-2026.html \
+            clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+          if ! git diff --quiet -- clanky/zzs-kadan-garaz-mycka-2026.html clanky/slavie-kadan-epp-plavci-120-tisic-2026.html; then
+            git config user.name 'Naše Kadaň – Facebook guard'
+            git config user.email 'info@nasekadan.cz'
+            git add clanky/zzs-kadan-garaz-mycka-2026.html clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+            git commit -m 'Opravit Facebook náhledy ZZS a Slávie [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 5
+              sleep $((attempt*2))
+            done
+          fi
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"; break; fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit opravené články a jejich PNG pod produkčním zámkem
+        id: deploy
+        shell: bash
+        run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/fb.log" 2>&1 <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          sudo rm -f /opt/nasekadan/.git/index.lock
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          cd /opt/nasekadan
+          python3 scripts/harden_facebook_meta.py --write --check --paths \
+            clanky/zzs-kadan-garaz-mycka-2026.html \
+            clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+          for article in zzs-kadan-garaz-mycka-2026.html slavie-kadan-epp-plavci-120-tisic-2026.html; do
+            sudo install -D -m 0644 "clanky/$article" "/var/www/nasekadan/clanky/$article"
+          done
+          for img in \
+            social/zzs-kadan-garaz-mycka-2026-308fe3d826.png \
+            social/slavie-kadan-epp-plavci-120-tisic-2026-2d4806136f.png; do
+            test -s "$img"
+            sudo install -D -m 0644 "$img" "/var/www/nasekadan/$img"
+          done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            for article in zzs-kadan-garaz-mycka-2026.html slavie-kadan-epp-plavci-120-tisic-2026.html; do
+              sudo docker cp "clanky/$article" "nasekadan-web:/usr/share/nginx/html/clanky/$article"
+            done
+            sudo docker cp social/zzs-kadan-garaz-mycka-2026-308fe3d826.png nasekadan-web:/usr/share/nginx/html/social/zzs-kadan-garaz-mycka-2026-308fe3d826.png
+            sudo docker cp social/slavie-kadan-epp-plavci-120-tisic-2026-2d4806136f.png nasekadan-web:/usr/share/nginx/html/social/slavie-kadan-epp-plavci-120-tisic-2026-2d4806136f.png
+          fi
+          REMOTE
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/fb.log"
+          exit 0
+
+      - name: Ověřit jako Facebook crawler
+        id: verify
+        if: steps.deploy.outputs.rc == '0'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, struct, time, urllib.request
+          base='https://nasekadan.cz'
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          articles=['zzs-kadan-garaz-mycka-2026.html','slavie-kadan-epp-plavci-120-tisic-2026.html']
+          for article in articles:
+              url=f'{base}/clanky/{article}?fbcheck={int(time.time()*1000)}'
+              req=urllib.request.Request(url,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r:
+                  assert r.status==200
+                  text=r.read().decode('utf-8','replace')
+              def meta(prop):
+                  m=re.search(rf'<meta\b[^>]*property=["\']{re.escape(prop)}["\'][^>]*content=["\']([^"\']+)',text,re.I)
+                  return m.group(1) if m else ''
+              image=meta('og:image')
+              secure=meta('og:image:secure_url')
+              assert image.startswith(base+'/social/') and '?fb=' in image, image
+              assert secure==image, (secure,image)
+              assert meta('og:image:type')=='image/png'
+              assert meta('og:image:width')=='1200'
+              assert meta('og:image:height')=='630'
+              req=urllib.request.Request(image,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=35) as r:
+                  assert r.status==200
+                  ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower()
+                  data=r.read()
+              assert ctype=='image/png', ctype
+              assert len(data)>10000
+              assert data[:8]==b'\x89PNG\r\n\x1a\n'
+              width,height=struct.unpack('>II',data[16:24])
+              assert (width,height)==(1200,630),(width,height)
+              print(article, image, ctype, len(data), width, height)
+          PY
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DEPLOY_RC: ${{ steps.deploy.outputs.rc }}
+          VERIFY: ${{ steps.verify.outcome }}
+        with:
+          script: |
+            const ok=process.env.DEPLOY_RC==='0' && process.env.VERIFY==='success';
+            let tail=''; try {tail=require('fs').readFileSync(process.env.RUNNER_TEMP+'/fb.log','utf8').split('\n').slice(-40).join('\n').slice(-3500)} catch {}
+            const body=ok
+              ? '✅ Facebook náhledy ZZS a Slávie jsou opravené a ověřené přímo jako facebookexternalhit. Oba články vracejí verzované lokální OG obrázky, secure_url, image/png a 1200×630.'
+              : `❌ Facebook oprava neprošla. deploy=${process.env.DEPLOY_RC||'unknown'}, crawler=${process.env.VERIFY||'unknown'}.\n\n\`\`\`text\n${tail}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:812,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:812,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.deploy.outputs.rc }}" = '0'
+          test "${{ steps.verify.outcome }}" = 'success'
