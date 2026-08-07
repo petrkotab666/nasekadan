@@ -1,0 +1,149 @@
+name: Finální veřejná kontrola MP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/verify-mestska-policie-public-final-20260807.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: verify-mestska-policie-public-final-20260807
+  cancel-in-progress: false
+
+env:
+  SLUG: mestska-policie-kadan-fakta-diskuse-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html
+  SOCIAL_URL: https://nasekadan.cz/social/mestska-policie-kadan-fakta-diskuse-2026.png
+  CONTENT_SHA: 626251f31e8e6a5cfa1799a901ffb123d1978b12
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Veřejně ověřit všechny povrchy bez falešného RSS počítání
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="mp-final-${GITHUB_RUN_ID}-$(date +%s%N)"
+          dir="$RUNNER_TEMP/mp-final"
+          mkdir -p "$dir"
+          get() { curl -4 -kfsS -L --max-time 45 "$1?v=$q" -o "$2"; }
+          get "$ARTICLE_URL" "$dir/article.html"
+          get "https://nasekadan.cz/" "$dir/home.html"
+          get "https://nasekadan.cz/clanky/" "$dir/archive.html"
+          get "https://nasekadan.cz/rss.xml" "$dir/rss.xml"
+          get "https://nasekadan.cz/sitemap.xml" "$dir/sitemap.xml"
+          get "https://nasekadan.cz/news-sitemap.xml" "$dir/news.xml"
+          get "https://nasekadan.cz/llms.txt" "$dir/llms.txt"
+          get "https://nasekadan.cz/deployment-health.txt" "$dir/health.txt"
+          get "https://nasekadan.cz/data/published-content-index.json" "$dir/registry.json"
+          get "$SOCIAL_URL" "$dir/social.png"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, struct, xml.etree.ElementTree as ET, os
+          d=Path(os.environ['RUNNER_TEMP'])/'mp-final'
+          slug=os.environ['SLUG']; url=os.environ['ARTICLE_URL']; social=os.environ['SOCIAL_URL']; sha=os.environ['CONTENT_SHA']
+          article=(d/'article.html').read_text(encoding='utf-8',errors='replace')
+          home=(d/'home.html').read_text(encoding='utf-8',errors='replace')
+          archive=(d/'archive.html').read_text(encoding='utf-8',errors='replace')
+          llms=(d/'llms.txt').read_text(encoding='utf-8',errors='replace')
+          health=(d/'health.txt').read_text(encoding='utf-8',errors='replace')
+          registry=(d/'registry.json').read_text(encoding='utf-8',errors='replace')
+          checks={}
+          checks['article_h1']=f'<h1>Neřeší městská policie dopravu? Bouřlivá debata přiměla redakci ověřit fakta</h1>' in article
+          checks['article_1886']='1 886' in article
+          checks['article_3840']='3 840' in article
+          checks['article_reactions']='Obyvatelé popisují rychlé reakce hlídek' in article
+          checks['indexable']=('content="index,follow' in article.lower()) and ('content="noindex' not in article.lower())
+          checks['newsarticle']='data-nk-newsarticle="1"' in article and '"@type":"NewsArticle"' in article
+          checks['canonical']=f'<link rel="canonical" href="{url}">' in article
+          checks['article_social']=social in article
+          checks['homepage_latest']=f'data-latest-article-href="/clanky/{slug}.html"' in home
+          checks['archive']=f'{slug}.html' in archive
+          rss=ET.parse(d/'rss.xml').getroot()
+          rss_links=[(x.text or '').strip() for x in rss.findall('./channel/item/link')]
+          checks['rss_one_item']=rss_links.count(url)==1
+          sm=ET.parse(d/'sitemap.xml').getroot()
+          sm_locs=[(x.text or '').strip() for x in sm.findall('.//{*}loc')]
+          checks['sitemap_one_loc']=sm_locs.count(url)==1
+          ns=ET.parse(d/'news.xml').getroot()
+          ns_locs=[(x.text or '').strip() for x in ns.findall('.//{*}loc')]
+          checks['news_sitemap_one_loc']=ns_locs.count(url)==1
+          checks['llms']=f'{slug}.html' in llms
+          checks['registry_url']=f'{slug}.html' in registry
+          checks['registry_sha']=sha in registry
+          checks['health_mode']='mode=rescue-v2-mestska-policie-publication' in health
+          checks['health_source']=f'source={sha}' in health
+          raw=(d/'social.png').read_bytes()
+          checks['social_png']=raw[:8]==b'\x89PNG\r\n\x1a\n'
+          if checks['social_png'] and len(raw)>=24:
+              w,h=struct.unpack('>II',raw[16:24]); checks['social_1200x630']=(w,h)==(1200,630)
+          else: checks['social_1200x630']=False
+          result={'status':'success' if all(checks.values()) else 'failure','article_url':url,'source_commit':sha,'checks':checks}
+          Path('reports').mkdir(exist_ok=True)
+          Path('reports/publication-mestska-policie-20260807-final.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(result,ensure_ascii=False,indent=2))
+          if not all(checks.values()):
+              raise SystemExit('Selhaly kontroly: '+', '.join(k for k,v in checks.items() if not v))
+          PY
+
+      - name: Uzavřít kanonickou evidenci úspěchu
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          verified="$(date -u +%FT%TZ)"
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, os
+          p=Path('data/published-content-index.json')
+          data=json.loads(p.read_text(encoding='utf-8'))
+          v=data.setdefault('validation',{})
+          v['repair_pending_public_verification']=False
+          v['public_audit_at']=os.environ.get('VERIFIED_AT')
+          v['last_publication']={
+            'status':'success','checked_at':os.environ.get('VERIFIED_AT'),
+            'article_url':os.environ['ARTICLE_URL'],'classification':'municipal_police_fact_check',
+            'source_commit':os.environ['CONTENT_SHA'],'public_verified_at':os.environ.get('VERIFIED_AT'),
+            'public_verification':{'article':True,'homepage':True,'archive':True,'rss':True,'sitemap':True,'news_sitemap':True,'llms':True,'deployment_health':True,'registry':True,'newsarticle':True,'social_image_1200x630':True}
+          }
+          p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – final MP verify'
+          git config user.email 'info@nasekadan.cz'
+          git add data/published-content-index.json reports/publication-mestska-policie-20260807-final.json
+          git commit -m 'Evidence: finálně veřejně ověřit publikaci MP'
+          for n in 1 2 3 4; do
+            if git push origin HEAD:main; then break; fi
+            git pull --rebase origin main
+            [[ "$n" = 4 ]] && exit 1
+            sleep $((n*2))
+          done
+          issue="$(gh issue list --state open --search '[incident] Publikace článku o Městské policii Kadaň in:title' --json number --jq '.[0].number // empty')"
+          if [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --body "Finální veřejná kontrola prošla. Předchozí verifier měl falešně přísnou podmínku pro RSS: stejná URL je v korektním RSS jednou v <link> a jednou v <guid>. Nová kontrola počítá jeden RSS item podle <item><link>. Článek, titulka, archiv, RSS, sitemap, news-sitemap, llms, registr, deployment-health, NewsArticle i PNG 1200 × 630 jsou veřejně ověřené."
+            gh issue close "$issue" --reason completed
+          fi
+        env:
+          VERIFIED_AT: ${{ github.run_started_at }}
+
+      - name: Zapsat diagnostiku při selhání
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          issue="$(gh issue list --state open --search '[incident] Publikace článku o Městské policii Kadaň in:title' --json number --jq '.[0].number // empty')"
+          [[ -n "$issue" ]] && gh issue comment "$issue" --body "Finální veřejná kontrola stále selhala. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. Přesný seznam neúspěšných kontrol je ve výpisu kroku veřejného ověření."
