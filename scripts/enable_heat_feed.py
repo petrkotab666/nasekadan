@@ -17,6 +17,8 @@ GYMNASTIKA_SLUG = 'gymnastika-kadan-treneri-prosinec-2026'
 GYMNASTIKA_ARTICLE = ROOT / 'clanky' / f'{GYMNASTIKA_SLUG}.html'
 GYMNASTIKA_SOCIAL = ROOT / 'social' / f'{GYMNASTIKA_SLUG}.png'
 GYMNASTIKA_FINALIZER = ROOT / 'scripts' / 'rebuild_gymnastika_surfaces.py'
+MP_TEMPLATE_REPAIR = ROOT / 'scripts' / 'repair_mestska_policie_template_20260807.py'
+MP_ARTICLE = ROOT / 'clanky' / 'mestska-policie-kadan-fakta-diskuse-2026.html'
 
 
 def surface_contains(path: Path, needle: str) -> bool:
@@ -24,12 +26,7 @@ def surface_contains(path: Path, needle: str) -> bool:
 
 
 def ensure_gymnastika_publication() -> None:
-    """Dopočítá publikační kanály z hotového HTML a PNG bez Pillow.
-
-    Článek i grafika jsou od 6. srpna součástí hlavní větve. Produkční runner
-    proto už nemá nic kreslit ani instalovat; pouze z aktuálního úplného seznamu
-    článků bezpečně přegeneruje titulku, archiv, RSS, sitemapy a registry.
-    """
+    """Dopočítá publikační kanály z hotového HTML a PNG bez Pillow."""
     if not GYMNASTIKA_ARTICLE.is_file():
         raise RuntimeError('Chybí hotový článek Gymnastiky Kadaň v hlavní větvi.')
     if not GYMNASTIKA_SOCIAL.is_file() or GYMNASTIKA_SOCIAL.stat().st_size < 10000:
@@ -50,15 +47,35 @@ def ensure_gymnastika_publication() -> None:
     if all(surface_contains(path, expected) for path in surfaces):
         return
 
-    subprocess.run(
-        [sys.executable, str(GYMNASTIKA_FINALIZER)],
-        cwd=ROOT,
-        check=True,
-    )
+    subprocess.run([sys.executable, str(GYMNASTIKA_FINALIZER)], cwd=ROOT, check=True)
     if not all(surface_contains(path, expected) for path in surfaces):
         missing = [str(path.relative_to(ROOT)) for path in surfaces if not surface_contains(path, expected)]
         raise RuntimeError('Neúplné textové kanály Gymnastiky Kadaň: ' + ', '.join(missing))
     print('Dokončeny všechny textové kanály Gymnastiky Kadaň bez grafických závislostí.')
+
+
+def ensure_mp_template() -> None:
+    """Nedovolí návrat staré modré šablony článku o městské policii."""
+    if not MP_ARTICLE.is_file():
+        return
+    if not MP_TEMPLATE_REPAIR.is_file():
+        raise RuntimeError('Chybí trvalá oprava šablony článku Městské policie Kadaň.')
+    text = MP_ARTICLE.read_text(encoding='utf-8', errors='replace')
+    required = (
+        'data-article-template="unified-v1"',
+        'src="/social/mestska-policie-kadan-fakta-diskuse-2026.png"',
+        '<a class="logo" href="/"',
+        '← Zpět na titulní stranu',
+        'theme-color" content="#9f2626"',
+    )
+    if all(marker in text for marker in required):
+        return
+    subprocess.run([sys.executable, str(MP_TEMPLATE_REPAIR)], cwd=ROOT, check=True)
+    text = MP_ARTICLE.read_text(encoding='utf-8', errors='replace')
+    missing = [marker for marker in required if marker not in text]
+    if missing:
+        raise RuntimeError('Šablona článku Městské policie zůstala neúplná: ' + repr(missing))
+    print('Ověřena jednotná šablona článku Městské policie Kadaň.')
 
 
 def is_public_article(path: Path, text: str) -> bool:
@@ -76,6 +93,7 @@ def is_public_article(path: Path, text: str) -> bool:
 
 def main() -> int:
     ensure_gymnastika_publication()
+    ensure_mp_template()
 
     articles = 0
     changed = 0
@@ -116,12 +134,7 @@ def main() -> int:
             raise RuntimeError(f'Feed zůstal na nečlánkové stránce: {path.relative_to(ROOT)}')
 
     subprocess.run(
-        [
-            sys.executable,
-            str(ROOT / 'scripts' / 'ensure_summer_ad_rotation.py'),
-            '--write',
-            '--check',
-        ],
+        [sys.executable, str(ROOT / 'scripts' / 'ensure_summer_ad_rotation.py'), '--write', '--check'],
         cwd=ROOT,
         check=True,
     )
