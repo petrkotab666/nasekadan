@@ -86,7 +86,32 @@ for raw in re.findall(pattern, text, re.I | re.S):
 print(value)
 PY
 )"
+# Archiv je stránkovaný, proto už nelze předpokládat, že starší kontrolní článek
+# musí být na první stránce /clanky/. Určíme jeho skutečnou kanonickou stránku
+# přímo ze zdrojového archivu a tu pak ověříme v kontejneru i na veřejném webu.
+KTK_ARCHIVE_PATH="$(python3 - <<'PY'
+from pathlib import Path
+import re
+
+target = 'clanky/vypadek-internetu-kadan-kradez-kabelu.html'
+root = Path('clanky')
+paths = [root / 'index.html']
+numbered = []
+for path in root.glob('strana-*.html'):
+    match = re.fullmatch(r'strana-(\d+)\.html', path.name)
+    if match:
+        numbered.append((int(match.group(1)), path))
+paths.extend(path for _, path in sorted(numbered))
+for path in paths:
+    if target in path.read_text(encoding='utf-8'):
+        print('/clanky/' if path.name == 'index.html' else f'/clanky/{path.name}')
+        break
+else:
+    raise SystemExit('Článek KTK nebyl nalezen v žádné stránce kanonického archivu.')
+PY
+)"
 test -n "$KTK_TITLE"
+test -n "$KTK_ARCHIVE_PATH"
 
 cat > deployment-health.txt <<EOF
 site=nasekadan.cz
@@ -154,8 +179,12 @@ verify_current_site() {
   # KTK na ní nemusí zůstat navždy, jakmile jej chronologicky odsunou nové texty.
   verify_contains "${base}/${suffix}" 'data-site-footer="v1"' "$label – titulní stránka"
 
-  # Archiv, článek a strojové přehledy musejí KTK obsahovat trvale.
-  verify_contains "${base}/clanky/${suffix}" "$KTK_FILE" "$label – archiv"
+  # Archiv je stránkovaný. Ověříme navigaci z první stránky a KTK na té stránce,
+  # na které se podle aktuálního kanonického zdroje skutečně nachází.
+  if [[ -f clanky/strana-2.html ]]; then
+    verify_contains "${base}/clanky/${suffix}" 'href="/clanky/strana-2.html"' "$label – navigace stránkování archivu"
+  fi
+  verify_contains "${base}${KTK_ARCHIVE_PATH}${suffix}" "$KTK_FILE" "$label – stránkovaný archiv"
   verify_contains "${base}${KTK_PATH}${suffix}" "$KTK_TITLE" "$label – článek KTK / H1"
   if [[ -n "$KTK_MODIFIED" ]]; then
     verify_contains "${base}${KTK_PATH}${suffix}" "$KTK_MODIFIED" "$label – článek KTK / dateModified"
@@ -164,7 +193,7 @@ verify_current_site() {
   verify_contains "${base}/rss.xml${suffix}" "$KTK_FILE" "$label – RSS"
   verify_contains "${base}/deployment-health.txt${suffix}" "source=$SOURCE_SHA" "$label – deployment-health"
 
-  echo "Ověřeno: $label; KTK H1, dateModified, archiv, RSS, sitemap a source commit jsou aktuální."
+  echo "Ověřeno: $label; stránkování archivu, KTK H1/dateModified, RSS, sitemap a source commit jsou aktuální."
 }
 
 # Nejdřív ověřit právě sestavený kontejner. Vadný build nesmí vstoupit do
@@ -236,7 +265,10 @@ verify_public_contains() {
 }
 
 verify_public_contains '/' 'data-site-footer="v1"' 'titulní stránka'
-verify_public_contains '/clanky/' "$KTK_FILE" 'archiv článků'
+if [[ -f clanky/strana-2.html ]]; then
+  verify_public_contains '/clanky/' 'href="/clanky/strana-2.html"' 'navigace stránkování archivu'
+fi
+verify_public_contains "$KTK_ARCHIVE_PATH" "$KTK_FILE" 'stránkovaný archiv článků'
 verify_public_contains "$KTK_PATH" "$KTK_TITLE" 'článek KTK / H1'
 if [[ -n "$KTK_MODIFIED" ]]; then
   verify_public_contains "$KTK_PATH" "$KTK_MODIFIED" 'článek KTK / dateModified'
@@ -258,4 +290,4 @@ else
   echo 'Instalace serverového timeru přeskočena: tento deploy spustila samotná serverová pojistka.'
 fi
 
-echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA; KTK H1, dateModified, archiv, RSS, sitemap a deployment-health jsou ověřené."
+echo "HOTOVO: veřejný web podává main @ $SOURCE_SHA; stránkování archivu, KTK H1/dateModified, RSS, sitemap a deployment-health jsou ověřené."
