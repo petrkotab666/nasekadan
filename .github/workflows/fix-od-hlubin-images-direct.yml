@@ -1,0 +1,186 @@
+name: Přímá oprava fotografií Od hlubin k nebi
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-od-hlubin-images-direct.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-od-hlubin-images-direct
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+      FB_TOKEN_1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      FB_TOKEN_3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit skutečné WebP v repozitáři
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          files=[
+            Path('images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp'),
+            Path('images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp'),
+          ]
+          for p in files:
+              b=p.read_bytes()
+              assert len(b)>10000, (p,len(b))
+              assert b[:4]==b'RIFF' and b[8:12]==b'WEBP', (p,b[:12])
+              print('REPO WEBP OK',p,len(b))
+          PY
+
+      - name: Přidat nové URL fotografií a odstranit interní postup z článku
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('clanky/od-hlubin-k-nebi-kadan.html')
+          t=p.read_text(encoding='utf-8')
+          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?v=20260807-2155', t)
+          t=re.sub(r'/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena\.webp(?:\?[^"\']*)?', '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?v=20260807-2155', t)
+          t=t.replace('width="900" height="675" loading="lazy"','width="1200" height="900" loading="lazy"')
+          t=re.sub(r'<div class="sourcebox"><strong>Jak jsme informace ověřovali</strong>.*?</div>\s*','',t,flags=re.S)
+          p.write_text(t,encoding='utf-8')
+          assert 'ptaci-ara-zoborozec.webp?v=20260807-2155' in t
+          assert 'ptaci-cela-stena.webp?v=20260807-2155' in t
+          assert 'Jak jsme informace ověřovali' not in t
+          PY
+
+      - name: Trvale uložit opravené HTML do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – media fix'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/od-hlubin-k-nebi-kadan.html
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit fotografie článku Od hlubin k nebi [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main || true
+              if git push origin HEAD:main; then break; fi
+              sleep $((attempt*2))
+            done
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+
+      - name: Nahrát článek a obě fotografie přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/od-hlubin-live.tgz" \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp \
+            social/od-hlubin-k-nebi-kadan-facebook-final-20260807-v3.png
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/od-hlubin-live.tgz" ubuntu@57.129.43.215:/tmp/od-hlubin-live.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"; sudo chmod a+rw "$LOCK"; exec 9>"$LOCK"; flock -w 300 9
+          sudo mkdir -p /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky/od-hlubin-k-nebi /var/www/nasekadan/social
+          sudo tar -xzf /tmp/od-hlubin-live.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi /usr/share/nginx/html/social
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+            sudo docker cp /var/www/nasekadan/social/od-hlubin-k-nebi-kadan-facebook-final-20260807-v3.png nasekadan-web:/usr/share/nginx/html/social/od-hlubin-k-nebi-kadan-facebook-final-20260807-v3.png
+          fi
+          rm -f /tmp/od-hlubin-live.tgz
+          REMOTE
+
+      - name: Veřejně ověřit článek a skutečná data obou fotek
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$RUNNER_TEMP/verify.log"
+          import time, urllib.request, re
+          base='https://nasekadan.cz'
+          stamp=str(time.time_ns())
+          ua='Mozilla/5.0 NašeKadaň-media-check'
+          req=urllib.request.Request(base+'/clanky/od-hlubin-k-nebi-kadan.html?verify='+stamp,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=40) as r:
+              assert r.status==200
+              text=r.read().decode('utf-8','replace')
+          assert 'ptaci-ara-zoborozec.webp?v=20260807-2155' in text
+          assert 'ptaci-cela-stena.webp?v=20260807-2155' in text
+          assert 'Jak jsme informace ověřovali' not in text
+          for name in ('ptaci-ara-zoborozec.webp','ptaci-cela-stena.webp'):
+              url=base+'/images/clanky/od-hlubin-k-nebi/'+name+'?v=20260807-2155&verify='+stamp
+              req=urllib.request.Request(url,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+              with urllib.request.urlopen(req,timeout=40) as r:
+                  status=r.status; ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); data=r.read()
+              assert status==200,(name,status)
+              assert ctype=='image/webp',(name,ctype)
+              assert len(data)>10000,(name,len(data))
+              assert data[:4]==b'RIFF' and data[8:12]==b'WEBP',(name,data[:12])
+              print('LIVE WEBP OK',name,len(data),ctype)
+          PY
+
+      - name: Znovu načíst Facebook náhled článku
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${FB_TOKEN_1:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
+          if [[ -n "$token" ]]; then
+            curl -fsS -X POST 'https://graph.facebook.com/v23.0/' \
+              --data-urlencode 'id=https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html' \
+              --data-urlencode 'scrape=true' \
+              --data-urlencode "access_token=$token" > "$RUNNER_TEMP/meta.json"
+          fi
+
+      - name: Zapsat veřejné potvrzení do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p reports
+          cat > reports/od-hlubin-images-live.json <<EOF
+          {
+            "status": "success",
+            "verified_at": "$(date -u +%FT%TZ)",
+            "article": "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html",
+            "photo_1": "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?v=20260807-2155",
+            "photo_2": "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?v=20260807-2155"
+          }
+          EOF
+          git config user.name 'Naše Kadaň – live verifier'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/od-hlubin-images-live.json
+          git commit -m 'Potvrdit živé fotografie Od hlubin k nebi [skip ci]'
+          git push origin HEAD:main
