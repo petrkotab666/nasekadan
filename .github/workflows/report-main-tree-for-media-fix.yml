@@ -1,0 +1,25 @@
+name: Report main tree for media fix
+on:
+  issues:
+    types: [opened, reopened]
+permissions:
+  contents: read
+  issues: write
+jobs:
+  report:
+    if: github.event.issue.title == 'Media tree SHA pro Od hlubin k nebi'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/github-script@v7
+        env:
+          HEAD_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const {execSync}=require('child_process');
+            const head=execSync('git rev-parse HEAD').toString().trim();
+            const tree=execSync('git rev-parse HEAD^{tree}').toString().trim();
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`HEAD=${head}\nTREE=${tree}`});
