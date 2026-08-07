@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Kontrola architektury produkčního zápisu Naše Kadaň.
 
-Smyslem je zabránit návratu historického stavu, kdy několik periodických guardů
-samo zapisovalo dílčí HTML/assets přímo do /var/www. Tyto guardy smějí už jen
-auditovat. Produkční obsah se nasazuje kompletně přes sync-production.sh.
+Periodické guardy smějí pouze auditovat. Produkční obsah se nasazuje kompletně
+z aktuálního main přes sync-production.sh. Kanonický deploy určuje nejnovější
+články dynamicky podle publikačního času a trvale ověřuje assety Rafandy.
 """
 from __future__ import annotations
 
@@ -52,11 +52,15 @@ def main() -> int:
         "deploy/sync-production.sh",
         "nasekadan-main.tgz",
         "Přenést úplný aktuální main na OVH",
+        "article:published_time",
+        "EXPECTED_LATEST",
+        "EXPECTED_SECOND",
+        "RAFANDA_SHA1",
+        "RAFANDA_SHA2",
+        "RAFANDA_SHA3",
         "prodejna-rafanda-24-7.webp",
         "navod-vstup-nakup-odchod.webp",
         "pravidla-platba-kamery-v2.webp",
-        "mestska-policie-kadan-fakta-diskuse-2026.html",
-        "gymnastika-kadan-treneri-prosinec-2026.html",
     )
     for token in required:
         if token not in canonical:
@@ -78,8 +82,8 @@ def main() -> int:
         raise SystemExit(1)
 
     print(
-        "OK: periodické guardy jsou audit-only; produkční deploy používá úplný main "
-        "a kanonický sync-production.sh včetně kontrol Rafandy."
+        "OK: periodické guardy jsou audit-only; produkční deploy používá úplný main, "
+        "dynamické pořadí článků, kanonický sync-production.sh a SHA-256 kontroly Rafandy."
     )
     return 0
 
