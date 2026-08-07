@@ -1,0 +1,73 @@
+name: Nasadit článek Od hlubin k nebi
+run-name: Produkční nasazení muralů a WebP kontrola
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deploy-murals-trigger.txt'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nasadit aktuální main
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Ověřit článek, přehledy a skutečné WebP
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          resolve=(--resolve nasekadan.cz:443:127.0.0.1)
+          slug='od-hlubin-k-nebi-kadan.html'
+          title='Od hlubin k nebi. Dva podchody na sídlišti A proměnila kadaňská autorka v obří atlas zvířat'
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/clanky/$slug?verify=$GITHUB_RUN_ID" | tee /tmp/mural-article.html | grep -Fq "$title"
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' /tmp/mural-article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' /tmp/mural-article.html
+          ! grep -Eqi '<img[^>]+src="[^"]+\.(jpg|jpeg|png)([?"#])' /tmp/mural-article.html
+          for img in ptaci-ara-zoborozec.webp ptaci-cela-stena.webp; do
+            curl -kfsS --max-time 30 "${resolve[@]}" "$base/images/clanky/od-hlubin-k-nebi/$img?verify=$GITHUB_RUN_ID" -o "/tmp/$img"
+            file "/tmp/$img" | grep -Fq 'Web/P image'
+            test "$(stat -c %s "/tmp/$img")" -gt 10000
+            curl -kfsSI --max-time 30 "${resolve[@]}" "$base/images/clanky/od-hlubin-k-nebi/$img?verify=$GITHUB_RUN_ID" | tr -d '\r' | grep -Eqi '^content-type: image/webp$'
+          done
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/?verify=$GITHUB_RUN_ID" | grep -Fq "$slug"
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/clanky/?verify=$GITHUB_RUN_ID" | grep -Fq "$slug"
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/rss.xml?verify=$GITHUB_RUN_ID" | grep -Fq "$slug"
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/sitemap.xml?verify=$GITHUB_RUN_ID" | grep -Fq "$slug"
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/news-sitemap.xml?verify=$GITHUB_RUN_ID" | grep -Fq "$slug"
+          curl -kfsS --max-time 30 "${resolve[@]}" "$base/deployment-health.txt?verify=$GITHUB_RUN_ID" | tee /tmp/mural-health.txt | grep -Fq 'status=ok'
+
+      - name: Zapsat potvrzení úspěšného nasazení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-deploy-bot'
+          git config user.email 'info@nasekadan.cz'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          source_line="$(curl -kfsS --max-time 20 --resolve nasekadan.cz:443:127.0.0.1 'https://nasekadan.cz/deployment-health.txt' | grep '^source=' | head -1)"
+          status=".github/deploy-status/od-hlubin-k-nebi-${GITHUB_RUN_ID}.txt"
+          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nwebp=ptaci-ara-zoborozec.webp,ptaci-cela-stena.webp\n%s\nverified_at=%s\n' "$source_line" "$(date -u +%FT%TZ)" > "$status"
+          git add "$status"
+          git commit -m 'Potvrdit nasazení článku Od hlubin k nebi [skip ci]'
+          git push origin HEAD:main
