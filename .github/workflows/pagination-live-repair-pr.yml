@@ -59,6 +59,13 @@ jobs:
           set -euo pipefail
           work=/tmp/nasekadan-pagination-repair
           sudo rm -rf "$work"
+          # Kanonický build může na malém produkčním disku narazit na starou
+          # BuildKit cache. Mažeme pouze nepoužívanou build cache a obrazy;
+          # obraz běžícího kontejneru Docker zachová.
+          sudo docker builder prune -af || true
+          sudo docker image prune -af || true
+          avail=$(df -Pk / | awk 'NR==2{print $4}')
+          test "$avail" -ge 524288
           git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git "$work"
           test -d "$work/.git"
           test -s "$work/clanky/index.html"
@@ -73,7 +80,7 @@ jobs:
           tail -n 160 "$log" || true
           if [[ $rc -ne 0 ]]; then
             echo '--- filtrované chybové řádky ---'
-            grep -Ein 'traceback|runtimeerror|error|chyb|selhal|fail|missing|nenalezen|neúpl|kontrola' "$log" | tail -n 80 || true
+            grep -Ein 'traceback|runtimeerror|error|chyb|selhal|fail|missing|nenalezen|neúpl|kontrola|space' "$log" | tail -n 80 || true
           fi
           exit "$rc"
 
