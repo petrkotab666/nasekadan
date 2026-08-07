@@ -1,0 +1,152 @@
+name: Nouzová úplná obnova Naše Kadaň
+
+on:
+  issues:
+    types: [reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: nasekadan-emergency-restore-20260807
+  cancel-in-progress: false
+
+env:
+  KEY_OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+  KEY_OVH_SSH_PRIVATE_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  KEY_SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  KEY_VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+  KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  restore:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 809
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in KEY_OVH_SSH_KEY KEY_OVH_SSH_PRIVATE_KEY KEY_SSH_PRIVATE_KEY KEY_VPS_SSH_KEY KEY_VPS_SSH_PRIVATE_KEY; do
+            value="${!name:-}"
+            if [ -n "$value" ]; then
+              printf '%s\n' "$value" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+              break
+            fi
+          done
+          test -s "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Čistě obnovit aktuální main na OVH
+        id: restore
+        shell: bash
+        run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/restore.log" 2>&1 <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+
+          sudo rm -rf /opt/nasekadan.fresh
+          git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git /opt/nasekadan.fresh
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan.fresh
+
+          stamp=$(date +%s)
+          if [ -d /opt/nasekadan ]; then
+            sudo mv /opt/nasekadan "/opt/nasekadan.rollback-$stamp"
+          fi
+          sudo mv /opt/nasekadan.fresh /opt/nasekadan
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          flock -u 9
+
+          if ! python3 -c 'import PIL' >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-pil
+          fi
+
+          sudo bash /opt/nasekadan/deploy/install-automation.sh
+          cd /opt/nasekadan
+          python3 scripts/verify_published_article_set.py --source . --target /var/www/nasekadan
+
+          for name in zzs-kadan-garaz-mycka-2026.html slavie-kadan-epp-plavci-120-tisic-2026.html od-hlubin-k-nebi-kadan.html mestska-policie-kadan-fakta-diskuse-2026.html gymnastika-kadan-treneri-prosinec-2026.html; do
+            test -s "/var/www/nasekadan/clanky/$name"
+            grep -Fq "$name" /var/www/nasekadan/clanky/index.html
+            grep -Fq "$name" /var/www/nasekadan/rss.xml
+            grep -Fq "$name" /var/www/nasekadan/sitemap.xml
+          done
+
+          sudo rm -rf /opt/nasekadan.rollback-*
+          REMOTE
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/restore.log"
+          exit 0
+
+      - name: Veřejně ověřit úplnost a Facebook obrázek
+        id: live
+        if: steps.restore.outputs.rc == '0'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="restore-${GITHUB_RUN_ID}-$(date +%s)"
+          base='https://nasekadan.cz'
+          curl -4 -kfsSL --max-time 40 "$base/clanky/?$stamp" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "$base/rss.xml?$stamp" -o /tmp/rss.xml
+          curl -4 -kfsSL --max-time 40 "$base/sitemap.xml?$stamp" -o /tmp/sitemap.xml
+          curl -4 -kfsSL --max-time 40 "$base/news-sitemap.xml?$stamp" -o /tmp/news.xml
+          curl -4 -kfsSL --max-time 40 "$base/clanky/zzs-kadan-garaz-mycka-2026.html?$stamp" -o /tmp/zzs.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html?$stamp" -o /tmp/slavie.html
+
+          for name in zzs-kadan-garaz-mycka-2026.html slavie-kadan-epp-plavci-120-tisic-2026.html od-hlubin-k-nebi-kadan.html mestska-policie-kadan-fakta-diskuse-2026.html gymnastika-kadan-treneri-prosinec-2026.html; do
+            grep -Fq "$name" /tmp/archive.html
+            grep -Fq "$name" /tmp/rss.xml
+            grep -Fq "$name" /tmp/sitemap.xml
+          done
+          grep -Fq '16,5 milionu' /tmp/zzs.html
+          grep -Fq '120 000 Kč' /tmp/slavie.html
+
+          og=$(grep -oiE '<meta[^>]+property=["'"']og:image["'"'][^>]+content=["'"'][^"'"']+' /tmp/zzs.html | head -1 | sed -E 's/.*content=["'"']([^"'"']+).*/\1/I')
+          case "$og" in
+            https://nasekadan.cz/social/*) ;;
+            *) echo "OG obrázek není lokální: $og" >&2; exit 1 ;;
+          esac
+          curl -4 -kfsSL --max-time 40 "$og?$stamp" -o /tmp/og-image
+          test -s /tmp/og-image
+          grep -Fq 'og:image:width' /tmp/zzs.html
+          grep -Fq 'og:image:height' /tmp/zzs.html
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RESTORE_RC: ${{ steps.restore.outputs.rc }}
+          LIVE_OUTCOME: ${{ steps.live.outcome }}
+        with:
+          script: |
+            const fs=require('fs');
+            let log='';
+            try { log=fs.readFileSync(`${process.env.RUNNER_TEMP}/restore.log`,'utf8'); } catch (_) {}
+            const tail=log.split('\n').slice(-60).join('\n').slice(-5000);
+            const ok=process.env.RESTORE_RC === '0' && process.env.LIVE_OUTCOME === 'success';
+            const body=ok
+              ? '✅ Úplná obnova produkce dokončena. ZZS, Slávie, Od hlubin k nebi, Městská policie a Gymnastika jsou veřejně ověřené v archivu, RSS a sitemapě. ZZS má lokální Facebook OG obrázek.'
+              : `❌ Úplná obnova produkce selhala. Server exit=${process.env.RESTORE_RC || 'unknown'}, veřejná kontrola=${process.env.LIVE_OUTCOME || 'unknown'}.\n\n\`\`\`text\n${tail}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:809,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:809,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.restore.outputs.rc }}" = '0'
+          test "${{ steps.live.outcome }}" = 'success'
