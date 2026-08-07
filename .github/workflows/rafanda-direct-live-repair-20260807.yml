@@ -5,9 +5,15 @@ on:
     branches: [main]
     paths:
       - '.github/rafanda-direct-live-trigger.txt'
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/rafanda-direct-pr-trigger.txt'
 
 permissions:
   contents: read
+  pull-requests: write
+  issues: write
 
 concurrency:
   group: rafanda-gymnastika-direct-live-repair-20260807
@@ -125,3 +131,19 @@ jobs:
           test "$(stat -c %s "$tmp/gym.png")" -gt 50000
           echo 'RAFANDA_GYMNASTIKA_LIVE_OK=1'
           REMOTE
+
+      - name: Zapsat výsledek do servisního PR
+        if: always() && github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? `✅ Rafanda i Gymnastika jsou opravené na produkci. Ověřen kompletní článek Rafandy, třetí WebP a plný PNG 1200×630 Gymnastiky. Run ${context.runId}.`
+                : `❌ Cílená oprava Rafandy/Gymnastiky selhala. Run ${context.runId}.`
+            });
