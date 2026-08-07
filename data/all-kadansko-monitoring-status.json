@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-07T19:56:25.050062+00:00",
+  "checkedAt": "2026-08-07T20:52:18.928239+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 196,
-  "failedSources": 17,
-  "itemsParsed": 17048,
-  "uniqueItems": 10851,
+  "checkedSources": 192,
+  "failedSources": 21,
+  "itemsParsed": 16677,
+  "uniqueItems": 10554,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 844,
+    "genericTitle": 837,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 0,
+    "broadWithoutLocalMatch": 1,
     "notEditoriallySignificant": 47,
     "notFreshOrUndated": 0,
-    "duplicate": 5353,
+    "duplicate": 5286,
     "deferredByCap": 0
   },
   "coverage": {
@@ -126,8 +126,9 @@
       "url": "https://gis.mesto-kadan.cz/portal",
       "category": "Město a územní plánování",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 13
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -459,8 +460,9 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 124
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -517,8 +519,9 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 82
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -698,7 +701,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 30
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -706,7 +709,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 29
     },
     {
       "name": "Liďák Kadaň – oficiální web",
@@ -1415,8 +1418,9 @@
       "url": "https://www.mesto-most.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "checked",
-      "itemsParsed": 160
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Louny – oficiální web",
@@ -1752,7 +1756,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 76
+      "itemsParsed": 80
     },
     {
       "name": "Google News – široký region 5",
@@ -1784,7 +1788,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 80
+      "itemsParsed": 78
     },
     {
       "name": "Google News – široký region 9",
@@ -1792,7 +1796,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 11
+      "itemsParsed": 13
     },
     {
       "name": "Google News – široký region 10",
@@ -1816,7 +1820,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 15
+      "itemsParsed": 16
     },
     {
       "name": "Google News – široký region 13",
@@ -1824,7 +1828,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 17
+      "itemsParsed": 18
     },
     {
       "name": "Google News – široký region 14",
