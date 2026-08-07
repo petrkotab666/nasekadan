@@ -19,19 +19,34 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Ověřit živé stránkování 1 až 5
+      - name: Diagnostikovat živé stránkování 1 až 5
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           base='https://nasekadan.cz/clanky'
-          code=$(curl -4 -ksSL --max-time 35 -o /tmp/p1.html -w '%{http_code}' "$base/?audit=${GITHUB_RUN_ID}")
-          test "$code" = 200
-          grep -Fq 'href="/clanky/strana-2.html"' /tmp/p1.html
+          failed=0
+          code=$(curl -4 -ksSL --max-time 35 -o /tmp/p1.html -w '%{http_code}' "$base/?audit=${GITHUB_RUN_ID}" || true)
+          bytes=$(wc -c < /tmp/p1.html 2>/dev/null || echo 0)
+          link2=no
+          grep -Fq 'href="/clanky/strana-2.html"' /tmp/p1.html 2>/dev/null && link2=yes
+          echo "PAGE_1 HTTP=$code bytes=$bytes link_to_2=$link2"
+          [[ "$code" == 200 && "$link2" == yes ]] || failed=1
+
           for n in 2 3 4 5; do
-            code=$(curl -4 -ksSL --max-time 35 -o "/tmp/p$n.html" -w '%{http_code}' "$base/strana-$n.html?audit=${GITHUB_RUN_ID}")
-            echo "PAGE_$n HTTP=$code bytes=$(wc -c < /tmp/p$n.html)"
-            test "$code" = 200
-            grep -Fq "Všechny články – strana $n" "/tmp/p$n.html"
-            grep -Fq 'article-card' "/tmp/p$n.html"
+            rm -f "/tmp/p$n.html"
+            code=$(curl -4 -ksSL --max-time 35 -o "/tmp/p$n.html" -w '%{http_code}' "$base/strana-$n.html?audit=${GITHUB_RUN_ID}" || true)
+            bytes=$(wc -c < "/tmp/p$n.html" 2>/dev/null || echo 0)
+            heading=no
+            cards=no
+            grep -Fq "Všechny články – strana $n" "/tmp/p$n.html" 2>/dev/null && heading=yes
+            grep -Fq 'article-card' "/tmp/p$n.html" 2>/dev/null && cards=yes
+            echo "PAGE_$n HTTP=$code bytes=$bytes heading=$heading cards=$cards"
+            [[ "$code" == 200 && "$heading" == yes && "$cards" == yes ]] || failed=1
           done
-          echo 'PAGINATION_LIVE_OK pages=1,2,3,4,5'
+
+          if [[ "$failed" == 0 ]]; then
+            echo 'PAGINATION_LIVE_OK pages=1,2,3,4,5'
+            exit 0
+          fi
+          echo 'PAGINATION_LIVE_FAIL'
+          exit 1
