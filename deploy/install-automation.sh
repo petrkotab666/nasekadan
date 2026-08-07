@@ -32,10 +32,6 @@ su - ubuntu -c "git -C '$APP_DIR' fetch --prune origin main"
 su - ubuntu -c "git -C '$APP_DIR' reset --hard origin/main"
 su - ubuntu -c "git -C '$APP_DIR' clean -fd"
 
-# sync-production.sh vlastní produkční zámek, sestaví Docker obraz, provede
-# všechny publikační transformace, SEO audit, atomické přepnutí document rootu
-# a ověření veřejného HTTPS webu. Přepínač zabrání tomu, aby běh z timeru
-# znovu instaloval právě běžící timer.
 env \
   GITHUB_WORKSPACE="$APP_DIR" \
   NASEKADAN_SKIP_AUTOMATION_INSTALL=1 \
@@ -76,11 +72,86 @@ Unit=nasekadan-refresh.service
 WantedBy=timers.target
 EOF
 
+# Okamžitá ochrana proti starému paralelnímu deployi. Sleduje hlavní publikační
+# plochy; při každé změně porovná nejnovější kanonický článek z origin/main se
+# skutečně podávaným document rootem. Pokud někdo nahraje starší snapshot,
+# okamžitě spustí jediný kanonický refresh aktuálního main.
+sudo tee /usr/local/sbin/nasekadan-regression-check >/dev/null <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="/opt/nasekadan"
+ROOT="/var/www/nasekadan"
+CHECK_LOCK="/run/lock/nasekadan-regression-check.lock"
+
+exec 8>"$CHECK_LOCK"
+flock -n 8 || exit 0
+
+[[ -d "$APP_DIR/.git" ]] || exit 0
+[[ -s "$ROOT/index.html" ]] || exit 0
+
+chown -R ubuntu:ubuntu "$APP_DIR"
+su - ubuntu -c "git -C '$APP_DIR' fetch --prune origin main" >/dev/null
+
+expected_href="$(git -C "$APP_DIR" show origin/main:index.html \
+  | grep -o 'data-latest-article-href="[^"]*"' \
+  | head -n1 \
+  | cut -d'"' -f2)"
+[[ -n "$expected_href" ]] || exit 1
+expected_file="$(basename "$expected_href")"
+
+ok=1
+grep -Fq "data-latest-article-href=\"$expected_href\"" "$ROOT/index.html" || ok=0
+grep -Fq "$expected_href" "$ROOT/clanky/index.html" || ok=0
+grep -Fq "$expected_file" "$ROOT/rss.xml" || ok=0
+
+if [[ "$ok" == 1 ]]; then
+  echo "Publikační plochy odpovídají origin/main: $expected_file"
+  exit 0
+fi
+
+echo "Zachycen starý nebo neúplný snapshot; očekáváno $expected_file. Spouštím kanonickou obnovu." >&2
+/usr/local/sbin/nasekadan-refresh
+EOF
+
+sudo chmod 755 /usr/local/sbin/nasekadan-regression-check
+
+sudo tee /etc/systemd/system/nasekadan-content-regression.service >/dev/null <<'EOF'
+[Unit]
+Description=Ochrana Naše Kadaň proti návratu starého publikačního snapshotu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nasekadan-regression-check
+User=root
+TimeoutStartSec=35min
+EOF
+
+sudo tee /etc/systemd/system/nasekadan-content-regression.path >/dev/null <<'EOF'
+[Unit]
+Description=Sledování regresí titulky, archivu a RSS Naše Kadaň
+
+[Path]
+PathChanged=/var/www/nasekadan/index.html
+PathChanged=/var/www/nasekadan/clanky/index.html
+PathChanged=/var/www/nasekadan/rss.xml
+Unit=nasekadan-content-regression.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 sudo systemctl daemon-reload
-sudo systemctl reset-failed nasekadan-refresh.service || true
+sudo systemctl reset-failed nasekadan-refresh.service nasekadan-content-regression.service || true
 sudo systemctl enable --now nasekadan-refresh.timer
 sudo systemctl restart nasekadan-refresh.timer
+sudo systemctl enable --now nasekadan-content-regression.path
+sudo systemctl restart nasekadan-content-regression.path
 
-# Právě dokončený deploy už web ověřil. Nespouštíme další souběžný refresh,
-# který by zbytečně čekal na stejný produkční zámek.
-echo "Serverová pojistka je aktivní každých 10 minut a používá jediný kanonický produkční build."
+# Jednorázově ověřit právě instalovanou ochranu; pokud je produkce už aktuální,
+# skončí bez deploye. Pokud mezitím někdo nahrál starší verzi, sama ji opraví.
+sudo /usr/local/sbin/nasekadan-regression-check
+
+echo "Serverová pojistka běží každých 10 minut a navíc okamžitě hlídá změny titulky, archivu a RSS proti origin/main."
