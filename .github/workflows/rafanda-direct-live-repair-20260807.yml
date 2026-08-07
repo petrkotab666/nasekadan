@@ -1,219 +1,39 @@
-name: Přímá oprava Rafandy a obrázku Gymnastiky na produkci
+name: Rafanda a Gymnastika – historický repair, pouze ruční audit
 
+# Jednorázový přímý deploy z 7. 8. 2026 je definitivně odstřižen.
+# Workflow už nemá automatický trigger, SSH secret ani právo měnit main/produkci.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/rafanda-direct-live-trigger.txt'
-  pull_request_target:
-    types: [opened, reopened, synchronize]
-    paths:
-      - '.github/rafanda-direct-pr-trigger.txt'
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-
-concurrency:
-  group: rafanda-gymnastika-direct-live-repair-20260807
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  repair:
+  audit-only:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      RAFANDA: clanky/eso-market-rafanda-kadan-24-7.html
-      GYM: clanky/gymnastika-kadan-treneri-prosinec-2026.html
-      R3_OLD: images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp
-      R3_NEW: images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp
-      GYM_SOURCE: social/gymnastika-kadan-treneri-prosinec-2026-source.svg
-      GYM_NEW: social/gymnastika-kadan-treneri-prosinec-2026-v2.png
-      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    timeout-minutes: 10
     steps:
-      - name: Načíst aktuální main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 20
+          fetch-depth: 1
 
-      - name: Připravit nové URL a čistou grafiku
+      - name: Ověřit kanonický zdroj Rafandy a Gymnastiky
         shell: bash
         run: |
           set -euo pipefail
-          test -s "$RAFANDA"
-          test -s "$GYM"
-          test -s "$R3_OLD"
-          test -s "$GYM_SOURCE"
-          cp "$R3_OLD" "$R3_NEW"
-
-          src="$(realpath "$GYM_SOURCE")"
-          out="$(realpath -m "$GYM_NEW")"
-          if command -v rsvg-convert >/dev/null 2>&1; then
-            rsvg-convert -w 1200 -h 630 -o "$out" "$src"
-          elif command -v magick >/dev/null 2>&1; then
-            magick -background none "$src" -resize '1200x630!' "$out"
-          elif command -v convert >/dev/null 2>&1; then
-            convert -background none "$src" -resize '1200x630!' "$out"
-          elif command -v google-chrome-stable >/dev/null 2>&1; then
-            google-chrome-stable --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1200,630 --screenshot="$out" "file://$src"
-          elif command -v google-chrome >/dev/null 2>&1; then
-            google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1200,630 --screenshot="$out" "file://$src"
-          else
-            echo 'Chybí renderer SVG -> PNG.' >&2
-            exit 1
-          fi
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import struct, zlib, binascii
-
-          raf = Path('clanky/eso-market-rafanda-kadan-24-7.html')
-          gym = Path('clanky/gymnastika-kadan-treneri-prosinec-2026.html')
-          raf_text = raf.read_text(encoding='utf-8')
-          gym_text = gym.read_text(encoding='utf-8')
-          raf_text = raf_text.replace('/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp', '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp')
-          gym_text = gym_text.replace('/social/gymnastika-kadan-treneri-prosinec-2026.png', '/social/gymnastika-kadan-treneri-prosinec-2026-v2.png')
-          raf.write_text(raf_text, encoding='utf-8')
-          gym.write_text(gym_text, encoding='utf-8')
-
-          webp = Path('images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp').read_bytes()
-          assert len(webp) > 10000 and webp[:4] == b'RIFF' and webp[8:12] == b'WEBP'
-
-          def verify_png(path):
-              data = Path(path).read_bytes()
-              assert data.startswith(b'\x89PNG\r\n\x1a\n')
-              pos = 8; idat = []; ihdr = None; saw_iend = False
-              while True:
-                  assert pos + 12 <= len(data), f'truncated chunk header at {pos}/{len(data)}'
-                  n = struct.unpack('>I', data[pos:pos+4])[0]
-                  assert pos + 12 + n <= len(data), f'truncated chunk at {pos}: {n}'
-                  typ = data[pos+4:pos+8]
-                  chunk = data[pos+8:pos+8+n]
-                  crc = struct.unpack('>I', data[pos+8+n:pos+12+n])[0]
-                  assert binascii.crc32(typ + chunk) & 0xffffffff == crc
-                  if typ == b'IHDR': ihdr = chunk
-                  if typ == b'IDAT': idat.append(chunk)
-                  pos += 12 + n
-                  if typ == b'IEND':
-                      saw_iend = True
-                      break
-              assert ihdr is not None and saw_iend and idat
-              w, h = struct.unpack('>II', ihdr[:8])
-              assert (w, h) == (1200, 630), (w, h)
-              decoded = zlib.decompress(b''.join(idat))
-              assert len(decoded) > 100000
-              return w, h, len(data), len(decoded)
-
-          print('NEW_PNG_OK=%sx%s bytes=%s decoded=%s' % verify_png('social/gymnastika-kadan-treneri-prosinec-2026-v2.png'))
-          PY
-
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' "$RAFANDA"
-          grep -Fq '/social/gymnastika-kadan-treneri-prosinec-2026-v2.png' "$GYM"
-          echo "R3_SHA=$(sha256sum "$R3_NEW" | awk '{print $1}')" >> "$GITHUB_ENV"
-          echo "GYM_SHA=$(sha256sum "$GYM_NEW" | awk '{print $1}')" >> "$GITHUB_ENV"
-
-      - name: Připravit cílený balík
-        shell: bash
-        run: |
-          set -euo pipefail
-          stage="$RUNNER_TEMP/nk-image-repair"
-          rm -rf "$stage"
-          mkdir -p "$stage/clanky" "$stage/images/clanky/eso-market-rafanda" "$stage/social"
-          cp "$RAFANDA" "$stage/clanky/"
-          cp "$GYM" "$stage/clanky/"
-          cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp "$stage/images/clanky/eso-market-rafanda/"
-          cp images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp "$stage/images/clanky/eso-market-rafanda/"
-          cp "$R3_NEW" "$stage/images/clanky/eso-market-rafanda/"
-          cp "$GYM_NEW" "$stage/social/"
-          tar -C "$stage" -czf "$RUNNER_TEMP/nk-image-repair.tgz" .
-
-      - name: Nasadit přímo na OVH
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -n "$SSH_KEY"
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          scp "${opts[@]}" "$RUNNER_TEMP/nk-image-repair.tgz" ubuntu@57.129.43.215:/tmp/nk-image-repair.tgz
-          ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          root=/var/www/nasekadan
-          work="$(mktemp -d /tmp/nk-image-repair.XXXXXX)"
-          trap 'rm -rf "$work" /tmp/nk-image-repair.tgz' EXIT
-          tar -xzf /tmp/nk-image-repair.tgz -C "$work"
-          sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
-          sudo install -m 0644 "$work/clanky/eso-market-rafanda-kadan-24-7.html" "$root/clanky/eso-market-rafanda-kadan-24-7.html"
-          sudo install -m 0644 "$work/clanky/gymnastika-kadan-treneri-prosinec-2026.html" "$root/clanky/gymnastika-kadan-treneri-prosinec-2026.html"
-          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp" "$root/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp"
-          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp" "$root/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp"
-          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp"
-          sudo install -m 0644 "$work/social/gymnastika-kadan-treneri-prosinec-2026-v2.png" "$root/social/gymnastika-kadan-treneri-prosinec-2026-v2.png"
-          sudo chmod -R a+rX "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/eso-market-rafanda /usr/share/nginx/html/social
-            sudo tar -C "$work" -czf - clanky images social | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
-          fi
-          REMOTE
-
-      - name: Ověřit nové URL a shodu bajtů
-        shell: bash
-        run: |
-          set -euo pipefail
-          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          ssh "${opts[@]}" ubuntu@57.129.43.215 "R3_SHA='$R3_SHA' GYM_SHA='$GYM_SHA' bash -s" <<'REMOTE'
-          set -euo pipefail
-          base='https://nasekadan.cz'
-          get() { curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base$1?repair=$(date +%s%N)"; }
-          raf="$(get /clanky/eso-market-rafanda-kadan-24-7.html)"
-          gym="$(get /clanky/gymnastika-kadan-treneri-prosinec-2026.html)"
-          echo "RAF_LEN=${#raf} GYM_LEN=${#gym}"
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' <<<"$raf"
-          grep -Fq '/social/gymnastika-kadan-treneri-prosinec-2026-v2.png' <<<"$gym"
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp?repair=$(date +%s%N)" -o "$tmp/r3.webp"
-          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/social/gymnastika-kadan-treneri-prosinec-2026-v2.png?repair=$(date +%s%N)" -o "$tmp/gym.png"
-          live_r3="$(sha256sum "$tmp/r3.webp" | awk '{print $1}')"
-          live_gym="$(sha256sum "$tmp/gym.png" | awk '{print $1}')"
-          echo "R3_EXPECTED=$R3_SHA R3_LIVE=$live_r3"
-          echo "GYM_EXPECTED=$GYM_SHA GYM_LIVE=$live_gym"
-          test "$live_r3" = "$R3_SHA"
-          test "$live_gym" = "$GYM_SHA"
-          file "$tmp/r3.webp"
-          file "$tmp/gym.png"
-          echo 'RAFANDA_GYMNASTIKA_LIVE_OK=1'
-          REMOTE
-
-      - name: Uložit opravu i do main
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'nasekadan-repair-bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add "$RAFANDA" "$GYM" "$R3_NEW" "$GYM_NEW"
-          if git diff --cached --quiet; then
-            echo 'Repo už obsahuje opravené assety.'
-            exit 0
-          fi
-          git commit -m 'Opravit rozbité obrázky Rafandy a Gymnastiky novými URL'
-          git pull --rebase origin main
-          git push origin HEAD:main
-
-      - name: Zapsat výsledek do servisního PR
-        if: always() && github.event_name == 'pull_request_target'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ok = '${{ job.status }}' === 'success';
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: ok
-                ? `✅ Rafanda i Gymnastika jsou opravené. Rafanda používá novou URL třetí fotografie a poškozené PNG Gymnastiky bylo nahrazeno nově vygenerovaným plným PNG 1200×630. Živé soubory se shodují SHA-256 se zdrojem. Run ${context.runId}.`
-                : `❌ Oprava Rafandy/Gymnastiky selhala. Run ${context.runId}.`
-            });
+          raf='clanky/eso-market-rafanda-kadan-24-7.html'
+          gym='clanky/gymnastika-kadan-treneri-prosinec-2026.html'
+          test -s "$raf"
+          test -s "$gym"
+          for img in \
+            images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp \
+            images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp \
+            images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp; do
+            test -s "$img"
+            grep -Fq "/$img" "$raf"
+          done
+          test -s social/gymnastika-kadan-treneri-prosinec-2026-v2.png
+          grep -Fq '/social/gymnastika-kadan-treneri-prosinec-2026-v2.png' "$gym"
+          git diff --exit-code
+          echo 'OK: historický repair je audit-only; zdrojové soubory jsou kompletní.'
