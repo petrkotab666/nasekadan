@@ -12,7 +12,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: rafanda-real-photo-final-20260807
+  group: rafanda-real-photo-skutecna-20260807
   cancel-in-progress: false
 
 jobs:
@@ -21,10 +21,10 @@ jobs:
     timeout-minutes: 25
     env:
       ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
-      OUT: images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp
-      PUBLIC_PATH: /images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp
-      EXPECTED_SHA: 38b9e3c8ea5dee052fd7a27305000d16cc30bbb147e829c57c48c3c264c1e715
-      EXPECTED_SIZE: '13472'
+      OUT: images/clanky/eso-market-rafanda/pravidla-platba-kamery-skutecna.webp
+      PUBLIC_PATH: /images/clanky/eso-market-rafanda/pravidla-platba-kamery-skutecna.webp
+      EXPECTED_SHA: 6c007e0b2663db97c2bd9478036cd52f696feb97770cc8f9cce67444973bb8a0
+      EXPECTED_SIZE: '9846'
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Načíst aktuální main
@@ -33,7 +33,7 @@ jobs:
           ref: main
           fetch-depth: 40
 
-      - name: Ověřit finální skutečný WebP
+      - name: Ověřit skutečný WebP
         shell: bash
         run: |
           set -euo pipefail
@@ -45,7 +45,7 @@ jobs:
           test "$size" = "$EXPECTED_SIZE"
           file "$OUT" | grep -Fq 'Web/P image'
 
-      - name: Přepnout článek na finální skutečnou fotografii
+      - name: Přepnout článek na skutečnou fotografii
         shell: bash
         run: |
           set -euo pipefail
@@ -53,14 +53,9 @@ jobs:
           from pathlib import Path
           p = Path('clanky/eso-market-rafanda-kadan-24-7.html')
           text = p.read_text(encoding='utf-8')
-          new = '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp'
-          for old in (
-              '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp',
-              '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp',
-              '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp',
-              '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp',
-          ):
-              text = text.replace(old, new)
+          new = '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-skutecna.webp'
+          import re
+          text = re.sub(r'/images/clanky/eso-market-rafanda/pravidla-platba-kamery[^" ]*\.webp', new, text)
           assert new in text
           assert 'Samostatný panel uvádí způsob platby' in text
           p.write_text(text, encoding='utf-8')
@@ -74,7 +69,7 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add "$ARTICLE"
           if ! git diff --cached --quiet; then
-            git commit -m 'Přepnout Rafandu na finální skutečnou fotografii'
+            git commit -m 'Přepnout Rafandu na skutečnou třetí fotografii'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
@@ -87,12 +82,12 @@ jobs:
           git reset --hard origin/main
           grep -Fq "$PUBLIC_PATH" "$ARTICLE"
           test "$(sha256sum "$OUT" | awk '{print $1}')" = "$EXPECTED_SHA"
-          stage="$RUNNER_TEMP/rafanda-final"
+          stage="$RUNNER_TEMP/rafanda-skutecna"
           rm -rf "$stage"
           mkdir -p "$stage/clanky" "$stage/images/clanky/eso-market-rafanda"
           cp "$ARTICLE" "$stage/clanky/"
           cp "$OUT" "$stage/images/clanky/eso-market-rafanda/"
-          tar -C "$stage" -czf "$RUNNER_TEMP/rafanda-final.tgz" .
+          tar -C "$stage" -czf "$RUNNER_TEMP/rafanda-skutecna.tgz" .
 
       - name: Nasadit přímo na OVH
         shell: bash
@@ -102,16 +97,16 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
           opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          scp "${opts[@]}" "$RUNNER_TEMP/rafanda-final.tgz" ubuntu@57.129.43.215:/tmp/nk-rafanda-final.tgz
+          scp "${opts[@]}" "$RUNNER_TEMP/rafanda-skutecna.tgz" ubuntu@57.129.43.215:/tmp/nk-rafanda-skutecna.tgz
           ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           root=/var/www/nasekadan
-          work="$(mktemp -d /tmp/nk-rafanda-final.XXXXXX)"
-          trap 'rm -rf "$work" /tmp/nk-rafanda-final.tgz' EXIT
-          tar -xzf /tmp/nk-rafanda-final.tgz -C "$work"
+          work="$(mktemp -d /tmp/nk-rafanda-skutecna.XXXXXX)"
+          trap 'rm -rf "$work" /tmp/nk-rafanda-skutecna.tgz' EXIT
+          tar -xzf /tmp/nk-rafanda-skutecna.tgz -C "$work"
           sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda"
           sudo install -m 0644 "$work/clanky/eso-market-rafanda-kadan-24-7.html" "$root/clanky/eso-market-rafanda-kadan-24-7.html"
-          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp"
+          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-skutecna.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-skutecna.webp"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/eso-market-rafanda
             sudo tar -C "$work" -czf - clanky images | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
@@ -152,6 +147,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: ok
-                ? `✅ Třetí fotografie Rafandy je na produkci a odpovídá skutečnému snímku 1000028565.jpg. Produkční hash: 38b9e3c8ea5dee052fd7a27305000d16cc30bbb147e829c57c48c3c264c1e715. Run ${context.runId}.`
-                : `❌ Finální nasazení třetí fotografie Rafandy selhalo. Run ${context.runId}.`
+                ? `✅ Třetí fotografie Rafandy je na produkci. Soubor v main i živá kopie mají SHA-256 6c007e0b2663db97c2bd9478036cd52f696feb97770cc8f9cce67444973bb8a0. Run ${context.runId}.`
+                : `❌ Nasazení skutečné třetí fotografie Rafandy selhalo. Run ${context.runId}.`
             });
