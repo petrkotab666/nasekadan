@@ -1,0 +1,113 @@
+name: Nainstalovat monotónní ochranu článků
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/install-monotonic-guard-trigger.txt'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nainstalovat ochranu a okamžitě obnovit aktuální main
+        id: install
+        shell: bash
+        run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/guard.log" 2>&1 <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          sudo rm -f /opt/nasekadan/.git/index.lock
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          git -C /opt/nasekadan clean -fd
+          flock -u 9
+          sudo bash /opt/nasekadan/deploy/install-automation.sh
+          cd /opt/nasekadan
+          python3 scripts/verify_published_article_set.py --source . --target /var/www/nasekadan
+          sudo systemctl is-active --quiet nasekadan-refresh.timer
+          sudo systemctl is-active --quiet nasekadan-content-regression.path
+          REMOTE
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/guard.log"
+          exit 0
+
+      - name: Ověřit živý web zvenčí
+        id: verify
+        if: steps.install.outputs.rc == '0'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="monotonic-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?$q" -o /tmp/home.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/?$q" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?$q" -o /tmp/rss.xml
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?$q" -o /tmp/sitemap.xml
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/published-articles-manifest.json?$q" -o /tmp/manifest.json
+          python3 - <<'PY'
+import json
+from pathlib import Path
+p=json.loads(Path('/tmp/manifest.json').read_text())
+assert p['article_count'] >= 60, p
+for name in ('clanky/zzs-kadan-garaz-mycka-2026.html','clanky/slavie-kadan-epp-plavci-120-tisic-2026.html','clanky/od-hlubin-k-nebi-kadan.html','clanky/mestska-policie-kadan-fakta-diskuse-2026.html'):
+    assert name in p['articles'], name
+print('manifest', p['article_count'])
+PY
+          for name in zzs-kadan-garaz-mycka-2026.html slavie-kadan-epp-plavci-120-tisic-2026.html od-hlubin-k-nebi-kadan.html mestska-policie-kadan-fakta-diskuse-2026.html; do
+            grep -Fq "$name" /tmp/archive.html
+            grep -Fq "$name" /tmp/rss.xml
+            grep -Fq "$name" /tmp/sitemap.xml
+          done
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html?$q" | grep -Fq '16,5 milionu'
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html?$q" | grep -Fq '120 000 Kč'
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs');
+            let log=''; try { log=fs.readFileSync(`${process.env.RUNNER_TEMP}/guard.log`,'utf8'); } catch(_) {}
+            const tail=log.split('\n').slice(-60).join('\n').slice(-5000);
+            const rc='${{ steps.install.outputs.rc }}';
+            const verify='${{ steps.verify.outcome }}';
+            const ok=rc==='0' && verify==='success';
+            const body=ok
+              ? '✅ Monotónní ochrana publikovaných článků je nainstalovaná. Živý web znovu obsahuje úplnou množinu článků z aktuálního main; ZZS, Slávie, Od hlubin k nebi i Městská policie jsou ověřené v archivu, RSS a sitemapě.'
+              : `❌ Instalace monotónní ochrany selhala. Server exit=${rc}, externí kontrola=${verify}.\n\n\`\`\`text\n${tail}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
+            if(ok) await github.rest.pulls.update({owner:context.repo.owner,repo:context.repo.repo,pull_number:context.issue.number,state:'closed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.install.outputs.rc }}" = '0'
+          test "${{ steps.verify.outcome }}" = 'success'
