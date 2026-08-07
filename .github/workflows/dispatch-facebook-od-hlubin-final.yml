@@ -1,0 +1,22 @@
+name: Spustit finální Facebook opravu Od hlubin k nebi
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/dispatch-facebook-od-hlubin-final.yml'
+      - '.github/facebook-od-hlubin-final.trigger'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Spustit opravný workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run repair-facebook-od-hlubin-k-nebi-final.yml --repo "$GITHUB_REPOSITORY" --ref main
