@@ -1,0 +1,111 @@
+name: Jednorázová měřitelná oprava stránkování
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/pagination-live-repair.trigger'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pagination-live-repair-20260807
+  cancel-in-progress: true
+
+jobs:
+  repair:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix-archive-pagination-live'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit zdrojové stránky 1 až 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s clanky/index.html
+          for n in 2 3 4 5; do
+            test -s "clanky/strana-$n.html"
+            grep -Fq "Všechny články – strana $n" "clanky/strana-$n.html"
+            grep -Fq 'article-card' "clanky/strana-$n.html"
+          done
+          grep -Fq 'href="/clanky/strana-2.html"' clanky/index.html
+
+      - name: Připravit úplný main a SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          tar --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-pagination-repair.tgz
+
+      - name: Spustit jediný kanonický produkční skript
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          work=/tmp/nasekadan-pagination-repair
+          rm -rf "$work"
+          mkdir -p "$work"
+          tar -xzf /tmp/nasekadan-pagination-repair.tgz -C "$work"
+          test -d "$work/.git"
+          chmod +x "$work/deploy/sync-production.sh"
+          sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
+          rm -rf "$work" /tmp/nasekadan-pagination-repair.tgz
+          REMOTE
+
+      - name: Veřejně ověřit klikatelné stránky archivu
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz/clanky'
+          for attempt in $(seq 1 12); do
+            q="pagination-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            ok=1
+            code=$(curl -4 -ksSL --max-time 35 -o /tmp/p1.html -w '%{http_code}' "$base/?v=$q" || true)
+            [[ "$code" == 200 ]] || ok=0
+            grep -Fq 'href="/clanky/strana-2.html"' /tmp/p1.html || ok=0
+            for n in 2 3 4 5; do
+              code=$(curl -4 -ksSL --max-time 35 -o "/tmp/p$n.html" -w '%{http_code}' "$base/strana-$n.html?v=$q" || true)
+              [[ "$code" == 200 ]] || ok=0
+              grep -Fq "Všechny články – strana $n" "/tmp/p$n.html" || ok=0
+              grep -Fq 'article-card' "/tmp/p$n.html" || ok=0
+            done
+            if [[ "$ok" == 1 ]]; then
+              echo 'PAGINATION_LIVE_OK pages=1,2,3,4,5'
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
+
+      - name: Zapsat výsledek do PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ok
+                ? `✅ Stránkování je veřejně funkční: strany 1–5 načteny přes HTTP 200 a obsahují články. Run ${context.runId}.`
+                : `❌ Oprava stránkování selhala. Run ${context.runId}.`
+            });
