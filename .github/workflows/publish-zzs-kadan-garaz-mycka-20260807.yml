@@ -1,0 +1,40 @@
+name: Publikovat článek o ZZS Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/publish_zzs_kadan_garaz_mycka_20260807.py'
+      - 'scripts/run_publish_zzs_kadan_garaz_mycka_20260807.sh'
+      - '.github/workflows/publish-zzs-kadan-garaz-mycka-20260807.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-zzs-kadan-garaz-mycka-20260807
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ověřit a publikovat článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/run_publish_zzs_kadan_garaz_mycka_20260807.sh
+          python3 -m py_compile scripts/publish_zzs_kadan_garaz_mycka_20260807.py
+          bash scripts/run_publish_zzs_kadan_garaz_mycka_20260807.sh
