@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-07T15:02:27.640696+00:00",
+  "checkedAt": "2026-08-07T16:02:06.519119+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 199,
-  "failedSources": 14,
-  "itemsParsed": 17224,
-  "uniqueItems": 10919,
-  "newAlerts": 0,
+  "checkedSources": 193,
+  "failedSources": 20,
+  "itemsParsed": 16765,
+  "uniqueItems": 10732,
+  "newAlerts": 1,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 885,
+    "genericTitle": 838,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 13,
-    "notEditoriallySignificant": 56,
+    "broadWithoutLocalMatch": 3,
+    "notEditoriallySignificant": 55,
     "notFreshOrUndated": 0,
-    "duplicate": 5420,
+    "duplicate": 5195,
     "deferredByCap": 0
   },
   "coverage": {
@@ -126,8 +126,9 @@
       "url": "https://gis.mesto-kadan.cz/portal",
       "category": "Město a územní plánování",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 13
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Registr smluv – Město Kadaň",
@@ -314,7 +315,7 @@
       "category": "Školství",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 41
+      "itemsParsed": 42
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -369,8 +370,9 @@
       "url": "https://www.2zskadan.cz/",
       "category": "Základní školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 245
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -566,8 +568,9 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 81
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -591,7 +594,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 30
+      "itemsParsed": 29
     },
     {
       "name": "Povodí Ohře",
@@ -697,7 +700,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 26
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -784,8 +787,9 @@
       "url": "https://kadan.eu/informace/tic",
       "category": "Kultura, památky a volný čas",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 27
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Galerie Josefa Lieslera",
@@ -897,8 +901,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 24
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -953,8 +958,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 72
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -1012,7 +1018,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 12
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -1413,7 +1419,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 160
+      "itemsParsed": 161
     },
     {
       "name": "Louny – oficiální web",
@@ -1733,7 +1739,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 38
+      "itemsParsed": 42
     },
     {
       "name": "Google News – široký region 3",
@@ -1741,7 +1747,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 30
+      "itemsParsed": 31
     },
     {
       "name": "Google News – široký region 4",
@@ -1749,7 +1755,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 74
+      "itemsParsed": 75
     },
     {
       "name": "Google News – široký region 5",
@@ -1781,7 +1787,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 80
+      "itemsParsed": 81
     },
     {
       "name": "Google News – široký region 9",
@@ -1789,7 +1795,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 16
+      "itemsParsed": 15
     },
     {
       "name": "Google News – široký region 10",
@@ -1797,7 +1803,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 10
+      "itemsParsed": 8
     },
     {
       "name": "Google News – široký region 11",
@@ -1813,7 +1819,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 13
+      "itemsParsed": 14
     },
     {
       "name": "Google News – široký region 13",
@@ -1821,7 +1827,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 16
+      "itemsParsed": 17
     },
     {
       "name": "Google News – široký region 14",
