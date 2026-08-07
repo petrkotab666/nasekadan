@@ -4,21 +4,48 @@
 Kanonický seznam se odvozuje přímo z veřejných HTML článků v aktuálním main,
 ne z titulky ani archivu, které jsou pouze generované pohledy. Cílový document
 root musí obsahovat každý kanonický článek a každý z nich musí být dohledatelný
-v archivu, RSS a sitemapě. Novější deploy tedy smí počet článků pouze zachovat
-nebo zvýšit; nikdy jej nesmí snížit.
+v archivu, RSS a sitemapě. Novější deploy tedy smí počet publikovaných článků
+pouze zachovat nebo zvýšit; budoucí naplánované texty se do manifestu nepočítají.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ARTICLE_RE = re.compile(r"^[^.].*\.html$")
 PAGE_RE = re.compile(r"strana-\d+\.html$")
 
 
-def is_public_article(path: Path) -> bool:
+def parse_datetime(value: str) -> datetime | None:
+    value = value.strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def published_at(text: str) -> datetime | None:
+    patterns = (
+        r'<meta\s+property=["\']article:published_time["\']\s+content=["\']([^"\']+)',
+        r'<meta\s+content=["\']([^"\']+)["\']\s+property=["\']article:published_time["\']',
+        r'["\']datePublished["\']\s*:\s*["\']([^"\']+)',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            dt = parse_datetime(match.group(1))
+            if dt:
+                return dt
+    return None
+
+
+def is_public_article(path: Path, *, now: datetime | None = None) -> bool:
     if path.name == "index.html" or PAGE_RE.fullmatch(path.name):
         return False
     if not ARTICLE_RE.fullmatch(path.name):
@@ -32,6 +59,10 @@ def is_public_article(path: Path) -> bool:
         re.I,
     ):
         return False
+    dt = published_at(text)
+    current = now or datetime.now(timezone.utc)
+    if dt and dt > current + timedelta(minutes=10):
+        return False
     return True
 
 
@@ -39,10 +70,11 @@ def canonical_articles(root: Path) -> list[str]:
     article_dir = root / "clanky"
     if not article_dir.is_dir():
         raise SystemExit(f"Chybí adresář článků: {article_dir}")
+    now = datetime.now(timezone.utc)
     return sorted(
         f"clanky/{path.name}"
         for path in article_dir.glob("*.html")
-        if is_public_article(path)
+        if is_public_article(path, now=now)
     )
 
 
@@ -105,6 +137,7 @@ def verify(source: Path, target: Path) -> tuple[list[str], list[str]]:
 def write_manifest(path: Path, articles: list[str]) -> None:
     payload = {
         "schema": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "article_count": len(articles),
         "articles": articles,
     }
