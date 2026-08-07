@@ -55,12 +55,12 @@ jobs:
           for attempt in 1 2 3 4; do
             git fetch origin main
             git reset --hard origin/main
-            python3 -m py_compile scripts/audit_canonical_content_runtime.py
-            result="$(python3 scripts/audit_canonical_content_runtime.py --write)"
+            python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+            result="$(python3 scripts/run_canonical_audit_runtime_v2.py --write-status)"
             echo "$result"
             git add data/published-content-index.json .github/canonical-content-audit-status.json
             if ! git diff --cached --quiet; then
-              git commit -m 'Evidence: opravit auditní stav po 46. článku'
+              git commit -m 'Evidence: synchronizovat kanonický audit živého webu'
             fi
             final_sha="$(git rev-parse HEAD)"
             if git push origin HEAD:main; then
