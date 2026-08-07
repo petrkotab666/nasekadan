@@ -1,0 +1,93 @@
+name: Cíleně nasadit rozšířený článek PK Slávie
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deploy-expanded-slavie-trigger.txt'
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ARTICLE: clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+      URL: https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit rozšířenou verzi před nasazením
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Nejde o body z plaveckých závodů' "$ARTICLE"
+          grep -Fq 'Co těch 252 tisíc bodů vlastně znamená' "$ARTICLE"
+          grep -Fq 'Body nejsou koruny' "$ARTICLE"
+          grep -Fq '258 379' "$ARTICLE"
+          grep -Fq 'AKTUALIZOVÁNO 7. SRPNA 2026 · 18:56' "$ARTICLE"
+
+      - name: Nasadit pouze článek na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          scp "${opts[@]}" "$ARTICLE" ubuntu@57.129.43.215:/tmp/slavie-expanded.html
+          ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky"
+          sudo install -m 0644 /tmp/slavie-expanded.html "$root/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
+            sudo docker cp /tmp/slavie-expanded.html nasekadan-web:/usr/share/nginx/html/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+          fi
+          rm -f /tmp/slavie-expanded.html
+          q="$(date +%s%N)"
+          live="$(curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html?expanded=$q")"
+          grep -Fq 'Nejde o body z plaveckých závodů' <<<"$live"
+          grep -Fq 'Co těch 252 tisíc bodů vlastně znamená' <<<"$live"
+          grep -Fq 'Body nejsou koruny' <<<"$live"
+          grep -Fq '258 379' <<<"$live"
+          REMOTE
+
+      - name: Ověřit článek zvenku
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="expanded-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "$URL?$q" -o /tmp/live.html
+          grep -Fq 'Nejde o body z plaveckých závodů' /tmp/live.html
+          grep -Fq 'Co těch 252 tisíc bodů vlastně znamená' /tmp/live.html
+          grep -Fq 'Body nejsou koruny' /tmp/live.html
+
+      - name: Zapsat výsledek do PR 810
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 810,
+              body: ok
+                ? `✅ Rozšířený článek PK Slávie je nasazený a veřejně ověřený. Živá stránka obsahuje vysvětlení EPP, rozdílu mezi body a korunami i účelu příspěvku. Run ${context.runId}.`
+                : `❌ Cílené nasazení rozšířeného článku PK Slávie selhalo. Run ${context.runId}.`
+            });
+            if (ok) {
+              await github.rest.pulls.update({owner: context.repo.owner, repo: context.repo.repo, pull_number: 810, state: 'closed'});
+            }
