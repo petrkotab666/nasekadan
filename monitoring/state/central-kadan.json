@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-04T18:55:23Z",
-  "last_quick_check_at": "2026-08-04T18:55:23Z",
-  "last_deep_check_at": "2026-08-04T13:58:19Z",
+  "updated_at": "2026-08-07T19:04:00Z",
+  "last_quick_check_at": "2026-08-07T19:04:00Z",
+  "last_deep_check_at": "2026-08-07T19:04:00Z",
   "canonical_registry": {
     "paths": [
       "data/organizations.json",
@@ -27,44 +27,46 @@
   },
   "city_news": {
     "path": "data/city-news.json",
-    "generated_at": "2026-08-04T14:41:06.101384+00:00",
+    "generated_at": "2026-08-07T13:40:13.528527+00:00",
     "total_unique_sources": 101,
-    "known_failed_sources": 13,
-    "error_records": 13,
+    "known_failed_sources": 14,
+    "error_records": 14,
     "failed_sources_require_fallback": true
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "55a87620c303927c525251597712ae2dddcddc57"
+    "main_sha_observed": "5bd45d22e821131aa074fa80d5b441daef7ac652"
   },
   "production": {
     "homepage_checked": true,
     "archive_checked": true,
     "rss_checked": true,
-    "sitemap_checked": true,
-    "news_sitemap_checked": true,
-    "llms_checked": true,
+    "sitemap_checked": false,
+    "news_sitemap_checked": false,
+    "llms_checked": false,
     "deployment_health_checked": true,
-    "latest_public_article_url": "https://nasekadan.cz/clanky/komunalni-volby-kadan-kandidaty-lhuta-2026.html",
-    "latest_public_article_title": "Lhůta pro kandidátky skončila. V Kadani se rýsuje souboj ODS, nové skupiny a ANO",
-    "latest_public_article_published_at": "2026-08-04T18:46:00+02:00",
-    "homepage_editorial_pin_url": "https://nasekadan.cz/clanky/klasterec-ochlazeni-zimni-stadion-kadan-2026.html",
+    "latest_public_article_url": "https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html",
+    "latest_public_article_title": "Neřeší městská policie dopravu? Bouřlivá debata přiměla redakci ověřit fakta",
+    "latest_public_article_published_at": "2026-08-07T04:00:00+02:00",
     "homepage_and_archive_consistent": true,
     "discovery_surfaces_contain_latest_article": true,
-    "public_audit_at": "2026-08-04T18:52:38Z",
-    "public_audit_evidence": "Veřejná kontrola issue #629 potvrdila dočasné připnutí článku o zimním stadionu pouze v hlavním bloku, volební článek jako první v bočním bloku, archivu a RSS, původní datum stadionového článku a 88 bodů předpovědi počasí.",
-    "public_article_count": 48,
-    "deployment_source_commit": "55a87620c303927c525251597712ae2dddcddc57",
-    "public_check_attempt_at": "2026-08-04T18:52:38Z",
-    "public_check_attempt_status": "success",
-    "repair_attempted": false
+    "public_audit_at": "2026-08-07T19:04:00Z",
+    "public_audit_evidence": "Veřejná titulka i archiv stále končí článkem o městské policii z 04:00, přestože main obsahuje novější schválené/publikačně vyžádané články Od hlubin k nebi, ZZS Kadaň a Slavie a kanonický deploy je má v povinné sadě. RSS endpoint byl dosažitelný, ale webový kontrolní nástroj nepodporuje jeho text/xml obsah; sitemap a news-sitemap nebyly v tomto běhu přes webový nástroj čitelně ověřitelné.",
+    "public_article_count": 58,
+    "deployment_source_commit": "91c549f6476b6d58f35f35f67457394d4abf674f",
+    "public_check_attempt_at": "2026-08-07T19:04:00Z",
+    "public_check_attempt_status": "stale-production-repair-pending",
+    "repair_attempted": true,
+    "repair_trigger_commit": "470a89946cc46437b1cbee1fc3c4a00a5357a377",
+    "repair_mode": "single-canonical-monotonic-ovh-trigger",
+    "repair_followup": "GitHub Actions veřejně ukazoval kanonický produkční běh jako pending; další paralelní deploy nebyl spuštěn."
   },
   "quick_check": {
     "extraordinary_events": "no_new_verified_threshold_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
-    "institutions_and_documents": "no_new_verified_threshold_development_since_election_deadline_alert",
-    "petition": "no_reliably_verified_threshold_event_since_previous_run",
-    "technical": "public_home_archive_rss_chronology_and_weather_verified_successfully"
+    "institutions_and_documents": "no_new_verified_threshold_development_requiring_user_alert",
+    "petition": "no_reliably_verified_threshold_event",
+    "technical": "significant_stale_production_detected_single_canonical_repair_triggered_pending_verification"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -74,14 +76,18 @@
     "josef-suchy-klasterec-u18-kanada-hlinka-20260804",
     "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804",
     "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804",
-    "komunalni-volby-kadan-kandidaty-lhuta-20260804"
+    "komunalni-volby-kadan-kandidaty-lhuta-20260804",
+    "jezero-most-druhy-pohresovany-patrani-20260807"
   ],
-  "new_significant_fingerprints": [],
+  "new_significant_fingerprints": [
+    "production-stale-main-20260807-evening"
+  ],
   "notes": [
-    "Při běhu byly povinně načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Rychlá kontrola mimořádných, dopravních, policejních, hasičských, síťových, meteorologických a soudních zdrojů neodhalila po předchozím volebním upozornění žádnou další novou ověřenou událost s dostatečným významem pro samostatné oznámení.",
-    "Vyhledané dopravní uzavírky, výluky a vodárenské události byly starší, již známé nebo mimo aktuální časové okno; nebyl vytvořen nový redakční alert.",
-    "Veřejná technická kontrola byla ve 20:52 místního času úspěšná: hlavní blok obsahuje dočasně připnutý článek o zimním stadionu, skutečně nejnovější volební článek je první v bočním bloku, archivu a RSS a počasí vrací 88 bodů.",
-    "Data/city-news.json byla naposledy generována 4. srpna 2026 ve 14:41 UTC a eviduje 101 unikátních zdrojů. Třináct chybujících zdrojů zůstává povinných a musí být dál obsluhováno náhradními kanály."
+    "Povinně byly načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
+    "Data/city-news.json jsou čerstvá z 7. srpna 2026 13:40 UTC a evidují 14 chybujících nebo blokovaných zdrojů; ty zůstávají povinné a mají být obsluhovány náhradními primárními kanály.",
+    "Kontrola nových policejních, hasičských, zdravotnických, dopravních, nemocničních a regionálních stop neodhalila po deduplikaci žádnou novou ověřenou obsahovou událost s dostatečným prahem pro samostatné upozornění. Pokračující pátrání po druhém člověku na jezeře Most je již zachyceno jako aktualizační stopa existujícího článku.",
+    "Byl zjištěn významný technický nesoulad: produkce večer 7. srpna neobsahovala novější schválené/publikačně vyžádané články, které už jsou v main a v povinné sadě kanonického deploye.",
+    "Byl proveden přesně jeden bezpečný kanonický opravný trigger přes .github/water-selfhosted-trigger.txt; další deploy nebyl spuštěn, protože kanonický běh byl stále ve frontě/pending.",
+    "Technický nález je evidován v issue #817 a pending alertu monitoring-alerts/pending/20260807T190150Z-production-stale-main-20260807-evening.json."
   ]
 }
