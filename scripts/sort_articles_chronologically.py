@@ -25,6 +25,7 @@ END = "<!-- WEEKLY-EVENTS-END -->"
 ARTICLE_RE = re.compile(r"<article\b[^>]*>.*?</article>", re.I | re.S)
 ITEM_RE = re.compile(r"<item>.*?</item>", re.I | re.S)
 URL_RE = re.compile(r"<url>.*?</url>", re.I | re.S)
+PAGINATION_RE = re.compile(r'<nav\b[^>]*class=["\'][^"\']*article-pagination[^"\']*["\'][^>]*>.*?</nav>', re.I | re.S)
 
 
 def iso_datetime(value: str) -> datetime:
@@ -94,8 +95,27 @@ def replace_section(path: Path, start_marker: str, end_marker: str, *, archive: 
         raise RuntimeError(f"V {path} chybí konec seznamu")
     body = text[body_start:end]
     blocks = sorted_article_blocks(body)
-    indent = "    " if archive else "    "
-    replacement = "\n" + "\n".join(wrap_weekly(block, indent) for block in blocks) + "\n    "
+    indent = "    "
+
+    # Generátor viditelnosti vkládá za karty stránkovací <nav>. Starší verze
+    # tohoto třídicího kroku při přepsání sekce zachovala jen <article> bloky,
+    # takže na první stránce archivu zmizel odkaz na stranu 2, přestože
+    # strana-2.html až strana-N.html na serveru existovaly. Navigaci proto
+    # výslovně zachovat. Na titulce je navíc potřeba obnovit uzavření .article-list.
+    pagination_match = PAGINATION_RE.search(body)
+    pagination = pagination_match.group(0).strip() if pagination_match else ""
+    rendered = "\n".join(wrap_weekly(block, indent) for block in blocks)
+    if archive:
+        suffix = pagination
+    else:
+        suffix = "</div>"
+        if pagination:
+            suffix += "\n" + pagination
+    replacement = "\n" + rendered
+    if suffix:
+        replacement += "\n" + indent + suffix
+    replacement += "\n    "
+
     text = text[:body_start] + replacement + text[end:]
     path.write_text(text, encoding="utf-8", newline="\n")
     return blocks
@@ -203,7 +223,7 @@ def main() -> int:
     update_archive_jsonld(archive_blocks)
     sort_rss()
     sort_news_sitemap()
-    print("Články jsou seřazené sestupně podle article:published_time/datePublished.")
+    print("Články jsou seřazené sestupně podle article:published_time/datePublished; stránkování zůstalo zachované.")
     for block in home_blocks[:10]:
         href = article_href(block)
         print(article_published(href).isoformat(), href)
