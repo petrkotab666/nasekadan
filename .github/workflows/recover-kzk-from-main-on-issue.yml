@@ -1,4 +1,4 @@
-name: Obnovit KZK z hlavní větve přes issue 507
+name: Nouzově obnovit úplný web přes issue 507
 
 on:
   issues:
@@ -10,7 +10,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: recover-kzk-from-main-on-issue
+  group: nasekadan-emergency-monotonic-restore
   cancel-in-progress: false
 
 env:
@@ -21,28 +21,15 @@ env:
   KEY_VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
 
 jobs:
-  recover:
+  restore:
     if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 507
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 1
-
-      - name: Ověřit připravené soubory v main
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s clanky/kulturni-zarizeni-kadan.html
-          test -s social/kulturni-zarizeni-kadan-20260802.png
-          grep -Fq 'Od Střelnice po klášter' clanky/kulturni-zarizeni-kadan.html
-          grep -Fq '/clanky/kulturni-zarizeni-kadan.html' index.html
-          grep -Fq '/clanky/kulturni-zarizeni-kadan.html' clanky/index.html
-          grep -Fq 'https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html' rss.xml
-          grep -Fq 'https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html' sitemap.xml
-          grep -Fq 'https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html' news-sitemap.xml
 
       - name: Připravit SSH klíč
         shell: bash
@@ -59,118 +46,93 @@ jobs:
           test -s "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nasadit publikaci přímo na OVH
+      - name: Obnovit úplný aktuální main na OVH
+        id: restore
         shell: bash
         run: |
+          set +e
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/restore.log" 2>&1 <<'REMOTE'
           set -euo pipefail
-          tar -czf "$RUNNER_TEMP/kzk-redeploy.tar.gz" \
-            clanky/kulturni-zarizeni-kadan.html social/kulturni-zarizeni-kadan-20260802.png \
-            index.html clanky/index.html rss.xml sitemap.xml news-sitemap.xml \
-            site.js style.css footer.css mobile.css reklamy.js reklamy-sidebar.js reklamy-sidebar.css \
-            reklamy-oprava-obrazku.js obsah-doplnky.js ad-spacing-guard.js analytics.js
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            "$RUNNER_TEMP/kzk-redeploy.tar.gz" ubuntu@57.129.43.215:/tmp/kzk-redeploy.tar.gz
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo -n true
-          sudo tar -xzf /tmp/kzk-redeploy.tar.gz -C /var/www/nasekadan
-          sudo chmod -R a+rX /var/www/nasekadan
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp /tmp/kzk-redeploy.tar.gz nasekadan-web:/tmp/kzk-redeploy.tar.gz
-            sudo docker exec nasekadan-web tar -xzf /tmp/kzk-redeploy.tar.gz -C /usr/share/nginx/html
-            sudo docker exec nasekadan-web rm -f /tmp/kzk-redeploy.tar.gz
-          fi
-          grep -Fq 'Od Střelnice po klášter' /var/www/nasekadan/clanky/kulturni-zarizeni-kadan.html
-          grep -Fq '/clanky/kulturni-zarizeni-kadan.html' /var/www/nasekadan/index.html
-          rm -f /tmp/kzk-redeploy.tar.gz
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          sudo rm -f /opt/nasekadan/.git/index.lock
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          git -C /opt/nasekadan clean -fd
+          flock -u 9
+          sudo bash /opt/nasekadan/deploy/install-automation.sh
+          cd /opt/nasekadan
+          python3 scripts/verify_published_article_set.py --source . --target /var/www/nasekadan
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /var/www/nasekadan/clanky/index.html
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /var/www/nasekadan/clanky/index.html
+          grep -Fq 'mestska-policie-kadan-fakta-diskuse-2026.html' /var/www/nasekadan/clanky/index.html
+          grep -Fq 'gymnastika-kadan-treneri-prosinec-2026.html' /var/www/nasekadan/clanky/index.html
           REMOTE
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/restore.log"
+          exit 0
 
-      - name: Veřejně ověřit obsah a pořadí
+      - name: Veřejně ověřit články a Facebook kartu
         id: live
+        if: steps.restore.outputs.rc == '0'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import time, urllib.request
+          stamp="restore-${GITHUB_RUN_ID}-$(date +%s)"
           base='https://nasekadan.cz'
-          stamp=str(int(time.time()*1000))
-          def get(path):
-              url=base+path+('?' if '?' not in path else '&')+'kzk_live='+stamp
-              req=urllib.request.Request(url,headers={'User-Agent':'NaseKadan-KZK-Recovery/2.0','Cache-Control':'no-cache','Pragma':'no-cache'})
-              with urllib.request.urlopen(req,timeout=30) as r:
-                  if r.status != 200: raise RuntimeError(f'{path}: HTTP {r.status}')
-                  return r.read().decode('utf-8','replace')
-          article=get('/clanky/kulturni-zarizeni-kadan.html')
-          home=get('/')
-          archive=get('/clanky/')
-          rss=get('/rss.xml')
-          sm=get('/sitemap.xml')
-          news=get('/news-sitemap.xml')
-          title='Od Střelnice po klášter. Co všechno pro Kadaň zajišťuje KZK'
-          rel='/clanky/kulturni-zarizeni-kadan.html'
-          absu='https://nasekadan.cz'+rel
-          assert title in article and 'id="konirna"' in article
-          assert 'data-promos data-context="sidebar"' in article
-          assert title in home and f'data-latest-article-href="{rel}"' in home
-          assert archive.find(rel) >= 0
-          competitor='/clanky/petice-nemocnice-kadan-podpisova-mista-2026.html'
-          assert competitor not in archive or archive.find(rel) < archive.find(competitor)
-          first_item=rss.find('<item>')
-          assert first_item >= 0 and absu in rss[first_item:rss.find('</item>',first_item)+7]
-          assert absu in sm and absu in news
-          print('article=ok')
-          print('home_first=ok')
-          print('archive_first=ok')
-          print('rss_first=ok')
-          print('sitemap=ok')
-          print('news_sitemap=ok')
-          PY
+          curl -4 -kfsSL --max-time 40 "$base/?$stamp" -o /tmp/home.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/?$stamp" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "$base/rss.xml?$stamp" -o /tmp/rss.xml
+          curl -4 -kfsSL --max-time 40 "$base/sitemap.xml?$stamp" -o /tmp/sitemap.xml
+          curl -4 -kfsSL --max-time 40 "$base/news-sitemap.xml?$stamp" -o /tmp/news.xml
+          curl -4 -kfsSL --max-time 40 "$base/clanky/zzs-kadan-garaz-mycka-2026.html?$stamp" -o /tmp/zzs.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html?$stamp" -o /tmp/slavie.html
+          for name in zzs-kadan-garaz-mycka-2026.html slavie-kadan-epp-plavci-120-tisic-2026.html od-hlubin-k-nebi-kadan.html mestska-policie-kadan-fakta-diskuse-2026.html gymnastika-kadan-treneri-prosinec-2026.html; do
+            grep -Fq "$name" /tmp/archive.html
+            grep -Fq "$name" /tmp/rss.xml
+            grep -Fq "$name" /tmp/sitemap.xml
+          done
+          grep -Fq '16,5 milionu' /tmp/zzs.html
+          grep -Fq '120 000 Kč' /tmp/slavie.html
+          og=$(python3 - <<'PY'
+import re
+from pathlib import Path
+text=Path('/tmp/zzs.html').read_text(encoding='utf-8')
+m=re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I)
+assert m
+print(m.group(1))
+PY
+          )
+          case "$og" in https://nasekadan.cz/social/*) ;; *) echo "OG není lokální: $og" >&2; exit 1;; esac
+          curl -4 -kfsSL --max-time 40 "$og?$stamp" -o /tmp/og
+          test -s /tmp/og
           echo 'ok=true' >> "$GITHUB_OUTPUT"
 
-      - name: Nainstalovat Chromium pro kontrolu reklam
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm init -y >/dev/null 2>&1
-          npm install --silent playwright@1.55.0
-          npx playwright install --with-deps chromium >/dev/null
-
-      - name: Ověřit vykreslené reklamy
-        id: ads
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'JS'
-          const { chromium } = require('playwright');
-          (async()=>{
-            const browser=await chromium.launch({headless:true});
-            const page=await browser.newPage({viewport:{width:1440,height:1800}});
-            await page.goto('https://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html?ads='+Date.now(),{waitUntil:'networkidle',timeout:90000});
-            await page.waitForTimeout(6000);
-            const title=await page.locator('body').innerText();
-            if(!title.includes('Od Střelnice po klášter')) throw new Error('Článek se v prohlížeči nevykreslil.');
-            const stream=await page.locator('.article-aside-adstream').count();
-            const cards=await page.locator('[class*="article-aside-ad-"], .promo-card, .article-ad-auto').count();
-            if(stream < 1 || cards < 1) throw new Error(`Reklamy se nevykreslily: stream=${stream}, cards=${cards}`);
-            console.log(`adstream=${stream}`);
-            console.log(`ad_cards=${cards}`);
-            await browser.close();
-          })().catch(e=>{console.error(e);process.exit(1)});
-          JS
-          echo 'ok=true' >> "$GITHUB_OUTPUT"
-
-      - name: Zapsat konečný výsledek do issue 507
+      - name: Zapsat výsledek do issue 507
         if: always()
         uses: actions/github-script@v7
         env:
-          LIVE_OK: ${{ steps.live.outputs.ok }}
-          ADS_OK: ${{ steps.ads.outputs.ok }}
+          RESTORE_RC: ${{ steps.restore.outputs.rc }}
+          LIVE: ${{ steps.live.outcome }}
         with:
           script: |
-            const ok = process.env.LIVE_OK === 'true' && process.env.ADS_OK === 'true';
-            const issue_number=507;
+            const ok=process.env.RESTORE_RC === '0' && process.env.LIVE === 'success';
             const body=ok
-              ? '✅ Obnova a veřejná kontrola dokončena. Článek je veřejný, první na titulní straně i v archivu, první v RSS, uvedený v sitemap.xml a news-sitemap.xml a reklamy se skutečně vykreslují.\n\nhttps://nasekadan.cz/clanky/kulturni-zarizeni-kadan.html'
-              : `🚨 Kontrola po přímém nasazení není úplná. Stav obsahu: ${process.env.LIVE_OK || 'false'}, stav vykreslených reklam: ${process.env.ADS_OK || 'false'}.`;
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number,body});
-            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number,state:'closed',state_reason:'completed'});
+              ? '✅ Úplná monotónní obnova dokončena. ZZS, Slávie, Od hlubin k nebi, Městská policie a Gymnastika jsou veřejně ověřené v archivu, RSS a sitemapě; ZZS má lokální Facebook OG obrázek.'
+              : `❌ Úplná obnova selhala. Server exit=${process.env.RESTORE_RC || 'unknown'}, veřejná kontrola=${process.env.LIVE || 'unknown'}.`;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:507,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:507,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.restore.outputs.rc }}" = '0'
+          test "${{ steps.live.outcome }}" = 'success'
