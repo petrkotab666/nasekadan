@@ -1,0 +1,131 @@
+name: Přímá obnova aktuálních článků z main
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/repair-current-articles-direct.trigger'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-direct-current-articles-repair
+  cancel-in-progress: true
+
+jobs:
+  repair-current-main:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'repair-current-articles-direct'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_KEY_A }}
+      OVH_KEY_B: ${{ secrets.OVH_KEY_B }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Sestavit aktuální publikační povrchy pouze z článků v main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/enforce_article_visibility.py
+          python3 scripts/ensure_all_published_articles_in_rss.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/enforce_latest_homepage_hero.py
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          grep -Fq "data-latest-article-href=\"/clanky/$mp\"" index.html
+          grep -Fq "/clanky/$gym" index.html
+          grep -Fq "/clanky/$mp" clanky/index.html
+          grep -Fq "/clanky/$gym" clanky/index.html
+          grep -Fq "https://nasekadan.cz/clanky/$mp" rss.xml
+          grep -Fq "https://nasekadan.cz/clanky/$gym" rss.xml
+
+      - name: Připravit SSH klíč a kanonický balík
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          source_sha="$(git rev-parse HEAD)"
+          stage="$RUNNER_TEMP/current-main"
+          mkdir -p "$stage/clanky" "$stage/data" "$stage/social"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$stage/"
+          cp clanky/*.html "$stage/clanky/"
+          cp data/published-content-index.json "$stage/data/"
+          cp social/mestska-policie-kadan-fakta-diskuse-2026-v2.png "$stage/social/"
+          cp social/gymnastika-kadan-treneri-prosinec-2026-v2.png "$stage/social/"
+          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-current-main-repair\n' \
+            "$source_sha" "$(date -u +%FT%TZ)" > "$stage/deployment-health.txt"
+          tar -C "$stage" -czf "$RUNNER_TEMP/current-main.tgz" .
+          echo "SOURCE_SHA=$source_sha" >> "$GITHUB_ENV"
+
+      - name: Atomicky obnovit publikační povrchy na produkci
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote="/tmp/nasekadan-current-main-${GITHUB_RUN_ID}"
+          ssh_opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          scp "${ssh_opts[@]}" "$RUNNER_TEMP/current-main.tgz" "ubuntu@57.129.43.215:${remote}.tgz"
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 "RUN_ID='${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          src="/tmp/nasekadan-current-main-${RUN_ID}"
+          rm -rf "$src"
+          mkdir -p "$src"
+          tar -xzf "${src}.tgz" -C "$src"
+          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
+          exec 9>/var/lock/nasekadan-content.lock
+          flock -x 9
+          root=/var/www/nasekadan
+          sudo install -d -m 0755 "$root/clanky" "$root/data" "$root/social"
+          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt; do
+            sudo install -m 0644 "$src/$f" "$root/$f"
+          done
+          for f in "$src"/clanky/*.html; do
+            sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"
+          done
+          sudo install -m 0644 "$src/data/published-content-index.json" "$root/data/published-content-index.json"
+          for f in "$src"/social/*; do
+            sudo install -m 0644 "$f" "$root/social/$(basename "$f")"
+          done
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/data /usr/share/nginx/html/social
+            sudo tar -C "$src" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky data social \
+              | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
+          fi
+          rm -rf "$src" "${src}.tgz"
+          REMOTE
+
+      - name: Ověřit živý veřejný web zvenku
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          success=0
+          for attempt in $(seq 1 8); do
+            q="direct-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            home="$(curl -4 -kfsSL --max-time 35 "$base/?$q" || true)"
+            archive="$(curl -4 -kfsSL --max-time 35 "$base/clanky/?$q" || true)"
+            rss="$(curl -4 -kfsSL --max-time 35 "$base/rss.xml?$q" || true)"
+            health="$(curl -4 -kfsSL --max-time 35 "$base/deployment-health.txt?$q" || true)"
+            if grep -Fq "data-latest-article-href=\"/clanky/$mp\"" <<<"$home" \
+              && grep -Fq "/clanky/$gym" <<<"$home" \
+              && grep -Fq "/clanky/$mp" <<<"$archive" \
+              && grep -Fq "/clanky/$gym" <<<"$archive" \
+              && grep -Fq "$base/clanky/$mp" <<<"$rss" \
+              && grep -Fq "$base/clanky/$gym" <<<"$rss" \
+              && grep -Fq "source=$SOURCE_SHA" <<<"$health"; then
+              success=1
+              break
+            fi
+            sleep 4
+          done
+          test "$success" = 1
+          echo "OK: veřejná produkce má MP + Gymnastiku a source=$SOURCE_SHA"
