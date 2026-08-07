@@ -1,0 +1,139 @@
+name: Facebook fresh images 818
+
+on:
+  issues:
+    types: [reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  fix:
+    if: github.event.issue.number == 818
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      K1: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      K2: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      K3: ${{ secrets.OVH_SSH_KEY }}
+      T1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      T2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      T3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      T4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit nové fyzické obrázky a HTML
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp social/zzs-kadan-garaz-mycka-2026-308fe3d826.png social/zzs-kadan-garaz-mycka-2026-fb-final-20260807.png
+          cp social/slavie-kadan-epp-plavci-120-tisic-2026-2d4806136f.png social/slavie-kadan-epp-plavci-120-tisic-2026-fb-final-20260807.png
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,html
+          rows=[
+           ('clanky/zzs-kadan-garaz-mycka-2026.html','https://nasekadan.cz/social/zzs-kadan-garaz-mycka-2026-fb-final-20260807.png','Záchranka v Kadani'),
+           ('clanky/slavie-kadan-epp-plavci-120-tisic-2026.html','https://nasekadan.cz/social/slavie-kadan-epp-plavci-120-tisic-2026-fb-final-20260807.png','Slávie Kadaň'),
+          ]
+          for fn,url,alt in rows:
+            p=Path(fn); t=p.read_text(encoding='utf-8')
+            t=re.sub(r'<meta\b[^>]*property=["\']og:image(?::(?:url|secure_url|type|width|height|alt))?["\'][^>]*>\s*','',t,flags=re.I)
+            t=re.sub(r'<meta\b[^>]*name=["\']twitter:image["\'][^>]*>\s*','',t,flags=re.I)
+            t=re.sub(r'<meta\b[^>]*name=["\']nasekadan:social-card["\'][^>]*>\s*','',t,flags=re.I)
+            block=(f'<meta property="og:image" content="{url}">\n'
+                   f'<meta property="og:image:url" content="{url}">\n'
+                   f'<meta property="og:image:secure_url" content="{url}">\n'
+                   '<meta property="og:image:type" content="image/png">\n'
+                   '<meta property="og:image:width" content="1200">\n'
+                   '<meta property="og:image:height" content="630">\n'
+                   f'<meta property="og:image:alt" content="{html.escape(alt,quote=True)}">\n'
+                   f'<meta name="twitter:image" content="{url}">\n'
+                   '<meta name="nasekadan:social-card" content="custom">\n')
+            m=re.search(r'</head>',t,re.I); assert m
+            t=t[:m.start()]+block+t[m.start():]
+            t=re.sub(r'"image"\s*:\s*\[\s*"[^"]+"\s*\]',f'"image":["{url}"]',t,count=1)
+            p.write_text(t,encoding='utf-8')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit do main
+        id: save
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Facebook fix'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/zzs-kadan-garaz-mycka-2026.html clanky/slavie-kadan-epp-plavci-120-tisic-2026.html social/*fb-final-20260807.png
+          git commit -m 'Použít nové fyzické Facebook obrázky [skip ci]' || true
+          for n in 1 2 3 4 5; do git pull --rebase origin main || true; git push origin HEAD:main && break; sleep $((n*2)); done
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${K1:-${K2:-${K3:-}}}"; test -n "$key"; printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+          tar -czf "$RUNNER_TEMP/fb.tgz" clanky/zzs-kadan-garaz-mycka-2026.html clanky/slavie-kadan-epp-plavci-120-tisic-2026.html social/zzs-kadan-garaz-mycka-2026-fb-final-20260807.png social/slavie-kadan-epp-plavci-120-tisic-2026-fb-final-20260807.png
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$RUNNER_TEMP/fb.tgz" ubuntu@57.129.43.215:/tmp/fb818.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo tar -xzf /tmp/fb818.tgz -C /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp /var/www/nasekadan/clanky/zzs-kadan-garaz-mycka-2026.html nasekadan-web:/usr/share/nginx/html/clanky/zzs-kadan-garaz-mycka-2026.html
+            sudo docker cp /var/www/nasekadan/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html nasekadan-web:/usr/share/nginx/html/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+            sudo docker cp /var/www/nasekadan/social/zzs-kadan-garaz-mycka-2026-fb-final-20260807.png nasekadan-web:/usr/share/nginx/html/social/zzs-kadan-garaz-mycka-2026-fb-final-20260807.png
+            sudo docker cp /var/www/nasekadan/social/slavie-kadan-epp-plavci-120-tisic-2026-fb-final-20260807.png nasekadan-web:/usr/share/nginx/html/social/slavie-kadan-epp-plavci-120-tisic-2026-fb-final-20260807.png
+          fi
+          REMOTE
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Meta rescrape a kontrola
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${T1:-}"; [[ -n "$token" ]] || token="${T2:-}"; [[ -n "$token" ]] || token="${T3:-}"; [[ -n "$token" ]] || token="${T4:-}"; test -n "$token"
+          : > "$RUNNER_TEMP/meta.log"
+          while IFS='|' read -r key url basename; do
+            r="$(curl -fsS -X POST https://graph.facebook.com/v23.0/ --data-urlencode "id=$url" --data-urlencode scrape=true --data-urlencode "access_token=$token")"
+            python3 - "$key" "$basename" "$r" <<'PY' | tee -a "$RUNNER_TEMP/meta.log"
+          import json,sys
+          key,basename,raw=sys.argv[1:]; d=json.loads(raw)
+          if 'error' in d: raise SystemExit(d['error'])
+          v=d.get('image'); urls=[]
+          if isinstance(v,str): urls=[v]
+          elif isinstance(v,dict): urls=[x for x in v.values() if isinstance(x,str)]
+          elif isinstance(v,list):
+            for x in v:
+              if isinstance(x,str): urls.append(x)
+              elif isinstance(x,dict): urls.extend(y for y in x.values() if isinstance(y,str))
+          assert any(basename in x for x in urls),(key,urls)
+          print(json.dumps({'key':key,'images':urls},ensure_ascii=False))
+          PY
+          done <<'EOF'
+          ZZS|https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html|zzs-kadan-garaz-mycka-2026-fb-final-20260807.png
+          SLAVIE|https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html|slavie-kadan-epp-plavci-120-tisic-2026-fb-final-20260807.png
+          EOF
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs'); let log=''; try{log=fs.readFileSync(process.env.RUNNER_TEMP+'/meta.log','utf8')}catch{}
+            const ok='${{ steps.prep.outputs.ok }}'==='true'&&'${{ steps.save.outputs.ok }}'==='true'&&'${{ steps.deploy.outputs.ok }}'==='true'&&'${{ steps.meta.outputs.ok }}'==='true';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:818,body:ok?'✅ Meta nyní drží úplně nové fyzické PNG cesty pro ZZS i Slávii.\n```json\n'+log+'\n```':'❌ Facebook fresh-image oprava selhala.'});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:818,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        run: test "${{ steps.meta.outputs.ok }}" = true
