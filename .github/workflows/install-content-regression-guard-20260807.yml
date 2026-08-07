@@ -14,12 +14,11 @@ permissions:
 jobs:
   install:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Připravit SSH
-        id: sshprep
         shell: bash
         run: |
           set -euo pipefail
@@ -27,35 +26,21 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Zkusit kanonický produkční deploy
-        id: server
-        shell: bash
-        run: |
-          set +e
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/zzs-server.log" 2>&1 <<'REMOTE'
-          set -euo pipefail
-          sudo chown -R ubuntu:ubuntu /opt/nasekadan
-          git -C /opt/nasekadan fetch --prune origin main
-          git -C /opt/nasekadan reset --hard origin/main
-          git -C /opt/nasekadan clean -fd
-          sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 NASEKADAN_AUDIT_PATHS=clanky/zzs-kadan-garaz-mycka-2026.html bash /opt/nasekadan/deploy/sync-production.sh
-          REMOTE
-          rc=$?
-          set -e
-          echo "rc=$rc" >> "$GITHUB_OUTPUT"
-          cat "$RUNNER_TEMP/zzs-server.log"
-          exit 0
-
-      - name: Cílený statický fallback ZZS
-        id: fallback
-        if: steps.server.outputs.rc != '0'
-        continue-on-error: true
+      - name: Cíleně nasadit článek ZZS na veřejný web
+        id: deploy
         shell: bash
         run: |
           set -euo pipefail
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
+          LOCK_FILE=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK_FILE"
+          sudo chmod a+rw "$LOCK_FILE"
+          exec 9>"$LOCK_FILE"
+          flock -w 180 9
+
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          sudo rm -f /opt/nasekadan/.git/index.lock
           git -C /opt/nasekadan fetch --prune origin main
           git -C /opt/nasekadan reset --hard origin/main
           git -C /opt/nasekadan clean -fd
@@ -68,13 +53,14 @@ jobs:
           NASEKADAN_AUDIT_PATHS=clanky/zzs-kadan-garaz-mycka-2026.html python3 scripts/finalize_launch.py
 
           ARTICLE='clanky/zzs-kadan-garaz-mycka-2026.html'
+          URL='https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html'
           grep -Fq '<h1>Kadaňská záchranka dostane novou garáž a myčku. Kraj stanovil strop 16,5 milionu</h1>' "$ARTICLE"
           grep -Fq '16,5 milionu korun bez DPH' "$ARTICLE"
           grep -Fq '049/45R/2026' "$ARTICLE"
           ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' "$ARTICLE"
           grep -Fq 'zzs-kadan-garaz-mycka-2026.html' index.html
           grep -Fq 'zzs-kadan-garaz-mycka-2026.html' clanky/index.html
-          grep -Fq 'https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html' rss.xml sitemap.xml news-sitemap.xml
+          grep -Fq "$URL" rss.xml sitemap.xml news-sitemap.xml
 
           root=/var/www/nasekadan
           sudo install -d -m 0755 "$root/clanky"
@@ -84,7 +70,7 @@ jobs:
           for f in clanky/index.html clanky/strana-*.html; do
             [ -f "$f" ] && sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"
           done
-          for f in rss.xml sitemap.xml news-sitemap.xml llms.txt; do
+          for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
             [ -f "$f" ] && sudo install -m 0644 "$f" "$root/$f"
           done
 
@@ -96,16 +82,14 @@ jobs:
             for f in clanky/index.html clanky/strana-*.html; do
               [ -f "$f" ] && sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")"
             done
-            for f in rss.xml sitemap.xml news-sitemap.xml llms.txt; do
+            for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
               [ -f "$f" ] && sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/$f"
             done
           fi
           REMOTE
 
-      - name: Ověřit veřejnou titulku a článek ZZS externě
-        id: external
-        if: steps.server.outputs.rc == '0' || steps.fallback.outcome == 'success'
-        continue-on-error: true
+      - name: Externě ověřit živý web
+        id: verify
         shell: bash
         run: |
           set -euo pipefail
@@ -127,39 +111,17 @@ jobs:
           ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' /tmp/zzs.html
           grep -Fq 'https://www.zzsuk.cz/wp-content/uploads/2026/03/DSC00125-scaled.jpg' /tmp/zzs.html
 
-      - name: Zapsat výsledek a diagnostiku
+      - name: Zapsat výsledek
         if: always()
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const path = `${process.env.RUNNER_TEMP}/zzs-server.log`;
-            let log = '';
-            try { log = fs.readFileSync(path, 'utf8'); } catch (_) {}
-            const tail = log.split('\n').slice(-45).join('\n').slice(-4500);
-            const serverRc = '${{ steps.server.outputs.rc }}';
-            const fallback = '${{ steps.fallback.outcome }}';
-            const external = '${{ steps.external.outcome }}';
-            const deployed = serverRc === '0' || fallback === 'success';
-            const ok = deployed && external === 'success';
-            let body;
-            if (ok) {
-              body = `✅ Článek ZZS Kadaň je veřejně nasazen a ověřen. Titulka, archiv, RSS, sitemap i news-sitemap jej obsahují. Kanonický deploy=${serverRc === '0' ? 'success' : 'fallback'}, statický fallback=${fallback}, externí kontrola=${external}.`;
-            } else if (!deployed) {
-              body = `❌ Kanonický deploy i cílený fallback selhaly. Kanonický exit=${serverRc}, fallback=${fallback}. Poslední část kanonického logu:\n\n\`\`\`text\n${tail}\n\`\`\``;
-            } else {
-              body = `❌ Nasazení proběhlo, ale externí veřejná kontrola skončila: ${external}. Kanonický exit=${serverRc}, fallback=${fallback}.`;
-            }
+            const deploy = '${{ steps.deploy.outcome }}';
+            const verify = '${{ steps.verify.outcome }}';
+            const ok = deploy === 'success' && verify === 'success';
+            const body = ok
+              ? '✅ Článek ZZS Kadaň je veřejně nasazen a ověřen. Je na titulce, v archivu, RSS, sitemapě i news-sitemapě; veřejná verze neobsahuje interní postupy dohledávání.'
+              : `❌ Cílené nasazení ZZS selhalo. Deploy=${deploy}, externí kontrola=${verify}.`;
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
-
-      - name: Ukončit běh chybou při neúspěchu
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          deployed=0
-          if [ "${{ steps.server.outputs.rc }}" = '0' ] || [ "${{ steps.fallback.outcome }}" = 'success' ]; then deployed=1; fi
-          test "$deployed" = '1'
-          test "${{ steps.external.outcome }}" = 'success'
