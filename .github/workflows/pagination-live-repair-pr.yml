@@ -41,7 +41,7 @@ jobs:
           done
           grep -Fq 'href="/clanky/strana-2.html"' clanky/index.html
 
-      - name: Připravit úplný main a SSH
+      - name: Připravit SSH
         shell: bash
         run: |
           set -euo pipefail
@@ -49,11 +49,8 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          tar --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-pagination-repair.tgz
 
-      - name: Spustit jediný kanonický produkční skript
+      - name: Spustit jediný kanonický produkční skript z čistého main
         shell: bash
         run: |
           set +e
@@ -62,12 +59,13 @@ jobs:
           set -euo pipefail
           work=/tmp/nasekadan-pagination-repair
           rm -rf "$work"
-          mkdir -p "$work"
-          tar -xzf /tmp/nasekadan-pagination-repair.tgz -C "$work"
+          git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git "$work"
           test -d "$work/.git"
+          test -s "$work/clanky/index.html"
+          test -s "$work/clanky/strana-2.html"
           chmod +x "$work/deploy/sync-production.sh"
           sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
-          rm -rf "$work" /tmp/nasekadan-pagination-repair.tgz
+          rm -rf "$work"
           REMOTE
           rc=$?
           echo "CANONICAL_DEPLOY_EXIT=$rc"
