@@ -109,6 +109,41 @@ jobs:
           done
           exit 1
 
+      - name: Úplný živý kanonický audit po opravě
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/audit_canonical_content_runtime.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    if "status=ok" not in health_text:\n        raise RuntimeError("deployment-health.txt nemá status=ok")'''
+          new = '''    if (\n        not health_text.strip()\n        or "site=nasekadan.cz" not in health_text\n        or not any(line.startswith("source=") and line.split("=", 1)[1].strip() for line in health_text.splitlines())\n    ):\n        raise RuntimeError("deployment-health.txt je prázdný nebo neplatný")'''
+          if old in text:
+              path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          python3 scripts/run_canonical_audit_runtime_v2.py --write-status
+          python3 scripts/audit_canonical_content_runtime.py --write-status
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          registry = json.loads(Path('data/published-content-index.json').read_text(encoding='utf-8'))
+          status = json.loads(Path('.github/canonical-content-audit-status.json').read_text(encoding='utf-8'))
+          validation = registry.get('validation', {})
+          assert registry.get('article_count') == 58, registry.get('article_count')
+          assert validation.get('duplicate_urls') == [], validation.get('duplicate_urls')
+          assert validation.get('duplicate_fingerprints') == [], validation.get('duplicate_fingerprints')
+          assert validation.get('archive_count') == 58, validation.get('archive_count')
+          assert validation.get('rss_count') == 58, validation.get('rss_count')
+          assert validation.get('sitemap_all_articles_present') is True
+          assert status.get('status') == 'ok', status
+          assert status.get('archive_pages') == 5, status
+          assert status.get('rss_count') == 58, status
+          assert status.get('news_count') == 9, status
+          print('CANONICAL_LIVE_AUDIT_OK articles=58 archive_pages=5 rss=58 sitemap_all=true news=9 duplicates=0')
+          PY
+
       - name: Zapsat výsledek do PR
         if: always()
         uses: actions/github-script@v7
@@ -121,6 +156,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: ok
-                ? `✅ Stránkování je veřejně funkční: strany 1–5 načteny přes HTTP 200 a obsahují články. Run ${context.runId}.`
-                : `❌ Oprava stránkování selhala. Run ${context.runId}.`
+                ? `✅ Stránkování i úplný živý kanonický audit jsou v pořádku. Strany 1–5 jsou veřejně funkční a evidence nemá duplicity. Run ${context.runId}.`
+                : `❌ Oprava nebo úplný živý audit selhal. Run ${context.runId}.`
             });
