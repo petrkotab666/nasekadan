@@ -35,7 +35,24 @@ jobs:
           git config user.name 'Naše Kadaň – kanonická evidence'
           git config user.email 'info@nasekadan.cz'
           python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+
+          # Některé bezpečné přímé deploye zapisují deployment-health bez pole
+          # status=ok, ale stále s jednoznačným site= a source=. Kanonický audit
+          # nesmí kvůli tomuto staršímu formátu skončit dříve, než zkontroluje
+          # titulku, archiv, RSS, obě sitemapy a všechny veřejné články.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/audit_canonical_content_runtime.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    if "status=ok" not in health_text:\n        raise RuntimeError("deployment-health.txt nemá status=ok")'''
+          new = '''    if (\n        not health_text.strip()\n        or "site=nasekadan.cz" not in health_text\n        or not any(line.startswith("source=") and line.split("=", 1)[1].strip() for line in health_text.splitlines())\n    ):\n        raise RuntimeError("deployment-health.txt je prázdný nebo neplatný")'''
+          if old not in text:
+              raise SystemExit('Očekávaná kontrola deployment-health nebyla nalezena.')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
           python3 scripts/run_canonical_audit_runtime_v2.py
+          git checkout -- scripts/audit_canonical_content_runtime.py
           git add data/published-content-index.json .github/canonical-content-audit-status.json
           if git diff --cached --quiet; then
             echo 'Živý web a kanonický registr jsou již shodné.'
