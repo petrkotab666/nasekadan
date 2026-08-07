@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
