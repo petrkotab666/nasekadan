@@ -1,0 +1,130 @@
+name: Přímé nasazení dvou fotografií podchodu
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 816
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit pouze fyzické soubory
+        id: files
+        shell: bash
+        run: |
+          set -euo pipefail
+          a='images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp'
+          b='images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp'
+          html='clanky/od-hlubin-k-nebi-kadan.html'
+          for f in "$a" "$b" "$html"; do
+            test -s "$f"
+            echo "$f $(stat -c '%s' "$f") bytes"
+          done | tee "$RUNNER_TEMP/files.log"
+          test "$(head -c4 "$a")" = 'RIFF'
+          test "$(dd if="$a" bs=1 skip=8 count=4 status=none)" = 'WEBP'
+          test "$(head -c4 "$b")" = 'RIFF'
+          test "$(dd if="$b" bs=1 skip=8 count=4 status=none)" = 'WEBP'
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' "$html"
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' "$html"
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Připravit SSH
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Nahrát tři soubory na OVH
+        id: ssh
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/mural.tgz" \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "$RUNNER_TEMP/mural.tgz" ubuntu@57.129.43.215:/tmp/mural-direct.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/ssh.log"
+          set -euxo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+          sudo mkdir -p /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky/od-hlubin-k-nebi
+          sudo tar -xzf /tmp/mural-direct.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan/images/clanky/od-hlubin-k-nebi /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html
+          ls -l /var/www/nasekadan/images/clanky/od-hlubin-k-nebi
+          head -c12 /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp | xxd
+          head -c12 /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp | xxd
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/. nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/
+          fi
+          rm -f /tmp/mural-direct.tgz
+          REMOTE
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Veřejně ověřit HTTP odpovědi
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="direct-${GITHUB_RUN_ID}-$(date +%s)"
+          article_code=$(curl -4 -ksSL -o /tmp/article.html -w '%{http_code}' "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html?$q")
+          a_code=$(curl -4 -ksSL -o /tmp/a.webp -w '%{http_code}' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?$q")
+          b_code=$(curl -4 -ksSL -o /tmp/b.webp -w '%{http_code}' "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?$q")
+          a_type=$(curl -4 -ksSI "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?$q" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')
+          b_type=$(curl -4 -ksSI "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?$q" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')
+          printf 'article=%s a=%s/%s/%sB b=%s/%s/%sB\n' "$article_code" "$a_code" "$a_type" "$(stat -c %s /tmp/a.webp)" "$b_code" "$b_type" "$(stat -c %s /tmp/b.webp)" | tee "$RUNNER_TEMP/live.log"
+          test "$article_code" = 200
+          test "$a_code" = 200
+          test "$b_code" = 200
+          grep -qi '^RIFF' <(head -c4 /tmp/a.webp)
+          grep -qi '^RIFF' <(head -c4 /tmp/b.webp)
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' /tmp/article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' /tmp/article.html
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Výsledek do issue 816
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          FILES: ${{ steps.files.outputs.ok }}
+          KEY: ${{ steps.key.outputs.ok }}
+          SSH: ${{ steps.ssh.outputs.ok }}
+          LIVE: ${{ steps.live.outputs.ok }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs');const read=n=>{try{return fs.readFileSync(process.env.RUNNER_TEMP+'/'+n,'utf8').slice(-5000)}catch{return ''}};
+            const ok=process.env.FILES==='true'&&process.env.KEY==='true'&&process.env.SSH==='true'&&process.env.LIVE==='true';
+            const body=ok?`✅ Přímý deploy fotografií prošel. Oba WebP a článek vracejí HTTP 200.\n\n\`\`\`\n${read('files.log')}\n${read('ssh.log')}\n${read('live.log')}\n\`\`\``:`❌ Přímý deploy fotografií selhal. files=${process.env.FILES||'false'}, key=${process.env.KEY||'false'}, ssh=${process.env.SSH||'false'}, live=${process.env.LIVE||'false'}.\n\n\`\`\`\n${read('files.log')}\n${read('ssh.log')}\n${read('live.log')}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:816,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:816,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        run: test "${{ steps.live.outputs.ok }}" = 'true'
