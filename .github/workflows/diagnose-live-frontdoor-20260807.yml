@@ -1,0 +1,77 @@
+name: Diagnostika veřejné titulky Naše Kadaň
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/diagnose-live-frontdoor-trigger.txt'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Porovnat veřejnou doménu s produkčním serverem
+        id: diag
+        shell: bash
+        run: |
+          set -euo pipefail
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          q="frontdoor-${GITHUB_RUN_ID}-$(date +%s)"
+          {
+            echo '=== DNS A ==='
+            dig +short A nasekadan.cz || true
+            echo '=== DNS AAAA ==='
+            dig +short AAAA nasekadan.cz || true
+            echo '=== CURL DEFAULT ==='
+            curl -kfsSL --max-time 35 -D /tmp/h-default "https://nasekadan.cz/?$q" -o /tmp/default.html || true
+            sed -n '1,30p' /tmp/h-default || true
+            echo "default_mp=$(grep -Fc "$mp" /tmp/default.html 2>/dev/null || true)"
+            echo "default_gym=$(grep -Fc "$gym" /tmp/default.html 2>/dev/null || true)"
+            echo '=== CURL IPV4 ==='
+            curl -4 -kfsSL --max-time 35 -D /tmp/h-v4 "https://nasekadan.cz/?$q-v4" -o /tmp/v4.html || true
+            sed -n '1,30p' /tmp/h-v4 || true
+            echo "v4_mp=$(grep -Fc "$mp" /tmp/v4.html 2>/dev/null || true)"
+            echo "v4_gym=$(grep -Fc "$gym" /tmp/v4.html 2>/dev/null || true)"
+            echo '=== CURL IPV6 ==='
+            curl -6 -kfsSL --max-time 20 -D /tmp/h-v6 "https://nasekadan.cz/?$q-v6" -o /tmp/v6.html || true
+            sed -n '1,30p' /tmp/h-v6 || true
+            echo "v6_mp=$(grep -Fc "$mp" /tmp/v6.html 2>/dev/null || true)"
+            echo "v6_gym=$(grep -Fc "$gym" /tmp/v6.html 2>/dev/null || true)"
+            echo '=== DIRECT OVH ==='
+            curl -4 -kfsSL --max-time 35 --resolve nasekadan.cz:443:57.129.43.215 "https://nasekadan.cz/?$q-direct" -o /tmp/direct.html || true
+            echo "direct_mp=$(grep -Fc "$mp" /tmp/direct.html 2>/dev/null || true)"
+            echo "direct_gym=$(grep -Fc "$gym" /tmp/direct.html 2>/dev/null || true)"
+          } | tee /tmp/diagnostic.txt
+
+          base64 -w0 /tmp/diagnostic.txt > /tmp/diag.b64
+          echo "diag_b64=$(cat /tmp/diag.b64)" >> "$GITHUB_OUTPUT"
+
+          test "$(grep -Fc "$mp" /tmp/default.html)" -ge 1
+          test "$(grep -Fc "$gym" /tmp/default.html)" -ge 1
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          DIAG_B64: ${{ steps.diag.outputs.diag_b64 }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let diag = '';
+            try { diag = Buffer.from(process.env.DIAG_B64 || '', 'base64').toString('utf8'); } catch(e) {}
+            const ok = '${{ job.status }}' === 'success';
+            const body = `${ok ? '✅ Veřejná doména už podává aktuální titulku.' : '❌ Veřejná doména stále nepodává aktuální titulku.'}\n\n\`\`\`text\n${diag.slice(0,12000)}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
+            if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
