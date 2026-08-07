@@ -1,193 +1,64 @@
-name: Hlavička – celý název Naše Kadaň
+name: Hlavička – celý název Naše Kadaň – pouze audit
 
+# Historická samooprava byla odstraněna. Workflow už nesmí měnit CSS, články,
+# main ani produkční server.
 on:
   workflow_dispatch:
-  issues:
-    types: [opened, reopened]
-  pull_request_target:
-    types: [opened, synchronize, reopened]
-    paths:
-      - '.github/header-pr-trigger.txt'
   push:
     branches: [main]
     paths:
-      - '.github/header-v2-trigger.txt'
+      - 'style.css'
+      - 'footer.css'
+      - 'clanky/*.html'
       - '.github/workflows/guard-header-brand-visibility.yml'
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/15 * * * *'
 
 permissions:
-  contents: write
+  contents: read
   issues: write
-  pull-requests: write
 
 concurrency:
-  group: header-brand-visibility
-  cancel-in-progress: false
+  group: header-brand-visibility-audit
+  cancel-in-progress: true
 
 jobs:
-  repair-and-verify:
-    if: >-
-      github.event_name != 'issues' ||
-      github.event.issue.title == '[repair] Vynutit celý název Naše Kadaň v hlavičce v2'
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
-      ARTICLE_FILE: clanky/slovan-druhy-pokus.html
-      ARTICLE_URL: https://nasekadan.cz/clanky/slovan-druhy-pokus.html
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Vložit neprůstřelnou opravu do článku i společných stylů
-        id: patch
+      - name: Ověřit zdrojovou hlavičku bez změn
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          css_rule='''
+          grep -Fq '<span>NAŠE <b>KADAŇ</b></span>' index.html
+          grep -Fq '<span>NAŠE <b>KADAŇ</b></span>' clanky/slovan-druhy-pokus.html
+          git diff --exit-code
 
-/* HEADER-BRAND-VISIBILITY-20260805 */
-.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}
-.head .logo > span:not(.logo-mark) b{color:var(--red,#a9232b)!important}
-'''
-          for name in ('style.css','footer.css'):
-              p=Path(name); t=p.read_text(encoding='utf-8')
-              if 'HEADER-BRAND-VISIBILITY-20260805' not in t:
-                  p.write_text(t.rstrip()+css_rule+'\n',encoding='utf-8',newline='\n')
-          article=Path('clanky/slovan-druhy-pokus.html')
-          t=article.read_text(encoding='utf-8')
-          inline='''
-  <style id="HEADER-BRAND-INLINE-20260805">
-    header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}
-    header[data-site-header="v1"] .head .logo > span:not(.logo-mark) b{color:#a9232b!important}
-  </style>
-'''
-          if 'HEADER-BRAND-INLINE-20260805' not in t:
-              t=t.replace('</head>',inline+'</head>',1)
-              article.write_text(t,encoding='utf-8',newline='\n')
-          final=article.read_text(encoding='utf-8')
-          assert 'HEADER-BRAND-INLINE-20260805' in final
-          assert '<span>NAŠE <b>KADAŇ</b></span>' in final
-          PY
-          changed=false
-          if ! git diff --quiet -- "$ARTICLE_FILE" style.css footer.css; then changed=true; fi
-          echo "changed=$changed" >> "$GITHUB_OUTPUT"
-
-      - name: Uložit opravu do main
-        if: steps.patch.outputs.changed == 'true'
+      - name: Ověřit veřejnou hlavičku bez samoopravy
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'Naše Kadaň – pojistka hlavičky'
-          git config user.email 'info@nasekadan.cz'
-          git add "$ARTICLE_FILE" style.css footer.css
-          git commit -m 'Vynutit celý název Naše Kadaň přímo v článku'
-          for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then exit 0; fi
-            git fetch origin main
-            git rebase origin/main
-            sleep $((attempt*3))
-          done
-          exit 1
+          q="header-audit-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/?$q" -o /tmp/home.html
+          curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/slovan-druhy-pokus.html?$q" -o /tmp/article.html
+          grep -Fq '<span>NAŠE <b>KADAŇ</b></span>' /tmp/home.html
+          grep -Fq '<span>NAŠE <b>KADAŇ</b></span>' /tmp/article.html
+          echo 'OK: hlavička je v pořádku; audit nic nezměnil.'
 
-      - name: Nasadit článek i oba styly přímo na OVH
+      - name: Nahlásit regresi bez opravy
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
-          test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-          mkdir -p "$RUNNER_TEMP/header-fix/clanky"
-          cp "$ARTICLE_FILE" "$RUNNER_TEMP/header-fix/clanky/slovan-druhy-pokus.html"
-          cp style.css footer.css "$RUNNER_TEMP/header-fix/"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/header-fix" ubuntu@57.129.43.215:/tmp/nasekadan-header-fix-v2
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          src=/tmp/nasekadan-header-fix-v2
-          root=/var/www/nasekadan
-          grep -Fq 'HEADER-BRAND-INLINE-20260805' "$src/clanky/slovan-druhy-pokus.html"
-          sudo install -d -m 0755 "$root/clanky"
-          sudo install -m 0644 "$src/clanky/slovan-druhy-pokus.html" "$root/clanky/slovan-druhy-pokus.html"
-          sudo install -m 0644 "$src/style.css" "$root/style.css"
-          sudo install -m 0644 "$src/footer.css" "$root/footer.css"
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
-            sudo docker cp "$src/clanky/slovan-druhy-pokus.html" nasekadan-web:/usr/share/nginx/html/clanky/slovan-druhy-pokus.html
-            sudo docker cp "$src/style.css" nasekadan-web:/usr/share/nginx/html/style.css
-            sudo docker cp "$src/footer.css" nasekadan-web:/usr/share/nginx/html/footer.css
-          fi
-          rm -rf "$src"
-          REMOTE
-
-      - name: Veřejně ověřit přímo vloženou opravu
-        shell: bash
-        run: |
-          set -euo pipefail
-          ok=0
-          for attempt in 1 2 3 4 5 6 7 8; do
-            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
-            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/footer.css?v=$q" -o /tmp/footer.css || true
-            python3 - <<'PY' && ok=1 && break || true
-          from pathlib import Path
-          html=Path('/tmp/article.html').read_text(encoding='utf-8',errors='replace')
-          style=Path('/tmp/style.css').read_text(encoding='utf-8',errors='replace')
-          footer=Path('/tmp/footer.css').read_text(encoding='utf-8',errors='replace')
-          assert 'HEADER-BRAND-INLINE-20260805' in html
-          assert '<span>NAŠE <b>KADAŇ</b></span>' in html
-          assert 'color:#13232d!important' in html
-          assert 'HEADER-BRAND-VISIBILITY-20260805' in style or 'HEADER-BRAND-VISIBILITY-20260805' in footer
-          PY
-            sleep $((attempt*4))
-          done
-          test "$ok" = 1
-
-      - name: Zapsat veřejný důkaz
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p reports
-          python3 - <<'PY'
-          import json,datetime,os
-          data={'status':'passed','checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'article':'https://nasekadan.cz/clanky/slovan-druhy-pokus.html','visibleBrand':'NAŠE KADAŇ','runId':os.environ.get('GITHUB_RUN_ID','')}
-          open('reports/header-brand-live-status.json','w',encoding='utf-8').write(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
-          PY
-          git config user.name 'Naše Kadaň – veřejná kontrola'
-          git config user.email 'info@nasekadan.cz'
-          git add reports/header-brand-live-status.json
-          git diff --cached --quiet && exit 0
-          git commit -m 'Potvrdit veřejně celý název Naše Kadaň [skip ci]'
-          for attempt in 1 2 3 4; do
-            if git push origin HEAD:main; then exit 0; fi
-            git fetch origin main
-            git rebase origin/main
-            sleep $((attempt*3))
-          done
-          exit 1
-
-      - name: Oznámit úspěch ve vlákně
-        if: success() && (github.event_name == 'issues' || github.event_name == 'pull_request_target')
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const number = context.eventName === 'issues' ? context.issue.number : context.payload.pull_request.number;
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:number,body:`Celý název NAŠE KADAŇ je vložen přímo do článku, nasazen na OVH a veřejně ověřen. Kontrolní běh: ${context.runId}.`});
-            if (context.eventName === 'issues') await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:number,state:'closed',state_reason:'completed'});
-
-      - name: Zapsat selhání do vlákna
-        if: failure() && (github.event_name == 'issues' || github.event_name == 'pull_request_target')
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const number = context.eventName === 'issues' ? context.issue.number : context.payload.pull_request.number;
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:number,body:`Přímá oprava nebo veřejná kontrola názvu webu selhala. Kontrolní běh: ${context.runId}.`});
+          title='[incident] Hlavička Naše Kadaň – audit zjistil regresi'
+          body="Audit zjistil chybu hlavičky. Workflow nic nemění ani nenasazuje. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
