@@ -1,25 +1,37 @@
-name: Report main tree for media fix
+name: Report media fix diagnostics
 on:
   issues:
     types: [opened, reopened]
 permissions:
   contents: read
   issues: write
+  actions: read
 jobs:
   report:
-    if: github.event.issue.title == 'Media tree SHA pro Od hlubin k nebi'
+    if: github.event.issue.title == 'Media tree SHA pro Od hlubin k nebi' || github.event.issue.title == 'Diagnostika v4 Od hlubin k nebi'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 1
-      - uses: actions/github-script@v7
+      - name: Zapsat HEAD, TREE a poslední v4 běhy
         env:
-          HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          head="$(git rev-parse HEAD)"
+          tree="$(git rev-parse HEAD^{tree})"
+          runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy-od-hlubin-real-v4.yml --limit 4 --json databaseId,status,conclusion,url,createdAt 2>&1 || true)"
+          {
+            echo "HEAD=$head"
+            echo "TREE=$tree"
+            echo "RUNS<<EOF"
+            echo "$runs"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+      - uses: actions/github-script@v7
         with:
           script: |
-            const {execSync}=require('child_process');
-            const head=execSync('git rev-parse HEAD').toString().trim();
-            const tree=execSync('git rev-parse HEAD^{tree}').toString().trim();
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:`HEAD=${head}\nTREE=${tree}`});
+            const body=`HEAD=${process.env.HEAD}\nTREE=${process.env.TREE}\nRUNS:\n\`\`\`json\n${process.env.RUNS}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
