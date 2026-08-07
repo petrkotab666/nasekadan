@@ -1,285 +1,98 @@
-name: Kanonické pořadí RSS Naše Kadaň
+name: Kanonické pořadí RSS – pouze audit
 
+# Audit kontroluje shodu RSS s články. Nic necommitne a nic nenahrává na OVH.
 "on":
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
-  issues:
-    types: [opened, reopened]
 
 permissions:
-  contents: write
+  contents: read
   issues: write
 
 concurrency:
-  group: nasekadan-rss-canonical-order
-  cancel-in-progress: false
+  group: nasekadan-rss-canonical-order-audit
+  cancel-in-progress: true
 
 jobs:
-  repair:
-    if: github.event_name != 'issues' || (github.actor == 'petrkotab666' && github.event.issue.title == '[audit] Srovnat RSS s kanonickou evidencí')
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    env:
-      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
-
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Srovnat RSS a auditní metadata s kanonickou evidencí
-        id: repair
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'Naše Kadaň – kanonická evidence'
-          git config user.email 'info@nasekadan.cz'
-
-          pushed=0
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-
-            python3 - <<'PY'
-          import json
-          import re
-          from datetime import datetime, timezone
-          from email.utils import format_datetime
-          from pathlib import Path
-
-          registry_path = Path('data/published-content-index.json')
-          rss_path = Path('rss.xml')
-          data = json.loads(registry_path.read_text(encoding='utf-8'))
-          validation = data.setdefault('validation', {})
-          entries = data.get('articles') or data.get('entries') or []
-          now = datetime.now(timezone.utc)
-
-          def publication_status(entry):
-              value = entry.get('publication_status')
-              if isinstance(value, str) and value:
-                  return value
-              legacy = entry.get('status')
-              return legacy if isinstance(legacy, str) else 'published'
-
-          expected = []
-          for entry in entries:
-              url = entry.get('url') or entry.get('canonical_url')
-              value = entry.get('published_at') or entry.get('date_published')
-              if not url or not value or publication_status(entry) in {'draft', 'scheduled', 'removed'}:
-                  continue
-              dt = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
-              if dt.tzinfo is None:
-                  dt = dt.replace(tzinfo=timezone.utc)
-              if dt.astimezone(timezone.utc) <= now:
-                  expected.append((dt, url))
-          expected.sort(reverse=True)
-          expected_urls = [url for _, url in expected]
-          count = len(expected_urls)
-
-          rss = rss_path.read_text(encoding='utf-8')
-          blocks = re.findall(r'(?ms)^\s*<item>.*?</item>\s*', rss)
-          if not blocks:
-              raise SystemExit('RSS neobsahuje žádné položky <item>.')
-
-          by_url = {}
-          extras = []
-          for block in blocks:
-              match = re.search(r'<link>\s*(https://nasekadan\.cz/clanky/[^<\s?]+\.html)\s*</link>', block)
-              if not match:
-                  extras.append(block)
-                  continue
-              url = match.group(1)
-              if url not in by_url:
-                  by_url[url] = block
-
-          missing = [url for url in expected_urls if url not in by_url]
-          if missing:
-              raise SystemExit(f'RSS postrádá {len(missing)} publikovaných článků: {missing[:3]}')
-
-          ordered = [by_url[url] for url in expected_urls]
-          known = set(expected_urls)
-          ordered.extend(block for url, block in by_url.items() if url not in known)
-          ordered.extend(extras)
-          first_start = rss.find(blocks[0])
-          last_end = rss.rfind(blocks[-1]) + len(blocks[-1])
-          normalized = rss[:first_start] + ''.join(ordered) + rss[last_end:]
-          normalized = re.sub(
-              r'<lastBuildDate>.*?</lastBuildDate>',
-              f'<lastBuildDate>{format_datetime(now)}</lastBuildDate>',
-              normalized,
-              count=1,
-          )
-          if normalized != rss:
-              rss_path.write_text(normalized, encoding='utf-8', newline='\n')
-
-          homepage_count = int(validation.get('homepage_count') or min(14, count))
-          archive_count = int(validation.get('archive_count') or count)
-          archive_page_count = int(validation.get('archive_page_count') or ((count + 11) // 12))
-          rss_count = count
-          news_count = int(validation.get('news_sitemap_recent_count') or 0)
-          audit = validation.setdefault('last_consistency_audit', {})
-
-          metadata_mismatch = any([
-              int(data.get('article_count') or count) != count,
-              archive_count != count,
-              int(validation.get('rss_count') or count) != count,
-              int(audit.get('article_count') or -1) != count,
-              int(audit.get('archive_count') or -1) != count,
-              int(audit.get('rss_count') or -1) != count,
-              audit.get('metadata_consistent') is not True,
-          ])
-
-          if metadata_mismatch:
-              stamp = now.isoformat()
-              data['article_count'] = count
-              data['generated_at'] = stamp
-              validation['archive_count'] = count
-              validation['rss_count'] = count
-              validation['rss_order_matches_archive'] = True
-              audit.update({
-                  'status': 'success',
-                  'checked_at': stamp,
-                  'article_count': count,
-                  'homepage_count': homepage_count,
-                  'archive_count': count,
-                  'archive_page_count': archive_page_count,
-                  'rss_count': rss_count,
-                  'news_sitemap_count': news_count,
-                  'deployment_health': validation.get('deployment_health', 'ok'),
-                  'metadata_consistent': True,
-              })
-              validation['last_registry_metadata_repair'] = {
-                  'status': 'success',
-                  'classification': 'stale_nested_audit_counts_repaired',
-                  'reason': 'Vnořený záznam auditu uváděl starší počet archivu než kanonická evidence.',
-                  'completed_at': stamp,
-                  'article_count': count,
-                  'archive_count': count,
-                  'rss_count': count,
-              }
-              registry_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-
-          check = json.loads(registry_path.read_text(encoding='utf-8'))
-          current_audit = check['validation']['last_consistency_audit']
-          assert check['article_count'] == count
-          assert check['validation']['archive_count'] == count
-          assert check['validation']['rss_count'] == count
-          assert current_audit['article_count'] == count
-          assert current_audit['archive_count'] == count
-          assert current_audit['rss_count'] == count
-          assert current_audit['metadata_consistent'] is True
-          assert check['validation'].get('duplicate_urls', []) == []
-          assert check['validation'].get('duplicate_fingerprints', []) == []
-          PY
-
-            git diff --check
-            git add rss.xml data/published-content-index.json
-            if ! git diff --cached --quiet; then
-              git commit -m 'Opravit zastaralé počty v kanonické evidenci'
-            fi
-            repair_sha="$(git rev-parse HEAD)"
-            if git push origin HEAD:main; then
-              pushed=1
-              echo "repair_sha=$repair_sha" >> "$GITHUB_OUTPUT"
-              break
-            fi
-            sleep $((attempt * 3))
-          done
-          test "$pushed" = 1
-
-      - name: Nasadit RSS a registr na OVH
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          git reset --hard origin/main
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
-          test -n "$key"
-          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
-            rss.xml data/published-content-index.json ubuntu@57.129.43.215:/tmp/
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo install -m 0666 /dev/null /var/lock/nasekadan-content.lock
-          exec 9>/var/lock/nasekadan-content.lock
-          flock -x 9
-          sudo install -d -m 0755 /var/www/nasekadan/data
-          sudo install -m 0644 /tmp/rss.xml /var/www/nasekadan/rss.xml
-          sudo install -m 0644 /tmp/published-content-index.json /var/www/nasekadan/data/published-content-index.json
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker cp /tmp/rss.xml nasekadan-web:/usr/share/nginx/html/rss.xml
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/data
-            sudo docker cp /tmp/published-content-index.json nasekadan-web:/usr/share/nginx/html/data/published-content-index.json
-          fi
-          rm -f /tmp/rss.xml /tmp/published-content-index.json
-          REMOTE
-
-      - name: Veřejně ověřit úplnost, pořadí a evidenci
+      - name: Ověřit RSS proti skutečně publikovaným článkům
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, re, ssl, time
-          from urllib.request import Request, urlopen
-          ctx = ssl.create_default_context()
-          ctx.check_hostname = False
-          ctx.verify_mode = ssl.CERT_NONE
-          last = None
-          for attempt in range(15):
-              try:
-                  nonce = f'{int(time.time())}-{attempt}'
-                  def get(url):
-                      req = Request(url + ('&' if '?' in url else '?') + 'canonical=' + nonce, headers={'User-Agent':'NaseKadan canonical guard/2.0','Cache-Control':'no-cache'})
-                      with urlopen(req, timeout=40, context=ctx) as response:
-                          return response.read().decode('utf-8', 'replace')
-                  registry = json.loads(get('https://nasekadan.cz/data/published-content-index.json'))
-                  rss = get('https://nasekadan.cz/rss.xml')
-                  count = registry['article_count']
-                  audit = registry['validation']['last_consistency_audit']
-                  urls = re.findall(r'<link>\s*(https://nasekadan\.cz/clanky/[^<\s?]+\.html)\s*</link>', rss)
-                  assert count == 52
-                  assert registry['validation']['archive_count'] == count
-                  assert registry['validation']['rss_count'] == count
-                  assert audit['article_count'] == count
-                  assert audit['archive_count'] == count
-                  assert audit['rss_count'] == count
-                  assert audit['metadata_consistent'] is True
-                  assert len(urls) == count
-                  assert len(urls) == len(set(urls))
-                  assert registry['validation'].get('duplicate_urls', []) == []
-                  assert registry['validation'].get('duplicate_fingerprints', []) == []
-                  break
-              except Exception as exc:
-                  last = exc
-                  time.sleep(8)
-          else:
-              raise SystemExit(f'Veřejná kontrola neprošla: {last}')
+          import re
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from email.utils import parsedate_to_datetime
+
+          def pub(path):
+              text=path.read_text(encoding='utf-8', errors='replace')
+              if re.search(r'<meta[^>]+name=["\']robots["\'][^>]+content=["\'][^"\']*noindex', text, re.I):
+                  return None
+              m=re.search(r'article:published_time[^>]+content=["\']([^"\']+)', text, re.I)
+              if not m:
+                  m=re.search(r'"datePublished"\s*:\s*"([^"]+)"', text)
+              if not m: return None
+              dt=datetime.fromisoformat(m.group(1).replace('Z','+00:00'))
+              if dt.tzinfo is None: dt=dt.replace(tzinfo=timezone.utc)
+              if dt.astimezone(timezone.utc) > datetime.now(timezone.utc): return None
+              return dt
+
+          expected=[]
+          for path in Path('clanky').glob('*.html'):
+              if path.name == 'index.html' or re.fullmatch(r'strana-\d+\.html', path.name): continue
+              dt=pub(path)
+              if dt: expected.append((dt, f'https://nasekadan.cz/clanky/{path.name}'))
+          expected.sort(reverse=True)
+          expected_urls=[u for _,u in expected]
+
+          rss=Path('rss.xml').read_text(encoding='utf-8')
+          items=re.findall(r'<item>.*?</item>', rss, re.S)
+          actual=[]
+          for item in items:
+              m=re.search(r'<link>\s*(https://nasekadan\.cz/clanky/[^<\s?]+\.html)\s*</link>', item)
+              if m: actual.append(m.group(1))
+
+          assert len(actual) == len(set(actual)), 'RSS obsahuje duplicitní články.'
+          assert set(actual) == set(expected_urls), f'RSS a články se liší: RSS={len(actual)}, články={len(expected_urls)}'
+          assert actual == expected_urls, 'RSS není v kanonickém chronologickém pořadí.'
+          print(f'OK: RSS přesně odpovídá {len(expected_urls)} publikovaným článkům; audit nic nemění.')
           PY
 
-      - name: Uzavřít auditní issue
-        if: success() && github.event_name == 'issues'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: `RSS a kanonická evidence byly srovnány a veřejně ověřeny. Opravný commit: ${{ steps.repair.outputs.repair_sha }}.`,
-            });
-            await github.rest.issues.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              state: 'closed',
-              state_reason: 'completed',
-            });
+      - name: Ověřit stejný stav veřejně
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="rss-audit-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?$q" -o /tmp/live-rss.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('rss.xml').read_text(encoding='utf-8')
+          live=Path('/tmp/live-rss.xml').read_text(encoding='utf-8')
+          def links(text):
+              import re
+              return re.findall(r'<link>\s*(https://nasekadan\.cz/clanky/[^<\s?]+\.html)\s*</link>', text)
+          assert links(src) == links(live), 'Živé RSS neodpovídá main.'
+          print(f'OK: veřejné RSS odpovídá main ({len(links(src))} článků).')
+          PY
+
+      - name: Nahlásit rozdíl bez samoopravy
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[incident] RSS se liší od kanonického main – audit only'
+          body="RSS audit zjistil rozdíl. Workflow záměrně nic nemění ani nenasazuje. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then gh issue comment "$existing" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
