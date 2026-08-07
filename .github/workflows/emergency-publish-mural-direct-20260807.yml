@@ -48,13 +48,12 @@ jobs:
           git -C /opt/nasekadan reset --hard origin/main
           cd /opt/nasekadan
 
-          python3 - <<'PY'
-try:
-    import PIL
-except Exception:
-    raise SystemExit(2)
+          if ! python3 - <<'PY'
+import PIL
 PY
-          if [ $? -ne 0 ]; then python3 -m pip install --user Pillow; fi
+          then
+            python3 -m pip install --user Pillow
+          fi
 
           python3 scripts/materialize_mural_assets.py
           python3 scripts/normalize_footers.py --write --check
