@@ -89,7 +89,8 @@ jobs:
           checks['social_png']=raw[:8]==b'\x89PNG\r\n\x1a\n'
           if checks['social_png'] and len(raw)>=24:
               w,h=struct.unpack('>II',raw[16:24]); checks['social_1200x630']=(w,h)==(1200,630)
-          else: checks['social_1200x630']=False
+          else:
+              checks['social_1200x630']=False
           result={'status':'success' if all(checks.values()) else 'failure','article_url':url,'source_commit':sha,'checks':checks}
           Path('reports').mkdir(exist_ok=True)
           Path('reports/publication-mestska-policie-20260807-final.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -102,9 +103,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          VERIFIED_AT: ${{ github.run_started_at }}
         run: |
           set -euo pipefail
-          verified="$(date -u +%FT%TZ)"
           python3 - <<'PY'
           from pathlib import Path
           import json, os
@@ -112,11 +113,11 @@ jobs:
           data=json.loads(p.read_text(encoding='utf-8'))
           v=data.setdefault('validation',{})
           v['repair_pending_public_verification']=False
-          v['public_audit_at']=os.environ.get('VERIFIED_AT')
+          v['public_audit_at']=os.environ['VERIFIED_AT']
           v['last_publication']={
-            'status':'success','checked_at':os.environ.get('VERIFIED_AT'),
+            'status':'success','checked_at':os.environ['VERIFIED_AT'],
             'article_url':os.environ['ARTICLE_URL'],'classification':'municipal_police_fact_check',
-            'source_commit':os.environ['CONTENT_SHA'],'public_verified_at':os.environ.get('VERIFIED_AT'),
+            'source_commit':os.environ['CONTENT_SHA'],'public_verified_at':os.environ['VERIFIED_AT'],
             'public_verification':{'article':True,'homepage':True,'archive':True,'rss':True,'sitemap':True,'news_sitemap':True,'llms':True,'deployment_health':True,'registry':True,'newsarticle':True,'social_image_1200x630':True}
           }
           p.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
@@ -136,8 +137,6 @@ jobs:
             gh issue comment "$issue" --body "Finální veřejná kontrola prošla. Předchozí verifier měl falešně přísnou podmínku pro RSS: stejná URL je v korektním RSS jednou v <link> a jednou v <guid>. Nová kontrola počítá jeden RSS item podle <item><link>. Článek, titulka, archiv, RSS, sitemap, news-sitemap, llms, registr, deployment-health, NewsArticle i PNG 1200 × 630 jsou veřejně ověřené."
             gh issue close "$issue" --reason completed
           fi
-        env:
-          VERIFIED_AT: ${{ github.run_started_at }}
 
       - name: Zapsat diagnostiku při selhání
         if: failure()
