@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Blokující pojistka proti zmizení již publikovaných článků.
 
-Kanonický seznam se odvozuje přímo z veřejných HTML článků v aktuálním main,
-ne z titulky ani archivu, které jsou pouze generované pohledy. Cílový document
-root musí obsahovat každý kanonický článek a každý z nich musí být dohledatelný
-v archivu, RSS a sitemapě. Novější deploy tedy smí počet publikovaných článků
-pouze zachovat nebo zvýšit; budoucí naplánované texty se do manifestu nepočítají.
+Kanonický seznam se odvozuje přímo z veřejných HTML článků, nikoli z titulky
+nebo archivu, které jsou pouze generované pohledy. Umí také uložit vstupní
+manifest před buildem a na konci sestavení proti němu ověřit, že žádný již
+publikovaný článek nezmizel.
 """
 from __future__ import annotations
 
@@ -102,8 +101,15 @@ def validate_article_file(path: Path, rel: str) -> list[str]:
     return errors
 
 
-def verify(source: Path, target: Path) -> tuple[list[str], list[str]]:
-    articles = canonical_articles(source)
+def load_manifest(path: Path) -> list[str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    articles = data.get("articles")
+    if not isinstance(articles, list) or not all(isinstance(item, str) for item in articles):
+        raise SystemExit(f"Neplatný manifest článků: {path}")
+    return sorted(set(articles))
+
+
+def verify(target: Path, articles: list[str]) -> list[str]:
     errors: list[str] = []
     archive = archive_text(target)
     rss = (target / "rss.xml").read_text(encoding="utf-8", errors="replace") if (target / "rss.xml").is_file() else ""
@@ -129,9 +135,9 @@ def verify(source: Path, target: Path) -> tuple[list[str], list[str]]:
     target_articles = canonical_articles(target) if (target / "clanky").is_dir() else []
     if len(target_articles) < len(articles):
         errors.append(
-            f"cílový web má méně článků než kanonický zdroj: {len(target_articles)} < {len(articles)}"
+            f"cílový web má méně článků než chráněný manifest: {len(target_articles)} < {len(articles)}"
         )
-    return articles, errors
+    return errors
 
 
 def write_manifest(path: Path, articles: list[str]) -> None:
@@ -149,16 +155,27 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", default=".")
     parser.add_argument("--target", default=".")
+    parser.add_argument("--manifest", help="Použít již uložený chráněný seznam článků.")
     parser.add_argument("--write-manifest")
+    parser.add_argument(
+        "--write-manifest-only",
+        action="store_true",
+        help="Pouze uložit kanonický seznam článků a nekontrolovat publikační povrchy.",
+    )
     args = parser.parse_args()
 
     source = Path(args.source).resolve()
     target = Path(args.target).resolve()
-    articles, errors = verify(source, target)
+    articles = load_manifest(Path(args.manifest)) if args.manifest else canonical_articles(source)
+
     if args.write_manifest:
         write_manifest(Path(args.write_manifest), articles)
+    if args.write_manifest_only:
+        print(f"Vstupní manifest uložen: {len(articles)} publikovaných článků.")
+        return 0
 
-    print(f"Kanonických publikovaných článků: {len(articles)}")
+    errors = verify(target, articles)
+    print(f"Chráněných publikovaných článků: {len(articles)}")
     if errors:
         print("REGRESE PUBLIKOVANÉHO OBSAHU:")
         for error in errors:
