@@ -12,7 +12,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: rafanda-real-photo-v3-20260807
+  group: rafanda-real-photo-v4-20260807
   cancel-in-progress: false
 
 jobs:
@@ -21,35 +21,30 @@ jobs:
     timeout-minutes: 25
     env:
       ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
-      OUT: images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp
-      EXPECTED_SHA: 66ae0fd92b7314c00e74cea396106e9d5ed379f2c7265bf5ccb7c27366a53399
+      OUT: images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp
+      EXPECTED_SHA: 69fb0553ffec5a62b15ebc3bae5cb728b2942cc75456c56f7e2912d74bfbd8b7
+      EXPECTED_SIZE: '116402'
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Načíst aktuální main
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 20
+          fetch-depth: 30
 
-      - name: Složit WebP z přesného originálu 1000028565.jpg
+      - name: Ověřit skutečný binární WebP v main
         shell: bash
         run: |
           set -euo pipefail
-          head_sha='${{ github.event.pull_request.head.sha }}'
-          git fetch origin "$head_sha" --depth=1
-          mkdir -p "$(dirname "$OUT")"
-          : > "$RUNNER_TEMP/rafanda-real.b64"
-          for n in 00 01 02 03 04 05 06; do
-            git show "$head_sha:.github/tmp/rafanda-real-v3/photo.part$n" >> "$RUNNER_TEMP/rafanda-real.b64"
-          done
-          base64 -d "$RUNNER_TEMP/rafanda-real.b64" > "$OUT"
+          test -f "$OUT"
           actual="$(sha256sum "$OUT" | awk '{print $1}')"
-          echo "SOURCE_SHA=$actual"
+          size="$(stat -c %s "$OUT")"
+          echo "SOURCE_SHA=$actual SIZE=$size"
           test "$actual" = "$EXPECTED_SHA"
+          test "$size" = "$EXPECTED_SIZE"
           file "$OUT" | grep -Fq 'Web/P image'
-          test "$(stat -c %s "$OUT")" -eq 87578
 
-      - name: Přepnout článek na novou URL
+      - name: Přepnout článek z vadné v2 na skutečnou v4
         shell: bash
         run: |
           set -euo pipefail
@@ -57,22 +52,39 @@ jobs:
           from pathlib import Path
           p = Path('clanky/eso-market-rafanda-kadan-24-7.html')
           text = p.read_text(encoding='utf-8')
-          new = '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp'
+          new = '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp'
           for old in (
               '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp',
               '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp',
-              new,
+              '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp',
           ):
               text = text.replace(old, new)
-          assert 'Pro Rafandu jde hlavně o dostupnější nákup' in text
           assert new in text
+          assert 'Samostatný panel uvádí způsob platby' in text
           p.write_text(text, encoding='utf-8')
           PY
+
+      - name: Uložit HTML opravu do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-repair-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add "$ARTICLE"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Přepnout Rafandu na skutečnou třetí fotografii'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
 
       - name: Připravit přesný publikační balík
         shell: bash
         run: |
           set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp' "$ARTICLE"
+          test "$(sha256sum "$OUT" | awk '{print $1}')" = "$EXPECTED_SHA"
           stage="$RUNNER_TEMP/rafanda-real-live"
           rm -rf "$stage"
           mkdir -p "$stage/clanky" "$stage/images/clanky/eso-market-rafanda"
@@ -97,51 +109,34 @@ jobs:
           tar -xzf /tmp/nk-rafanda-real-live.tgz -C "$work"
           sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda"
           sudo install -m 0644 "$work/clanky/eso-market-rafanda-kadan-24-7.html" "$root/clanky/eso-market-rafanda-kadan-24-7.html"
-          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp"
-          sudo chmod a+r "$root/clanky/eso-market-rafanda-kadan-24-7.html" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp"
+          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/eso-market-rafanda
             sudo tar -C "$work" -czf - clanky images | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
           fi
           REMOTE
 
-      - name: Ověřit živý článek a bajtovou shodu fotografie
+      - name: Ověřit živý článek a přesný hash obrázku
         shell: bash
         run: |
           set -euo pipefail
           opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          ssh "${opts[@]}" ubuntu@57.129.43.215 "EXPECTED_SHA='$EXPECTED_SHA' bash -s" <<'REMOTE'
+          ssh "${opts[@]}" ubuntu@57.129.43.215 "EXPECTED_SHA='$EXPECTED_SHA' EXPECTED_SIZE='$EXPECTED_SIZE' bash -s" <<'REMOTE'
           set -euo pipefail
           base='https://nasekadan.cz'
           q="$(date +%s%N)"
           article="$(curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/clanky/eso-market-rafanda-kadan-24-7.html?repair=$q")"
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp' <<<"$article"
-          grep -Fq 'Samostatný panel uvádí způsob platby' <<<"$article"
-          tmp="$(mktemp)"
-          trap 'rm -f "$tmp"' EXIT
-          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp?repair=$q" -o "$tmp"
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp' <<<"$article"
+          tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp?repair=$q" -o "$tmp"
           actual="$(sha256sum "$tmp" | awk '{print $1}')"
-          echo "LIVE_SHA=$actual"
+          size="$(stat -c %s "$tmp")"
+          echo "LIVE_SHA=$actual SIZE=$size"
           test "$actual" = "$EXPECTED_SHA"
-          test "$(stat -c %s "$tmp")" -eq 87578
+          test "$size" = "$EXPECTED_SIZE"
           file "$tmp" | grep -Fq 'Web/P image'
-          echo 'RAFANDA_REAL_PHOTO_LIVE_OK=1'
+          echo RAFANDA_REAL_PHOTO_LIVE_OK=1
           REMOTE
-
-      - name: Uložit opravu trvale do main
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'nasekadan-repair-bot'
-          git config user.email 'actions@users.noreply.github.com'
-          git add "$ARTICLE" "$OUT"
-          if git diff --cached --quiet; then
-            echo 'Oprava už je v main.'
-            exit 0
-          fi
-          git commit -m 'Nasadit skutečnou třetí fotografii Rafandy'
-          git pull --rebase origin main
-          git push origin HEAD:main
 
       - name: Zapsat výsledek do servisního PR
         if: always()
@@ -155,6 +150,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: ok
-                ? `✅ Skutečná třetí fotografie Rafandy z originálu 1000028565.jpg je na produkci. Živý WebP má přesný SHA-256 66ae0fd92b7314c00e74cea396106e9d5ed379f2c7265bf5ccb7c27366a53399. Run ${context.runId}.`
+                ? `✅ Třetí fotografie Rafandy je skutečný snímek 1000028565.jpg převedený do WebP 1200×900. Produkční kopie má přesný SHA-256 69fb0553ffec5a62b15ebc3bae5cb728b2942cc75456c56f7e2912d74bfbd8b7. Run ${context.runId}.`
                 : `❌ Nasazení skutečné třetí fotografie Rafandy selhalo. Run ${context.runId}.`
             });
