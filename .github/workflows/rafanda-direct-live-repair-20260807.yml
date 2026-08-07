@@ -28,7 +28,7 @@ jobs:
       GYM: clanky/gymnastika-kadan-treneri-prosinec-2026.html
       R3_OLD: images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp
       R3_NEW: images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp
-      GYM_OLD: social/gymnastika-kadan-treneri-prosinec-2026.png
+      GYM_SOURCE: social/gymnastika-kadan-treneri-prosinec-2026-source.svg
       GYM_NEW: social/gymnastika-kadan-treneri-prosinec-2026-v2.png
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
@@ -38,16 +38,33 @@ jobs:
           ref: main
           fetch-depth: 20
 
-      - name: Připravit nové URL a ověřit integritu zdrojů
+      - name: Připravit nové URL a čistou grafiku
         shell: bash
         run: |
           set -euo pipefail
           test -s "$RAFANDA"
           test -s "$GYM"
           test -s "$R3_OLD"
-          test -s "$GYM_OLD"
+          test -s "$GYM_SOURCE"
           cp "$R3_OLD" "$R3_NEW"
-          cp "$GYM_OLD" "$GYM_NEW"
+
+          src="$(realpath "$GYM_SOURCE")"
+          out="$(realpath -m "$GYM_NEW")"
+          if command -v rsvg-convert >/dev/null 2>&1; then
+            rsvg-convert -w 1200 -h 630 -o "$out" "$src"
+          elif command -v magick >/dev/null 2>&1; then
+            magick -background none "$src" -resize '1200x630!' "$out"
+          elif command -v convert >/dev/null 2>&1; then
+            convert -background none "$src" -resize '1200x630!' "$out"
+          elif command -v google-chrome-stable >/dev/null 2>&1; then
+            google-chrome-stable --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1200,630 --screenshot="$out" "file://$src"
+          elif command -v google-chrome >/dev/null 2>&1; then
+            google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1200,630 --screenshot="$out" "file://$src"
+          else
+            echo 'Chybí renderer SVG -> PNG.' >&2
+            exit 1
+          fi
+
           python3 - <<'PY'
           from pathlib import Path
           import struct, zlib, binascii
@@ -64,29 +81,34 @@ jobs:
           webp = Path('images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp').read_bytes()
           assert len(webp) > 10000 and webp[:4] == b'RIFF' and webp[8:12] == b'WEBP'
 
-          p = Path('social/gymnastika-kadan-treneri-prosinec-2026-v2.png')
-          data = p.read_bytes()
-          assert data.startswith(b'\x89PNG\r\n\x1a\n')
-          pos = 8; idat = []; ihdr = None; saw_iend = False
-          while pos < len(data):
-              assert pos + 12 <= len(data)
-              n = struct.unpack('>I', data[pos:pos+4])[0]
-              typ = data[pos+4:pos+8]
-              chunk = data[pos+8:pos+8+n]
-              crc = struct.unpack('>I', data[pos+8+n:pos+12+n])[0]
-              assert binascii.crc32(typ + chunk) & 0xffffffff == crc
-              if typ == b'IHDR': ihdr = chunk
-              if typ == b'IDAT': idat.append(chunk)
-              if typ == b'IEND': saw_iend = True
-              pos += 12 + n
-              if typ == b'IEND': break
-          assert ihdr is not None and saw_iend and idat
-          w, h = struct.unpack('>II', ihdr[:8])
-          assert (w, h) == (1200, 630), (w, h)
-          decoded = zlib.decompress(b''.join(idat))
-          assert len(decoded) > 100000
-          print(f'PNG_OK={w}x{h} bytes={len(data)} decoded={len(decoded)}')
+          def verify_png(path):
+              data = Path(path).read_bytes()
+              assert data.startswith(b'\x89PNG\r\n\x1a\n')
+              pos = 8; idat = []; ihdr = None; saw_iend = False
+              while True:
+                  assert pos + 12 <= len(data), f'truncated chunk header at {pos}/{len(data)}'
+                  n = struct.unpack('>I', data[pos:pos+4])[0]
+                  assert pos + 12 + n <= len(data), f'truncated chunk at {pos}: {n}'
+                  typ = data[pos+4:pos+8]
+                  chunk = data[pos+8:pos+8+n]
+                  crc = struct.unpack('>I', data[pos+8+n:pos+12+n])[0]
+                  assert binascii.crc32(typ + chunk) & 0xffffffff == crc
+                  if typ == b'IHDR': ihdr = chunk
+                  if typ == b'IDAT': idat.append(chunk)
+                  pos += 12 + n
+                  if typ == b'IEND':
+                      saw_iend = True
+                      break
+              assert ihdr is not None and saw_iend and idat
+              w, h = struct.unpack('>II', ihdr[:8])
+              assert (w, h) == (1200, 630), (w, h)
+              decoded = zlib.decompress(b''.join(idat))
+              assert len(decoded) > 100000
+              return w, h, len(data), len(decoded)
+
+          print('NEW_PNG_OK=%sx%s bytes=%s decoded=%s' % verify_png('social/gymnastika-kadan-treneri-prosinec-2026-v2.png'))
           PY
+
           grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' "$RAFANDA"
           grep -Fq '/social/gymnastika-kadan-treneri-prosinec-2026-v2.png' "$GYM"
           echo "R3_SHA=$(sha256sum "$R3_NEW" | awk '{print $1}')" >> "$GITHUB_ENV"
@@ -136,7 +158,7 @@ jobs:
           fi
           REMOTE
 
-      - name: Ověřit nové URL, shodu bajtů a úplné PNG
+      - name: Ověřit nové URL a shodu bajtů
         shell: bash
         run: |
           set -euo pipefail
@@ -160,27 +182,12 @@ jobs:
           echo "GYM_EXPECTED=$GYM_SHA GYM_LIVE=$live_gym"
           test "$live_r3" = "$R3_SHA"
           test "$live_gym" = "$GYM_SHA"
-          python3 - "$tmp/gym.png" <<'PY'
-          import sys, struct, zlib, binascii
-          p=sys.argv[1]; data=open(p,'rb').read(); assert data.startswith(b'\x89PNG\r\n\x1a\n')
-          pos=8; idat=[]; ihdr=None; iend=False
-          while pos < len(data):
-              n=struct.unpack('>I',data[pos:pos+4])[0]; typ=data[pos+4:pos+8]; chunk=data[pos+8:pos+8+n]
-              crc=struct.unpack('>I',data[pos+8+n:pos+12+n])[0]
-              assert binascii.crc32(typ+chunk)&0xffffffff == crc
-              if typ==b'IHDR': ihdr=chunk
-              if typ==b'IDAT': idat.append(chunk)
-              pos += 12+n
-              if typ==b'IEND': iend=True; break
-          assert ihdr and iend and idat
-          w,h=struct.unpack('>II',ihdr[:8]); assert (w,h)==(1200,630)
-          dec=zlib.decompress(b''.join(idat)); assert len(dec)>100000
-          print(f'LIVE_PNG_OK={w}x{h} bytes={len(data)} decoded={len(dec)}')
-          PY
+          file "$tmp/r3.webp"
+          file "$tmp/gym.png"
           echo 'RAFANDA_GYMNASTIKA_LIVE_OK=1'
           REMOTE
 
-      - name: Uložit verzované URL i do main
+      - name: Uložit opravu i do main
         shell: bash
         run: |
           set -euo pipefail
@@ -188,7 +195,7 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add "$RAFANDA" "$GYM" "$R3_NEW" "$GYM_NEW"
           if git diff --cached --quiet; then
-            echo 'Repo už obsahuje verzované assety.'
+            echo 'Repo už obsahuje opravené assety.'
             exit 0
           fi
           git commit -m 'Opravit rozbité obrázky Rafandy a Gymnastiky novými URL'
@@ -207,6 +214,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: ok
-                ? `✅ Rafanda i Gymnastika jsou opravené přes nové URL. Živé soubory se bajt po bajtu shodují se zdrojem a PNG 1200×630 prošlo úplným dekódováním. Run ${context.runId}.`
-                : `❌ Oprava novými URL selhala. Run ${context.runId}.`
+                ? `✅ Rafanda i Gymnastika jsou opravené. Rafanda používá novou URL třetí fotografie a poškozené PNG Gymnastiky bylo nahrazeno nově vygenerovaným plným PNG 1200×630. Živé soubory se shodují SHA-256 se zdrojem. Run ${context.runId}.`
+                : `❌ Oprava Rafandy/Gymnastiky selhala. Run ${context.runId}.`
             });
