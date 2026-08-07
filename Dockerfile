@@ -9,6 +9,14 @@ RUN python scripts/remove_unpublished_articles.py
 # Skript vytvoří veřejnou verzi přímo z redakčního návrhu ještě před normalizací.
 RUN python scripts/publish_avies_article.py
 
+# MONOTONIC-PUBLICATION-GUARD-V1
+# Po odstranění explicitně neschválených textů uložit neměnný vstupní otisk všech
+# již publikovaných článků. Každý pozdější krok buildu musí tuto množinu zachovat.
+RUN python scripts/verify_published_article_set.py \
+    --source . \
+    --write-manifest /tmp/published-before-build.json \
+    --write-manifest-only
+
 # Online petice byla spuštěna na soukromém portálu e-petice.cz. Článek musí
 # staticky rozlišit tuto platformu od státní ePetice v Portálu občana.
 RUN python scripts/update_online_petition_status.py
@@ -103,6 +111,15 @@ RUN python scripts/normalize_search_snippets.py
 # Fragmenty článků a ověřovací HTML Googlu nejsou samostatné veřejné stránky.
 # Generátory je proto před auditem odstraní z hlavní sitemapy.
 RUN python scripts/clean_sitemap_technical_entries.py
+
+# MONOTONIC-PUBLICATION-GUARD-V1
+# Kandidát buildu musí stále obsahovat úplně všechny články z předbuildového
+# manifestu a zároveň musí mít úplné přehledy pro všechny aktuálně publikované
+# texty. Při ztrátě jediného článku Docker build okamžitě končí chybou.
+RUN python scripts/verify_published_article_set.py \
+      --target . --manifest /tmp/published-before-build.json \
+ && python scripts/verify_published_article_set.py \
+      --source . --target . --write-manifest published-articles-manifest.json
 
 # Kritická SEO/AI chyba musí zastavit sestavení ještě před přepnutím produkce.
 # Stránkované archivní stránky jsou webové přehledy, nikoli NewsArticle.
