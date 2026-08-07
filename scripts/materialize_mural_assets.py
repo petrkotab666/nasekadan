@@ -11,8 +11,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
-    "images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp": "725c1c09724df0a7a64b5e8ed4f9a8c69ab68c39",
-    "images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp": "3896d0f5b341af7b03d5d3c246c82b800eba2ee6",
+    "images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp": "6d90d5c3aa5caf7bcd58d80371289eb94ab162e5",
+    "images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp": "14a97e9acb273f50fa3cd7621a73254a8b27dfe7",
 }
 API = "https://api.github.com/repos/petrkotab666/nasekadan/git/blobs/{}"
 
@@ -74,7 +74,7 @@ def main() -> None:
         if not valid_webp(target):
             target.unlink(missing_ok=True)
             raise RuntimeError(f"Mural asset po převodu není platný WebP: {relative}")
-        print(f"Mural WebP převeden z původního obrazového blobu a ověřen: {relative}")
+        print(f"Mural WebP převeden z trvalého zdrojového blobu a ověřen: {relative}")
 
 
 if __name__ == "__main__":
