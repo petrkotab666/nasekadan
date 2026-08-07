@@ -1,0 +1,164 @@
+name: Opravit fotografie podchodu Od hlubin k nebi
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 814
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Stáhnout a vytvořit dvě skutečné WebP fotografie
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          mkdir -p images/clanky/od-hlubin-k-nebi "$RUNNER_TEMP/mural"
+          gh api repos/${GITHUB_REPOSITORY}/git/blobs/6d90d5c3aa5caf7bcd58d80371289eb94ab162e5 > "$RUNNER_TEMP/mural/a.json"
+          gh api repos/${GITHUB_REPOSITORY}/git/blobs/14a97e9acb273f50fa3cd7621a73254a8b27dfe7 > "$RUNNER_TEMP/mural/b.json"
+          python3 - <<'PY' | tee "$RUNNER_TEMP/mural-build.log"
+          from pathlib import Path
+          from io import BytesIO
+          from PIL import Image
+          import base64,json
+          jobs=[
+            ('a.json','images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp'),
+            ('b.json','images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp'),
+          ]
+          tmp=Path(__import__('os').environ['RUNNER_TEMP'])/'mural'
+          for srcname,targetname in jobs:
+            data=json.loads((tmp/srcname).read_text(encoding='utf-8'))
+            raw=base64.b64decode(data['content'])
+            with Image.open(BytesIO(raw)) as im:
+              im.load()
+              print(srcname,'SOURCE',im.format,im.size,len(raw))
+              assert im.width>=800 and im.height>=600
+              if im.mode=='RGBA':
+                bg=Image.new('RGB',im.size,'white'); bg.paste(im,mask=im.getchannel('A')); im=bg
+              elif im.mode!='RGB': im=im.convert('RGB')
+              out=Path(targetname); out.parent.mkdir(parents=True,exist_ok=True)
+              im.save(out,'WEBP',quality=92,method=6)
+            with Image.open(out) as check:
+              check.load(); assert check.format=='WEBP' and check.width>=800 and check.height>=600
+              print(targetname,'WEBP',check.size,out.stat().st_size)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Trvale commitnout fotografie do main
+        id: persist
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – fotografie'
+          git config user.email 'info@nasekadan.cz'
+          git add images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          if git diff --cached --quiet; then
+            echo 'Fotografie už jsou v main.'
+          else
+            git commit -m 'Trvale uložit skutečné fotografie článku Od hlubin k nebi [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              sleep $((attempt*2))
+            done
+          fi
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Nahrát fotografie a článek přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+          tar -czf "$RUNNER_TEMP/mural-live.tgz" \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$RUNNER_TEMP/mural-live.tgz" ubuntu@57.129.43.215:/tmp/mural-live.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"; sudo chmod a+rw "$LOCK"; exec 9>"$LOCK"; flock -w 300 9
+          sudo tar -xzf /tmp/mural-live.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/. nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/
+          fi
+          rm -f /tmp/mural-live.tgz
+          REMOTE
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Veřejně ověřit článek i obě fotografie
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$RUNNER_TEMP/mural-public.log"
+          import time,urllib.request
+          from io import BytesIO
+          from PIL import Image
+          base='https://nasekadan.cz'
+          q='?mural='+str(time.time_ns())
+          req=urllib.request.Request(base+'/clanky/od-hlubin-k-nebi-kadan.html'+q,headers={'Cache-Control':'no-cache','User-Agent':'NaseKadan-mural-final'})
+          with urllib.request.urlopen(req,timeout=40) as r:
+            assert r.status==200; html=r.read().decode('utf-8','replace')
+          for name in ('ptaci-ara-zoborozec.webp','ptaci-cela-stena.webp'):
+            rel='/images/clanky/od-hlubin-k-nebi/'+name
+            assert rel in html
+            req=urllib.request.Request(base+rel+q,headers={'Cache-Control':'no-cache','User-Agent':'NaseKadan-mural-final'})
+            with urllib.request.urlopen(req,timeout=40) as r:
+              status=r.status; ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); raw=r.read()
+            assert status==200 and ctype=='image/webp' and len(raw)>10000,(name,status,ctype,len(raw))
+            with Image.open(BytesIO(raw)) as im:
+              im.load(); assert im.format=='WEBP' and im.width>=800 and im.height>=600
+              print('PUBLIC OK',name,im.size,len(raw),ctype)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek do issue 814
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          BUILD: ${{ steps.build.outputs.ok }}
+          PERSIST: ${{ steps.persist.outputs.ok }}
+          DEPLOY: ${{ steps.deploy.outputs.ok }}
+          VERIFY: ${{ steps.verify.outputs.ok }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs');
+            let build='',pub=''; try{build=fs.readFileSync(process.env.RUNNER_TEMP+'/mural-build.log','utf8')}catch{} try{pub=fs.readFileSync(process.env.RUNNER_TEMP+'/mural-public.log','utf8')}catch{}
+            const ok=process.env.BUILD==='true'&&process.env.PERSIST==='true'&&process.env.DEPLOY==='true'&&process.env.VERIFY==='true';
+            const body=ok?`✅ Obě fotografie podchodu jsou trvale v main a veřejně vracejí platný image/webp.\n\n\`\`\`\n${build}\n${pub}\n\`\`\``:`❌ Oprava fotek selhala. build=${process.env.BUILD||'false'}, persist=${process.env.PERSIST||'false'}, deploy=${process.env.DEPLOY||'false'}, verify=${process.env.VERIFY||'false'}.\n\n\`\`\`\n${build}\n${pub}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:814,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:814,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        run: |
+          test "${{ steps.verify.outputs.ok }}" = 'true'
