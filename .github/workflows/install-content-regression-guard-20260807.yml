@@ -38,7 +38,7 @@ jobs:
           git -C /opt/nasekadan fetch --prune origin main
           git -C /opt/nasekadan reset --hard origin/main
           git -C /opt/nasekadan clean -fd
-          sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash /opt/nasekadan/deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 NASEKADAN_AUDIT_PATHS=clanky/zzs-kadan-garaz-mycka-2026.html bash /opt/nasekadan/deploy/sync-production.sh
           sudo bash /opt/nasekadan/deploy/install-automation.sh
           sudo systemctl is-active --quiet nasekadan-refresh.timer
           sudo systemctl is-active --quiet nasekadan-content-regression.path
