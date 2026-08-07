@@ -1,0 +1,190 @@
+name: Obnovit Facebook náhledy ZZS a Slávie
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/refresh-facebook-new-articles-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-facebook-rescrape-new-articles
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      FB_TOKEN_1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      FB_TOKEN_3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Nainstalovat Pillow a zpevnit Facebook metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          python scripts/harden_facebook_meta.py --write --check
+
+      - name: Uložit případné opravy metadat do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- clanky; then exit 0; fi
+          git config user.name 'Naše Kadaň – Facebook fix'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky
+          git commit -m 'Zpevnit Facebook metadata nových článků [skip ci]'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+            sleep $((attempt*2))
+          done
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Připravit seznam článků a sociálních obrázků
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          from pathlib import Path
+          import re
+          items=[
+            ('ZZS','clanky/zzs-kadan-garaz-mycka-2026.html','https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html'),
+            ('SLAVIE','clanky/slavie-kadan-epp-plavci-120-tisic-2026.html','https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html'),
+          ]
+          for key,path,url in items:
+            text=Path(path).read_text(encoding='utf-8')
+            m=re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I)
+            assert m, path
+            image=m.group(1).replace('&amp;','&')
+            clean=image.split('?',1)[0]
+            assert clean.startswith('https://nasekadan.cz/social/')
+            rel=clean.removeprefix('https://nasekadan.cz/').lstrip('/')
+            p=Path(rel)
+            assert p.is_file() and p.stat().st_size>10000, rel
+            data=p.read_bytes()[:24]
+            assert data[:8]==b'\x89PNG\r\n\x1a\n'
+            assert (int.from_bytes(data[16:20],'big'),int.from_bytes(data[20:24],'big'))==(1200,630)
+            print(f'{key}_ARTICLE_PATH={path}')
+            print(f'{key}_ARTICLE_URL={url}')
+            print(f'{key}_IMAGE_URL={image}')
+            print(f'{key}_IMAGE_PATH={rel}')
+          PY
+
+      - name: Nasadit opravené články a jejich OG obrázky na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          tar -czf - "$ZZS_ARTICLE_PATH" "$ZZS_IMAGE_PATH" "$SLAVIE_ARTICLE_PATH" "$SLAVIE_IMAGE_PATH" | \
+            ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"; sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"; flock -w 300 9
+          sudo tar -xzf - -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
+            sudo docker cp /var/www/nasekadan/clanky/zzs-kadan-garaz-mycka-2026.html nasekadan-web:/usr/share/nginx/html/clanky/zzs-kadan-garaz-mycka-2026.html
+            sudo docker cp /var/www/nasekadan/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html nasekadan-web:/usr/share/nginx/html/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
+            sudo docker cp /var/www/nasekadan/social/. nasekadan-web:/usr/share/nginx/html/social/
+          fi
+          REMOTE
+
+      - name: Ověřit živé URL jako facebookexternalhit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os,re,struct,time,urllib.request
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          for key in ('ZZS','SLAVIE'):
+            article=os.environ[key+'_ARTICLE_URL']
+            expected=os.environ[key+'_IMAGE_URL']
+            req=urllib.request.Request(article+'?verifyfb='+str(time.time_ns()),headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+            with urllib.request.urlopen(req,timeout=35) as r:
+              assert r.status==200
+              text=r.read().decode('utf-8','replace')
+            m=re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I)
+            assert m and m.group(1).replace('&amp;','&')==expected,(key,m.group(1) if m else None,expected)
+            req=urllib.request.Request(expected,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+            with urllib.request.urlopen(req,timeout=35) as r:
+              ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); data=r.read()
+            assert ctype=='image/png' and data[:8]==b'\x89PNG\r\n\x1a\n' and struct.unpack('>II',data[16:24])==(1200,630)
+            print(key,'LIVE OK',expected,len(data))
+          PY
+
+      - name: Přinutit Facebook znovu načíst oba odkazy přes Graph API
+        id: meta_scrape
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${FB_TOKEN_1:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"
+          [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
+          test -n "$token"
+          : > "$RUNNER_TEMP/facebook-rescrape.jsonl"
+          for key in ZZS SLAVIE; do
+            eval "url=\${${key}_ARTICLE_URL}"
+            eval "expected=\${${key}_IMAGE_URL}"
+            response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' --data-urlencode "id=$url" --data-urlencode 'scrape=true' --data-urlencode "access_token=$token")"
+            python3 - "$key" "$url" "$expected" "$response" <<'PY' | tee -a "$RUNNER_TEMP/facebook-rescrape.jsonl"
+          import json,sys
+          key,url,expected,raw=sys.argv[1:]
+          data=json.loads(raw)
+          if 'error' in data: raise SystemExit(str(data['error']))
+          image=''
+          obj=data.get('og_object') or {}
+          if isinstance(obj,dict):
+            image=(obj.get('image') or '')
+          print(json.dumps({'key':key,'url':url,'expected':expected,'facebook_image':image,'response':data},ensure_ascii=False))
+          PY
+            sleep 2
+          done
+          echo 'refreshed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat potvrzení do main
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          python3 - <<'PY'
+          import json,os
+          rows=[]
+          p=os.path.join(os.environ['RUNNER_TEMP'],'facebook-rescrape.jsonl')
+          for line in open(p,encoding='utf-8'):
+            if line.strip(): rows.append(json.loads(line))
+          out={'status':'success','facebook_rescrape':True,'articles':rows}
+          open('.github/deploy-status/facebook-new-articles-20260807.json','w',encoding='utf-8').write(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+          PY
+          git config user.name 'Naše Kadaň – Meta scrape'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/deploy-status/facebook-new-articles-20260807.json
+          git commit -m 'Potvrdit nový Facebook scrape ZZS a Slávie [skip ci]'
+          git push origin HEAD:main
