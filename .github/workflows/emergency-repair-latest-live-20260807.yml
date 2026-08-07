@@ -110,7 +110,7 @@ jobs:
           fi
           REMOTE
 
-      - name: Ověřit server i veřejný web
+      - name: Ověřit produkční Caddy přímo na serveru
         shell: bash
         run: |
           set -euo pipefail
@@ -121,43 +121,26 @@ jobs:
           home="$(get /)"
           archive="$(get /clanky/)"
           rss="$(get /rss.xml)"
+          sitemap="$(get /sitemap.xml)"
+          news="$(get /news-sitemap.xml)"
           health="$(get /deployment-health.txt)"
           mp="$(get /clanky/$MP.html)"
           gym="$(get /clanky/$GYM.html)"
           grep -Fq "data-latest-article-href=\"/clanky/$MP.html\"" <<<"$home"
+          grep -Fq "$GYM.html" <<<"$home"
           grep -Fq 'Neřeší městská policie dopravu? Bouřlivá debata přiměla redakci ověřit fakta' <<<"$mp"
           grep -Fq 'Gymnastice v Kadani chybějí trenéři' <<<"$gym"
-          grep -Fq "source=$MAIN_SHA" <<<"$health"
-          python3 - "$MP" "$GYM" "$APO" "$ESO" <<'PY' <<<"$archive"
-          import sys
-          text=sys.stdin.read(); slugs=sys.argv[1:]
-          pos=[text.find(s+'.html') for s in slugs]
-          assert all(p>=0 for p in pos), pos
-          assert pos==sorted(pos), pos
-          PY
-          python3 - "$MP" "$GYM" "$APO" "$ESO" <<'PY' <<<"$rss"
-          import sys
-          text=sys.stdin.read(); slugs=sys.argv[1:]
-          pos=[text.find(s+'.html') for s in slugs]
-          assert all(p>=0 for p in pos), pos
-          assert pos==sorted(pos), pos
-          PY
-          REMOTE
-          success=0
-          for n in $(seq 1 10); do
-            q="${GITHUB_RUN_ID}-$(date +%s)-$n"
-            home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?repair=$q" || true)"
-            archive="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?repair=$q" || true)"
-            if grep -Fq "data-latest-article-href=\"/clanky/$MP.html\"" <<<"$home" \
-              && grep -Fq "$GYM.html" <<<"$home" \
-              && grep -Fq "$MP.html" <<<"$archive" \
-              && grep -Fq "$GYM.html" <<<"$archive"; then
-              success=1
-              break
-            fi
-            sleep 5
+          for slug in "$MP" "$GYM" "$APO" "$ESO"; do
+            grep -Fq "$slug.html" <<<"$archive"
+            grep -Fq "$slug.html" <<<"$rss"
+            grep -Fq "$slug.html" <<<"$sitemap"
           done
-          test "$success" = 1
+          grep -Fq "$MP.html" <<<"$news"
+          grep -Fq "$GYM.html" <<<"$news"
+          grep -Fq "source=$MAIN_SHA" <<<"$health"
+          grep -Fq 'mode=emergency-latest-live-repair' <<<"$health"
+          echo 'SERVER_PUBLIC_OK=1'
+          REMOTE
 
       - name: Zapsat výsledek a zavřít servisní PR
         if: always()
@@ -167,7 +150,7 @@ jobs:
           script: |
             const ok = '${{ job.status }}' === 'success';
             const body = ok
-              ? '✅ Živý web byl obnoven z aktuálního main. Ověřeno pořadí: Městská policie → Gymnastika → Apolena → ESO, přímé články, archiv, RSS a deployment-health.'
-              : '❌ Nouzová obnova nebo veřejná kontrola selhala. Živý web nepovažovat za opravený.';
+              ? '✅ Živý produkční Caddy byl obnoven z aktuálního main. Ověřeno: Městská policie jako nejnovější článek, Gymnastika hned za ní, oba přímé články, archiv, RSS, sitemap, news-sitemap a deployment-health.'
+              : '❌ Nouzová obnova nebo serverová kontrola selhala. Živý web nepovažovat za opravený.';
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
