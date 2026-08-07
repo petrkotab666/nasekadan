@@ -1,0 +1,123 @@
+name: Přímá oprava článku ESO market Rafanda na produkci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/rafanda-direct-live-trigger.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rafanda-direct-live-repair-20260807
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Načíst aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Obnovit skutečné fotografie a ověřit článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p images/clanky/eso-market-rafanda social
+          test -s images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp
+          cat .github/tmp/rafanda-photo-fix/navod.part* | base64 -d > images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp
+          base64 -d tmp/rafanda-candidates/05-4660.bin > images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp
+          cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp social/eso-market-rafanda-kadan-24-7.webp
+          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$ARTICLE"
+          grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' "$ARTICLE"
+          grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' "$ARTICLE"
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' "$ARTICLE"
+          for f in \
+            images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp \
+            images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp \
+            images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp \
+            social/eso-market-rafanda-kadan-24-7.webp; do
+            file "$f" | grep -Fq 'Web/P image'
+            test "$(stat -c %s "$f")" -gt 10000
+          done
+
+      - name: Připravit přesný balík
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/rafanda-live"
+          rm -rf "$stage"
+          mkdir -p "$stage/clanky" "$stage/images/clanky/eso-market-rafanda" "$stage/social"
+          cp "$ARTICLE" "$stage/clanky/"
+          cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp "$stage/images/clanky/eso-market-rafanda/"
+          cp images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp "$stage/images/clanky/eso-market-rafanda/"
+          cp images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp "$stage/images/clanky/eso-market-rafanda/"
+          cp social/eso-market-rafanda-kadan-24-7.webp "$stage/social/"
+          tar -C "$stage" -czf "$RUNNER_TEMP/rafanda-live.tgz" .
+
+      - name: Nasadit článek a fotografie přímo na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          scp "${opts[@]}" "$RUNNER_TEMP/rafanda-live.tgz" ubuntu@57.129.43.215:/tmp/nk-rafanda-live.tgz
+          ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          root=/var/www/nasekadan
+          work="$(mktemp -d /tmp/nk-rafanda-live.XXXXXX)"
+          trap 'rm -rf "$work" /tmp/nk-rafanda-live.tgz' EXIT
+          tar -xzf /tmp/nk-rafanda-live.tgz -C "$work"
+          sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
+          sudo install -m 0644 "$work/clanky/eso-market-rafanda-kadan-24-7.html" "$root/clanky/eso-market-rafanda-kadan-24-7.html"
+          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp" "$root/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp"
+          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp" "$root/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp"
+          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp"
+          sudo install -m 0644 "$work/social/eso-market-rafanda-kadan-24-7.webp" "$root/social/eso-market-rafanda-kadan-24-7.webp"
+          sudo chmod -R a+rX "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/eso-market-rafanda /usr/share/nginx/html/social
+            sudo tar -C "$work" -czf - clanky images social | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
+          fi
+          REMOTE
+
+      - name: Ověřit živý článek přes produkční Caddy
+        shell: bash
+        run: |
+          set -euo pipefail
+          opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          get() { curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base$1?repair=$(date +%s%N)"; }
+          article="$(get /clanky/eso-market-rafanda-kadan-24-7.html)"
+          test "${#article}" -gt 8000
+          grep -Fq '<article class="article">' <<<"$article"
+          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' <<<"$article"
+          grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' <<<"$article"
+          grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' <<<"$article"
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' <<<"$article"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for rel in \
+            /images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp \
+            /images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp \
+            /images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp \
+            /social/eso-market-rafanda-kadan-24-7.webp; do
+            out="$tmp/$(basename "$rel")"
+            curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base$rel?repair=$(date +%s%N)" -o "$out"
+            file "$out" | grep -Fq 'Web/P image'
+            test "$(stat -c %s "$out")" -gt 10000
+          done
+          echo 'RAFANDA_LIVE_OK=1'
+          REMOTE
