@@ -1,11 +1,14 @@
-name: Trvalá pojistka zveřejnění webu a Facebooku
+name: Trvalá pojistka zveřejnění – pouze audit
 
+# Tento guard smí pouze kontrolovat. Nesmí nahrávat soubory na OVH,
+# přepisovat /var/www, opravovat Docker ani měnit obsah main.
 on:
   push:
     branches: [main]
     paths:
       - 'clanky/*.html'
-      - 'social/*.png'
+      - 'images/clanky/**'
+      - 'social/**'
       - 'index.html'
       - 'clanky/index.html'
       - 'rss.xml'
@@ -18,207 +21,67 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
 
 concurrency:
-  group: nasekadan-publication-integrity
-  cancel-in-progress: false
+  group: nasekadan-publication-integrity-audit
+  cancel-in-progress: true
 
 jobs:
-  guard:
+  audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      KEY1: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
-      KEY2: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Sestavit seznam čerstvě publikovaných článků
-        id: manifest
+      - name: Ověřit poslední publikace bez samoopravy
+        id: audit
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/verify_recent_publications.py manifest --hours 48 --limit 8 > "$RUNNER_TEMP/publication-manifest.json"
-          count="$(python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          data=json.loads(Path(os.environ['RUNNER_TEMP']).joinpath('publication-manifest.json').read_text())
-          print(len(data))
-          PY
-          )"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          cat "$RUNNER_TEMP/publication-manifest.json"
-
-      - name: První veřejná kontrola
-        if: steps.manifest.outputs.count != '0'
-        id: initial
-        continue-on-error: true
-        shell: bash
-        run: |
-          set -euo pipefail
+          python3 scripts/verify_recent_publications.py manifest --hours 72 --limit 12 > "$RUNNER_TEMP/publication-manifest.json"
           python3 scripts/verify_recent_publications.py check \
             --manifest-file "$RUNNER_TEMP/publication-manifest.json" \
-            --status-file "$RUNNER_TEMP/publication-status-initial.json"
+            --status-file "$RUNNER_TEMP/publication-status.json"
 
-      - name: Připravit balíček pro samoopravu
-        if: steps.manifest.outputs.count != '0' && steps.initial.outcome != 'success'
+          # Trvalé kotvy, které odhalí přesně současnou regresi.
+          base='https://nasekadan.cz'
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          eso='eso-market-rafanda-kadan-24-7.html'
+          q="integrity-audit-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "$base/?$q" -o /tmp/home.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/?$q" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "$base/clanky/$eso?$q" -o /tmp/eso.html
+          grep -Fq "data-latest-article-href=\"/clanky/$mp\"" /tmp/home.html
+          grep -Fq "/clanky/$gym" /tmp/home.html
+          grep -Fq "/clanky/$eso" /tmp/archive.html
+          for img in \
+            prodejna-rafanda-24-7.webp \
+            navod-vstup-nakup-odchod.webp \
+            pravidla-platba-kamery-v2.webp; do
+            grep -Fq "/images/clanky/eso-market-rafanda/$img" /tmp/eso.html
+            curl -4 -kfsSL --max-time 40 "$base/images/clanky/eso-market-rafanda/$img?$q" -o "/tmp/$img"
+            test -s "/tmp/$img"
+          done
+          echo 'OK: audit posledních publikací prošel; nic nebylo změněno.'
+
+      - name: Nahlásit regresi bez přepisování webu
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          bundle="$RUNNER_TEMP/nk-integrity-repair"
-          rm -rf "$bundle"
-          mkdir -p "$bundle/clanky" "$bundle/social"
-          python3 - <<'PY'
-          import json, os, shutil
-          from pathlib import Path
-          root=Path('.')
-          bundle=Path(os.environ['RUNNER_TEMP'])/'nk-integrity-repair'
-          items=json.loads((Path(os.environ['RUNNER_TEMP'])/'publication-manifest.json').read_text())
-          for item in items:
-              src=root/item['article_path']
-              if src.is_file(): shutil.copy2(src, bundle/'clanky'/src.name)
-              image=item.get('image_path','')
-              if image:
-                  img=root/image
-                  if img.is_file(): shutil.copy2(img, bundle/'social'/img.name)
-          shutil.copy2(root/'clanky/index.html', bundle/'clanky/index.html')
-          for name in ('index.html','rss.xml','sitemap.xml','news-sitemap.xml','llms.txt','robots.txt'):
-              src=root/name
-              if src.is_file(): shutil.copy2(src,bundle/name)
-          PY
-
-      - name: Připravit SSH klíč pro opravu
-        if: steps.manifest.outputs.count != '0' && steps.initial.outcome != 'success'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -n "${KEY1:-}" ]]; then
-            printf '%s\n' "$KEY1" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
-          elif [[ -n "${KEY2:-}" ]]; then
-            printf '%s\n' "$KEY2" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          title='[incident] Publikační integrita – audit zjistil regresi'
+          body="Živý web neodpovídá kanonickému main nebo chybí asset. Audit produkci záměrně nemění. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body "$body"
           else
-            echo 'Chybí SSH klíč pro samoopravu.' >&2
-            exit 1
+            gh issue create --title "$title" --body "$body"
           fi
-          chmod 600 "$RUNNER_TEMP/ovh_key"
-
-      - name: Samoopravit chybějící nasazení na OVH
-        if: steps.manifest.outputs.count != '0' && steps.initial.outcome != 'success'
-        id: repair
-        shell: bash
-        run: |
-          set -euo pipefail
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/nk-integrity-repair" ubuntu@57.129.43.215:/tmp/nk-integrity-repair
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
-          set -euo pipefail
-          sudo -n true
-          sudo install -d -m 0755 /var/www/nasekadan/clanky /var/www/nasekadan/social
-          find /tmp/nk-integrity-repair/clanky -maxdepth 1 -type f -name '*.html' -exec sudo install -m 0644 {} /var/www/nasekadan/clanky/ \;
-          find /tmp/nk-integrity-repair/social -maxdepth 1 -type f -name '*.png' -exec sudo install -m 0644 {} /var/www/nasekadan/social/ \;
-          for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
-            [[ -f "/tmp/nk-integrity-repair/$f" ]] && sudo install -m 0644 "/tmp/nk-integrity-repair/$f" /var/www/nasekadan/
-          done
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social
-            for f in /tmp/nk-integrity-repair/clanky/*.html; do [[ -f "$f" ]] && sudo docker cp "$f" nasekadan-web:/usr/share/nginx/html/clanky/; done
-            for f in /tmp/nk-integrity-repair/social/*.png; do [[ -f "$f" ]] && sudo docker cp "$f" nasekadan-web:/usr/share/nginx/html/social/; done
-            for f in index.html rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
-              [[ -f "/tmp/nk-integrity-repair/$f" ]] && sudo docker cp "/tmp/nk-integrity-repair/$f" "nasekadan-web:/usr/share/nginx/html/$f"
-            done
-          fi
-          sudo chmod -R a+rX /var/www/nasekadan
-          rm -rf /tmp/nk-integrity-repair
-          REMOTE
-
-      - name: Konečná veřejná kontrola po případné opravě
-        if: steps.manifest.outputs.count != '0'
-        id: final
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 12); do
-            if python3 scripts/verify_recent_publications.py check \
-              --manifest-file "$RUNNER_TEMP/publication-manifest.json" \
-              --status-file "$RUNNER_TEMP/publication-status-final.json"; then
-              exit 0
-            fi
-            sleep 10
-          done
-          exit 1
-
-      - name: Najít články bez potvrzeného Facebook příspěvku
-        if: steps.manifest.outputs.count != '0' && steps.final.outcome == 'success'
-        id: fb_missing
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY' > "$RUNNER_TEMP/facebook-missing.txt"
-          import json, os
-          from pathlib import Path
-          root=Path('.')
-          items=json.loads((Path(os.environ['RUNNER_TEMP'])/'publication-manifest.json').read_text())
-          for item in reversed(items):
-              if not (root/item['facebook_marker']).is_file():
-                  print(item['article_path'])
-          PY
-          count="$(grep -c . "$RUNNER_TEMP/facebook-missing.txt" || true)"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
-          cat "$RUNNER_TEMP/facebook-missing.txt"
-
-      - name: Záložně zpracovat Facebook frontu
-        if: steps.fb_missing.outputs.count != '0'
-        id: facebook
-        continue-on-error: true
-        env:
-          FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
-          FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
-          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
-          FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
-          FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
-          FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
-          FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
-          FACEBOOK_WAIT_TIMEOUT: '300'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t articles < "$RUNNER_TEMP/facebook-missing.txt"
-          python3 scripts/process_facebook_queue_live.py "${articles[@]}"
-
-      - name: Uložit Facebook frontu a potvrzení
-        if: always() && steps.fb_missing.outputs.count != '0'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'Naše Kadaň trvalá publikační pojistka'
-          git config user.email 'info@nasekadan.cz'
-          git add -A -- .github/facebook-publish-pending.txt .github/facebook-last-status.json .github/facebook-published
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Aktualizovat trvalou pojistku publikování na Facebooku'
-          for attempt in 1 2 3; do
-            git pull --rebase origin main && git push origin HEAD:main && exit 0
-            sleep $((attempt * 5))
-          done
-          exit 1
-
-      - name: Zapsat stav trvalé pojistky do souhrnu běhu
-        if: always() && steps.manifest.outputs.count != '0'
-        shell: bash
-        env:
-          INITIAL: ${{ steps.initial.outcome }}
-          REPAIR: ${{ steps.repair.outcome }}
-          FINAL: ${{ steps.final.outcome }}
-          FACEBOOK: ${{ steps.facebook.outcome }}
-        run: |
-          {
-            echo '## Trvalá publikační pojistka'
-            echo "- První veřejná kontrola: ${INITIAL:-skipped}"
-            echo "- Samooprava: ${REPAIR:-not_needed}"
-            echo "- Konečná veřejná kontrola: ${FINAL:-skipped}"
-            echo "- Facebook: ${FACEBOOK:-not_needed}"
-            echo "- Run ID: $GITHUB_RUN_ID"
-          } >> "$GITHUB_STEP_SUMMARY"
