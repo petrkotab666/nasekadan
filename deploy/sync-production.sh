@@ -115,6 +115,7 @@ test -n "$KTK_ARCHIVE_PATH"
 
 cat > deployment-health.txt <<EOF
 site=nasekadan.cz
+status=ok
 source=$SOURCE_SHA
 generated=$(date -u +%FT%TZ)
 mode=canonical-ovh
@@ -208,7 +209,7 @@ sudo mkdir -p "$STAGE"
 docker cp nasekadan-web:/usr/share/nginx/html/. "$BUILT"
 sudo cp -a "$BUILT"/. "$STAGE"/
 sudo rm -rf "$BUILT"
-printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=canonical-ovh\n' \
+printf 'site=nasekadan.cz\nstatus=ok\nsource=%s\ngenerated=%s\nmode=canonical-ovh\n' \
   "$SOURCE_SHA" "$(date -u +%FT%TZ)" | sudo tee "$STAGE/deployment-health.txt" >/dev/null
 sudo chmod -R a+rX "$STAGE"
 
