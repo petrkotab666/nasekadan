@@ -1,0 +1,107 @@
+name: Kanonický úplný produkční deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/canonical-production.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Předprodukční ochrana úplnosti
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d .git
+          test -f deploy/sync-production.sh
+          test -f clanky/mestska-policie-kadan-fakta-diskuse-2026.html
+          test -f clanky/gymnastika-kadan-treneri-prosinec-2026.html
+          test -f clanky/eso-market-rafanda-kadan-24-7.html
+          grep -Fq 'data-latest-article-href="/clanky/mestska-policie-kadan-fakta-diskuse-2026.html"' index.html
+          grep -Fq '/clanky/gymnastika-kadan-treneri-prosinec-2026.html' index.html
+          grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' clanky/eso-market-rafanda-kadan-24-7.html
+          grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' clanky/eso-market-rafanda-kadan-24-7.html
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' clanky/eso-market-rafanda-kadan-24-7.html
+          test -f images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp
+          test -f images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp
+          test -f images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Přenést úplný aktuální main na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-canonical-main.tgz
+
+      - name: Atomicky nasadit přes jediný kanonický skript
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          work=/tmp/nasekadan-canonical-main
+          rm -rf "$work"
+          mkdir -p "$work"
+          tar -xzf /tmp/nasekadan-canonical-main.tgz -C "$work"
+          test -d "$work/.git"
+          chmod +x "$work/deploy/sync-production.sh"
+          sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
+          rm -rf "$work" /tmp/nasekadan-canonical-main.tgz
+          REMOTE
+
+      - name: Veřejně ověřit titulku a fotografie Rafandy
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          ok=0
+          for attempt in $(seq 1 12); do
+            q="canonical-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            curl -4 -kfsSL --max-time 40 "$base/?v=$q" -o /tmp/home.html || true
+            curl -4 -kfsSL --max-time 40 "$base/clanky/eso-market-rafanda-kadan-24-7.html?v=$q" -o /tmp/rafanda.html || true
+            img1=$(curl -4 -kfsSL --max-time 40 -o /tmp/rafanda1.webp -w '%{http_code}' "$base/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp?v=$q" || true)
+            img2=$(curl -4 -kfsSL --max-time 40 -o /tmp/rafanda2.webp -w '%{http_code}' "$base/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp?v=$q" || true)
+            img3=$(curl -4 -kfsSL --max-time 40 -o /tmp/rafanda3.webp -w '%{http_code}' "$base/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp?v=$q" || true)
+            if grep -Fq 'data-latest-article-href="/clanky/mestska-policie-kadan-fakta-diskuse-2026.html"' /tmp/home.html \
+              && grep -Fq '/clanky/gymnastika-kadan-treneri-prosinec-2026.html' /tmp/home.html \
+              && grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' /tmp/rafanda.html \
+              && grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' /tmp/rafanda.html \
+              && grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp' /tmp/rafanda.html \
+              && [[ "$img1" == 200 && "$img2" == 200 && "$img3" == 200 ]] \
+              && [[ -s /tmp/rafanda1.webp && -s /tmp/rafanda2.webp && -s /tmp/rafanda3.webp ]]; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ok" = 1
+          echo 'OK: produkce podává aktuální MP + Gymnastiku a všechny tři fotografie Rafandy.'
