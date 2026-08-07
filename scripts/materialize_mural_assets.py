@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 import json
 import urllib.request
 from pathlib import Path
@@ -41,6 +42,26 @@ def fetch_blob(sha: str) -> bytes:
     return base64.b64decode(payload["content"])
 
 
+def materialize_webp(target: Path, source: bytes, relative: str) -> None:
+    try:
+        with Image.open(BytesIO(source)) as image:
+            image.load()
+            if image.width < 800 or image.height < 600:
+                raise RuntimeError(
+                    f"Zdroj muralu má příliš malé rozměry {image.width}x{image.height}: {relative}"
+                )
+            if image.mode not in {"RGB", "RGBA"}:
+                image = image.convert("RGB")
+            elif image.mode == "RGBA":
+                background = Image.new("RGB", image.size, "white")
+                background.paste(image, mask=image.getchannel("A"))
+                image = background
+            image.save(target, format="WEBP", quality=92, method=6)
+    except Exception as exc:
+        target.unlink(missing_ok=True)
+        raise RuntimeError(f"Zdroj muralu nelze převést na WebP: {relative}: {exc}") from exc
+
+
 def main() -> None:
     for relative, sha in TARGETS.items():
         target = ROOT / relative
@@ -48,11 +69,12 @@ def main() -> None:
         if valid_webp(target):
             print(f"Mural WebP ověřen: {relative}")
             continue
-        target.write_bytes(fetch_blob(sha))
+        source = fetch_blob(sha)
+        materialize_webp(target, source, relative)
         if not valid_webp(target):
             target.unlink(missing_ok=True)
-            raise RuntimeError(f"Mural asset není platný WebP: {relative}")
-        print(f"Mural WebP materializován a ověřen: {relative}")
+            raise RuntimeError(f"Mural asset po převodu není platný WebP: {relative}")
+        print(f"Mural WebP převeden z původního obrazového blobu a ověřen: {relative}")
 
 
 if __name__ == "__main__":
