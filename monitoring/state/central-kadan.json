@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-07T19:04:00Z",
-  "last_quick_check_at": "2026-08-07T19:04:00Z",
+  "updated_at": "2026-08-07T20:04:52Z",
+  "last_quick_check_at": "2026-08-07T20:04:52Z",
   "last_deep_check_at": "2026-08-07T19:04:00Z",
   "canonical_registry": {
     "paths": [
@@ -27,10 +27,9 @@
   },
   "city_news": {
     "path": "data/city-news.json",
-    "generated_at": "2026-08-07T13:40:13.528527+00:00",
-    "total_unique_sources": 101,
-    "known_failed_sources": 14,
-    "error_records": 14,
+    "generated_at": "2026-08-07T19:17:01.498445+00:00",
+    "total_unique_sources": 105,
+    "error_records": 17,
     "failed_sources_require_fallback": true
   },
   "repository": {
@@ -51,22 +50,22 @@
     "homepage_and_archive_consistent": true,
     "discovery_surfaces_contain_latest_article": true,
     "public_audit_at": "2026-08-07T19:04:00Z",
-    "public_audit_evidence": "Veřejná titulka i archiv stále končí článkem o městské policii z 04:00, přestože main obsahuje novější schválené/publikačně vyžádané články Od hlubin k nebi, ZZS Kadaň a Slavie a kanonický deploy je má v povinné sadě. RSS endpoint byl dosažitelný, ale webový kontrolní nástroj nepodporuje jeho text/xml obsah; sitemap a news-sitemap nebyly v tomto běhu přes webový nástroj čitelně ověřitelné.",
+    "public_audit_evidence": "Veřejná titulka i archiv při předchozí ověřitelné kontrole končily článkem o městské policii z 04:00, přestože main obsahoval novější schválené/publikačně vyžádané články. Nález byl evidován fingerprintem production-stale-main-20260807-evening a issue #817; jeden kanonický opravný trigger už proběhl. V tomto běhu nebylo možné získat nezávislé čerstvé cache-busting HTTP ověření všech produkčních ploch, proto nebyl spuštěn další deploy.",
     "public_article_count": 58,
     "deployment_source_commit": "91c549f6476b6d58f35f35f67457394d4abf674f",
-    "public_check_attempt_at": "2026-08-07T19:04:00Z",
-    "public_check_attempt_status": "stale-production-repair-pending",
+    "public_check_attempt_at": "2026-08-07T20:04:52Z",
+    "public_check_attempt_status": "known-fingerprint-deduped-no-repeat-repair",
     "repair_attempted": true,
     "repair_trigger_commit": "470a89946cc46437b1cbee1fc3c4a00a5357a377",
     "repair_mode": "single-canonical-monotonic-ovh-trigger",
-    "repair_followup": "GitHub Actions veřejně ukazoval kanonický produkční běh jako pending; další paralelní deploy nebyl spuštěn."
+    "repair_followup": "Issue #817 je uzavřen po následné kontrole live social assetů. Bez nového odlišného důkazu nebyl spuštěn druhý paralelní ani opakovaný deploy."
   },
   "quick_check": {
     "extraordinary_events": "no_new_verified_threshold_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_verified_threshold_development_requiring_user_alert",
     "petition": "no_reliably_verified_threshold_event",
-    "technical": "significant_stale_production_detected_single_canonical_repair_triggered_pending_verification"
+    "technical": "known_production_mismatch_fingerprint_already_handled_no_new_distinct_failure_verified"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -77,17 +76,16 @@
     "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804",
     "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804",
     "komunalni-volby-kadan-kandidaty-lhuta-20260804",
-    "jezero-most-druhy-pohresovany-patrani-20260807"
-  ],
-  "new_significant_fingerprints": [
+    "jezero-most-druhy-pohresovany-patrani-20260807",
     "production-stale-main-20260807-evening"
   ],
+  "new_significant_fingerprints": [],
   "notes": [
     "Povinně byly načteny všechny tři kanonické registry: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Data/city-news.json jsou čerstvá z 7. srpna 2026 13:40 UTC a evidují 14 chybujících nebo blokovaných zdrojů; ty zůstávají povinné a mají být obsluhovány náhradními primárními kanály.",
-    "Kontrola nových policejních, hasičských, zdravotnických, dopravních, nemocničních a regionálních stop neodhalila po deduplikaci žádnou novou ověřenou obsahovou událost s dostatečným prahem pro samostatné upozornění. Pokračující pátrání po druhém člověku na jezeře Most je již zachyceno jako aktualizační stopa existujícího článku.",
-    "Byl zjištěn významný technický nesoulad: produkce večer 7. srpna neobsahovala novější schválené/publikačně vyžádané články, které už jsou v main a v povinné sadě kanonického deploye.",
-    "Byl proveden přesně jeden bezpečný kanonický opravný trigger přes .github/water-selfhosted-trigger.txt; další deploy nebyl spuštěn, protože kanonický běh byl stále ve frontě/pending.",
-    "Technický nález je evidován v issue #817 a pending alertu monitoring-alerts/pending/20260807T190150Z-production-stale-main-20260807-evening.json."
+    "Data/city-news.json byla znovu vygenerována 7. srpna 2026 v 19:17 UTC a pokrývají 105 unikátních zdrojů. Chybující nebo blokované kanály zůstávají povinné a vyžadují náhradní primární kanály; tento běh neodhalil nový kritický slepý bod.",
+    "Rychlá kontrola policejních, hasičských, krizových, dopravních, zdravotnických, městských a regionálních stop neodhalila po deduplikaci žádnou novou ověřenou událost s dostatečným prahem pro upozornění.",
+    "Kontrola veřejně indexovaných soudních stop pro dlouhodobé kadaňské priority neukázala nový procesní pohyb s dostatečným stupněm ověření.",
+    "Technický nesoulad produkce z večera 7. srpna je již zachycen fingerprintem production-stale-main-20260807-evening, issue #817 a předchozím jedním kanonickým opravným triggerem. Nebyl vytvořen duplicitní alert ani spuštěn další deploy.",
+    "V tomto běhu nebylo možné přes dostupné nástroje provést spolehlivé čerstvé cache-busting načtení všech HTTPS produkčních endpointů; tento nedostatek sám o sobě není nový redakční alert a bude znovu ověřen při dalším běhu."
   ]
 }
