@@ -18,8 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      OVH_KEY_A: ${{ secrets.OVH_KEY_A }}
-      OVH_KEY_B: ${{ secrets.OVH_KEY_B }}
+      SSH_KEY: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,7 +54,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          key="$SSH_KEY"
           if [[ -n "$key" ]]; then echo 'KEY_PRESENT=true' >> "$GITHUB_ENV"; else echo 'KEY_PRESENT=false' >> "$GITHUB_ENV"; fi
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
