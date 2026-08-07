@@ -77,18 +77,32 @@ jobs:
           print('FACEBOOK_SCRAPE_OK=1')
           PY
 
+      - name: Ověřit systémový guard po opravě
+        id: guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/refresh_facebook_previews_on_change.py \
+            --article clanky/mestska-policie-kadan-fakta-diskuse-2026.html \
+            --timeout 30
+          grep -Fq '"state": "preview_refreshed"' .github/facebook-preview-refresh-status.json
+          grep -Fq '"facebook_rescrape": true' .github/facebook-preview-refresh-status.json
+          echo 'SYSTEM_GUARD_OK=1'
+
       - name: Zapsat výsledek diagnostiky do PR
         if: always()
         uses: actions/github-script@v7
         env:
           DIAG: ${{ steps.diag.outcome }}
+          GUARD: ${{ steps.guard.outcome }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const ok=process.env.DIAG==='success' && process.env.GUARD==='success';
             await github.rest.issues.createComment({
               owner:context.repo.owner,
               repo:context.repo.repo,
               issue_number:context.issue.number,
-              body:`MP_FACEBOOK_DIAGNOSTIC=${process.env.DIAG}`
+              body:`MP_FACEBOOK_DIAGNOSTIC=${process.env.DIAG}; SYSTEM_GUARD=${process.env.GUARD}`
             });
-            if(process.env.DIAG!=='success') core.setFailed('Diagnostika FB náhledu selhala.');
+            if(!ok) core.setFailed('Diagnostika nebo systémový FB guard selhal.');
