@@ -1,9 +1,9 @@
 {
   "version": 2,
-  "updatedAt": "2026-08-06T09:03:09+00:00",
-  "lastQuickCheckAt": "2026-08-06T09:03:09+00:00",
-  "lastDeepCheckAt": "2026-08-06T05:37:51.577706+00:00",
-  "repositoryMainShaObserved": "a7c643934f1f5411e8538768872326e601569ef7",
+  "updatedAt": "2026-08-07T23:56:17+00:00",
+  "lastQuickCheckAt": "2026-08-07T23:56:17+00:00",
+  "lastDeepCheckAt": "2026-08-07T23:40:50.551973+00:00",
+  "repositoryMainShaObserved": "3ae443cbd7e89cb7cdbf5a82af97c079a538a01a",
   "canonicalRegistries": [
     "data/organizations.json",
     "data/city-sources.json",
@@ -15,54 +15,57 @@
     "regionalSourcesSha": "2a58f103fa8dbcff344176e938c06e8836511db0"
   },
   "coverageSnapshot": {
-    "cityNewsGeneratedAt": "2026-08-06T03:37:51.577706+00:00",
-    "knownFailedSources": 13,
+    "completeRegionalCheckedAt": "2026-08-07T23:40:50.551973+00:00",
+    "sourceCount": 213,
+    "checkedSources": 194,
+    "knownFailedSources": 19,
+    "regionalMunicipalities": 58,
+    "regionalNamedInstitutions": 25,
+    "regionalRegistryComplete": true,
     "failedSourcesRemainMonitored": true
   },
   "quickCheck": {
     "newSignificantFindings": 0,
     "newSignificantFingerprints": [],
-    "duplicateFindingsSuppressed": [
-      "51bbe982acae479cb67a",
-      "87f1b1ee1a7c0ff72307",
-      "dd9a1589df62e2b1ca97"
-    ],
     "unverifiedLeads": [],
     "scopesChecked": [
       "kanonické registry organizací, kadaňských zdrojů a širokého regionu",
-      "Policie ČR, HZS Ústeckého kraje, městská policie a rychlé regionální zprávy",
+      "kompletní regionální monitoring 213 zdrojů včetně 58 obcí a 25 pojmenovaných institucí",
+      "Město Kadaň a aktuální městské informace",
+      "Policie ČR, HZS Ústeckého kraje, ZZS Ústeckého kraje a krajský krizový portál",
       "doprava, železnice, voda, elektřina a meteorologická varování",
-      "Kadaň, Chomutovsko, Mostecko, Žatecko a zdroje širokého okolí",
-      "Nemocnice Kadaň, dlouhodobé kauzy a známé soudní pohyby",
-      "nové monitoringové issues, pending nálezy a kontrola duplicit",
-      "stav repozitáře a nejnovější schválený obsah"
+      "Nemocnice Kadaň, dlouhodobé kauzy, veřejné smlouvy a soudní stopy",
+      "Císařský den 2026 a velké regionální akce",
+      "živá titulní strana a archiv Naše Kadaň",
+      "stav repozitáře a deduplikace proti zveřejněnému obsahu"
     ],
     "observations": {
       "newEmergencyFound": false,
       "newCourtMovementFound": false,
       "newInstitutionalDocumentFound": false,
-      "hospitalPetitionSignificantChangeFound": false,
-      "stateEPetitionFound": false,
-      "jezeroMostOfficialPoliceUpdateFound": false,
-      "jezeroMostSecondPersonStatusConfirmed": false,
-      "latestAlreadyDeliveredFinding": "Pátrání na jezeře Most má tragický vývoj; nález těla osmadvacetiletého muže byl již zachycen, deduplikován a uživateli oznámen.",
-      "latestRepositoryArticleTitle": "Mládež Tatranu Kadaň má za sebou úspěšnou sezonu. V září klub otevře nábor",
-      "latestRepositoryArticlePublishedAt": "2026-08-06T10:50:00+02:00",
-      "latestRepositoryArticleUrl": "https://nasekadan.cz/clanky/mladez-tatranu-kadan-uspesna-sezona-nabor-2026.html",
-      "homepageDirectFetchAvailable": false,
-      "archiveDirectFetchAvailable": false,
+      "newMajorCultureFindingFound": false,
+      "newTransportDisruptionFound": false,
+      "currentRegionalWeatherWarningFound": false,
+      "completeRegionalMonitorNewAlerts": 0,
+      "latestRepositoryArticleTitle": "Neřeší městská policie dopravu? Bouřlivá debata přiměla redakci ověřit fakta",
+      "latestRepositoryArticlePublishedAt": "2026-08-07T04:00:00+02:00",
+      "latestRepositoryArticleUrl": "https://nasekadan.cz/clanky/mestska-policie-kadan-fakta-diskuse-2026.html",
+      "homepageDirectFetchAvailable": true,
+      "archiveDirectFetchAvailable": true,
+      "homepageAndArchiveMatchRepository": true,
       "sitemapDirectFetchAvailable": false,
       "rssDirectFetchAvailable": false,
       "deploymentHealthDirectFetchAvailable": false,
-      "publicFetchFailure": "DNS resolution of nasekadan.cz was unavailable from the runtime; search-engine results were reachable but were not fresh enough to prove current production state.",
-      "technicalRepairAttemptThisRun": "none; no verified evidence of stale production, therefore no deploy was attempted",
-      "checkedAt": "2026-08-06T09:03:09+00:00"
+      "publicFetchLimitation": "Webový prohlížeč živě načetl titulní stranu a archiv. XML a textové endpointy sitemap.xml, rss.xml a deployment-health.txt v tomto běhu nástroj nevrátil v čitelné podobě; nebyl ale nalezen žádný důkaz zastaralé produkce.",
+      "technicalRepairAttemptThisRun": "none; titulní strana a archiv odpovídají aktuálnímu repozitáři a nebyl zjištěn stav opravňující deploy",
+      "checkedAt": "2026-08-07T23:56:17+00:00"
     },
     "notes": [
-      "Hodinová kontrola neodhalila nový ověřený a neduplicitní nález nad redakčním prahem.",
-      "Tragický vývoj pátrání na jezeře Most byl již oznámen v předchozím běhu; nové oficiální policejní potvrzení ani potvrzený stav druhé osoby se neobjevily.",
-      "Nevznikl nový alert, pending JSON ani GitHub Issue.",
-      "Přímá veřejná kontrola webu nebyla v tomto prostředí technicky možná; bez důkazu zastaralé produkce nebyl spuštěn opravný deploy."
+      "Kompletní regionální průchod skončil 16 minut před touto kontrolou: 194 z 213 zdrojů bylo dostupných a nevznikl žádný nový alert.",
+      "Následná rychlá kontrola oficiálních městských, bezpečnostních, krizových, dopravních a meteorologických zdrojů neodhalila nový ověřený a neduplicitní nález nad redakčním prahem.",
+      "Na webu města Kadaň se neobjevila novější aktualita než dosud známé položky; kalendář obsahuje běžné srpnové akce určené spíše do kulturního přehledu.",
+      "Krajský krizový portál uvádí, že pro Ústecký kraj nejsou aktuálně vydány žádné výstrahy ČHMÚ.",
+      "Nevznikl nový alert, pending JSON ani GitHub Issue."
     ]
   }
 }
