@@ -51,7 +51,12 @@ jobs:
           path.write_text(text.replace(old, new), encoding='utf-8')
           PY
 
+          # První průchod synchronizuje samotný registr podle živého webu.
           python3 scripts/run_canonical_audit_runtime_v2.py
+          # Druhý průchod stejným živým webem zapíše samostatný auditní stav.
+          # Bez tohoto kroku zůstával .github/canonical-content-audit-status.json
+          # na starších počtech, i když hlavní registr už byl správně aktualizovaný.
+          python3 scripts/audit_canonical_content_runtime.py --write-status
           git checkout -- scripts/audit_canonical_content_runtime.py
           git add data/published-content-index.json .github/canonical-content-audit-status.json
           if git diff --cached --quiet; then
