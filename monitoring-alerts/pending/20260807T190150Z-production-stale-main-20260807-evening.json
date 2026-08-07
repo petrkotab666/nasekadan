@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "fingerprint": "production-stale-main-20260807-evening",
+  "created_at": "2026-08-07T19:01:50Z",
+  "severity": "high",
+  "category": "technical-production",
+  "title": "Produkce večer 7. 8. zaostává za schváleným main",
+  "location": "Naše Kadaň / nasekadan.cz",
+  "issue_number": 817,
+  "facts": [
+    "Veřejná titulní stránka a archiv při večerní kontrole stále končily článkem o městské policii z 04:00.",
+    "V main jsou novější schválené nebo publikačně vyžádané články Od hlubin k nebi, zázemí ZZS Kadaň a Slavie Kadaň.",
+    "Kanonický deploy workflow tyto články zahrnuje do povinné ověřované sady.",
+    "Byl proveden právě jeden bezpečný opravný trigger přes kanonický monotónní OVH deploy; trigger commit 470a89946cc46437b1cbee1fc3c4a00a5357a377.",
+    "Po zásahu byl kanonický produkční běh ve veřejném GitHub Actions přehledu ve stavu pending; další paralelní deploy nebyl spuštěn."
+  ],
+  "editorial_action": "Po doběhnutí kanonického běhu ověřit homepage, archiv, RSS, sitemap, news-sitemap, OG a deployment-health; při selhání opravit konkrétní krok bez slepého opakování celého deploye.",
+  "status": "pending-verification"
+}
