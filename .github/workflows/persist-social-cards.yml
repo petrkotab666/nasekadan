@@ -6,6 +6,7 @@ on:
     paths:
       - 'clanky/*.html'
       - 'scripts/generate_social_cards.py'
+      - 'scripts/harden_facebook_meta.py'
       - '.github/workflows/persist-social-cards.yml'
   workflow_dispatch:
 
@@ -35,119 +36,29 @@ jobs:
       - name: Nainstalovat Pillow
         run: python -m pip install --disable-pip-version-check Pillow
 
-      - name: Vytvořit jedinečné 1200×630 grafiky a OG metadata
-        run: |
-          python scripts/generate_social_cards.py --write --check
+      - name: Vytvořit jedinečné 1200×630 grafiky
+        run: python scripts/generate_social_cards.py --write --check
 
-      - name: Přidat Facebook cache-busting a secure_url
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          from hashlib import sha256
-          import re
-          from scripts.generate_social_cards import meta_content, replace_meta
-
-          SITE='https://nasekadan.cz'
-          changed=0
-          bad=[]
-          for path in Path('clanky').glob('*.html'):
-              text=path.read_text(encoding='utf-8', errors='replace')
-              if 'NewsArticle' not in text or 'article-shell' not in text:
-                  continue
-              image=meta_content(text, property_name='og:image')
-              if not image.startswith(SITE + '/social/'):
-                  bad.append(f'{path}: og:image není lokální')
-                  continue
-              clean=image.split('?',1)[0]
-              rel=clean.removeprefix(SITE).lstrip('/')
-              asset=Path(rel)
-              if not asset.is_file() or asset.stat().st_size < 10000:
-                  bad.append(f'{path}: chybí {rel}')
-                  continue
-              head=asset.read_bytes()[:24]
-              if not head.startswith(b'\x89PNG\r\n\x1a\n'):
-                  bad.append(f'{path}: {rel} není PNG')
-                  continue
-              width=int.from_bytes(head[16:20],'big')
-              height=int.from_bytes(head[20:24],'big')
-              if (width,height)!=(1200,630):
-                  bad.append(f'{path}: {rel} má {width}x{height}')
-                  continue
-              digest=sha256(asset.read_bytes()).hexdigest()[:16]
-              versioned=f'{clean}?fb={digest}'
-              new=text
-              new=replace_meta(new,'og:image',versioned)
-              new=replace_meta(new,'og:image:secure_url',versioned)
-              new=replace_meta(new,'og:image:type','image/png')
-              new=replace_meta(new,'og:image:width','1200')
-              new=replace_meta(new,'og:image:height','630')
-              new=replace_meta(new,'twitter:image',versioned,property_meta=False)
-              # Udržet i schema.org image na stejné lokální kartě, pokud je v článku jednoduché pole image.
-              new=re.sub(r'"image"\s*:\s*\[\s*"[^"]+"\s*\]', f'"image":["{versioned}"]', new, count=1)
-              if new != text:
-                  path.write_text(new,encoding='utf-8')
-                  changed += 1
-          if bad:
-              raise SystemExit('Facebook grafiky nejsou kompletní:\n- ' + '\n- '.join(bad))
-          print(f'Verzovaná Facebook metadata aktualizována u {changed} článků.')
-          PY
-
-      - name: Blokující kontrola Facebook metadat
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-          bad=[]
-          for path in Path('clanky').glob('*.html'):
-              text=path.read_text(encoding='utf-8', errors='replace')
-              if 'NewsArticle' not in text or 'article-shell' not in text:
-                  continue
-              def get(prop):
-                  m=re.search(rf'<meta[^>]+property=["\']{re.escape(prop)}["\'][^>]+content=["\']([^"\']+)',text,re.I)
-                  return m.group(1) if m else ''
-              image=get('og:image')
-              secure=get('og:image:secure_url')
-              width=get('og:image:width')
-              height=get('og:image:height')
-              typ=get('og:image:type')
-              if not image.startswith('https://nasekadan.cz/social/') or '?fb=' not in image:
-                  bad.append(f'{path}: neplatný og:image')
-              if secure != image:
-                  bad.append(f'{path}: secure_url se neshoduje')
-              if width!='1200' or height!='630' or typ!='image/png':
-                  bad.append(f'{path}: neplatné rozměry/MIME')
-              twitter=re.search(r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)',text,re.I)
-              if not twitter or twitter.group(1)!=image:
-                  bad.append(f'{path}: twitter:image se neshoduje')
-          if bad:
-              raise SystemExit('Blokující Facebook kontrola:\n- '+'\n- '.join(bad))
-          print('OK: všechny články mají lokální verzovanou Facebook kartu 1200×630.')
-          PY
+      - name: Vynutit Facebook-safe metadata a nový cache klíč
+        run: python scripts/harden_facebook_meta.py --write --check
 
       - name: Uložit grafiky a metadata přímo do main
-        id: persist
         shell: bash
         run: |
           set -euo pipefail
           if git diff --quiet -- clanky social; then
-            echo 'changed=false' >> "$GITHUB_OUTPUT"
             echo 'Všechny články už mají správná Facebook metadata.'
-            exit 0
+          else
+            git config user.name 'Naše Kadaň automat'
+            git config user.email 'actions@users.noreply.github.com'
+            git add clanky social
+            git commit -m 'Opravit Facebook náhledy článků [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              test "$attempt" -lt 5
+              sleep $((attempt*2))
+            done
           fi
-          git config user.name 'Naše Kadaň automat'
-          git config user.email 'actions@users.noreply.github.com'
-          git add clanky social
-          git commit -m 'Opravit Facebook náhledy článků [skip ci]'
-          for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then
-              echo 'changed=true' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            sleep $((attempt*2))
-          done
-          exit 1
 
       - name: Spustit kanonický produkční deploy
         if: success()
