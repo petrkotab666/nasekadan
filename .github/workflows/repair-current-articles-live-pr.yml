@@ -1,0 +1,54 @@
+name: Obnovit aktuální články na produkci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/repair-current-articles-live.trigger'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-canonical-production
+  cancel-in-progress: true
+
+jobs:
+  repair-live:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'repair-current-articles-live'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Nasadit pouze aktuální main kanonickou cestou
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash deploy/sync-production.sh
+
+      - name: Ověřit dnešní články přímo na produkčním frontendu
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          resolve=(--resolve nasekadan.cz:443:127.0.0.1)
+          q="repair-${GITHUB_RUN_ID}"
+          home="$(curl -kfsSL --max-time 30 "${resolve[@]}" "$base/?$q")"
+          archive="$(curl -kfsSL --max-time 30 "${resolve[@]}" "$base/clanky/?$q")"
+          rss="$(curl -kfsSL --max-time 30 "${resolve[@]}" "$base/rss.xml?$q")"
+          health="$(curl -kfsSL --max-time 30 "${resolve[@]}" "$base/deployment-health.txt?$q")"
+          mp='mestska-policie-kadan-fakta-diskuse-2026.html'
+          gym='gymnastika-kadan-treneri-prosinec-2026.html'
+          grep -Fq "data-latest-article-href=\"/clanky/$mp\"" <<<"$home"
+          grep -Fq "/clanky/$gym" <<<"$home"
+          grep -Fq "/clanky/$mp" <<<"$archive"
+          grep -Fq "/clanky/$gym" <<<"$archive"
+          grep -Fq "$base/clanky/$mp" <<<"$rss"
+          grep -Fq "$base/clanky/$gym" <<<"$rss"
+          grep -Fq "source=$(git rev-parse HEAD)" <<<"$health"
+          echo "OK: produkce obsahuje MP + Gymnastiku a odpovídá main $(git rev-parse HEAD)."
