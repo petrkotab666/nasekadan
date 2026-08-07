@@ -1,0 +1,91 @@
+name: Nasadit murály přes SSH fallback
+run-name: Okamžité nasazení článku Od hlubin k nebi přes OVH SSH
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/deploy-murals-ssh-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-murals-ssh-fallback
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit aktuální main na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          cd /opt/nasekadan
+          chmod +x deploy/sync-production.sh
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash deploy/sync-production.sh
+          REMOTE
+
+      - name: Ověřit veřejný článek a WebP
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          slug='od-hlubin-k-nebi-kadan.html'
+          q="mural-ssh-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "$base/clanky/$slug?$q" -o /tmp/article.html
+          grep -Fq '<h1>Od hlubin k nebi. Dva podchody na sídlišti A proměnila kadaňská autorka v obří atlas zvířat</h1>' /tmp/article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' /tmp/article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' /tmp/article.html
+          for img in ptaci-ara-zoborozec.webp ptaci-cela-stena.webp; do
+            curl -4 -kfsSL --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" -o "/tmp/$img"
+            file "/tmp/$img" | grep -Fq 'Web/P image'
+            test "$(stat -c %s "/tmp/$img")" -gt 10000
+            curl -4 -kfsSI --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" | tr -d '\r' | grep -Eqi '^content-type: image/webp$'
+          done
+          curl -4 -kfsSL --max-time 40 "$base/?$q" | grep -Fq "$slug"
+          curl -4 -kfsSL --max-time 40 "$base/clanky/?$q" | grep -Fq "$slug"
+          curl -4 -kfsSL --max-time 40 "$base/rss.xml?$q" | grep -Fq "$slug"
+          curl -4 -kfsSL --max-time 40 "$base/sitemap.xml?$q" | grep -Fq "$slug"
+          curl -4 -kfsSL --max-time 40 "$base/news-sitemap.xml?$q" | grep -Fq "$slug"
+          curl -4 -kfsSL --max-time 40 "$base/deployment-health.txt?$q" | grep -Fq 'status=ok'
+
+      - name: Zapsat potvrzení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-deploy-bot'
+          git config user.email 'info@nasekadan.cz'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          status=".github/deploy-status/od-hlubin-k-nebi-ssh-${GITHUB_RUN_ID}.txt"
+          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nmethod=github-hosted-ssh\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
+          git add "$status"
+          git commit -m 'Potvrdit SSH nasazení článku Od hlubin k nebi [skip ci]'
+          git push origin HEAD:main
