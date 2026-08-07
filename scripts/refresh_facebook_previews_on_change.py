@@ -67,6 +67,13 @@ def marker_rows() -> list[tuple[Path, dict[str, Any]]]:
 
 
 def detect_candidates(changed: set[str], forced: list[str]) -> list[dict[str, Any]]:
+    """Vybere jen publikované články, kterých se právě týká tato změna.
+
+    Historický rozdíl mezi starým markerem a dnešním og:image sám o sobě nesmí
+    spustit hromadný rescrape všech starších článků. Rozdíl se zohlední teprve
+    tehdy, když je konkrétní článek v aktuálním pushi změněn, změnil se jeho
+    aktuální OG soubor, nebo byl článek výslovně vybrán přes --article.
+    """
     forced_set = {
         queue.normalize_article_path(value)
         for value in forced
@@ -85,14 +92,22 @@ def detect_candidates(changed: set[str], forced: list[str]) -> list[dict[str, An
             print(f"Přeskakuji marker {marker.name}: {exc}", file=sys.stderr)
             continue
 
-        reasons: list[str] = []
-        if article_path in forced_set:
-            reasons.append("manual")
-        if article_path in changed:
-            reasons.append("article_changed")
-
+        is_forced = article_path in forced_set
+        article_changed = article_path in changed
         image_rel = same_site_image_path(article.get("image", ""))
-        if image_rel and image_rel in changed:
+        image_changed = bool(image_rel and image_rel in changed)
+
+        # Článek mimo rozsah aktuální změny vůbec neřešíme. Tím staré markery
+        # nemohou samy od sebe vyvolat hromadnou obnovu desítek FB náhledů.
+        if not (is_forced or article_changed or image_changed):
+            continue
+
+        reasons: list[str] = []
+        if is_forced:
+            reasons.append("manual")
+        if article_changed:
+            reasons.append("article_changed")
+        if image_changed:
             reasons.append("image_changed")
 
         old_image = str(data.get("og_image", "")).strip()
@@ -100,16 +115,15 @@ def detect_candidates(changed: set[str], forced: list[str]) -> list[dict[str, An
         if old_image != new_image:
             reasons.append("og_image_changed")
 
-        if reasons:
-            candidates.append(
-                {
-                    "marker": marker,
-                    "marker_data": data,
-                    "article_path": article_path,
-                    "article": article,
-                    "reasons": sorted(set(reasons)),
-                }
-            )
+        candidates.append(
+            {
+                "marker": marker,
+                "marker_data": data,
+                "article_path": article_path,
+                "article": article,
+                "reasons": sorted(set(reasons)),
+            }
+        )
 
     missing_forced = forced_set - {row["article_path"] for row in candidates}
     for article_path in sorted(missing_forced):
