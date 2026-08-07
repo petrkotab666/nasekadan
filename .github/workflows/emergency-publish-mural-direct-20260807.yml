@@ -1,5 +1,5 @@
-name: Nouzově publikovat Od hlubin k nebi přímo
-run-name: Přímé nasazení článku Od hlubin k nebi na OVH
+name: Obnovit úplný web a monotónní ochranu
+run-name: Úplná monotónní obnova Naše Kadaň na OVH
 
 on:
   push:
@@ -34,18 +34,15 @@ jobs:
           set -euo pipefail
           key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
           test -n "$key"
-          printf '%s\n' "$key" > "$RUNNER_TEMP/ovh_key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Připravit a zapsat článek přímo do veřejného webu
+      - name: Nainstalovat monotónní ochranu a obnovit celý web
         shell: bash
         run: |
           set -euo pipefail
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-
-          # Sdílet stejný serverový zámek jako kanonický deploy. Tím nemůže
-          # souběžně běžící starší nasazení po této opravě znovu přepsat web.
           LOCK_FILE=/tmp/nasekadan-production-deploy.lock
           sudo touch "$LOCK_FILE"
           sudo chmod a+rw "$LOCK_FILE"
@@ -53,90 +50,77 @@ jobs:
           flock -w 1200 9
 
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          sudo rm -f /opt/nasekadan/.git/index.lock
           git -C /opt/nasekadan fetch --prune origin main
           git -C /opt/nasekadan reset --hard origin/main
+          git -C /opt/nasekadan clean -fd
           cd /opt/nasekadan
 
-          if ! python3 - <<'PY'
-import PIL
-PY
-          then
-            python3 -m pip install --user Pillow
-          fi
+          # Uvolnit společný zámek před instalátorem. Nový static-restore si jej
+          # vezme sám a od této chvíle jej používají všechny serverové obnovy.
+          flock -u 9
+          sudo bash deploy/install-automation.sh
 
-          python3 scripts/materialize_mural_assets.py
-          python3 scripts/normalize_footers.py --write --check
-          python3 scripts/normalize_articles.py --write --check
-          python3 scripts/generate_social_cards.py --write --check
-          python3 scripts/enforce_current_article_order.py
-          python3 scripts/prepare_discovery.py
-
-          ARTICLE='clanky/od-hlubin-k-nebi-kadan.html'
-          SLUG='od-hlubin-k-nebi-kadan.html'
-          test -s "$ARTICLE"
-          grep -Fq '<h1>Od hlubin k nebi. Dva podchody na sídlišti A proměnila kadaňská autorka v obří atlas zvířat</h1>' "$ARTICLE"
-          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' "$ARTICLE"
-          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' "$ARTICLE"
-
-          OG_URL=$(python3 - <<'PY'
-from pathlib import Path
-import re
-text=Path('clanky/od-hlubin-k-nebi-kadan.html').read_text(encoding='utf-8')
-m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']https://nasekadan\.cz/([^"\']+)', text, re.I)
-if not m:
-    raise SystemExit('og:image nebyl nalezen')
-print(m.group(1))
-PY
-          )
-          test -n "$OG_URL"
-          test -s "$OG_URL"
-
-          ROOT=/var/www/nasekadan
-          sudo mkdir -p "$ROOT/clanky" "$ROOT/images/clanky/od-hlubin-k-nebi" "$ROOT/social"
-          sudo install -m 0644 "$ARTICLE" "$ROOT/$ARTICLE"
-          sudo install -m 0644 images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp "$ROOT/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp"
-          sudo install -m 0644 images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp "$ROOT/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp"
-          sudo install -m 0644 "$OG_URL" "$ROOT/$OG_URL"
-          sudo install -m 0644 index.html "$ROOT/index.html"
-          for f in clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml; do
-            [ -f "$f" ] && sudo install -m 0644 "$f" "$ROOT/$f"
-          done
-          sha=$(git rev-parse HEAD)
-          printf 'site=nasekadan.cz\nstatus=ok\nsource=%s\ngenerated=%s\nmode=emergency-direct-mural-locked\n' "$sha" "$(date -u +%FT%TZ)" | sudo tee "$ROOT/deployment-health.txt" >/dev/null
-          sudo chmod -R a+rX "$ROOT/clanky" "$ROOT/images/clanky/od-hlubin-k-nebi" "$ROOT/social" "$ROOT/index.html" "$ROOT/rss.xml" "$ROOT/sitemap.xml" "$ROOT/news-sitemap.xml" "$ROOT/deployment-health.txt"
+          # Po instalaci musí být celý veřejný document root monotónně úplný.
+          python3 scripts/verify_published_article_set.py \
+            --source /opt/nasekadan --target /var/www/nasekadan
+          sudo systemctl is-active --quiet nasekadan-refresh.timer
+          sudo systemctl is-active --quiet nasekadan-content-regression.path
           REMOTE
 
-      - name: Ověřit veřejné nasazení
+      - name: Ověřit úplný veřejný web
         shell: bash
         run: |
           set -euo pipefail
           base='https://nasekadan.cz'
-          slug='od-hlubin-k-nebi-kadan.html'
-          q="mural-direct-${GITHUB_RUN_ID}-$(date +%s)"
-          curl -4 -kfsSL --max-time 40 "$base/clanky/$slug?$q" -o /tmp/article.html
-          grep -Fq '<h1>Od hlubin k nebi. Dva podchody na sídlišti A proměnila kadaňská autorka v obří atlas zvířat</h1>' /tmp/article.html
-          for img in ptaci-ara-zoborozec.webp ptaci-cela-stena.webp; do
-            curl -4 -kfsSL --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" -o "/tmp/$img"
-            file "/tmp/$img" | grep -Fq 'Web/P image'
-            curl -4 -kfsSI --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" | tr -d '\r' | grep -Eqi '^content-type: image/webp$'
+          q="monotonic-recovery-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "$base/published-articles-manifest.json?$q" -o /tmp/manifest.json
+          curl -4 -kfsSL --max-time 40 "$base/clanky/?$q" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "$base/rss.xml?$q" -o /tmp/rss.xml
+          curl -4 -kfsSL --max-time 40 "$base/sitemap.xml?$q" -o /tmp/sitemap.xml
+          python3 - <<'PY'
+import json
+from pathlib import Path
+p=json.loads(Path('/tmp/manifest.json').read_text(encoding='utf-8'))
+required={
+ 'clanky/zzs-kadan-garaz-mycka-2026.html',
+ 'clanky/slavie-kadan-epp-plavci-120-tisic-2026.html',
+ 'clanky/od-hlubin-k-nebi-kadan.html',
+ 'clanky/mestska-policie-kadan-fakta-diskuse-2026.html',
+ 'clanky/gymnastika-kadan-treneri-prosinec-2026.html',
+}
+missing=required-set(p.get('articles', []))
+assert not missing, missing
+assert p.get('article_count', 0) >= len(required)
+print('manifest article_count=',p['article_count'])
+PY
+          for slug in \
+            zzs-kadan-garaz-mycka-2026.html \
+            slavie-kadan-epp-plavci-120-tisic-2026.html \
+            od-hlubin-k-nebi-kadan.html \
+            mestska-policie-kadan-fakta-diskuse-2026.html \
+            gymnastika-kadan-treneri-prosinec-2026.html; do
+            grep -Fq "$slug" /tmp/archive.html
+            grep -Fq "$slug" /tmp/rss.xml
+            grep -Fq "$slug" /tmp/sitemap.xml
+            curl -4 -kfsSL --max-time 40 "$base/clanky/$slug?$q" >/dev/null
           done
+
+          # Facebook: ZZS musí ukazovat na vlastní lokální kartu a karta musí být
+          # fyzicky dostupná jako obrázek na našem serveru.
+          curl -4 -kfsSL --max-time 40 "$base/clanky/zzs-kadan-garaz-mycka-2026.html?$q" -o /tmp/zzs.html
           og=$(python3 - <<'PY'
 from pathlib import Path
 import re
-text=Path('/tmp/article.html').read_text(encoding='utf-8')
-m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)', text, re.I)
-if not m: raise SystemExit(1)
+text=Path('/tmp/zzs.html').read_text(encoding='utf-8')
+m=re.search(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I)
+assert m
 print(m.group(1))
 PY
           )
-          test -n "$og"
-          curl -4 -kfsSL --max-time 40 "$og?$q" -o /tmp/og-image
-          file /tmp/og-image | grep -Eqi 'PNG image data|JPEG image data|Web/P image'
-          curl -4 -kfsSL --max-time 40 "$base/?$q" | grep -Fq "$slug"
-          curl -4 -kfsSL --max-time 40 "$base/clanky/?$q" | grep -Fq "$slug"
-          curl -4 -kfsSL --max-time 40 "$base/rss.xml?$q" | grep -Fq "$slug"
-          curl -4 -kfsSL --max-time 40 "$base/sitemap.xml?$q" | grep -Fq "$slug"
-          curl -4 -kfsSL --max-time 40 "$base/news-sitemap.xml?$q" | grep -Fq "$slug"
+          case "$og" in https://nasekadan.cz/social/*) ;; *) echo "Neplatný OG: $og" >&2; exit 1;; esac
+          curl -4 -kfsSL --max-time 40 "$og?$q" -o /tmp/zzs-og
+          file /tmp/zzs-og | grep -Eqi 'PNG image data|JPEG image data|Web/P image'
 
       - name: Zapsat potvrzení
         shell: bash
@@ -147,8 +131,8 @@ PY
           git fetch origin main
           git reset --hard origin/main
           mkdir -p .github/deploy-status
-          status=".github/deploy-status/od-hlubin-k-nebi-direct-${GITHUB_RUN_ID}.txt"
-          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nmethod=emergency-direct-locked\nwebp=verified\nog_image=verified\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
+          status=".github/deploy-status/monotonic-recovery-${GITHUB_RUN_ID}.txt"
+          printf 'mode=monotonic-full-recovery\narticles=verified\nzzs=verified\nslavie=verified\nfacebook_og=verified\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
           git add "$status"
-          git commit -m 'Potvrdit zamčené přímé nasazení článku Od hlubin k nebi [skip ci]'
+          git commit -m 'Potvrdit úplnou monotónní obnovu webu [skip ci]'
           git push origin HEAD:main
