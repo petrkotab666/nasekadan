@@ -1,0 +1,104 @@
+name: Ověřit finální Facebook náhled Od hlubin k nebi
+
+on:
+  workflow_run:
+    workflows: ['Definitivně opravit Facebook náhled Od hlubin k nebi']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verify-facebook-od-hlubin-final
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FB_TOKEN_1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      FB_TOKEN_3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit veřejný článek a Meta image
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          article='https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html'
+          expected='https://nasekadan.cz/social/od-hlubin-k-nebi-kadan-facebook-final-20260807-v3.png'
+          python3 - "$article" "$expected" <<'PY' | tee /tmp/live.txt
+          import re,struct,sys,time,urllib.request
+          article,expected=sys.argv[1:]
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          req=urllib.request.Request(article+'?verifyfb='+str(time.time_ns()),headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=40) as r:
+              assert r.status==200
+              text=r.read().decode('utf-8','replace')
+          imgs=[x.replace('&amp;','&') for x in re.findall(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I)]
+          assert imgs==[expected],imgs
+          req=urllib.request.Request(expected,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=40) as r:
+              data=r.read(); ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); code=r.status
+          assert code==200 and ctype=='image/png' and len(data)>10000
+          assert data[:8]==b'\x89PNG\r\n\x1a\n' and struct.unpack('>II',data[16:24])==(1200,630)
+          print('LIVE_OK',expected,len(data),ctype)
+          PY
+          token="${FB_TOKEN_1:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
+          test -n "$token"
+          response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' --data-urlencode "id=$article" --data-urlencode 'scrape=true' --data-urlencode "access_token=$token")"
+          python3 - "$expected" "$response" <<'PY' | tee /tmp/meta.txt
+          import json,sys
+          expected,raw=sys.argv[1:]
+          d=json.loads(raw)
+          if 'error' in d: raise SystemExit(json.dumps(d['error'],ensure_ascii=False))
+          rawimg=d.get('image'); urls=[]
+          if isinstance(rawimg,str): urls=[rawimg]
+          elif isinstance(rawimg,dict): urls=[v for k,v in rawimg.items() if k in ('url','secure_url','src') and isinstance(v,str)]
+          elif isinstance(rawimg,list):
+              for x in rawimg:
+                  if isinstance(x,str): urls.append(x)
+                  elif isinstance(x,dict): urls.extend(v for k,v in x.items() if k in ('url','secure_url','src') and isinstance(v,str))
+          if expected not in urls: raise SystemExit('META_IMAGE_MISMATCH '+json.dumps(urls,ensure_ascii=False))
+          print('META_OK',json.dumps(urls,ensure_ascii=False))
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat důkaz do main
+        if: steps.verify.outputs.ok == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – Facebook verifier'
+          git config user.email 'info@nasekadan.cz'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p reports
+          cat > reports/facebook-od-hlubin-k-nebi-final.json <<EOF
+          {
+            "status": "success",
+            "verified_at": "$(date -u +%FT%TZ)",
+            "article": "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html",
+            "meta_image": "https://nasekadan.cz/social/od-hlubin-k-nebi-kadan-facebook-final-20260807-v3.png",
+            "live": true,
+            "meta_graph_api": true,
+            "width": 1200,
+            "height": 630
+          }
+          EOF
+          git add reports/facebook-od-hlubin-k-nebi-final.json
+          git commit -m 'Potvrdit Facebook náhled Od hlubin k nebi [skip ci]'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep $((attempt*2))
+          done
+          exit 1
