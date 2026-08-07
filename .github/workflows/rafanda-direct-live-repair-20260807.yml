@@ -1,22 +1,16 @@
-name: Přímá oprava článku ESO market Rafanda na produkci
+name: Přímá oprava Rafandy a obrázku Gymnastiky na produkci
 
 on:
   push:
     branches: [main]
     paths:
       - '.github/rafanda-direct-live-trigger.txt'
-  pull_request_target:
-    types: [opened, reopened, synchronize]
-    paths:
-      - '.github/rafanda-direct-pr-trigger.txt'
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 concurrency:
-  group: rafanda-direct-live-repair-20260807
+  group: rafanda-gymnastika-direct-live-repair-20260807
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
+      RAFANDA: clanky/eso-market-rafanda-kadan-24-7.html
+      GYM: clanky/gymnastika-kadan-treneri-prosinec-2026.html
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Načíst aktuální main
@@ -33,19 +28,13 @@ jobs:
           ref: main
           fetch-depth: 1
 
-      - name: Obnovit skutečné fotografie a ověřit článek
+      - name: Ověřit zdrojové články a obrázky
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p images/clanky/eso-market-rafanda social
-          test -s images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp
-          cat .github/tmp/rafanda-photo-fix/navod.part* | base64 -d > images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp
-          base64 -d tmp/rafanda-candidates/05-4660.bin > images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp
-          cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp social/eso-market-rafanda-kadan-24-7.webp
-          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$ARTICLE"
-          grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' "$ARTICLE"
-          grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' "$ARTICLE"
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' "$ARTICLE"
+          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' "$RAFANDA"
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' "$RAFANDA"
+          grep -Fq '/social/gymnastika-kadan-treneri-prosinec-2026.png' "$GYM"
           for f in \
             images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp \
             images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp \
@@ -54,22 +43,26 @@ jobs:
             file "$f" | grep -Fq 'Web/P image'
             test "$(stat -c %s "$f")" -gt 10000
           done
+          file social/gymnastika-kadan-treneri-prosinec-2026.png | grep -Fq 'PNG image data, 1200 x 630'
+          test "$(stat -c %s social/gymnastika-kadan-treneri-prosinec-2026.png)" -gt 50000
 
-      - name: Připravit přesný balík
+      - name: Připravit cílený balík
         shell: bash
         run: |
           set -euo pipefail
-          stage="$RUNNER_TEMP/rafanda-live"
+          stage="$RUNNER_TEMP/nk-image-repair"
           rm -rf "$stage"
           mkdir -p "$stage/clanky" "$stage/images/clanky/eso-market-rafanda" "$stage/social"
-          cp "$ARTICLE" "$stage/clanky/"
+          cp "$RAFANDA" "$stage/clanky/"
+          cp "$GYM" "$stage/clanky/"
           cp images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp "$stage/images/clanky/eso-market-rafanda/"
           cp images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp "$stage/images/clanky/eso-market-rafanda/"
           cp images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp "$stage/images/clanky/eso-market-rafanda/"
           cp social/eso-market-rafanda-kadan-24-7.webp "$stage/social/"
-          tar -C "$stage" -czf "$RUNNER_TEMP/rafanda-live.tgz" .
+          cp social/gymnastika-kadan-treneri-prosinec-2026.png "$stage/social/"
+          tar -C "$stage" -czf "$RUNNER_TEMP/nk-image-repair.tgz" .
 
-      - name: Nasadit článek a fotografie přímo na OVH
+      - name: Nasadit přímo na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -77,19 +70,21 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
           opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          scp "${opts[@]}" "$RUNNER_TEMP/rafanda-live.tgz" ubuntu@57.129.43.215:/tmp/nk-rafanda-live.tgz
+          scp "${opts[@]}" "$RUNNER_TEMP/nk-image-repair.tgz" ubuntu@57.129.43.215:/tmp/nk-image-repair.tgz
           ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           root=/var/www/nasekadan
-          work="$(mktemp -d /tmp/nk-rafanda-live.XXXXXX)"
-          trap 'rm -rf "$work" /tmp/nk-rafanda-live.tgz' EXIT
-          tar -xzf /tmp/nk-rafanda-live.tgz -C "$work"
+          work="$(mktemp -d /tmp/nk-image-repair.XXXXXX)"
+          trap 'rm -rf "$work" /tmp/nk-image-repair.tgz' EXIT
+          tar -xzf /tmp/nk-image-repair.tgz -C "$work"
           sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
           sudo install -m 0644 "$work/clanky/eso-market-rafanda-kadan-24-7.html" "$root/clanky/eso-market-rafanda-kadan-24-7.html"
+          sudo install -m 0644 "$work/clanky/gymnastika-kadan-treneri-prosinec-2026.html" "$root/clanky/gymnastika-kadan-treneri-prosinec-2026.html"
           sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp" "$root/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp"
           sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp" "$root/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp"
           sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp"
           sudo install -m 0644 "$work/social/eso-market-rafanda-kadan-24-7.webp" "$root/social/eso-market-rafanda-kadan-24-7.webp"
+          sudo install -m 0644 "$work/social/gymnastika-kadan-treneri-prosinec-2026.png" "$root/social/gymnastika-kadan-treneri-prosinec-2026.png"
           sudo chmod -R a+rX "$root/clanky" "$root/images/clanky/eso-market-rafanda" "$root/social"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/eso-market-rafanda /usr/share/nginx/html/social
@@ -97,7 +92,7 @@ jobs:
           fi
           REMOTE
 
-      - name: Ověřit živý článek přes produkční Caddy
+      - name: Ověřit živý web přes produkční Caddy
         shell: bash
         run: |
           set -euo pipefail
@@ -106,13 +101,13 @@ jobs:
           set -euo pipefail
           base='https://nasekadan.cz'
           get() { curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base$1?repair=$(date +%s%N)"; }
-          article="$(get /clanky/eso-market-rafanda-kadan-24-7.html)"
-          test "${#article}" -gt 8000
-          grep -Fq '<article class="article">' <<<"$article"
-          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' <<<"$article"
-          grep -Fq '/images/clanky/eso-market-rafanda/prodejna-rafanda-24-7.webp' <<<"$article"
-          grep -Fq '/images/clanky/eso-market-rafanda/navod-vstup-nakup-odchod.webp' <<<"$article"
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' <<<"$article"
+          raf="$(get /clanky/eso-market-rafanda-kadan-24-7.html)"
+          gym="$(get /clanky/gymnastika-kadan-treneri-prosinec-2026.html)"
+          test "${#raf}" -gt 8000
+          test "${#gym}" -gt 8000
+          grep -Fq 'Pro Rafandu jde hlavně o dostupnější nákup' <<<"$raf"
+          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp' <<<"$raf"
+          grep -Fq '/social/gymnastika-kadan-treneri-prosinec-2026.png' <<<"$gym"
           tmp="$(mktemp -d)"
           trap 'rm -rf "$tmp"' EXIT
           for rel in \
@@ -125,21 +120,8 @@ jobs:
             file "$out" | grep -Fq 'Web/P image'
             test "$(stat -c %s "$out")" -gt 10000
           done
-          echo 'RAFANDA_LIVE_OK=1'
+          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/social/gymnastika-kadan-treneri-prosinec-2026.png?repair=$(date +%s%N)" -o "$tmp/gym.png"
+          file "$tmp/gym.png" | grep -Fq 'PNG image data, 1200 x 630'
+          test "$(stat -c %s "$tmp/gym.png")" -gt 50000
+          echo 'RAFANDA_GYMNASTIKA_LIVE_OK=1'
           REMOTE
-
-      - name: Zapsat výsledek do servisního PR
-        if: always() && github.event_name == 'pull_request_target'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ok = '${{ job.status }}' === 'success';
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: ok
-                ? `✅ Přímá oprava Rafandy uspěla. Živý článek a tři WebP fotografie byly ověřeny přes produkční Caddy. Run ${context.runId}.`
-                : `❌ Přímá oprava Rafandy selhala. Run ${context.runId}.`
-            });
