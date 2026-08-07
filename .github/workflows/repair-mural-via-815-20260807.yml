@@ -1,0 +1,192 @@
+name: Dokončit fotografie podchodu přes ověřený kanál 815
+
+on:
+  issues:
+    types: [reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: nasekadan-mural-via-815
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 815
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Složit nové WebP přímo z původních fotografií
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          mkdir -p images/clanky/od-hlubin-k-nebi
+          cat .github/mural-upload/a-*.b64 | tr -d '\r\n' | base64 -d > images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp
+          cat .github/mural-upload/b-*.b64 | tr -d '\r\n' | base64 -d > images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          python3 - <<'PY' | tee "$RUNNER_TEMP/mural-build.log"
+          from pathlib import Path
+          from PIL import Image
+          import hashlib
+          expected={
+            'images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp':('9b3a46d7f4427a287beae579bd0229c547f3c7056a8cdd88d526c0abada8e632',(1000,750),43866),
+            'images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp':('357a4ba86eb42fe16b9332d515034cfa1d86fb80537c49599839d7c76f4307ca',(1000,750),43854),
+          }
+          article=Path('clanky/od-hlubin-k-nebi-kadan.html').read_text(encoding='utf-8')
+          for rel,(want_sha,want_size,want_bytes) in expected.items():
+            p=Path(rel)
+            raw=p.read_bytes()
+            got=hashlib.sha256(raw).hexdigest()
+            assert got==want_sha,(rel,'sha',got,want_sha)
+            assert len(raw)==want_bytes,(rel,'bytes',len(raw),want_bytes)
+            assert '/'+rel in article,(rel,'missing from article')
+            with Image.open(p) as im:
+              im.load()
+              assert im.format=='WEBP' and im.size==want_size,(rel,im.format,im.size)
+            print('RECONSTRUCT OK',rel,want_size,want_bytes,got)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Trvale nahradit vadné soubory v main
+        id: persist
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – fotografie'
+          git config user.email 'info@nasekadan.cz'
+          git add images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          if git diff --cached --quiet; then
+            echo 'Správné fotografie už jsou v main.'
+          else
+            git commit -m 'Nahradit fotografie podchodu skutečnými WebP [skip ci]'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then pushed=1; break; fi
+              sleep $((attempt*2))
+            done
+            test "$pushed" = 1
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected={
+            'images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp':'9b3a46d7f4427a287beae579bd0229c547f3c7056a8cdd88d526c0abada8e632',
+            'images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp':'357a4ba86eb42fe16b9332d515034cfa1d86fb80537c49599839d7c76f4307ca',
+          }
+          for rel,want in expected.items():
+            got=hashlib.sha256(Path(rel).read_bytes()).hexdigest()
+            assert got==want,(rel,got,want)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Připravit ověřený SSH klíč
+        id: key
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Nahrát článek a obě skutečné fotografie na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/mural-final.tgz" \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            "$RUNNER_TEMP/mural-final.tgz" ubuntu@57.129.43.215:/tmp/mural-final.tgz
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 \
+            ubuntu@57.129.43.215 'bash -s' <<'REMOTE' | tee "$RUNNER_TEMP/mural-server.log"
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+          sudo mkdir -p /var/www/nasekadan/clanky /var/www/nasekadan/images/clanky/od-hlubin-k-nebi
+          sudo tar -xzf /tmp/mural-final.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html /var/www/nasekadan/images/clanky/od-hlubin-k-nebi
+          sha256sum \
+            /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp \
+            /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          test "$(sha256sum /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp | awk '{print $1}')" = '9b3a46d7f4427a287beae579bd0229c547f3c7056a8cdd88d526c0abada8e632'
+          test "$(sha256sum /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp | awk '{print $1}')" = '357a4ba86eb42fe16b9332d515034cfa1d86fb80537c49599839d7c76f4307ca'
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/. nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/
+          fi
+          rm -f /tmp/mural-final.tgz
+          REMOTE
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Ověřit živou stránku a oba obrázky bajtově
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="mural-final-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html?$q" -o /tmp/mural.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' /tmp/mural.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' /tmp/mural.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?$q" -o /tmp/a.webp
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?$q" -o /tmp/b.webp
+          a_sha="$(sha256sum /tmp/a.webp | awk '{print $1}')"
+          b_sha="$(sha256sum /tmp/b.webp | awk '{print $1}')"
+          a_type="$(curl -4 -ksSI --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?$q" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')"
+          b_type="$(curl -4 -ksSI --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?$q" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')"
+          printf 'A sha=%s bytes=%s type=%s\nB sha=%s bytes=%s type=%s\n' "$a_sha" "$(stat -c %s /tmp/a.webp)" "$a_type" "$b_sha" "$(stat -c %s /tmp/b.webp)" "$b_type" | tee "$RUNNER_TEMP/mural-live.log"
+          test "$a_sha" = '9b3a46d7f4427a287beae579bd0229c547f3c7056a8cdd88d526c0abada8e632'
+          test "$b_sha" = '357a4ba86eb42fe16b9332d515034cfa1d86fb80537c49599839d7c76f4307ca'
+          test "$(stat -c %s /tmp/a.webp)" = '43866'
+          test "$(stat -c %s /tmp/b.webp)" = '43854'
+          case "$a_type" in image/webp*) ;; *) exit 1;; esac
+          case "$b_type" in image/webp*) ;; *) exit 1;; esac
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek do issue 815
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          BUILD: ${{ steps.build.outputs.ok }}
+          PERSIST: ${{ steps.persist.outputs.ok }}
+          DEPLOY: ${{ steps.deploy.outputs.ok }}
+          LIVE: ${{ steps.live.outputs.ok }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs'); const read=n=>{try{return fs.readFileSync(process.env.RUNNER_TEMP+'/'+n,'utf8').slice(-5000)}catch{return ''}};
+            const ok=process.env.BUILD==='true'&&process.env.PERSIST==='true'&&process.env.DEPLOY==='true'&&process.env.LIVE==='true';
+            const body=ok
+              ? `✅ Fotografie článku Od hlubin k nebi jsou opravené. Nové WebP jsou složené přímo z původních fotografií, trvale uložené v main a veřejný web vrací přesně stejné SHA-256 a image/webp.\n\n\`\`\`text\n${read('mural-build.log')}\n${read('mural-server.log')}\n${read('mural-live.log')}\n\`\`\``
+              : `❌ Oprava fotografií podchodu selhala. build=${process.env.BUILD||'false'}, persist=${process.env.PERSIST||'false'}, deploy=${process.env.DEPLOY||'false'}, live=${process.env.LIVE||'false'}.\n\n\`\`\`text\n${read('mural-build.log')}\n${read('mural-server.log')}\n${read('mural-live.log')}\n\`\`\``;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:815,body});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        run: test "${{ steps.live.outputs.ok }}" = 'true'
