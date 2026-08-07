@@ -36,6 +36,17 @@ def ensure_sitemap() -> None:
         raise RuntimeError(f"Cílová URL je v sitemapě {text.count(mp.URL)}× místo 1×.")
 
 
+def normalize_generated_whitespace() -> None:
+    paths = [ROOT / "index.html", ROOT / "clanky" / "index.html"]
+    paths.extend(sorted((ROOT / "clanky").glob("strana-*.html")))
+    for path in paths:
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        clean = "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
+        path.write_text(clean, encoding="utf-8", newline="\n")
+
+
 def main() -> int:
     mp.make_article()
     rescue.generate_social()
@@ -44,6 +55,7 @@ def main() -> int:
     mp.rebuild_surfaces_and_manifest()
     mp.upsert_registry()
     ensure_sitemap()
+    normalize_generated_whitespace()
     mp.validate()
     rescue.assert_article()
     print(json.dumps({
