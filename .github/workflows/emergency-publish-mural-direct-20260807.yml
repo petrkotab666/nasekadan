@@ -18,7 +18,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
       OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
@@ -43,6 +43,15 @@ jobs:
           set -euo pipefail
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
+
+          # Sdílet stejný serverový zámek jako kanonický deploy. Tím nemůže
+          # souběžně běžící starší nasazení po této opravě znovu přepsat web.
+          LOCK_FILE=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK_FILE"
+          sudo chmod a+rw "$LOCK_FILE"
+          exec 9>"$LOCK_FILE"
+          flock -w 1200 9
+
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
           git -C /opt/nasekadan fetch --prune origin main
           git -C /opt/nasekadan reset --hard origin/main
@@ -63,26 +72,37 @@ PY
           python3 scripts/prepare_discovery.py
 
           ARTICLE='clanky/od-hlubin-k-nebi-kadan.html'
+          SLUG='od-hlubin-k-nebi-kadan.html'
           test -s "$ARTICLE"
           grep -Fq '<h1>Od hlubin k nebi. Dva podchody na sídlišti A proměnila kadaňská autorka v obří atlas zvířat</h1>' "$ARTICLE"
           grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' "$ARTICLE"
           grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' "$ARTICLE"
+
+          OG_URL=$(python3 - <<'PY'
+from pathlib import Path
+import re
+text=Path('clanky/od-hlubin-k-nebi-kadan.html').read_text(encoding='utf-8')
+m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']https://nasekadan\.cz/([^"\']+)', text, re.I)
+if not m:
+    raise SystemExit('og:image nebyl nalezen')
+print(m.group(1))
+PY
+          )
+          test -n "$OG_URL"
+          test -s "$OG_URL"
 
           ROOT=/var/www/nasekadan
           sudo mkdir -p "$ROOT/clanky" "$ROOT/images/clanky/od-hlubin-k-nebi" "$ROOT/social"
           sudo install -m 0644 "$ARTICLE" "$ROOT/$ARTICLE"
           sudo install -m 0644 images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp "$ROOT/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp"
           sudo install -m 0644 images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp "$ROOT/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp"
+          sudo install -m 0644 "$OG_URL" "$ROOT/$OG_URL"
           sudo install -m 0644 index.html "$ROOT/index.html"
           for f in clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml; do
             [ -f "$f" ] && sudo install -m 0644 "$f" "$ROOT/$f"
           done
-          social_file=$(grep -o 'social/od-hlubin-k-nebi-kadan-[^"'"']*\.png' "$ARTICLE" | head -1 || true)
-          if [ -n "$social_file" ] && [ -f "$social_file" ]; then
-            sudo install -m 0644 "$social_file" "$ROOT/$social_file"
-          fi
           sha=$(git rev-parse HEAD)
-          printf 'site=nasekadan.cz\nstatus=ok\nsource=%s\ngenerated=%s\nmode=emergency-direct-mural\n' "$sha" "$(date -u +%FT%TZ)" | sudo tee "$ROOT/deployment-health.txt" >/dev/null
+          printf 'site=nasekadan.cz\nstatus=ok\nsource=%s\ngenerated=%s\nmode=emergency-direct-mural-locked\n' "$sha" "$(date -u +%FT%TZ)" | sudo tee "$ROOT/deployment-health.txt" >/dev/null
           sudo chmod -R a+rX "$ROOT/clanky" "$ROOT/images/clanky/od-hlubin-k-nebi" "$ROOT/social" "$ROOT/index.html" "$ROOT/rss.xml" "$ROOT/sitemap.xml" "$ROOT/news-sitemap.xml" "$ROOT/deployment-health.txt"
           REMOTE
 
@@ -100,6 +120,18 @@ PY
             file "/tmp/$img" | grep -Fq 'Web/P image'
             curl -4 -kfsSI --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" | tr -d '\r' | grep -Eqi '^content-type: image/webp$'
           done
+          og=$(python3 - <<'PY'
+from pathlib import Path
+import re
+text=Path('/tmp/article.html').read_text(encoding='utf-8')
+m=re.search(r'<meta\s+property=["\']og:image["\']\s+content=["\']([^"\']+)', text, re.I)
+if not m: raise SystemExit(1)
+print(m.group(1))
+PY
+          )
+          test -n "$og"
+          curl -4 -kfsSL --max-time 40 "$og?$q" -o /tmp/og-image
+          file /tmp/og-image | grep -Eqi 'PNG image data|JPEG image data|Web/P image'
           curl -4 -kfsSL --max-time 40 "$base/?$q" | grep -Fq "$slug"
           curl -4 -kfsSL --max-time 40 "$base/clanky/?$q" | grep -Fq "$slug"
           curl -4 -kfsSL --max-time 40 "$base/rss.xml?$q" | grep -Fq "$slug"
@@ -116,7 +148,7 @@ PY
           git reset --hard origin/main
           mkdir -p .github/deploy-status
           status=".github/deploy-status/od-hlubin-k-nebi-direct-${GITHUB_RUN_ID}.txt"
-          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nmethod=emergency-direct\nwebp=verified\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
+          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nmethod=emergency-direct-locked\nwebp=verified\nog_image=verified\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
           git add "$status"
-          git commit -m 'Potvrdit přímé nasazení článku Od hlubin k nebi [skip ci]'
+          git commit -m 'Potvrdit zamčené přímé nasazení článku Od hlubin k nebi [skip ci]'
           git push origin HEAD:main
