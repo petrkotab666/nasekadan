@@ -14,7 +14,7 @@ permissions:
 jobs:
   install:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
@@ -26,7 +26,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Nainstalovat ochranu na OVH
+      - name: Nasadit aktuální main a nainstalovat ochranu na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -36,25 +36,35 @@ jobs:
           git -C /opt/nasekadan fetch --prune origin main
           git -C /opt/nasekadan reset --hard origin/main
           git -C /opt/nasekadan clean -fd
+          sudo env GITHUB_WORKSPACE=/opt/nasekadan NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash /opt/nasekadan/deploy/sync-production.sh
           sudo bash /opt/nasekadan/deploy/install-automation.sh
           sudo systemctl is-active --quiet nasekadan-refresh.timer
           sudo systemctl is-active --quiet nasekadan-content-regression.path
           sudo test -x /usr/local/sbin/nasekadan-regression-check
           sudo /usr/local/sbin/nasekadan-regression-check
-          echo '=== TIMER ==='
-          sudo systemctl status nasekadan-refresh.timer --no-pager -l | sed -n '1,18p'
-          echo '=== PATH GUARD ==='
-          sudo systemctl status nasekadan-content-regression.path --no-pager -l | sed -n '1,18p'
           REMOTE
 
-      - name: Ověřit veřejnou titulku externě
+      - name: Ověřit veřejnou titulku a článek ZZS externě
         shell: bash
         run: |
           set -euo pipefail
           q="guard-${GITHUB_RUN_ID}-$(date +%s)"
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?$q" -o /tmp/home.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/?$q" -o /tmp/archive.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html?$q" -o /tmp/zzs.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?$q" -o /tmp/rss.xml
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?$q" -o /tmp/sitemap.xml
           grep -Fq 'mestska-policie-kadan-fakta-diskuse-2026.html' /tmp/home.html
           grep -Fq 'gymnastika-kadan-treneri-prosinec-2026.html' /tmp/home.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/home.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/archive.html
+          grep -Fq '<h1>Kadaňská záchranka dostane novou garáž a myčku. Kraj stanovil strop 16,5 milionu</h1>' /tmp/zzs.html
+          grep -Fq '16,5 milionu korun bez DPH' /tmp/zzs.html
+          grep -Fq '049/45R/2026' /tmp/zzs.html
+          ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' /tmp/zzs.html
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/rss.xml
+          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/sitemap.xml
+          grep -Fq 'https://www.zzsuk.cz/wp-content/uploads/2026/03/DSC00125-scaled.jpg' /tmp/zzs.html
 
       - name: Zapsat výsledek
         if: always()
@@ -64,7 +74,7 @@ jobs:
           script: |
             const ok = '${{ job.status }}' === 'success';
             const body = ok
-              ? '✅ Na serveru je aktivní okamžitý path guard proti návratu staré titulky i pravidelný kanonický timer. Veřejná titulka po instalaci obsahuje Městskou policii i Gymnastiku.'
-              : '❌ Instalace nebo ověření ochrany proti regresi selhalo.';
+              ? '✅ Produkční deploy aktuálního mainu proběhl. Veřejně jsou ověřené titulka, archiv, RSS, sitemap a článek ZZS Kadaň včetně OG fotografie a bez interních postupů dohledávání.'
+              : '❌ Produkční deploy nebo veřejná kontrola článku ZZS Kadaň selhaly.';
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
