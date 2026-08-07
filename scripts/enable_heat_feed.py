@@ -15,7 +15,7 @@ SCRIPT_RE = re.compile(
 )
 GYMNASTIKA_SLUG = 'gymnastika-kadan-treneri-prosinec-2026'
 GYMNASTIKA_ARTICLE = ROOT / 'clanky' / f'{GYMNASTIKA_SLUG}.html'
-GYMNASTIKA_SOCIAL = ROOT / 'social' / f'{GYMNASTIKA_SLUG}.png'
+GYMNASTIKA_SOCIAL = ROOT / 'social' / f'{GYMNASTIKA_SLUG}-v2.png'
 GYMNASTIKA_FINALIZER = ROOT / 'scripts' / 'rebuild_gymnastika_surfaces.py'
 MP_TEMPLATE_REPAIR = ROOT / 'scripts' / 'repair_mestska_policie_template_20260807.py'
 MP_ARTICLE = ROOT / 'clanky' / 'mestska-policie-kadan-fakta-diskuse-2026.html'
@@ -26,7 +26,7 @@ def surface_contains(path: Path, needle: str) -> bool:
 
 
 def ensure_gymnastika_publication() -> None:
-    """Dopočítá publikační kanály z hotového HTML a PNG bez Pillow."""
+    """Dopočítá publikační kanály z hotového HTML a finálního PNG bez Pillow."""
     if not GYMNASTIKA_ARTICLE.is_file():
         raise RuntimeError('Chybí hotový článek Gymnastiky Kadaň v hlavní větvi.')
     if not GYMNASTIKA_SOCIAL.is_file() or GYMNASTIKA_SOCIAL.stat().st_size < 10000:
@@ -63,7 +63,7 @@ def ensure_mp_template() -> None:
     text = MP_ARTICLE.read_text(encoding='utf-8', errors='replace')
     required = (
         'data-article-template="unified-v1"',
-        'src="/social/mestska-policie-kadan-fakta-diskuse-2026.png"',
+        'src="/social/mestska-policie-kadan-fakta-diskuse-2026-v2.png"',
         '<a class="logo" href="/"',
         '← Zpět na titulní stranu',
         'theme-color" content="#9f2626"',
