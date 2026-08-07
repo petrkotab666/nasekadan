@@ -1,0 +1,53 @@
+name: Politika jediného produkčního zápisu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+      - 'deploy/**'
+      - 'scripts/audit_production_writer_policy.py'
+  schedule:
+    - cron: '43 3 * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: production-writer-policy-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Ověřit, že boční guardy nemohou zapisovat na produkci
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_production_writer_policy.py
+          git diff --exit-code
+
+      - name: Nahlásit porušení publikační architektury
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='[incident] Porušena politika jediného produkčního deploye'
+          body="Kontrola zjistila návrat paralelního zapisovače nebo poškození kanonického deploye. Workflow samo nic neopravuje. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          existing="$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
