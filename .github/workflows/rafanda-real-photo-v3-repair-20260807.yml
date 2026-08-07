@@ -12,7 +12,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: rafanda-real-photo-v4-20260807
+  group: rafanda-real-photo-final-20260807
   cancel-in-progress: false
 
 jobs:
@@ -21,18 +21,19 @@ jobs:
     timeout-minutes: 25
     env:
       ARTICLE: clanky/eso-market-rafanda-kadan-24-7.html
-      OUT: images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp
-      EXPECTED_SHA: 69fb0553ffec5a62b15ebc3bae5cb728b2942cc75456c56f7e2912d74bfbd8b7
-      EXPECTED_SIZE: '116402'
+      OUT: images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp
+      PUBLIC_PATH: /images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp
+      EXPECTED_SHA: 38b9e3c8ea5dee052fd7a27305000d16cc30bbb147e829c57c48c3c264c1e715
+      EXPECTED_SIZE: '13472'
       SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
     steps:
       - name: Načíst aktuální main
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 30
+          fetch-depth: 40
 
-      - name: Ověřit skutečný binární WebP v main
+      - name: Ověřit finální skutečný WebP
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +45,7 @@ jobs:
           test "$size" = "$EXPECTED_SIZE"
           file "$OUT" | grep -Fq 'Web/P image'
 
-      - name: Přepnout článek z vadné v2 na skutečnou v4
+      - name: Přepnout článek na finální skutečnou fotografii
         shell: bash
         run: |
           set -euo pipefail
@@ -52,11 +53,12 @@ jobs:
           from pathlib import Path
           p = Path('clanky/eso-market-rafanda-kadan-24-7.html')
           text = p.read_text(encoding='utf-8')
-          new = '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp'
+          new = '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp'
           for old in (
               '/images/clanky/eso-market-rafanda/pravidla-platba-kamery.webp',
               '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-v2.webp',
               '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v3.webp',
+              '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp',
           ):
               text = text.replace(old, new)
           assert new in text
@@ -72,27 +74,27 @@ jobs:
           git config user.email 'actions@users.noreply.github.com'
           git add "$ARTICLE"
           if ! git diff --cached --quiet; then
-            git commit -m 'Přepnout Rafandu na skutečnou třetí fotografii'
+            git commit -m 'Přepnout Rafandu na finální skutečnou fotografii'
             git pull --rebase origin main
             git push origin HEAD:main
           fi
 
-      - name: Připravit přesný publikační balík
+      - name: Připravit publikační balík
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main
           git reset --hard origin/main
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp' "$ARTICLE"
+          grep -Fq "$PUBLIC_PATH" "$ARTICLE"
           test "$(sha256sum "$OUT" | awk '{print $1}')" = "$EXPECTED_SHA"
-          stage="$RUNNER_TEMP/rafanda-real-live"
+          stage="$RUNNER_TEMP/rafanda-final"
           rm -rf "$stage"
           mkdir -p "$stage/clanky" "$stage/images/clanky/eso-market-rafanda"
           cp "$ARTICLE" "$stage/clanky/"
           cp "$OUT" "$stage/images/clanky/eso-market-rafanda/"
-          tar -C "$stage" -czf "$RUNNER_TEMP/rafanda-real-live.tgz" .
+          tar -C "$stage" -czf "$RUNNER_TEMP/rafanda-final.tgz" .
 
-      - name: Nasadit článek a skutečnou fotografii přímo na OVH
+      - name: Nasadit přímo na OVH
         shell: bash
         run: |
           set -euo pipefail
@@ -100,35 +102,35 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
           opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          scp "${opts[@]}" "$RUNNER_TEMP/rafanda-real-live.tgz" ubuntu@57.129.43.215:/tmp/nk-rafanda-real-live.tgz
+          scp "${opts[@]}" "$RUNNER_TEMP/rafanda-final.tgz" ubuntu@57.129.43.215:/tmp/nk-rafanda-final.tgz
           ssh "${opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
           root=/var/www/nasekadan
-          work="$(mktemp -d /tmp/nk-rafanda-real.XXXXXX)"
-          trap 'rm -rf "$work" /tmp/nk-rafanda-real-live.tgz' EXIT
-          tar -xzf /tmp/nk-rafanda-real-live.tgz -C "$work"
+          work="$(mktemp -d /tmp/nk-rafanda-final.XXXXXX)"
+          trap 'rm -rf "$work" /tmp/nk-rafanda-final.tgz' EXIT
+          tar -xzf /tmp/nk-rafanda-final.tgz -C "$work"
           sudo install -d -m 0755 "$root/clanky" "$root/images/clanky/eso-market-rafanda"
           sudo install -m 0644 "$work/clanky/eso-market-rafanda-kadan-24-7.html" "$root/clanky/eso-market-rafanda-kadan-24-7.html"
-          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp"
+          sudo install -m 0644 "$work/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp" "$root/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-final.webp"
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/eso-market-rafanda
             sudo tar -C "$work" -czf - clanky images | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html
           fi
           REMOTE
 
-      - name: Ověřit živý článek a přesný hash obrázku
+      - name: Ověřit živý HTML a přesný hash fotografie
         shell: bash
         run: |
           set -euo pipefail
           opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
-          ssh "${opts[@]}" ubuntu@57.129.43.215 "EXPECTED_SHA='$EXPECTED_SHA' EXPECTED_SIZE='$EXPECTED_SIZE' bash -s" <<'REMOTE'
+          ssh "${opts[@]}" ubuntu@57.129.43.215 "EXPECTED_SHA='$EXPECTED_SHA' EXPECTED_SIZE='$EXPECTED_SIZE' PUBLIC_PATH='$PUBLIC_PATH' bash -s" <<'REMOTE'
           set -euo pipefail
           base='https://nasekadan.cz'
           q="$(date +%s%N)"
           article="$(curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/clanky/eso-market-rafanda-kadan-24-7.html?repair=$q")"
-          grep -Fq '/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp' <<<"$article"
+          grep -Fq "$PUBLIC_PATH" <<<"$article"
           tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base/images/clanky/eso-market-rafanda/pravidla-platba-kamery-real-v4.webp?repair=$q" -o "$tmp"
+          curl -kfsS -L --max-time 30 --resolve nasekadan.cz:443:127.0.0.1 "$base$PUBLIC_PATH?repair=$q" -o "$tmp"
           actual="$(sha256sum "$tmp" | awk '{print $1}')"
           size="$(stat -c %s "$tmp")"
           echo "LIVE_SHA=$actual SIZE=$size"
@@ -138,7 +140,7 @@ jobs:
           echo RAFANDA_REAL_PHOTO_LIVE_OK=1
           REMOTE
 
-      - name: Zapsat výsledek do servisního PR
+      - name: Zapsat výsledek
         if: always()
         uses: actions/github-script@v7
         with:
@@ -150,6 +152,6 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: ok
-                ? `✅ Třetí fotografie Rafandy je skutečný snímek 1000028565.jpg převedený do WebP 1200×900. Produkční kopie má přesný SHA-256 69fb0553ffec5a62b15ebc3bae5cb728b2942cc75456c56f7e2912d74bfbd8b7. Run ${context.runId}.`
-                : `❌ Nasazení skutečné třetí fotografie Rafandy selhalo. Run ${context.runId}.`
+                ? `✅ Třetí fotografie Rafandy je na produkci a odpovídá skutečnému snímku 1000028565.jpg. Produkční hash: 38b9e3c8ea5dee052fd7a27305000d16cc30bbb147e829c57c48c3c264c1e715. Run ${context.runId}.`
+                : `❌ Finální nasazení třetí fotografie Rafandy selhalo. Run ${context.runId}.`
             });
