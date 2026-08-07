@@ -55,7 +55,7 @@ jobs:
           flock -w 300 9
 
           sudo rm -rf /opt/nasekadan.fresh
-          git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git /opt/nasekadan.fresh
+          sudo git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git /opt/nasekadan.fresh
           sudo chown -R ubuntu:ubuntu /opt/nasekadan.fresh
 
           stamp=$(date +%s)
