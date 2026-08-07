@@ -1,0 +1,70 @@
+name: Nainstalovat okamžitou ochranu aktuálních článků
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    paths:
+      - '.github/install-content-regression-guard-trigger.txt'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nainstalovat ochranu na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          git -C /opt/nasekadan clean -fd
+          sudo bash /opt/nasekadan/deploy/install-automation.sh
+          sudo systemctl is-active --quiet nasekadan-refresh.timer
+          sudo systemctl is-active --quiet nasekadan-content-regression.path
+          sudo test -x /usr/local/sbin/nasekadan-regression-check
+          sudo /usr/local/sbin/nasekadan-regression-check
+          echo '=== TIMER ==='
+          sudo systemctl status nasekadan-refresh.timer --no-pager -l | sed -n '1,18p'
+          echo '=== PATH GUARD ==='
+          sudo systemctl status nasekadan-content-regression.path --no-pager -l | sed -n '1,18p'
+          REMOTE
+
+      - name: Ověřit veřejnou titulku externě
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="guard-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?$q" -o /tmp/home.html
+          grep -Fq 'mestska-policie-kadan-fakta-diskuse-2026.html' /tmp/home.html
+          grep -Fq 'gymnastika-kadan-treneri-prosinec-2026.html' /tmp/home.html
+
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ok = '${{ job.status }}' === 'success';
+            const body = ok
+              ? '✅ Na serveru je aktivní okamžitý path guard proti návratu staré titulky i pravidelný kanonický timer. Veřejná titulka po instalaci obsahuje Městskou policii i Gymnastiku.'
+              : '❌ Instalace nebo ověření ochrany proti regresi selhalo.';
+            await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
+            if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
