@@ -8,9 +8,14 @@ on:
       - 'index.html'
       - 'sitemap.xml'
       - 'rss.xml'
-      - 'scripts/ensure_publication_integrity.py'
-      - 'scripts/ensure_newest_article_indexes.py'
-      - 'scripts/validate_publication_integrity.py'
+      - 'news-sitemap.xml'
+      - 'scripts/enforce_article_visibility.py'
+      - 'scripts/enforce_all_article_visibility.py'
+      - 'scripts/enforce_current_article_order.py'
+      - 'scripts/ensure_all_published_articles_in_rss.py'
+      - 'scripts/sort_articles_chronologically.py'
+      - 'scripts/enforce_latest_homepage_hero.py'
+      - 'scripts/verify_published_article_set.py'
       - '.github/publication-integrity-trigger.txt'
       - '.github/workflows/protect-published-articles.yml'
   pull_request:
@@ -40,23 +45,28 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Obnovit všechny chybějící vazby publikovaných článků
+      - name: Sestavit přehledy výhradně ze skutečných článkových souborů
+        shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/ensure_publication_integrity.py
-          python3 scripts/ensure_newest_article_indexes.py
+          python3 scripts/enforce_all_article_visibility.py
+          python3 scripts/ensure_all_published_articles_in_rss.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/enforce_latest_homepage_hero.py
+          # Finalizace doplní sitemapu/news-sitemapu, ale audit článků zde
+          # záměrně neváže úplnost publikace na nesouvisející SEO/reklamní nálezy.
+          NASEKADAN_AUDIT_PATHS=clanky/__none__.html python3 scripts/finalize_launch.py
+          python3 scripts/verify_published_article_set.py \
+            --source . --target . --write-manifest published-articles-manifest.json
 
-      - name: Ověřit titulní stránku, archiv, sitemapu a RSS
-        run: python3 scripts/validate_publication_integrity.py
-
-      - name: Trvale uložit automatickou opravu
+      - name: Trvale uložit pouze publikační povrchy
         id: save
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'Naše Kadaň – ochrana článků'
           git config user.email 'info@nasekadan.cz'
-          git add index.html clanky/index.html sitemap.xml rss.xml
+          git add index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml published-articles-manifest.json
 
           if git diff --cached --quiet; then
             echo 'changed=false' >> "$GITHUB_OUTPUT"
@@ -64,10 +74,21 @@ jobs:
             exit 0
           fi
 
-          git commit -m 'Obnovit trvalou dostupnost všech publikovaných článků'
+          git commit -m 'Obnovit monotónní úplnost publikovaných článků'
           git pull --rebase origin main
-          git push origin main
+          # Po rebase znovu sestavit z nejnovějšího main, aby starší běh nikdy
+          # nepřepsal novější článek starým snapshotem.
+          python3 scripts/enforce_all_article_visibility.py
+          python3 scripts/ensure_all_published_articles_in_rss.py
+          python3 scripts/sort_articles_chronologically.py
+          python3 scripts/enforce_latest_homepage_hero.py
+          NASEKADAN_AUDIT_PATHS=clanky/__none__.html python3 scripts/finalize_launch.py
+          python3 scripts/verify_published_article_set.py \
+            --source . --target . --write-manifest published-articles-manifest.json
+          git add index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml published-articles-manifest.json
+          git commit --amend --no-edit
+          git push origin HEAD:main
           echo 'changed=true' >> "$GITHUB_OUTPUT"
 
-      - name: Závěrečná kontrola po opravě
-        run: python3 scripts/validate_publication_integrity.py
+      - name: Závěrečná obsahová kontrola
+        run: python3 scripts/verify_published_article_set.py --source . --target .
