@@ -30,28 +30,25 @@ jobs:
         id: deploy
         shell: bash
         run: |
-          set -euo pipefail
-          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set +e
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$RUNNER_TEMP/slavie-server.log" 2>&1 <<'REMOTE'
           set -euo pipefail
           LOCK_FILE=/tmp/nasekadan-production-deploy.lock
           sudo touch "$LOCK_FILE"
           sudo chmod a+rw "$LOCK_FILE"
           exec 9>"$LOCK_FILE"
           flock -w 180 9
-
           sudo chown -R ubuntu:ubuntu /opt/nasekadan
           sudo rm -f /opt/nasekadan/.git/index.lock
           git -C /opt/nasekadan fetch --prune origin main
           git -C /opt/nasekadan reset --hard origin/main
           git -C /opt/nasekadan clean -fd
           cd /opt/nasekadan
-
           python3 scripts/enforce_all_article_visibility.py
           python3 scripts/ensure_all_published_articles_in_rss.py
           python3 scripts/sort_articles_chronologically.py
           python3 scripts/enforce_latest_homepage_hero.py
           NASEKADAN_AUDIT_PATHS=clanky/slavie-kadan-epp-plavci-120-tisic-2026.html python3 scripts/finalize_launch.py
-
           ARTICLE='clanky/slavie-kadan-epp-plavci-120-tisic-2026.html'
           URL='https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html'
           grep -Fq '<h1>Dětští plavci získali potřebné body. Slávie Kadaň teď čeká na příspěvek 120 tisíc</h1>' "$ARTICLE"
@@ -62,35 +59,32 @@ jobs:
           grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' index.html
           grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' clanky/index.html
           grep -Fq "$URL" rss.xml sitemap.xml news-sitemap.xml
-
           root=/var/www/nasekadan
           sudo install -d -m 0755 "$root/clanky"
           sudo install -m 0644 "$ARTICLE" "$root/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html"
           sudo install -m 0644 index.html "$root/index.html"
           sudo rm -f "$root"/clanky/strana-*.html
-          for f in clanky/index.html clanky/strana-*.html; do
-            [ -f "$f" ] && sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"
-          done
-          for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
-            [ -f "$f" ] && sudo install -m 0644 "$f" "$root/$f"
-          done
-
+          for f in clanky/index.html clanky/strana-*.html; do [ -f "$f" ] && sudo install -m 0644 "$f" "$root/clanky/$(basename "$f")"; done
+          for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do [ -f "$f" ] && sudo install -m 0644 "$f" "$root/$f"; done
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
             sudo docker cp "$ARTICLE" nasekadan-web:/usr/share/nginx/html/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
             sudo docker cp index.html nasekadan-web:/usr/share/nginx/html/index.html
             sudo docker exec nasekadan-web sh -lc 'rm -f /usr/share/nginx/html/clanky/strana-*.html'
-            for f in clanky/index.html clanky/strana-*.html; do
-              [ -f "$f" ] && sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")"
-            done
-            for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do
-              [ -f "$f" ] && sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/$f"
-            done
+            for f in clanky/index.html clanky/strana-*.html; do [ -f "$f" ] && sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/clanky/$(basename "$f")"; done
+            for f in rss.xml sitemap.xml news-sitemap.xml llms.txt robots.txt; do [ -f "$f" ] && sudo docker cp "$f" "nasekadan-web:/usr/share/nginx/html/$f"; done
           fi
           REMOTE
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/slavie-server.log"
+          exit 0
 
       - name: Externě ověřit živý web
         id: verify
+        if: steps.deploy.outputs.rc == '0'
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -101,11 +95,7 @@ jobs:
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?$q" -o /tmp/rss.xml
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?$q" -o /tmp/sitemap.xml
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/news-sitemap.xml?$q" -o /tmp/news.xml
-          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/home.html
-          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/archive.html
-          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/rss.xml
-          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/sitemap.xml
-          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/news.xml
+          for f in /tmp/home.html /tmp/archive.html /tmp/rss.xml /tmp/sitemap.xml /tmp/news.xml; do grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' "$f"; done
           grep -Fq '<h1>Dětští plavci získali potřebné body. Slávie Kadaň teď čeká na příspěvek 120 tisíc</h1>' /tmp/slavie.html
           grep -Fq '120 000 Kč' /tmp/slavie.html
           grep -Fq '258 379' /tmp/slavie.html
@@ -118,11 +108,25 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const deploy = '${{ steps.deploy.outcome }}';
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/slavie-server.log`, 'utf8'); } catch (_) {}
+            const tail = log.split('\n').slice(-70).join('\n').slice(-6000);
+            const rc = '${{ steps.deploy.outputs.rc }}';
             const verify = '${{ steps.verify.outcome }}';
-            const ok = deploy === 'success' && verify === 'success';
+            const ok = rc === '0' && verify === 'success';
             const body = ok
               ? '✅ Článek PK Slávie Kadaň je veřejně nasazen a ověřen. Je na titulce, v archivu, RSS, sitemapě i news-sitemapě; veřejná verze neobsahuje interní postupy dohledávání.'
-              : `❌ Cílené nasazení článku PK Slávie selhalo. Deploy=${deploy}, externí kontrola=${verify}.`;
+              : rc !== '0'
+                ? `❌ Serverové nasazení PK Slávie selhalo (exit ${rc}). Poslední část logu:\n\n\`\`\`text\n${tail}\n\`\`\``
+                : `❌ Nasazení PK Slávie proběhlo, ale externí kontrola skončila: ${verify}.`;
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
+
+      - name: Ukončit běh chybou při neúspěchu
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.deploy.outputs.rc }}" = '0'
+          test "${{ steps.verify.outcome }}" = 'success'
