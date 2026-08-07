@@ -58,14 +58,14 @@ jobs:
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' >"$log" 2>&1 <<'REMOTE'
           set -euo pipefail
           work=/tmp/nasekadan-pagination-repair
-          rm -rf "$work"
+          sudo rm -rf "$work"
           git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git "$work"
           test -d "$work/.git"
           test -s "$work/clanky/index.html"
           test -s "$work/clanky/strana-2.html"
           chmod +x "$work/deploy/sync-production.sh"
           sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
-          rm -rf "$work"
+          sudo rm -rf "$work"
           REMOTE
           rc=$?
           echo "CANONICAL_DEPLOY_EXIT=$rc"
