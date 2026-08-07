@@ -1,0 +1,81 @@
+name: Okamžitě nainstalovat monotónní ochranu článků
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/install-monotonic-guard-now.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nasekadan-monotonic-guard-install
+  cancel-in-progress: false
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SSH_KEY: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - name: Připravit SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY"
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nainstalovat ochranu a obnovit aktuální main
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"
+          sudo chmod a+rw "$LOCK"
+          exec 9>"$LOCK"
+          flock -w 300 9
+          sudo chown -R ubuntu:ubuntu /opt/nasekadan
+          sudo rm -f /opt/nasekadan/.git/index.lock
+          git -C /opt/nasekadan fetch --prune origin main
+          git -C /opt/nasekadan reset --hard origin/main
+          git -C /opt/nasekadan clean -fd
+          flock -u 9
+          sudo bash /opt/nasekadan/deploy/install-automation.sh
+          cd /opt/nasekadan
+          python3 scripts/verify_published_article_set.py --source . --target /var/www/nasekadan
+          sudo systemctl is-active --quiet nasekadan-refresh.timer
+          sudo systemctl is-active --quiet nasekadan-content-regression.path
+          REMOTE
+
+      - name: Ověřit živý web
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="monotonic-now-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/published-articles-manifest.json?$q" -o /tmp/manifest.json
+          python3 - <<'PY'
+import json
+from pathlib import Path
+p=json.loads(Path('/tmp/manifest.json').read_text())
+assert p['article_count'] >= 60, p['article_count']
+required={
+'clanky/zzs-kadan-garaz-mycka-2026.html',
+'clanky/slavie-kadan-epp-plavci-120-tisic-2026.html',
+'clanky/od-hlubin-k-nebi-kadan.html',
+'clanky/mestska-policie-kadan-fakta-diskuse-2026.html',
+}
+assert required.issubset(set(p['articles'])), required-set(p['articles'])
+print('articles', p['article_count'])
+PY
+          for path in \
+            /clanky/zzs-kadan-garaz-mycka-2026.html \
+            /clanky/slavie-kadan-epp-plavci-120-tisic-2026.html \
+            /clanky/od-hlubin-k-nebi-kadan.html \
+            /clanky/mestska-policie-kadan-fakta-diskuse-2026.html; do
+            curl -4 -kfsSL --max-time 40 "https://nasekadan.cz${path}?$q" >/dev/null
+          done
