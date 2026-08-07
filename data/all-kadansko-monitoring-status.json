@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-06T23:15:58.860837+00:00",
+  "checkedAt": "2026-08-07T00:10:32.854954+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 197,
-  "failedSources": 16,
-  "itemsParsed": 17174,
-  "uniqueItems": 10869,
+  "checkedSources": 196,
+  "failedSources": 17,
+  "itemsParsed": 17057,
+  "uniqueItems": 10779,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 888,
+    "genericTitle": 889,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 2,
+    "broadWithoutLocalMatch": 1,
     "notEditoriallySignificant": 47,
     "notFreshOrUndated": 0,
-    "duplicate": 5417,
+    "duplicate": 5389,
     "deferredByCap": 0
   },
   "coverage": {
@@ -599,7 +599,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 46
+      "itemsParsed": 47
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -697,7 +697,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 26
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -705,7 +705,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 28
+      "itemsParsed": 29
     },
     {
       "name": "Liďák Kadaň – oficiální web",
@@ -1414,7 +1414,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 160
+      "itemsParsed": 161
     },
     {
       "name": "Louny – oficiální web",
@@ -1461,8 +1461,9 @@
       "url": "https://www.baerenstein-erzgebirge.de/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "checked",
-      "itemsParsed": 118
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 104] Connection reset by peer>"
     },
     {
       "name": "Annaberg-Buchholz – oficiální web",
