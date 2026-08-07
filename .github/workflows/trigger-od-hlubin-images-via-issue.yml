@@ -16,8 +16,15 @@ jobs:
       - name: Spustit přímý workflow
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run fix-od-hlubin-images-direct.yml --repo "$GITHUB_REPOSITORY" --ref main
+        run: |
+          set -euo pipefail
+          gh workflow run fix-od-hlubin-images-direct.yml --repo "$GITHUB_REPOSITORY" --ref main
+          sleep 7
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow fix-od-hlubin-images-direct.yml --limit 1 --json databaseId,status,conclusion,createdAt,url > "$RUNNER_TEMP/run.json"
+          cat "$RUNNER_TEMP/run.json"
       - uses: actions/github-script@v7
         with:
           script: |
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:'Přímá oprava fotografií byla explicitně spuštěna přes workflow_dispatch.'});
+            const fs=require('fs');
+            let run='[]'; try { run=fs.readFileSync(`${process.env.RUNNER_TEMP}/run.json`,'utf8'); } catch (_) {}
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:'Přímá oprava fotografií byla explicitně spuštěna. Nejnovější běh:\n```json\n'+run+'\n```'});
