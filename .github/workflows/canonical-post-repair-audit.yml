@@ -1,0 +1,87 @@
+name: Úplný kanonický audit po opravě
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/canonical-post-repair-audit.trigger'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canonical-post-repair-audit
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Provést úplnou synchronizaci a veřejný audit
+        id: audit
+        shell: bash
+        run: |
+          set -uo pipefail
+          git config user.name 'Naše Kadaň – úplný kanonický audit'
+          git config user.email 'info@nasekadan.cz'
+          python3 -m py_compile scripts/audit_canonical_content_runtime.py scripts/run_canonical_audit_runtime_v2.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/audit_canonical_content_runtime.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    if "status=ok" not in health_text:\n        raise RuntimeError("deployment-health.txt nemá status=ok")'''
+          new = '''    if (\n        not health_text.strip()\n        or "site=nasekadan.cz" not in health_text\n        or not any(line.startswith("source=") and line.split("=", 1)[1].strip() for line in health_text.splitlines())\n    ):\n        raise RuntimeError("deployment-health.txt je prázdný nebo neplatný")'''
+          if old in text:
+              path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
+          set +e
+          python3 scripts/run_canonical_audit_runtime_v2.py > /tmp/sync.log 2>&1
+          sync_rc=$?
+          audit_rc=99
+          if [[ $sync_rc -eq 0 ]]; then
+            python3 scripts/audit_canonical_content_runtime.py --write-status > /tmp/audit.log 2>&1
+            audit_rc=$?
+          else
+            : > /tmp/audit.log
+          fi
+          set -e
+          git checkout -- scripts/audit_canonical_content_runtime.py
+
+          mkdir -p reports
+          status=failure
+          if [[ $sync_rc -eq 0 && $audit_rc -eq 0 ]]; then status=success; fi
+          {
+            echo "status=$status"
+            echo "checked_at=$(date -u +%FT%TZ)"
+            echo "source=$(git rev-parse HEAD)"
+            echo "sync_rc=$sync_rc"
+            echo "audit_rc=$audit_rc"
+            echo '--- sync ---'
+            cat /tmp/sync.log
+            echo '--- audit ---'
+            cat /tmp/audit.log
+          } > reports/canonical-post-repair-audit-20260807.txt
+
+          git add data/published-content-index.json .github/canonical-content-audit-status.json reports/canonical-post-repair-audit-20260807.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "Evidence: úplný veřejný audit po opravě: $status [skip ci]"
+            for attempt in 1 2 3 4 5; do
+              if git push origin HEAD:main; then break; fi
+              git pull --rebase origin main
+              sleep $((attempt * 2))
+            done
+          fi
+
+          [[ "$status" == success ]]
