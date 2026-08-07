@@ -1,0 +1,232 @@
+name: Opravit média článku Od hlubin k nebi
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  repair:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 819
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+      FB_TOKEN_1: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_2: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+      FB_TOKEN_3: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+      FB_TOKEN_4: ${{ secrets.FACEBOOK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ověřit oba WebP v main a připravit nový Facebook PNG
+        id: prepare
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          python3 - <<'PY' | tee "$RUNNER_TEMP/prepare.log"
+          from pathlib import Path
+          from PIL import Image
+          files=[
+            Path('images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp'),
+            Path('images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp'),
+          ]
+          for p in files:
+            assert p.is_file() and p.stat().st_size > 10000, (p, p.stat().st_size if p.exists() else 0)
+            with Image.open(p) as im:
+              im.load()
+              assert im.format == 'WEBP', (p, im.format)
+              assert im.width >= 800 and im.height >= 600, (p, im.size)
+              print('WEBP OK',p,im.size,p.stat().st_size)
+          src=Path('social/od-hlubin-k-nebi-kadan-31d3fafbaa.png')
+          assert src.is_file() and src.stat().st_size > 10000
+          with Image.open(src) as im:
+            im.load(); assert im.format=='PNG' and im.size==(1200,630)
+          dst=Path('social/od-hlubin-k-nebi-kadan-fb-final-20260807.png')
+          dst.write_bytes(src.read_bytes())
+          print('FB PNG',dst,dst.stat().st_size)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Přepsat sociální metadata a odstranit interní metodiku z článku
+        id: article
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$RUNNER_TEMP/article.log"
+          from pathlib import Path
+          import re,html
+          p=Path('clanky/od-hlubin-k-nebi-kadan.html')
+          text=p.read_text(encoding='utf-8')
+          image='https://nasekadan.cz/social/od-hlubin-k-nebi-kadan-fb-final-20260807.png'
+          # Odstranit všechny staré OG image a twitter image značky.
+          text=re.sub(r'<meta\b[^>]*property=["\']og:image(?::(?:url|secure_url|type|width|height|alt))?["\'][^>]*>\s*','',text,flags=re.I)
+          text=re.sub(r'<meta\b[^>]*name=["\']twitter:image["\'][^>]*>\s*','',text,flags=re.I)
+          text=re.sub(r'<meta\b[^>]*name=["\']nasekadan:social-card["\'][^>]*>\s*','',text,flags=re.I)
+          block=(
+            f'<meta property="og:image" content="{image}">\n'
+            f'<meta property="og:image:url" content="{image}">\n'
+            f'<meta property="og:image:secure_url" content="{image}">\n'
+            '<meta property="og:image:type" content="image/png">\n'
+            '<meta property="og:image:width" content="1200">\n'
+            '<meta property="og:image:height" content="630">\n'
+            '<meta property="og:image:alt" content="Od hlubin k nebi – kadaňské podchody">\n'
+            f'<meta name="twitter:image" content="{image}">\n'
+            '<meta name="nasekadan:social-card" content="custom">\n'
+          )
+          m=re.search(r'</head>',text,re.I); assert m
+          text=text[:m.start()]+block+text[m.start():]
+          text=re.sub(r'"image"\s*:\s*\[\s*"[^"]+"\s*\]',f'"image":["{image}"]',text,count=1)
+          # Veřejný článek nesmí popisovat interní redakční postup. Zachovat pouze zdroje.
+          text=re.sub(
+            r'<div class="sourcebox"><strong>Jak jsme informace ověřovali</strong><p>.*?</p></div>',
+            '<div class="sourcebox"><strong>Zdroje</strong><p>Festival Do:díla!, Město Kadaň, profesní web autorky a vlastní fotodokumentace Naše Kadaň.</p></div>',
+            text,
+            count=1,
+            flags=re.S,
+          )
+          assert 'Jak jsme informace ověřovali' not in text
+          assert text.count('property="og:image"') == 1
+          assert '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' in text
+          assert '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' in text
+          p.write_text(text,encoding='utf-8')
+          print('ARTICLE OK',image)
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit trvalou opravu do main
+        id: persist
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – Od hlubin média'
+          git config user.email 'info@nasekadan.cz'
+          git add clanky/od-hlubin-k-nebi-kadan.html social/od-hlubin-k-nebi-kadan-fb-final-20260807.png images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit fotky a Facebook náhled článku Od hlubin k nebi [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              git pull --rebase origin main || true
+              if git push origin HEAD:main; then break; fi
+              sleep $((attempt*2))
+            done
+          fi
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Nasadit článek, WebP a nový PNG přímo na OVH
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"; chmod 600 "$RUNNER_TEMP/key"
+          tar -czf "$RUNNER_TEMP/od-hlubin-media.tgz" \
+            clanky/od-hlubin-k-nebi-kadan.html \
+            images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp \
+            images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp \
+            social/od-hlubin-k-nebi-kadan-fb-final-20260807.png
+          scp -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$RUNNER_TEMP/od-hlubin-media.tgz" ubuntu@57.129.43.215:/tmp/od-hlubin-media.tgz
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          LOCK=/tmp/nasekadan-production-deploy.lock
+          sudo touch "$LOCK"; sudo chmod a+rw "$LOCK"; exec 9>"$LOCK"; flock -w 300 9
+          sudo tar -xzf /tmp/od-hlubin-media.tgz -C /var/www/nasekadan
+          sudo chmod -R a+rX /var/www/nasekadan
+          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
+            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/images/clanky/od-hlubin-k-nebi /usr/share/nginx/html/social
+            sudo docker cp /var/www/nasekadan/clanky/od-hlubin-k-nebi-kadan.html nasekadan-web:/usr/share/nginx/html/clanky/od-hlubin-k-nebi-kadan.html
+            sudo docker cp /var/www/nasekadan/images/clanky/od-hlubin-k-nebi/. nasekadan-web:/usr/share/nginx/html/images/clanky/od-hlubin-k-nebi/
+            sudo docker cp /var/www/nasekadan/social/od-hlubin-k-nebi-kadan-fb-final-20260807.png nasekadan-web:/usr/share/nginx/html/social/od-hlubin-k-nebi-kadan-fb-final-20260807.png
+          fi
+          rm -f /tmp/od-hlubin-media.tgz
+          REMOTE
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Ověřit živé fotografie a sociální PNG
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' | tee "$RUNNER_TEMP/live.log"
+          import re,struct,time,urllib.request
+          from io import BytesIO
+          from PIL import Image
+          base='https://nasekadan.cz'
+          ua='facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)'
+          q='?fix='+str(time.time_ns())
+          req=urllib.request.Request(base+'/clanky/od-hlubin-k-nebi-kadan.html'+q,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=40) as r: assert r.status==200; text=r.read().decode('utf-8','replace')
+          assert 'Jak jsme informace ověřovali' not in text
+          imgs=re.findall(r'<meta\b[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)',text,re.I)
+          assert imgs==['https://nasekadan.cz/social/od-hlubin-k-nebi-kadan-fb-final-20260807.png'],imgs
+          for rel in ('/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp','/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp'):
+            req=urllib.request.Request(base+rel+q,headers={'User-Agent':'Mozilla/5.0','Cache-Control':'no-cache'})
+            with urllib.request.urlopen(req,timeout=40) as r: code=r.status; ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); data=r.read()
+            assert code==200 and ctype=='image/webp' and len(data)>10000,(rel,code,ctype,len(data))
+            with Image.open(BytesIO(data)) as im: im.load(); assert im.format=='WEBP' and im.width>=800 and im.height>=600
+            print('PHOTO OK',rel,len(data))
+          image=imgs[0]
+          req=urllib.request.Request(image+q,headers={'User-Agent':ua,'Cache-Control':'no-cache'})
+          with urllib.request.urlopen(req,timeout=40) as r: code=r.status; ctype=(r.headers.get('Content-Type') or '').split(';')[0].lower(); data=r.read()
+          assert code==200 and ctype=='image/png' and data[:8]==b'\x89PNG\r\n\x1a\n' and struct.unpack('>II',data[16:24])==(1200,630)
+          print('FB IMAGE OK',image,len(data))
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Vynutit Meta scrape=true pro Od hlubin k nebi
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="${FB_TOKEN_1:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_2:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_3:-}"; [[ -n "$token" ]] || token="${FB_TOKEN_4:-}"
+          test -n "$token"
+          url='https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html'
+          basename='od-hlubin-k-nebi-kadan-fb-final-20260807.png'
+          response="$(curl -fsS -X POST 'https://graph.facebook.com/v23.0/' --data-urlencode "id=$url" --data-urlencode 'scrape=true' --data-urlencode "access_token=$token")"
+          python3 - "$basename" "$response" <<'PY' | tee "$RUNNER_TEMP/meta.log"
+          import json,sys
+          basename,raw=sys.argv[1:]
+          d=json.loads(raw)
+          if 'error' in d: raise SystemExit(json.dumps(d['error'],ensure_ascii=False))
+          raw_image=d.get('image'); urls=[]
+          if isinstance(raw_image,str): urls=[raw_image]
+          elif isinstance(raw_image,dict): urls=[v for k,v in raw_image.items() if k in ('url','secure_url','src') and isinstance(v,str)]
+          elif isinstance(raw_image,list):
+            for x in raw_image:
+              if isinstance(x,str): urls.append(x)
+              elif isinstance(x,dict): urls.extend(v for k,v in x.items() if k in ('url','secure_url','src') and isinstance(v,str))
+          matched=[u for u in urls if basename in u]
+          if not matched: raise SystemExit('Meta nemá nový obrázek: '+json.dumps(urls,ensure_ascii=False))
+          print(json.dumps({'meta_images':urls,'matched':matched},ensure_ascii=False))
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek do issue 819
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs');const read=n=>{try{return fs.readFileSync(process.env.RUNNER_TEMP+'/'+n,'utf8')}catch{return ''}};
+            const ok='${{ steps.prepare.outputs.ok }}'==='true'&&'${{ steps.article.outputs.ok }}'==='true'&&'${{ steps.persist.outputs.ok }}'==='true'&&'${{ steps.deploy.outputs.ok }}'==='true'&&'${{ steps.live.outputs.ok }}'==='true'&&'${{ steps.meta.outputs.ok }}'==='true';
+            const body=ok?`✅ Od hlubin k nebi: obě fotografie jsou veřejně 200/image-webp, nový Facebook PNG je veřejně 1200×630 a Meta po scrape=true drží právě tento nový soubor.\n\nLive:\n\`\`\`\n${read('live.log')}\n\`\`\`\nMeta:\n\`\`\`json\n${read('meta.log')}\n\`\`\``:`❌ Oprava Od hlubin k nebi selhala. prepare=${'${{ steps.prepare.outputs.ok }}'}, article=${'${{ steps.article.outputs.ok }}'}, persist=${'${{ steps.persist.outputs.ok }}'}, deploy=${'${{ steps.deploy.outputs.ok }}'}, live=${'${{ steps.live.outputs.ok }}'}, meta=${'${{ steps.meta.outputs.ok }}'}\n\n${read('prepare.log')}\n${read('article.log')}\n${read('live.log')}\n${read('meta.log')}`;
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:819,body});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:819,state:'closed',state_reason:'completed'});
+
+      - name: Selhat při neúspěchu
+        if: always()
+        run: test "${{ steps.meta.outputs.ok }}" = 'true'
