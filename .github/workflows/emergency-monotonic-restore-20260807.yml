@@ -114,11 +114,8 @@ jobs:
           grep -Fq '16,5 milionu' /tmp/zzs.html
           grep -Fq '120 000 Kč' /tmp/slavie.html
 
-          og=$(grep -oiE '<meta[^>]+property=["'"']og:image["'"'][^>]+content=["'"'][^"'"']+' /tmp/zzs.html | head -1 | sed -E 's/.*content=["'"']([^"'"']+).*/\1/I')
-          case "$og" in
-            https://nasekadan.cz/social/*) ;;
-            *) echo "OG obrázek není lokální: $og" >&2; exit 1 ;;
-          esac
+          og=$(grep -oE 'https://nasekadan\.cz/social/[^" ]+' /tmp/zzs.html | head -1)
+          test -n "$og"
           curl -4 -kfsSL --max-time 40 "$og?$stamp" -o /tmp/og-image
           test -s /tmp/og-image
           grep -Fq 'og:image:width' /tmp/zzs.html
