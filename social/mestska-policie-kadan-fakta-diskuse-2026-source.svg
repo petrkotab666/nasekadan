@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Městská policie Kadaň – doprava pod lupou</title>
+  <desc id="desc">Redakční grafika Naše Kadaň k článku o městské policii, dopravě, parkování a ověřování faktů.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#132d42"/>
+      <stop offset="0.58" stop-color="#214f68"/>
+      <stop offset="1" stop-color="#397c83"/>
+    </linearGradient>
+    <linearGradient id="street" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1e303b"/>
+      <stop offset="1" stop-color="#334b58"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#07131d" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1115" cy="76" r="230" fill="#ffffff" opacity="0.035"/>
+  <circle cx="1040" cy="590" r="305" fill="#ffffff" opacity="0.035"/>
+
+  <g transform="translate(72 68)">
+    <rect width="176" height="46" rx="23" fill="#a72d2d"/>
+    <text x="88" y="31" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="20" font-weight="700" letter-spacing="1.8" fill="#fff">NAŠE KADAŇ</text>
+  </g>
+
+  <g font-family="Arial,Helvetica,sans-serif" fill="#fff">
+    <text x="72" y="188" font-size="28" font-weight="700" letter-spacing="3.1" opacity="0.88">MĚSTSKÁ POLICIE</text>
+    <text x="72" y="276" font-size="61" font-weight="900" letter-spacing="-1.7">DOPRAVA</text>
+    <text x="72" y="344" font-size="61" font-weight="900" letter-spacing="-1.7">POD LUPOU</text>
+    <text x="72" y="413" font-size="24" font-weight="600" opacity="0.92">Parkování, rychlost a čísla za rok 2025.</text>
+    <text x="72" y="452" font-size="22" opacity="0.78">Co ukazují data a co zaznělo ve veřejné debatě.</text>
+  </g>
+
+  <g transform="translate(545 54)" filter="url(#shadow)">
+    <!-- silueta historické Kadaně -->
+    <rect x="0" y="238" width="655" height="220" rx="18" fill="#d9d0bf" opacity="0.95"/>
+    <rect x="28" y="196" width="110" height="262" fill="#d8c8ad"/>
+    <polygon points="18,196 83,148 148,196" fill="#9d5e43"/>
+    <rect x="158" y="210" width="118" height="248" fill="#e1d4bd"/>
+    <polygon points="150,210 217,165 284,210" fill="#9e5a3f"/>
+    <rect x="296" y="184" width="125" height="274" fill="#d7c7af"/>
+    <polygon points="286,184 359,136 431,184" fill="#9b5b42"/>
+    <rect x="447" y="224" width="162" height="234" fill="#e3d5be"/>
+    <polygon points="437,224 528,169 619,224" fill="#9d6046"/>
+    <!-- radniční věž -->
+    <rect x="350" y="94" width="64" height="206" fill="#efe5d4"/>
+    <rect x="340" y="78" width="84" height="34" fill="#e6dbc6"/>
+    <polygon points="338,78 382,16 426,78" fill="#304b47"/>
+    <circle cx="382" cy="130" r="13" fill="#9fb0b0"/>
+    <!-- okna -->
+    <g fill="#7d9094" opacity="0.8">
+      <rect x="52" y="242" width="20" height="28"/><rect x="92" y="242" width="20" height="28"/>
+      <rect x="181" y="248" width="22" height="30"/><rect x="226" y="248" width="22" height="30"/>
+      <rect x="319" y="231" width="22" height="30"/><rect x="373" y="231" width="22" height="30"/>
+      <rect x="472" y="261" width="22" height="30"/><rect x="518" y="261" width="22" height="30"/><rect x="564" y="261" width="22" height="30"/>
+    </g>
+
+    <!-- ulice -->
+    <path d="M0 400 H655 V576 H0Z" fill="url(#street)"/>
+    <path d="M18 506 H150 M196 506 H328 M374 506 H506 M552 506 H640" stroke="#eef1ed" stroke-width="11" stroke-linecap="round" opacity="0.85"/>
+
+    <!-- zaparkovaná auta -->
+    <g transform="translate(420 398)">
+      <rect x="0" y="38" width="132" height="54" rx="18" fill="#8e3131"/>
+      <path d="M26 38 L46 12 H95 L116 38Z" fill="#7d9ca8"/>
+      <circle cx="28" cy="91" r="17" fill="#18252b"/><circle cx="104" cy="91" r="17" fill="#18252b"/>
+    </g>
+    <g transform="translate(95 405)">
+      <rect x="0" y="34" width="112" height="48" rx="16" fill="#5d6871"/>
+      <path d="M24 34 L42 12 H82 L99 34Z" fill="#8198a0"/>
+      <circle cx="25" cy="81" r="15" fill="#18252b"/><circle cx="87" cy="81" r="15" fill="#18252b"/>
+    </g>
+
+    <!-- parkovací značka -->
+    <g transform="translate(557 160)">
+      <rect x="34" y="96" width="9" height="268" rx="4" fill="#8a8f91"/>
+      <rect x="0" y="0" width="77" height="94" rx="8" fill="#f5f7f7" stroke="#224d75" stroke-width="7"/>
+      <rect x="9" y="10" width="59" height="59" rx="4" fill="#285f9a"/>
+      <text x="38.5" y="56" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="48" font-weight="800" fill="#fff">P</text>
+      <rect x="7" y="74" width="63" height="14" rx="3" fill="#fff"/>
+    </g>
+
+    <!-- strážník zezadu -->
+    <g transform="translate(247 250)">
+      <circle cx="112" cy="54" r="35" fill="#d3a47d"/>
+      <path d="M78 45 Q112 13 146 45 L143 64 H81Z" fill="#151d22"/>
+      <path d="M69 96 Q112 70 156 96 L176 245 Q113 276 48 245Z" fill="#141c22"/>
+      <path d="M48 118 Q12 151 3 221" stroke="#141c22" stroke-width="30" fill="none" stroke-linecap="round"/>
+      <path d="M157 118 Q194 151 204 221" stroke="#141c22" stroke-width="30" fill="none" stroke-linecap="round"/>
+      <rect x="67" y="127" width="91" height="62" rx="8" fill="#222d34" stroke="#5d6a70" stroke-width="3"/>
+      <text x="112" y="151" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="800" fill="#fff">MĚSTSKÁ</text>
+      <text x="112" y="174" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="19" font-weight="900" fill="#fff">POLICIE</text>
+      <path d="M68 245 L63 336" stroke="#151d22" stroke-width="29" stroke-linecap="round"/>
+      <path d="M145 245 L151 336" stroke="#151d22" stroke-width="29" stroke-linecap="round"/>
+    </g>
+  </g>
+
+  <g font-family="Arial,Helvetica,sans-serif">
+    <rect x="72" y="536" width="360" height="2" fill="#ffffff" opacity="0.34"/>
+    <text x="72" y="579" font-size="18" font-weight="700" fill="#fff" opacity="0.82">nasekadan.cz</text>
+    <text x="1080" y="579" text-anchor="end" font-size="16" fill="#fff" opacity="0.56">7. 8. 2026</text>
+  </g>
+</svg>
