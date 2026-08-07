@@ -1,0 +1,73 @@
+name: Zabudovat Facebook hardening přímo do Docker buildu
+
+on:
+  issues:
+    types: [reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  patch:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 815
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Vložit povinný Facebook hardening do Dockerfile
+        id: patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('Dockerfile')
+          text=p.read_text(encoding='utf-8')
+          line='RUN python scripts/harden_facebook_meta.py --write --check\n'
+          generate='RUN python scripts/generate_social_cards.py --write --check\n'
+          if text.count(line) < 1:
+              if generate not in text:
+                  raise SystemExit('Dockerfile neobsahuje generátor social cards.')
+              text=text.replace(generate, generate+line, 1)
+          marker='# MONOTONIC-PUBLICATION-GUARD-V1\n# Kandidát buildu'
+          if text.count(line) < 2:
+              if marker not in text:
+                  raise SystemExit('Nenalezen finální monotónní guard v Dockerfile.')
+              text=text.replace(marker, line+'\n'+marker, 1)
+          p.write_text(text,encoding='utf-8')
+          assert text.count(line) >= 2
+          print('Facebook hardening je v Dockerfile dvakrát.')
+          PY
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit změnu do main
+        id: persist
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – build guard'
+          git config user.email 'info@nasekadan.cz'
+          git add Dockerfile
+          if ! git diff --cached --quiet; then
+            git commit -m 'Zabudovat Facebook hardening přímo do Docker buildu [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              sleep $((attempt*2))
+            done
+          fi
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Výsledek do issue 815
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ok='${{ steps.patch.outputs.ok }}'==='true' && '${{ steps.persist.outputs.ok }}'==='true';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:815,body:ok?'✅ Facebook hardening je nyní povinnou součástí Docker buildu před finálním publikačním guardem.':'❌ Nepodařilo se zabudovat Facebook hardening do Docker buildu.'});
