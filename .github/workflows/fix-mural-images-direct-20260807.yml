@@ -1,0 +1,99 @@
+name: Opravit obrázky článku Od hlubin k nebi
+run-name: Přímá oprava WebP obrázků muralů na OVH
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/fix-mural-images-trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Připravit SSH klíč
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Zapsat WebP přímo do veřejného webu
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'python3 - <<'"'"'PY'"'"'
+import base64, json, urllib.request
+from pathlib import Path
+
+targets = {
+    "/var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp": "725c1c09724df0a7a64b5e8ed4f9a8c69ab68c39",
+    "/var/www/nasekadan/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp": "3896d0f5b341af7b03d5d3c246c82b800eba2ee6",
+}
+for name, sha in targets.items():
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/petrkotab666/nasekadan/git/blobs/{sha}",
+        headers={"Accept":"application/vnd.github+json","User-Agent":"nasekadan-deploy"},
+    )
+    with urllib.request.urlopen(req, timeout=45) as r:
+        payload = json.load(r)
+    data = base64.b64decode(payload["content"])
+    if len(data) < 10000 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        raise SystemExit(f"invalid WebP blob {sha}")
+    p = Path(name)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(data)
+    p.chmod(0o644)
+    print(name, len(data))
+PY'
+
+      - name: Ověřit veřejné WebP a článek
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://nasekadan.cz'
+          q="mural-img-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "$base/clanky/od-hlubin-k-nebi-kadan.html?$q" -o /tmp/article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' /tmp/article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' /tmp/article.html
+          for img in ptaci-ara-zoborozec.webp ptaci-cela-stena.webp; do
+            curl -4 -kfsSL --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" -o "/tmp/$img"
+            python3 - "$img" <<'PY'
+from pathlib import Path
+import sys
+p=Path('/tmp')/sys.argv[1]
+d=p.read_bytes()
+assert len(d) > 10000 and d[:4] == b'RIFF' and d[8:12] == b'WEBP'
+PY
+            curl -4 -kfsSI --max-time 40 "$base/images/clanky/od-hlubin-k-nebi/$img?$q" | tr -d '\r' | grep -Eqi '^content-type: image/webp$'
+          done
+
+      - name: Zapsat potvrzení
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'nasekadan-deploy-bot'
+          git config user.email 'info@nasekadan.cz'
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          status=".github/deploy-status/od-hlubin-k-nebi-images-${GITHUB_RUN_ID}.txt"
+          printf 'article=clanky/od-hlubin-k-nebi-kadan.html\nimages=ptaci-ara-zoborozec.webp,ptaci-cela-stena.webp\nwebp=verified\nverified_at=%s\n' "$(date -u +%FT%TZ)" > "$status"
+          git add "$status"
+          git commit -m 'Potvrdit opravu WebP obrázků Od hlubin k nebi [skip ci]'
+          git push origin HEAD:main
