@@ -1,0 +1,83 @@
+name: Ověřit živé fotografie Od hlubin k nebi
+
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  verify:
+    if: github.event.issue.title == 'Ověřit živé fotografie Od hlubin k nebi'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Ověřit živý článek a obě WebP
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          stamp="$(date +%s%N)"
+          article='https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html'
+          curl -4 -kfsSL --max-time 40 -A 'Mozilla/5.0 NaseKadanMediaCheck' "$article?verify=$stamp" -o /tmp/article.html
+          grep -Fq 'ptaci-ara-zoborozec.webp?v=20260807-2155' /tmp/article.html
+          grep -Fq 'ptaci-cela-stena.webp?v=20260807-2155' /tmp/article.html
+          ! grep -Fq 'Jak jsme informace ověřovali' /tmp/article.html
+          : > /tmp/result.txt
+          for name in ptaci-ara-zoborozec.webp ptaci-cela-stena.webp; do
+            url="https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/$name?v=20260807-2155&verify=$stamp"
+            code="$(curl -4 -kLsS --max-time 40 -A 'Mozilla/5.0 NaseKadanMediaCheck' -o "/tmp/$name" -w '%{http_code}' "$url")"
+            ctype="$(curl -4 -kLsSI --max-time 40 -A 'Mozilla/5.0 NaseKadanMediaCheck' "$url" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')"
+            bytes="$(stat -c %s "/tmp/$name")"
+            python3 - "$name" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path('/tmp')/sys.argv[1]
+          b=p.read_bytes()
+          assert len(b)>10000,(p,len(b))
+          assert b[:4]==b'RIFF' and b[8:12]==b'WEBP',(p,b[:12])
+          PY
+            test "$code" = 200
+            [[ "$ctype" == image/webp* ]]
+            printf '%s code=%s type=%s bytes=%s\n' "$name" "$code" "$ctype" "$bytes" | tee -a /tmp/result.txt
+          done
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+      - name: Zapsat výsledek
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OK: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const fs=require('fs'); let result=''; try { result=fs.readFileSync('/tmp/result.txt','utf8'); } catch (_) {}
+            const ok=process.env.OK==='true';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body:ok?'✅ Obě fotografie jsou na živém webu veřejně dostupné jako platné WebP.\n```\n'+result+'\n```':'❌ Veřejná kontrola fotografií stále selhala.\n```\n'+result+'\n```'});
+            if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
+      - name: Uložit důkaz do main
+        if: steps.verify.outputs.ok == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p reports
+          cat > reports/od-hlubin-images-live.json <<EOF
+          {
+            "status":"success",
+            "verified_at":"$(date -u +%FT%TZ)",
+            "article":"https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html",
+            "photo_1":"ptaci-ara-zoborozec.webp?v=20260807-2155",
+            "photo_2":"ptaci-cela-stena.webp?v=20260807-2155"
+          }
+          EOF
+          git config user.name 'Naše Kadaň – media verifier'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/od-hlubin-images-live.json
+          git commit -m 'Potvrdit živé fotografie Od hlubin k nebi [skip ci]'
+          git push origin HEAD:main
