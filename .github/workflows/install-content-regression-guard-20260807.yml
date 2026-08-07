@@ -1,4 +1,4 @@
-name: Nainstalovat okamžitou ochranu aktuálních článků
+name: Cíleně nasadit aktuální článek Naše Kadaň
 
 on:
   pull_request_target:
@@ -26,7 +26,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Cíleně nasadit článek ZZS na veřejný web
+      - name: Cíleně nasadit článek PK Slávie na veřejný web
         id: deploy
         shell: bash
         run: |
@@ -50,21 +50,22 @@ jobs:
           python3 scripts/ensure_all_published_articles_in_rss.py
           python3 scripts/sort_articles_chronologically.py
           python3 scripts/enforce_latest_homepage_hero.py
-          NASEKADAN_AUDIT_PATHS=clanky/zzs-kadan-garaz-mycka-2026.html python3 scripts/finalize_launch.py
+          NASEKADAN_AUDIT_PATHS=clanky/slavie-kadan-epp-plavci-120-tisic-2026.html python3 scripts/finalize_launch.py
 
-          ARTICLE='clanky/zzs-kadan-garaz-mycka-2026.html'
-          URL='https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html'
-          grep -Fq '<h1>Kadaňská záchranka dostane novou garáž a myčku. Kraj stanovil strop 16,5 milionu</h1>' "$ARTICLE"
-          grep -Fq '16,5 milionu korun bez DPH' "$ARTICLE"
-          grep -Fq '049/45R/2026' "$ARTICLE"
-          ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' "$ARTICLE"
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' index.html
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' clanky/index.html
+          ARTICLE='clanky/slavie-kadan-epp-plavci-120-tisic-2026.html'
+          URL='https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html'
+          grep -Fq '<h1>Dětští plavci získali potřebné body. Slávie Kadaň teď čeká na příspěvek 120 tisíc</h1>' "$ARTICLE"
+          grep -Fq '120 000 Kč' "$ARTICLE"
+          grep -Fq '258 379' "$ARTICLE"
+          grep -Fq 'řeší smlouvu a čeká na příspěvek' "$ARTICLE"
+          ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy|neveřejně indexovan' "$ARTICLE"
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' index.html
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' clanky/index.html
           grep -Fq "$URL" rss.xml sitemap.xml news-sitemap.xml
 
           root=/var/www/nasekadan
           sudo install -d -m 0755 "$root/clanky"
-          sudo install -m 0644 "$ARTICLE" "$root/clanky/zzs-kadan-garaz-mycka-2026.html"
+          sudo install -m 0644 "$ARTICLE" "$root/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html"
           sudo install -m 0644 index.html "$root/index.html"
           sudo rm -f "$root"/clanky/strana-*.html
           for f in clanky/index.html clanky/strana-*.html; do
@@ -76,7 +77,7 @@ jobs:
 
           if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
             sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
-            sudo docker cp "$ARTICLE" nasekadan-web:/usr/share/nginx/html/clanky/zzs-kadan-garaz-mycka-2026.html
+            sudo docker cp "$ARTICLE" nasekadan-web:/usr/share/nginx/html/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html
             sudo docker cp index.html nasekadan-web:/usr/share/nginx/html/index.html
             sudo docker exec nasekadan-web sh -lc 'rm -f /usr/share/nginx/html/clanky/strana-*.html'
             for f in clanky/index.html clanky/strana-*.html; do
@@ -93,23 +94,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          q="zzs-${GITHUB_RUN_ID}-$(date +%s)"
+          q="slavie-${GITHUB_RUN_ID}-$(date +%s)"
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?$q" -o /tmp/home.html
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/?$q" -o /tmp/archive.html
-          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/zzs-kadan-garaz-mycka-2026.html?$q" -o /tmp/zzs.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/slavie-kadan-epp-plavci-120-tisic-2026.html?$q" -o /tmp/slavie.html
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?$q" -o /tmp/rss.xml
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?$q" -o /tmp/sitemap.xml
           curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/news-sitemap.xml?$q" -o /tmp/news.xml
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/home.html
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/archive.html
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/rss.xml
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/sitemap.xml
-          grep -Fq 'zzs-kadan-garaz-mycka-2026.html' /tmp/news.xml
-          grep -Fq '<h1>Kadaňská záchranka dostane novou garáž a myčku. Kraj stanovil strop 16,5 milionu</h1>' /tmp/zzs.html
-          grep -Fq '16,5 milionu korun bez DPH' /tmp/zzs.html
-          grep -Fq '049/45R/2026' /tmp/zzs.html
-          ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy' /tmp/zzs.html
-          grep -Fq 'https://www.zzsuk.cz/wp-content/uploads/2026/03/DSC00125-scaled.jpg' /tmp/zzs.html
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/home.html
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/archive.html
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/rss.xml
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/sitemap.xml
+          grep -Fq 'slavie-kadan-epp-plavci-120-tisic-2026.html' /tmp/news.xml
+          grep -Fq '<h1>Dětští plavci získali potřebné body. Slávie Kadaň teď čeká na příspěvek 120 tisíc</h1>' /tmp/slavie.html
+          grep -Fq '120 000 Kč' /tmp/slavie.html
+          grep -Fq '258 379' /tmp/slavie.html
+          grep -Fq 'řeší smlouvu a čeká na příspěvek' /tmp/slavie.html
+          ! grep -Eiq 'fulltext|OCR|způsob ověření|způsob dohledávání|bez textové vrstvy|neveřejně indexovan' /tmp/slavie.html
 
       - name: Zapsat výsledek
         if: always()
@@ -121,7 +122,7 @@ jobs:
             const verify = '${{ steps.verify.outcome }}';
             const ok = deploy === 'success' && verify === 'success';
             const body = ok
-              ? '✅ Článek ZZS Kadaň je veřejně nasazen a ověřen. Je na titulce, v archivu, RSS, sitemapě i news-sitemapě; veřejná verze neobsahuje interní postupy dohledávání.'
-              : `❌ Cílené nasazení ZZS selhalo. Deploy=${deploy}, externí kontrola=${verify}.`;
+              ? '✅ Článek PK Slávie Kadaň je veřejně nasazen a ověřen. Je na titulce, v archivu, RSS, sitemapě i news-sitemapě; veřejná verze neobsahuje interní postupy dohledávání.'
+              : `❌ Cílené nasazení článku PK Slávie selhalo. Deploy=${deploy}, externí kontrola=${verify}.`;
             await github.rest.issues.createComment({owner:context.repo.owner, repo:context.repo.repo, issue_number:context.issue.number, body});
             if (ok) await github.rest.pulls.update({owner:context.repo.owner, repo:context.repo.repo, pull_number:context.issue.number, state:'closed'});
