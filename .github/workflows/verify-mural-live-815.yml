@@ -1,0 +1,90 @@
+name: Ověřit živé fotografie podchodu přes 815
+
+on:
+  issues:
+    types: [reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.number == 815
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Bajtově ověřit článek a fotografie z veřejného webu
+        id: live
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="verify-mural-${GITHUB_RUN_ID}-$(date +%s)"
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html?$q" -o /tmp/article.html
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?$q" -o /tmp/a.webp
+          curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?$q" -o /tmp/b.webp
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp' /tmp/article.html
+          grep -Fq '/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp' /tmp/article.html
+          a_sha="$(sha256sum /tmp/a.webp | awk '{print $1}')"
+          b_sha="$(sha256sum /tmp/b.webp | awk '{print $1}')"
+          a_bytes="$(stat -c %s /tmp/a.webp)"
+          b_bytes="$(stat -c %s /tmp/b.webp)"
+          a_type="$(curl -4 -ksSI --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp?$q" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')"
+          b_type="$(curl -4 -ksSI --max-time 40 "https://nasekadan.cz/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp?$q" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print tolower($2);exit}')"
+          printf 'A_SHA=%s\nA_BYTES=%s\nA_TYPE=%s\nB_SHA=%s\nB_BYTES=%s\nB_TYPE=%s\n' "$a_sha" "$a_bytes" "$a_type" "$b_sha" "$b_bytes" "$b_type" | tee "$RUNNER_TEMP/mural-verification.txt"
+          test "$a_sha" = '9b3a46d7f4427a287beae579bd0229c547f3c7056a8cdd88d526c0abada8e632'
+          test "$b_sha" = '357a4ba86eb42fe16b9332d515034cfa1d86fb80537c49599839d7c76f4307ca'
+          test "$a_bytes" = '43866'
+          test "$b_bytes" = '43854'
+          case "$a_type" in image/webp*) ;; *) exit 1;; esac
+          case "$b_type" in image/webp*) ;; *) exit 1;; esac
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Uložit jednoznačný doklad do main
+        if: steps.live.outputs.ok == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          cat > .github/deploy-status/mural-photos-20260807.json <<EOF
+          {
+            "status": "success",
+            "verified_at": "$(date -u +%FT%TZ)",
+            "article": "https://nasekadan.cz/clanky/od-hlubin-k-nebi-kadan.html",
+            "photos": [
+              {"path": "/images/clanky/od-hlubin-k-nebi/ptaci-ara-zoborozec.webp", "sha256": "9b3a46d7f4427a287beae579bd0229c547f3c7056a8cdd88d526c0abada8e632", "bytes": 43866, "width": 1000, "height": 750},
+              {"path": "/images/clanky/od-hlubin-k-nebi/ptaci-cela-stena.webp", "sha256": "357a4ba86eb42fe16b9332d515034cfa1d86fb80537c49599839d7c76f4307ca", "bytes": 43854, "width": 1000, "height": 750}
+            ]
+          }
+          EOF
+          git config user.name 'Naše Kadaň – veřejný audit'
+          git config user.email 'info@nasekadan.cz'
+          git add .github/deploy-status/mural-photos-20260807.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Potvrdit živé fotografie podchodu [skip ci]'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+              sleep $((attempt*2))
+            done
+            exit 1
+          fi
+
+      - name: Zapsat výsledek do issue 815
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          LIVE: ${{ steps.live.outputs.ok }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs=require('fs'); let detail=''; try{detail=fs.readFileSync(process.env.RUNNER_TEMP+'/mural-verification.txt','utf8')}catch{}
+            const ok=process.env.LIVE==='true';
+            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:815,body:ok?`✅ Veřejné fotografie podchodu jsou bajtově shodné s novými originály.\n\n\`\`\`text\n${detail}\n\`\`\``:`❌ Veřejné fotografie podchodu ještě nejsou správné.\n\n\`\`\`text\n${detail}\n\`\`\``});
