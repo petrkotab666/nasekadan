@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-07T00:10:32.854954+00:00",
+  "checkedAt": "2026-08-07T02:09:07.249766+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 196,
-  "failedSources": 17,
-  "itemsParsed": 17057,
-  "uniqueItems": 10779,
+  "checkedSources": 194,
+  "failedSources": 19,
+  "itemsParsed": 16605,
+  "uniqueItems": 10638,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 889,
+    "genericTitle": 841,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 1,
-    "notEditoriallySignificant": 47,
+    "broadWithoutLocalMatch": 3,
+    "notEditoriallySignificant": 45,
     "notFreshOrUndated": 0,
-    "duplicate": 5389,
+    "duplicate": 5126,
     "deferredByCap": 0
   },
   "coverage": {
@@ -369,8 +369,9 @@
       "url": "https://www.2zskadan.cz/",
       "category": "Základní školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 245
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -566,8 +567,9 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 81
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -599,7 +601,7 @@
       "category": "Vodní toky a povodně",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 47
+      "itemsParsed": 46
     },
     {
       "name": "ČHMÚ – výstrahy",
@@ -673,7 +675,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 272
+      "itemsParsed": 273
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -697,7 +699,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 26
+      "itemsParsed": 28
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -720,9 +722,8 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 12
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -898,8 +899,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 24
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -954,8 +956,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 72
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -1013,7 +1016,7 @@
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 17
+      "itemsParsed": 19
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
@@ -1461,9 +1464,8 @@
       "url": "https://www.baerenstein-erzgebirge.de/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 104] Connection reset by peer>"
+      "status": "checked",
+      "itemsParsed": 118
     },
     {
       "name": "Annaberg-Buchholz – oficiální web",
@@ -1694,9 +1696,8 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 12
     },
     {
       "name": "Hasištejn",
@@ -1711,8 +1712,9 @@
       "url": "https://hornihrad.cz/",
       "category": "castle-events",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 176
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "TimeoutError: The read operation timed out"
     },
     {
       "name": "Dolní Poohří – regionální kalendář",
@@ -1752,7 +1754,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 84
+      "itemsParsed": 82
     },
     {
       "name": "Google News – široký region 5",
@@ -1784,7 +1786,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 71
+      "itemsParsed": 72
     },
     {
       "name": "Google News – široký region 9",
@@ -1800,7 +1802,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 12
+      "itemsParsed": 13
     },
     {
       "name": "Google News – široký region 11",
