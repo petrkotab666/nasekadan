@@ -1,0 +1,106 @@
+name: Obnovit Facebook náhled po změně OG
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clanky/*.html'
+      - 'social/*.png'
+      - 'scripts/refresh_facebook_previews_on_change.py'
+      - '.github/workflows/refresh-facebook-previews-on-og-change.yml'
+  workflow_dispatch:
+    inputs:
+      article_path:
+        description: 'Volitelná cesta článku k ruční obnově FB náhledu'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nasekadan-facebook
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FACEBOOK_PAGES_JSON: ${{ secrets.FACEBOOK_PAGES_JSON }}
+      FACEBOOK_PAGE_KEY: ${{ vars.FACEBOOK_PAGE_KEY }}
+      FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+      FACEBOOK_PAGE_ACCESS_TOKEN: ${{ secrets.FACEBOOK_PAGE_ACCESS_TOKEN }}
+      FACEBOOK_APP_ID: ${{ vars.FACEBOOK_APP_ID }}
+      FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}
+      FACEBOOK_GRAPH_VERSION: ${{ vars.FACEBOOK_GRAPH_VERSION }}
+      FACEBOOK_WAIT_TIMEOUT: '1200'
+
+    steps:
+      - name: Stáhnout aktuální main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+
+      - name: Zjistit změněné soubory
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/changed-paths.txt"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+            if [[ "$before" =~ ^0+$ ]]; then
+              before="${after}^"
+            fi
+            git diff --name-only "$before" "$after" > "$RUNNER_TEMP/changed-paths.txt"
+          fi
+          echo 'Změněné soubory:'
+          cat "$RUNNER_TEMP/changed-paths.txt" || true
+
+      - name: Ověřit živý OG obrázek a obnovit Facebook cache
+        id: refresh
+        continue-on-error: true
+        shell: bash
+        env:
+          MANUAL_ARTICLE: ${{ inputs.article_path }}
+        run: |
+          set -euo pipefail
+          args=(--changed-file "$RUNNER_TEMP/changed-paths.txt")
+          if [[ -n "${MANUAL_ARTICLE:-}" ]]; then
+            args+=(--article "$MANUAL_ARTICLE")
+          fi
+          python3 scripts/refresh_facebook_previews_on_change.py "${args[@]}"
+
+      - name: Uložit aktualizované markery a stav
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň Facebook preview guard'
+          git config user.email 'info@nasekadan.cz'
+          git add -A -- .github/facebook-published .github/facebook-preview-refresh-status.json
+          if git diff --cached --quiet; then
+            echo 'Není co ukládat.'
+            exit 0
+          fi
+          git commit -m 'Aktualizovat stav Facebook náhledů [skip ci]'
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin main; then
+              exit 0
+            fi
+            if [[ "$attempt" = 5 ]]; then
+              exit 1
+            fi
+            git rebase --abort >/dev/null 2>&1 || true
+            git reset --hard HEAD >/dev/null
+            sleep $((attempt * 2))
+          done
+
+      - name: Potvrdit úspěšnou obnovu
+        if: steps.refresh.outcome != 'success'
+        shell: bash
+        run: |
+          echo 'Obnova Facebook náhledu selhala; stav je uložen v .github/facebook-preview-refresh-status.json.' >&2
+          exit 1
