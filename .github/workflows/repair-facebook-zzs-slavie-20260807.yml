@@ -142,7 +142,7 @@ jobs:
           PY
           echo 'ok=true' >> "$GITHUB_OUTPUT"
 
-      - name: Vynutit Meta Graph API scrape=true
+      - name: Vynutit Meta Graph API scrape=true a ověřit uložený image
         id: scrape
         shell: bash
         run: |
@@ -162,10 +162,23 @@ jobs:
           key,url,expected,raw=sys.argv[1:]
           d=json.loads(raw)
           if 'error' in d: raise SystemExit(json.dumps(d['error'],ensure_ascii=False))
-          obj=d.get('og_object') if isinstance(d,dict) else None
-          img=''
-          if isinstance(obj,dict): img=obj.get('image') or ''
-          print(json.dumps({'key':key,'url':url,'expected':expected,'facebook_image':img,'response_keys':sorted(d.keys()) if isinstance(d,dict) else []},ensure_ascii=False))
+          raw_image=d.get('image') if isinstance(d,dict) else None
+          urls=[]
+          if isinstance(raw_image,str): urls=[raw_image]
+          elif isinstance(raw_image,dict):
+            for k in ('url','secure_url','src'):
+              if raw_image.get(k): urls.append(raw_image[k])
+          elif isinstance(raw_image,list):
+            for item in raw_image:
+              if isinstance(item,str): urls.append(item)
+              elif isinstance(item,dict):
+                for k in ('url','secure_url','src'):
+                  if item.get(k): urls.append(item[k])
+          clean_expected=expected.split('?',1)[0]
+          matched=[u for u in urls if isinstance(u,str) and (u==expected or u.split('?',1)[0]==clean_expected)]
+          if not matched:
+            raise SystemExit('Meta po scrape nemá očekávaný obrázek. expected='+expected+' got='+json.dumps(urls,ensure_ascii=False))
+          print(json.dumps({'key':key,'url':url,'expected':expected,'meta_images':urls,'matched':matched},ensure_ascii=False))
           PY
             sleep 3
           done
@@ -197,11 +210,10 @@ jobs:
             const fs=require('fs'); const read=n=>{try{return fs.readFileSync(process.env.RUNNER_TEMP+'/'+n,'utf8').slice(-6000)}catch{return ''}};
             const scrape=read('scrape.log'), live=read('live.log'), access=read('fb-access.log');
             const ok=process.env.META==='true'&&process.env.ASSETS==='true'&&process.env.DEPLOY==='true'&&process.env.LIVE==='true'&&process.env.SCRAPE==='true';
-            const body=ok?`✅ Meta Graph API znovu načetlo ZZS i Slávii. Živé články i PNG jsou 200 a 1200×630.\n\nGraph API:\n\`\`\`json\n${scrape}\n\`\`\`\n\nŽivá kontrola:\n\`\`\`\n${live}\n\`\`\`\n\nMeta požadavky v nginx logu:\n\`\`\`\n${access}\n\`\`\``:`❌ Facebook oprava selhala. meta=${process.env.META||'false'}, assets=${process.env.ASSETS||'false'}, deploy=${process.env.DEPLOY||'false'}, live=${process.env.LIVE||'false'}, scrape=${process.env.SCRAPE||'false'}.\n\nScrape:\n\`\`\`\n${scrape}\n\`\`\`\nLive:\n\`\`\`\n${live}\n\`\`\``;
+            const body=ok?`✅ Meta po scrape=true drží správný obrázek pro ZZS i Slávii. Živé články i PNG jsou 200 a 1200×630.\n\nGraph API:\n\`\`\`json\n${scrape}\n\`\`\`\n\nŽivá kontrola:\n\`\`\`\n${live}\n\`\`\`\n\nMeta požadavky v nginx logu:\n\`\`\`\n${access}\n\`\`\``:`❌ Facebook oprava selhala. meta=${process.env.META||'false'}, assets=${process.env.ASSETS||'false'}, deploy=${process.env.DEPLOY||'false'}, live=${process.env.LIVE||'false'}, scrape=${process.env.SCRAPE||'false'}.\n\nScrape:\n\`\`\`\n${scrape}\n\`\`\`\nLive:\n\`\`\`\n${live}\n\`\`\``;
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:815,body});
             if(ok) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:815,state:'closed',state_reason:'completed'});
 
       - name: Selhat při neúspěchu
         if: always()
-        run: |
-          test "${{ steps.scrape.outputs.ok }}" = 'true'
+        run: test "${{ steps.scrape.outputs.ok }}" = 'true'
