@@ -2,13 +2,19 @@
   "fingerprint": "production-stale-main-20260808-1057",
   "type": "technical-production-stale",
   "detectedAt": "2026-08-08T10:57:38+02:00",
+  "lastVerifiedAt": "2026-08-08T15:04:10+02:00",
   "status": "pending",
   "severity": "high",
-  "summary": "Veřejná produkce Naše Kadaň zaostává za aktuálním main; dnešní článek o komunálních volbách není v živém archivu.",
+  "summary": "Veřejná produkce Naše Kadaň zaostává za aktuálním main; živá titulní strana i archiv stále končí článkem ze 7. srpna, zatímco main obsahuje články z 8. srpna včetně komunálních voleb a nového hřbitova.",
   "publicArchive": "https://nasekadan.cz/clanky/",
-  "expectedMain": "04955c29e533e36be27bb0844f736bd76603ce0d",
-  "affectedArticle": "https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html",
-  "repairAttemptCommit": "04955c29e533e36be27bb0844f736bd76603ce0d",
+  "affectedArticles": [
+    "https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html",
+    "https://nasekadan.cz/clanky/novy-hrbitov-kadan-architektonicka-studie-2026.html"
+  ],
+  "previousRepairAttemptCommit": "04955c29e533e36be27bb0844f736bd76603ce0d",
+  "stateChangedSincePreviousAttempt": true,
+  "currentRepairTriggerCommit": "276416b358e82c0cf450917b01d3d95c81d748da",
+  "repairRoute": ".github/water-selfhosted-trigger.txt -> deploy-ovh.yml -> self-hosted OVH monotonic production",
   "githubIssue": 828,
-  "nextStep": "Zkontrolovat production-content-watchdog, self-hosted OVH runner a deploy/sync-production.sh; další automatický deploy provést až po změně stavu."
+  "nextStep": "Nevytvářet další paralelní deploy. Při dalším běhu ověřit živě titulku, archiv, RSS, sitemap, news-sitemap a deployment-health; při úspěšném srovnání incident uzavřít."
 }
