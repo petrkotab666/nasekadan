@@ -9,9 +9,15 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import publish_kadan_election_history_20260808 as pub
+import publish_gymnastika_kadan_20260806 as helper
 
 
 def validate_v2() -> None:
+    # Původní generátor sestaví manifest před normalizací konstrukce článků.
+    # Obnova tady garantuje, že hash/bytes v manifestu odpovídají skutečně
+    # finální podobě souborů, která půjde do commitu a na produkci.
+    helper.rebuild_integrity_manifest()
+
     text = pub.ARTICLE.read_text(encoding="utf-8")
     for heading in pub.REQUIRED_HEADINGS:
         if f">{heading}</h2>" not in text:
