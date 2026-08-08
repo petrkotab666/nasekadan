@@ -68,12 +68,18 @@ jobs:
             sudo docker cp "$file" "$cid:/usr/share/nginx/html/$file"
           done
 
+          arc="$(curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html)"
           curl -fsS http://127.0.0.1:3224/index.html | grep -Fq 'data-arc-med-hero'
-          curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq 'data-promos data-context="sidebar"'
-          curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq '/reklamy-sidebar.js?'
+          grep -Fq 'data-promos data-context="sidebar"' <<<"$arc"
+          grep -Fq '/reklamy-sidebar.js?' <<<"$arc"
+          grep -Fq 'data-arc-med-correction="2026-08-08"' <<<"$arc"
+          grep -Fq '16&nbsp;000&nbsp;000 Kč' <<<"$arc"
+          grep -Fq 'MUDr. Zora Ouzká' <<<"$arc"
           curl -fsS http://127.0.0.1:3224/clanky/avies-nemocnice-kadan.html | grep -Fq 'data-oswald-avies-context'
-          ! curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK'
-          ! curl -fsS http://127.0.0.1:3224/clanky/arc-med-nemocnice-kadan.html | grep -Fq 'static-article-ads'
+          ! grep -Fq 'veřejný záznam proto sám o sobě nepotvrzuje částku 16 milionů korun' <<<"$arc"
+          ! grep -Fq 'Úplná smlouva o převodu všech podílů včetně příloh a přesného splátkového kalendáře.' <<<"$arc"
+          ! grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK' <<<"$arc"
+          ! grep -Fq 'static-article-ads' <<<"$arc"
           REMOTE
 
       - name: Zapsat stav hotfixu
@@ -90,7 +96,9 @@ jobs:
               trigger_commit: context.sha,
               run_id: context.runId,
               run_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              docker_deploy: process.env.DEPLOY_OUTCOME || 'unknown'
+              docker_deploy: process.env.DEPLOY_OUTCOME || 'unknown',
+              arc_med_contract_fix: '2026-08-08',
+              required_live_marker: 'data-arc-med-correction="2026-08-08"'
             };
             const content = Buffer.from(JSON.stringify(status, null, 2) + '\n').toString('base64');
             let sha;
