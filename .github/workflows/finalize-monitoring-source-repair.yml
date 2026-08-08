@@ -1,0 +1,171 @@
+name: Dokončit opravu zdrojů monitoringu a provést plný audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-monitoring-source-repair.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-monitoring-source-repair
+  cancel-in-progress: true
+
+jobs:
+  fix-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit přesné URL a poslední HTTP fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          # 1) Zdrojová URL se nesmí při deduplikaci přepsat na variantu bez koncového /.
+          p=Path('scripts/monitor_all_kadansko.py')
+          t=p.read_text(encoding='utf-8')
+          old='''    for source in base_sources:\n        url = stable_url(source.get("url"))\n        if not url or url in seen:\n            continue\n        seen.add(url)\n        tier = infer_tier(source)\n        merged.append({**source, "url": url, "kind": source.get("kind") or "html", "tier": tier})\n\n    for source in extra.get("sources", []):\n        if not isinstance(source, dict):\n            continue\n        url = stable_url(source.get("url"))\n        if not url or url in seen:\n            continue\n        seen.add(url)\n        tier = infer_tier(source)\n        merged.append({**source, "url": url, "tier": tier})\n'''
+          new='''    for source in base_sources:\n        source_url = str(source.get("url") or "").strip()\n        dedup_key = stable_url(source_url)\n        if not dedup_key or dedup_key in seen:\n            continue\n        seen.add(dedup_key)\n        tier = infer_tier(source)\n        # Deduplikace používá stabilní klíč, HTTP požadavek ale musí dostat\n        # přesnou adresu z registru. Některé servery rozlišují /news a /news/.\n        merged.append({**source, "url": source_url, "kind": source.get("kind") or "html", "tier": tier})\n\n    for source in extra.get("sources", []):\n        if not isinstance(source, dict):\n            continue\n        source_url = str(source.get("url") or "").strip()\n        dedup_key = stable_url(source_url)\n        if not dedup_key or dedup_key in seen:\n            continue\n        seen.add(dedup_key)\n        tier = infer_tier(source)\n        merged.append({**source, "url": source_url, "tier": tier})\n'''
+          if old in t:
+              t=t.replace(old,new)
+              p.write_text(t,encoding='utf-8')
+          elif 'dedup_key = stable_url(source_url)' not in t:
+              raise SystemExit('Nelze najít blok load_all_sources pro opravu přesných URL')
+
+          # 2) Curl jako poslední fallback pro servery blokující urllib 403/429.
+          p=Path('scripts/monitor_national_kadan.py')
+          t=p.read_text(encoding='utf-8')
+          if 'MONITOR_CURL_FALLBACK_V1' not in t:
+              t=t.replace('import socket\nimport threading\n', 'import socket\nimport subprocess\nimport threading\n')
+              marker='''    if last_exc is not None:\n        raise last_exc\n    raise RuntimeError(f"Nepodařilo se načíst {url}")\n'''
+              replacement='''    # MONITOR_CURL_FALLBACK_V1\n    # Některé veřejné weby odmítají urllib, ale běžný HTTP klient obslouží.\n    # Curl je až poslední možnost a nepoužívá se pro trvalé 404.\n    if not (isinstance(last_exc, HTTPError) and last_exc.code == 404):\n        try:\n            proc = subprocess.run([\n                "curl", "-fsSL", "--compressed", "--max-time", "70",\n                "--retry", "2", "--retry-delay", "2", "--retry-all-errors",\n                "-A", BROWSER_UA,\n                "-H", "Accept-Language: cs-CZ,cs;q=0.9,en;q=0.6",\n                "-H", "Accept: application/rss+xml,application/atom+xml,application/xml,text/xml,text/html,application/xhtml+xml,*/*;q=0.8",\n                url,\n            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)\n            body = proc.stdout.decode("utf-8", errors="replace")\n            if body.strip():\n                stripped=body.lstrip().lower()\n                content_type = "application/xml" if stripped.startswith("<?xml") or stripped.startswith("<rss") or stripped.startswith("<feed") else "text/html"\n                return body, content_type\n        except Exception:\n            pass\n    if last_exc is not None:\n        raise last_exc\n    raise RuntimeError(f"Nepodařilo se načíst {url}")\n'''
+              if marker not in t:
+                  raise SystemExit('Nelze najít konec fetch() pro curl fallback')
+              t=t.replace(marker,replacement)
+              p.write_text(t,encoding='utf-8')
+
+          # 3) Ověřené náhrady zastaralých/nepraktických zdrojových URL.
+          replacements={
+            'Kino Hvězda Kadaň':'https://www.kinokadan.cz/',
+            'Kino Hvězda':'https://www.kinokadan.cz/',
+            'SK Kadaň':'https://www.hokej.cz/klub/sk-kadan/39',
+            'Gymnázium Kadaň':'https://www.gymka.cz/news/',
+            'Městské divadlo Most – program':'https://www.divadlo-most.cz/cz/program/',
+            'Let It Roll – akce':'https://letitroll.cz/',
+            'Docela velké divadlo Litvínov':'https://www.docelavelkedivadlo.cz/cz/program',
+            'Severočeské vodovody a kanalizace – události':'https://www.scvk.cz/vodovody-a-kanalizace/odstavky-a-havarie/',
+            'Fotbalový klub Tatran Kadaň':'https://www.fotbal.cz/facr/club/club/3438',
+            'Římskokatolická farnost Kadaň':'https://www.farnostkadan.cz/aktuality.php',
+            'Chomutov – městský web':'https://mesto.chomutov.cz/',
+          }
+
+          def walk(value):
+              if isinstance(value,dict):
+                  name=str(value.get('name') or '')
+                  if name in replacements and 'url' in value:
+                      value['url']=replacements[name]
+                  for k,v in value.items():
+                      walk(v)
+              elif isinstance(value,list):
+                  for x in value: walk(x)
+
+          for filename in ('data/organizations.json','data/kadansko-extra-sources.json','data/regional-sources.json','data/city-sources.json'):
+              path=Path(filename)
+              if not path.exists(): continue
+              data=json.loads(path.read_text(encoding='utf-8'))
+              walk(data)
+              # municipality official URL fixes
+              if filename.endswith('regional-sources.json'):
+                  for m in data.get('municipalities',[]):
+                      if m.get('name')=='Chomutov': m['officialUrl']='https://mesto.chomutov.cz/'
+                      if m.get('name')=='Podbořany': m['officialUrl']='https://www.podborany.net/cs/'
+              path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+
+          python3 -m py_compile scripts/monitor_national_kadan.py scripts/monitor_all_kadansko.py scripts/run_complete_regional_monitor.py scripts/update_city_news.py
+
+      - name: Uložit systémovou opravu registru
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – monitoring source repair'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/monitor_all_kadansko.py scripts/monitor_national_kadan.py data/organizations.json data/kadansko-extra-sources.json data/regional-sources.json data/city-sources.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit zdrojové URL a blokované weby monitoringu [skip ci]'
+            for n in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((n*3))
+            done
+          fi
+
+      - name: Nezávisle projet kompletní monitoring
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp data/all-kadansko-monitoring-state.json "$RUNNER_TEMP/state.json"
+          printf '{}\n' > "$RUNNER_TEMP/status.json"
+          python3 scripts/run_complete_regional_monitor.py \
+            --state "$RUNNER_TEMP/state.json" \
+            --status "$RUNNER_TEMP/status.json" \
+            --output "$RUNNER_TEMP/output.json"
+
+      - name: Vytvořit konečný report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          s=json.loads((root/'status.json').read_text(encoding='utf-8'))
+          o=json.loads((root/'output.json').read_text(encoding='utf-8'))
+          r={
+            'generatedAt':datetime.now(timezone.utc).isoformat(),
+            'mode':'full-audit-after-url-and-http-repair',
+            'sourceCount':s.get('sourceCount'),'checkedSources':s.get('checkedSources'),'failedSources':s.get('failedSources'),
+            'initialFailedSources':s.get('initialFailedSources'),'recoveredSourcesAfterRetry':s.get('recoveredSourcesAfterRetry'),
+            'itemsParsed':s.get('itemsParsed'),'uniqueItems':s.get('uniqueItems'),'newAlerts':s.get('newAlerts'),
+            'alerts':o.get('alerts') or [],
+            'failed':[x for x in s.get('sourceStatus',[]) if x.get('status')=='failed'],
+            'suppressed':s.get('suppressed') or {},'coverage':s.get('coverage') or {},
+          }
+          Path('reports/monitoring-final-audit.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps({k:r[k] for k in ('sourceCount','checkedSources','failedSources','initialFailedSources','recoveredSourcesAfterRetry','itemsParsed','uniqueItems','newAlerts')},ensure_ascii=False))
+          for a in r['alerts']:
+              print('ALERT:',a.get('title'),'|',a.get('sourceName'),'|',a.get('url'))
+          for f in r['failed']:
+              print('FAILED:',f.get('name'),'|',f.get('error'))
+          PY
+
+      - name: Uložit konečný audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main || true
+          git config user.name 'Naše Kadaň – monitoring final audit'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/monitoring-final-audit.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Dokončit audit celého monitoringu po opravě [skip ci]'
+            for n in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((n*3))
+            done
+            exit 1
+          fi
