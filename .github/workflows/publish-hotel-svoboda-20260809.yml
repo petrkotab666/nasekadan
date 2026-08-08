@@ -83,7 +83,8 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – Hotel Svoboda'
           git config user.email 'info@nasekadan.cz'
-          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          # Uložit atomicky celý ověřený výstup publikačních normalizátorů.
+          git add -A
           if ! git diff --cached --quiet; then
             git commit -m 'Publikovat Hotel Svoboda: byty, knihovna a SFPI'
             pushed=0
