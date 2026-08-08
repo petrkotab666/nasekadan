@@ -1,4 +1,4 @@
-name: Publikovat Gymnastiku Kadaň po otevření issue
+name: Publikovat historii komunálních voleb po otevření issue
 
 on:
   issues:
@@ -10,12 +10,13 @@ permissions:
   issues: write
 
 concurrency:
-  group: publish-gymnastika-kadan-production
+  group: publish-kadan-election-history-issue-20260808
   cancel-in-progress: false
 
 env:
-  SLUG: gymnastika-kadan-treneri-prosinec-2026
-  PUBLIC_URL: https://nasekadan.cz/clanky/gymnastika-kadan-treneri-prosinec-2026.html
+  SLUG: komunalni-volby-kadan-historie-1990-2026
+  PUBLIC_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html
+  TITLE: '36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026'
   OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
   OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
   OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
@@ -24,80 +25,53 @@ env:
 
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || (github.actor == 'petrkotab666' && github.event.issue.title == '[publish] Gymnastika Kadaň – nedostatek trenérů')
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[publish] 36 let komunálních voleb Kadaň'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
-      - name: Vygenerovat článek a všechny kanály
+      - name: Vygenerovat článek, PNG a všechny kanály
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install --quiet Pillow
-          python scripts/publish_gymnastika_kadan_20260806.py
+          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          python3 scripts/publish_kadan_election_history_20260808_v2.py
+          git diff --check
+          test -f "clanky/$SLUG.html"
+          test -f "social/$SLUG.png"
+          grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" index.html
+          grep -Fq "$SLUG.html" clanky/index.html
+          grep -Fq "$PUBLIC_URL" rss.xml
 
-      - name: Uložit kanonický obsah
+      - name: Uložit kanonický obsah do main
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'Naše Kadaň – publikace Gymnastiky'
+          git config user.name 'Naše Kadaň – historie voleb'
           git config user.email 'info@nasekadan.cz'
           git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
-          git commit -m 'Publikovat nedostatek trenérů Gymnastiky Kadaň'
-          for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
-            git rebase --abort 2>/dev/null || true
-            test "$attempt" != 5
-            sleep $((attempt * 4))
-          done
-          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-
-      - name: Doplnit registr a health
-        shell: bash
-        run: |
-          set -euo pipefail
+          if ! git diff --cached --quiet; then
+            git commit -m 'Dokončit dnešní článek o 36 letech komunálních voleb'
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then break; fi
+              git rebase --abort 2>/dev/null || true
+              test "$attempt" != 5
+              sleep $((attempt*3))
+            done
+          fi
           git fetch origin main
           git reset --hard origin/main
-          python - <<'PY'
-          from datetime import datetime, timezone
-          from pathlib import Path
-          import json, os
-          slug=os.environ['SLUG']; sha=os.environ['CONTENT_SHA']
-          path=Path('data/published-content-index.json')
-          data=json.loads(path.read_text(encoding='utf-8'))
-          url=f'https://nasekadan.cz/clanky/{slug}.html'
-          for item in data.get('articles', []):
-              if item.get('url') == url:
-                  item['source_commit']=sha
-                  break
-          else:
-              raise SystemExit('Článek chybí v registru.')
-          data['source_commit']=sha
-          data['generated_at']=datetime.now(timezone.utc).isoformat()
-          last=data.setdefault('validation', {}).setdefault('last_publication', {})
-          last['source_commit']=sha
-          path.write_text(json.dumps(data, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-          PY
-          printf 'site=nasekadan.cz\nsource=%s\ngenerated=%s\nmode=direct-gymnastika-publication\n' "$CONTENT_SHA" "$(date -u +%FT%TZ)" > deployment-health.txt
-          git add data/published-content-index.json deployment-health.txt
-          git commit -m 'Evidence: přiřadit publikaci Gymnastiky ke commitu'
-          for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push origin HEAD:main; then break; fi
-            git rebase --abort 2>/dev/null || true
-            test "$attempt" != 5
-            sleep $((attempt * 4))
-          done
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Připravit SSH a balík
+      - name: Připravit SSH a publikační balík
         shell: bash
         run: |
           set -euo pipefail
@@ -105,22 +79,22 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
           chmod 600 "$RUNNER_TEMP/key"
-          bundle="$RUNNER_TEMP/gymnastika"
+          bundle="$RUNNER_TEMP/elections"
           rm -rf "$bundle"
           mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
-          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt "$bundle/"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
           cp "clanky/$SLUG.html" clanky/index.html clanky/strana-*.html "$bundle/clanky/"
           cp "social/$SLUG.png" "$bundle/social/"
           cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
 
-      - name: Nasadit proudově na OVH a do kontejneru
+      - name: Nasadit balík přímo na OVH a do nginx kontejneru
         id: deploy
         shell: bash
         run: |
           set -euo pipefail
-          bundle="$RUNNER_TEMP/gymnastika"
-          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo rm -rf /tmp/gymnastika* /tmp/nasekadan-deploy* 2>/dev/null || true; sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
-          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt deployment-health.txt clanky social data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+          bundle="$RUNNER_TEMP/elections"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt clanky social data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
 
       - name: Veřejně ověřit všechny povrchy
         id: verify
@@ -130,35 +104,30 @@ jobs:
           success=0
           for n in $(seq 1 15); do
             q="$GITHUB_RUN_ID-$(date +%s)-$n"
-            article="$(curl -4 -kfsS -L --max-time 40 "$PUBLIC_URL?v=$q" || true)"
-            home="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/?v=$q" || true)"
-            archive="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/clanky/?v=$q" || true)"
-            rss="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" || true)"
-            sitemap="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
-            news="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
-            registry="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
-            health="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
-            image_size="$(curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c | tr -d ' ' || true)"
-            if grep -Fq 'Gymnastice v Kadani chybějí trenéři' <<<"$article" \
-              && grep -Fq 'nové děti' <<<"$article" \
-              && grep -Fq 'prosinec 2026' <<<"$article" \
+            article="$(curl -4 -kfsSL --max-time 40 "$PUBLIC_URL?v=$q" || true)"
+            home="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            image_size="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c | tr -d ' ' || true)"
+            if grep -Fq "<h1>$TITLE</h1>" <<<"$article" \
+              && grep -Fq 'Právní paradox roku 2010' <<<"$article" \
+              && grep -Fq 'A co rok 2026? Kadaň jde do voleb po změně politické mapy' <<<"$article" \
               && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
               && grep -Fq "$SLUG.html" <<<"$archive" \
-              && [ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" = 1 ] \
-              && [ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" = 1 ] \
-              && [ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" = 1 ] \
-              && grep -Fq "$SLUG.html" <<<"$registry" \
-              && grep -Fq 'mode=direct-gymnastika-publication' <<<"$health" \
+              && [ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" = 2 ] \
+              && grep -Fq "$SLUG.html" <<<"$sitemap" \
+              && grep -Fq "$SLUG.html" <<<"$news" \
               && [ "${image_size:-0}" -gt 10000 ]; then
-              success=1
-              break
+              success=1; break
             fi
             sleep 5
           done
           test "$success" = 1
           echo 'ok=true' >> "$GITHUB_OUTPUT"
 
-      - name: Zapsat výsledek a uzavřít issue
+      - name: Zapsat výsledek a uzavřít servisní issue
         if: always() && github.event_name == 'issues'
         uses: actions/github-script@v7
         env:
@@ -168,7 +137,7 @@ jobs:
           script: |
             const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
             const body = ok
-              ? '✅ Článek o Gymnastice Kadaň je veřejně publikovaný a ověřený na titulce, archivu, RSS, sitemapě, news-sitemapě, sociální grafice a registru.\n\nhttps://nasekadan.cz/clanky/gymnastika-kadan-treneri-prosinec-2026.html'
+              ? '✅ Dnešní článek o 36 letech komunálních voleb je veřejně publikovaný a ověřený na titulce, archivu, RSS, sitemapách a v PNG 1200×630.\n\nhttps://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html'
               : `❌ Publikace nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}; ověření: ${process.env.VERIFIED || 'false'}. Běh: ${context.runId}.`;
             await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
             if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
