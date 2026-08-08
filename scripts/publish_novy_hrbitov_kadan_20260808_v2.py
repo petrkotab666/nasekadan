@@ -21,6 +21,30 @@ def ensure_article_sitemap() -> None:
         )
 
 
+def strip_trailing_whitespace(path) -> None:
+    if not path.exists() or not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8")
+    cleaned = "\n".join(line.rstrip(" \t") for line in text.splitlines()) + "\n"
+    if cleaned != text:
+        base.write(path, cleaned)
+
+
+def normalize_generated_whitespace() -> None:
+    paths = [
+        base.ROOT / "index.html",
+        base.ROOT / "rss.xml",
+        base.ROOT / "sitemap.xml",
+        base.ROOT / "news-sitemap.xml",
+        base.ROOT / "llms.txt",
+        base.ROOT / "clanky/index.html",
+        base.ARTICLE,
+    ]
+    paths.extend(sorted((base.ROOT / "clanky").glob("strana-*.html")))
+    for path in paths:
+        strip_trailing_whitespace(path)
+
+
 def validate_fixed() -> None:
     text = base.ARTICLE.read_text(encoding="utf-8")
     surfaces = {
@@ -86,6 +110,7 @@ def main() -> int:
         cwd=base.ROOT,
         check=True,
     )
+    normalize_generated_whitespace()
     validate_fixed()
     return 0
 
