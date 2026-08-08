@@ -220,22 +220,26 @@ def load_all_sources(extra_path: Path) -> tuple[list[dict[str, Any]], dict[str, 
     seen: set[str] = set()
 
     for source in base_sources:
-        url = stable_url(source.get("url"))
-        if not url or url in seen:
+        source_url = str(source.get("url") or "").strip()
+        dedup_key = stable_url(source_url)
+        if not dedup_key or dedup_key in seen:
             continue
-        seen.add(url)
+        seen.add(dedup_key)
         tier = infer_tier(source)
-        merged.append({**source, "url": url, "kind": source.get("kind") or "html", "tier": tier})
+        # Deduplikace používá stabilní klíč, HTTP požadavek ale musí dostat
+        # přesnou adresu z registru. Některé servery rozlišují /news a /news/.
+        merged.append({**source, "url": source_url, "kind": source.get("kind") or "html", "tier": tier})
 
     for source in extra.get("sources", []):
         if not isinstance(source, dict):
             continue
-        url = stable_url(source.get("url"))
-        if not url or url in seen:
+        source_url = str(source.get("url") or "").strip()
+        dedup_key = stable_url(source_url)
+        if not dedup_key or dedup_key in seen:
             continue
-        seen.add(url)
+        seen.add(dedup_key)
         tier = infer_tier(source)
-        merged.append({**source, "url": url, "tier": tier})
+        merged.append({**source, "url": source_url, "tier": tier})
 
     coverage = {
         **coverage,

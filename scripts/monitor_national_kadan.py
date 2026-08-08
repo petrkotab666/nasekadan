@@ -9,6 +9,7 @@ import json
 import random
 import re
 import socket
+import subprocess
 import threading
 import time
 import unicodedata
@@ -134,6 +135,26 @@ def fetch(url: str) -> tuple[str, str]:
             backoff = max(retry_after, min(12.0, 1.2 * (2 ** attempt)))
             time.sleep(backoff + random.random() * 0.6)
 
+    # MONITOR_CURL_FALLBACK_V1
+    # Některé veřejné weby odmítají urllib, ale běžný HTTP klient obslouží.
+    # Curl je až poslední možnost a nepoužívá se pro trvalé 404.
+    if not (isinstance(last_exc, HTTPError) and last_exc.code == 404):
+        try:
+            proc = subprocess.run([
+                "curl", "-fsSL", "--compressed", "--max-time", "70",
+                "--retry", "2", "--retry-delay", "2", "--retry-all-errors",
+                "-A", BROWSER_UA,
+                "-H", "Accept-Language: cs-CZ,cs;q=0.9,en;q=0.6",
+                "-H", "Accept: application/rss+xml,application/atom+xml,application/xml,text/xml,text/html,application/xhtml+xml,*/*;q=0.8",
+                url,
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            body = proc.stdout.decode("utf-8", errors="replace")
+            if body.strip():
+                stripped=body.lstrip().lower()
+                content_type = "application/xml" if stripped.startswith("<?xml") or stripped.startswith("<rss") or stripped.startswith("<feed") else "text/html"
+                return body, content_type
+        except Exception:
+            pass
     if last_exc is not None:
         raise last_exc
     raise RuntimeError(f"Nepodařilo se načíst {url}")
