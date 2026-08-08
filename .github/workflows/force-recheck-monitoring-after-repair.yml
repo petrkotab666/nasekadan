@@ -1,0 +1,111 @@
+name: Nezávislý plný recheck monitoringu po opravě
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/force-recheck-monitoring-after-repair.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: independent-monitoring-recheck-after-repair
+  cancel-in-progress: true
+
+jobs:
+  recheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit, že systémová oprava je aktivní
+        run: |
+          set -euo pipefail
+          grep -q 'MONITOR_RELIABLE_FETCH_V2' scripts/monitor_national_kadan.py
+          grep -q 'MONITOR_SECOND_PASS_V2' scripts/monitor_all_kadansko.py
+          python3 -m py_compile scripts/monitor_national_kadan.py scripts/monitor_all_kadansko.py scripts/run_complete_regional_monitor.py
+
+      - name: Připravit nezávislou kopii stavu
+        run: |
+          set -euo pipefail
+          cp data/all-kadansko-monitoring-state.json "$RUNNER_TEMP/state.json"
+          printf '{}\n' > "$RUNNER_TEMP/status.json"
+
+      - name: Projít celý monitoring
+        run: |
+          set -euo pipefail
+          python3 scripts/run_complete_regional_monitor.py \
+            --state "$RUNNER_TEMP/state.json" \
+            --status "$RUNNER_TEMP/status.json" \
+            --output "$RUNNER_TEMP/output.json"
+
+      - name: Sestavit auditní report
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root=Path(os.environ['RUNNER_TEMP'])
+          status=json.loads((root/'status.json').read_text(encoding='utf-8'))
+          output=json.loads((root/'output.json').read_text(encoding='utf-8'))
+          failed=[x for x in status.get('sourceStatus',[]) if x.get('status')=='failed']
+          alerts=output.get('alerts') or []
+          report={
+            'generatedAt':datetime.now(timezone.utc).isoformat(),
+            'mode':'independent-full-recheck-after-repair',
+            'sourceCount':status.get('sourceCount'),
+            'checkedSources':status.get('checkedSources'),
+            'failedSources':status.get('failedSources'),
+            'initialFailedSources':status.get('initialFailedSources'),
+            'recoveredSourcesAfterRetry':status.get('recoveredSourcesAfterRetry'),
+            'itemsParsed':status.get('itemsParsed'),
+            'uniqueItems':status.get('uniqueItems'),
+            'newAlerts':status.get('newAlerts'),
+            'alerts':alerts,
+            'failed':failed,
+            'suppressed':status.get('suppressed') or {},
+            'coverage':status.get('coverage') or {},
+          }
+          Path('reports/monitoring-recheck-after-repair.json').write_text(
+            json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps({
+            'sources':f"{report['checkedSources']}/{report['sourceCount']}",
+            'initialFailed':report['initialFailedSources'],
+            'recovered':report['recoveredSourcesAfterRetry'],
+            'failed':report['failedSources'],
+            'alerts':report['newAlerts'],
+            'parsed':report['itemsParsed'],
+            'unique':report['uniqueItems'],
+          },ensure_ascii=False))
+          if alerts:
+            print('ALERTS')
+            for a in alerts:
+              print('-',a.get('title'),'|',a.get('sourceName'),'|',a.get('url'))
+          if failed:
+            print('FAILED')
+            for f in failed:
+              print('-',f.get('name'),'|',f.get('error'))
+          PY
+
+      - name: Uložit pouze report, ne deduplikační stav
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – monitoring audit'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/monitoring-recheck-after-repair.json
+          git commit -m 'Nezávisle prověřit monitoring po opravě [skip ci]'
+          for n in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            git rebase --abort 2>/dev/null || true
+            sleep $((n*3))
+          done
+          exit 1
