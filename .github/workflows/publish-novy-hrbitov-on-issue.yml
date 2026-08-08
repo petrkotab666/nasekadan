@@ -1,0 +1,145 @@
+name: Publikovat nový hřbitov po otevření issue
+
+on:
+  issues:
+    types: [opened, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: publish-novy-hrbitov-hosted-20260808
+  cancel-in-progress: false
+
+env:
+  SLUG: novy-hrbitov-kadan-architektonicka-studie-2026
+  PUBLIC_URL: https://nasekadan.cz/clanky/novy-hrbitov-kadan-architektonicka-studie-2026.html
+  TITLE: 'Kadaň posouvá plán nového hřbitova. Architektonická studie bude stát 580 tisíc korun'
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
+  OVH_KEY_D: ${{ secrets.SSH_PRIVATE_KEY }}
+  OVH_KEY_E: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[publish] nový hřbitov Kadaň 2026'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Vygenerovat článek, PNG a všechny kanály
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet Pillow
+          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          python3 scripts/publish_novy_hrbitov_kadan_20260808_v2.py
+          git diff --check
+          test -f "clanky/$SLUG.html"
+          test -f "social/$SLUG.png"
+          grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" index.html
+          grep -Fq "$SLUG.html" clanky/index.html
+          grep -Fq "$PUBLIC_URL" rss.xml
+          grep -Fq "$PUBLIC_URL" sitemap.xml
+          grep -Fq "$PUBLIC_URL" news-sitemap.xml
+
+      - name: Uložit kanonický obsah do main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – nový hřbitov'
+          git config user.email 'info@nasekadan.cz'
+          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Publikovat článek o novém hřbitově v Kadani'
+            pushed=0
+            for attempt in 1 2 3 4 5; do
+              if git pull --rebase origin main && git push origin HEAD:main; then pushed=1; break; fi
+              git rebase --abort 2>/dev/null || true
+              sleep $((attempt*3))
+            done
+            test "$pushed" = 1
+          fi
+          git fetch origin main
+          git reset --hard origin/main
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Připravit SSH a publikační balík
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="${OVH_KEY_A:-${OVH_KEY_B:-${OVH_KEY_C:-${OVH_KEY_D:-${OVH_KEY_E:-}}}}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/key"
+          chmod 600 "$RUNNER_TEMP/key"
+          bundle="$RUNNER_TEMP/cemetery"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/clanky" "$bundle/social" "$bundle/data"
+          cp index.html rss.xml sitemap.xml news-sitemap.xml llms.txt "$bundle/"
+          cp "clanky/$SLUG.html" clanky/index.html clanky/strana-*.html "$bundle/clanky/"
+          cp "social/$SLUG.png" "$bundle/social/"
+          cp data/published-content-index.json data/article-integrity-manifest.json "$bundle/data/"
+
+      - name: Nasadit balík přímo na OVH a do nginx kontejneru
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="$RUNNER_TEMP/cemetery"
+          ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'sudo install -d -m 0755 /var/www/nasekadan /var/www/nasekadan/clanky /var/www/nasekadan/social /var/www/nasekadan/data'
+          tar -C "$bundle" -czf - . | ssh -i "$RUNNER_TEMP/key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'set -euo pipefail; root=/var/www/nasekadan; sudo tar -xzf - -C "$root"; sudo chmod -R a+rX "$root"; if sudo docker inspect nasekadan-web >/dev/null 2>&1; then sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky /usr/share/nginx/html/social /usr/share/nginx/html/data; sudo tar -C "$root" -czf - index.html rss.xml sitemap.xml news-sitemap.xml llms.txt clanky social data | sudo docker exec -i nasekadan-web tar -xzf - -C /usr/share/nginx/html; fi'
+
+      - name: Veřejně ověřit všechny povrchy
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for n in $(seq 1 15); do
+            q="$GITHUB_RUN_ID-$(date +%s)-$n"
+            article="$(curl -4 -kfsSL --max-time 40 "$PUBLIC_URL?v=$q" || true)"
+            home="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            image_size="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c | tr -d ' ' || true)"
+            if grep -Fq "<h1>$TITLE</h1>" <<<"$article" \
+              && grep -Fq 'Tušimice i Úhošťany' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+              && grep -Fq "$SLUG.html" <<<"$archive" \
+              && grep -Fq "$SLUG.html" <<<"$rss" \
+              && grep -Fq "$SLUG.html" <<<"$sitemap" \
+              && grep -Fq "$SLUG.html" <<<"$news" \
+              && [ "${image_size:-0}" -gt 10000 ]; then
+              success=1; break
+            fi
+            sleep 5
+          done
+          test "$success" = 1
+          echo 'ok=true' >> "$GITHUB_OUTPUT"
+
+      - name: Zapsat výsledek a uzavřít servisní issue
+        if: always() && github.event_name == 'issues'
+        uses: actions/github-script@v7
+        env:
+          DEPLOY: ${{ steps.deploy.outcome }}
+          VERIFIED: ${{ steps.verify.outputs.ok }}
+        with:
+          script: |
+            const ok = process.env.DEPLOY === 'success' && process.env.VERIFIED === 'true';
+            const body = ok
+              ? '✅ Článek o novém hřbitově je veřejně publikovaný a ověřený na titulce, v archivu, RSS, sitemapách a v PNG 1200×630.\n\nhttps://nasekadan.cz/clanky/novy-hrbitov-kadan-architektonicka-studie-2026.html'
+              : `❌ Publikace nebyla potvrzena. Nasazení: ${process.env.DEPLOY || 'unknown'}; ověření: ${process.env.VERIFIED || 'false'}. Běh: ${context.runId}.`;
+            await github.rest.issues.createComment({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body});
+            if (ok) await github.rest.issues.update({owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, state: 'closed', state_reason: 'completed'});
