@@ -5,27 +5,124 @@ on:
     types: [opened, reopened]
 
 permissions:
-  actions: write
+  contents: write
   issues: write
 
+concurrency:
+  group: direct-monitoring-repair-known-trigger
+  cancel-in-progress: false
+
 jobs:
-  trigger:
+  repair:
     if: github.event.issue.title == 'Spustit opravu kompletního monitoringu'
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
-      - name: Spustit opravný workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Opravit síťovou odolnost
+        shell: bash
         run: |
           set -euo pipefail
-          gh workflow run repair-and-rerun-complete-monitoring.yml --repo "$GITHUB_REPOSITORY" --ref main
-          sleep 10
-          gh run list --repo "$GITHUB_REPOSITORY" --workflow repair-and-rerun-complete-monitoring.yml --limit 1 --json databaseId,status,conclusion,createdAt,url > "$RUNNER_TEMP/run.json"
-          cat "$RUNNER_TEMP/run.json"
-      - uses: actions/github-script@v7
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p=Path('scripts/monitor_national_kadan.py')
+          t=p.read_text(encoding='utf-8')
+          if 'MONITOR_RELIABLE_FETCH_V2' not in t:
+              t=t.replace('import argparse\nimport hashlib\nimport html\nimport json\nimport re\nimport unicodedata\n',
+                          'import argparse\nimport hashlib\nimport html\nimport http.client\nimport json\nimport random\nimport re\nimport socket\nimport threading\nimport time\nimport unicodedata\n')
+              t=t.replace('from urllib.error import HTTPError\n','from urllib.error import HTTPError, URLError\n')
+              old='''def _request(url: str, user_agent: str) -> tuple[str, str]:\n    request = Request(\n        url,\n        headers={\n            "User-Agent": user_agent,\n            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, application/xhtml+xml",\n            "Accept-Language": "cs,en;q=0.7",\n            "Cache-Control": "no-cache",\n        },\n    )\n    with urlopen(request, timeout=30) as response:\n        content_type = response.headers.get_content_type() or ""\n        charset = response.headers.get_content_charset() or "utf-8"\n        return response.read().decode(charset, errors="replace"), content_type\n\n\ndef fetch(url: str) -> tuple[str, str]:\n    try:\n        return _request(url, UA)\n    except HTTPError as exc:\n        if exc.code not in {403, 406, 429}:\n            raise\n        return _request(url, BROWSER_UA)\n'''
+              new='''# MONITOR_RELIABLE_FETCH_V2\n_TRANSIENT_HTTP_CODES = {403, 406, 408, 425, 429, 500, 502, 503, 504}\n_HOST_SEMAPHORES: dict[str, threading.Semaphore] = {"news.google.com": threading.Semaphore(2)}\n\n\ndef _request(url: str, user_agent: str, timeout: int = 45) -> tuple[str, str]:\n    request = Request(url, headers={\n        "User-Agent": user_agent,\n        "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, application/xhtml+xml",\n        "Accept-Language": "cs-CZ,cs;q=0.9,en;q=0.6",\n        "Cache-Control": "no-cache",\n        "Pragma": "no-cache",\n    })\n    with urlopen(request, timeout=timeout) as response:\n        content_type = response.headers.get_content_type() or ""\n        charset = response.headers.get_content_charset() or "utf-8"\n        return response.read().decode(charset, errors="replace"), content_type\n\n\ndef fetch(url: str) -> tuple[str, str]:\n    host=urlsplit(url).netloc.lower().split(':',1)[0]\n    attempts=5 if host=="news.google.com" else 3\n    sem=_HOST_SEMAPHORES.get(host)\n    last_exc: Exception | None=None\n    for attempt in range(attempts):\n        acquired=False\n        try:\n            if sem is not None:\n                sem.acquire(); acquired=True\n                time.sleep(0.25+random.random()*0.35)\n            ua=UA if attempt==0 else BROWSER_UA\n            return _request(url,ua,timeout=45 if attempt<2 else 60)\n        except HTTPError as exc:\n            last_exc=exc\n            if exc.code not in _TRANSIENT_HTTP_CODES:\n                raise\n            try: retry_after=float(exc.headers.get('Retry-After') or 0)\n            except (TypeError,ValueError): retry_after=0.0\n        except (URLError,TimeoutError,socket.timeout,ConnectionError,ConnectionResetError,http.client.IncompleteRead,OSError) as exc:\n            last_exc=exc; retry_after=0.0\n        finally:\n            if acquired and sem is not None: sem.release()\n        if attempt+1<attempts:\n            time.sleep(max(retry_after,min(12.0,1.2*(2**attempt)))+random.random()*0.6)\n    if last_exc is not None: raise last_exc\n    raise RuntimeError(f"Nepodařilo se načíst {url}")\n'''
+              if old not in t: raise SystemExit('fetch blok nebyl nalezen')
+              p.write_text(t.replace(old,new),encoding='utf-8')
+
+          p=Path('scripts/monitor_all_kadansko.py')
+          t=p.read_text(encoding='utf-8')
+          if 'MONITOR_SECOND_PASS_V2' not in t:
+              t=t.replace('import re\nfrom concurrent.futures import ThreadPoolExecutor\n','import re\nimport time\nfrom concurrent.futures import ThreadPoolExecutor\n')
+              old='''    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(sources))) as executor:\n        collected = list(executor.map(collect, sources))\n\n    source_status: list[dict[str, Any]] = []\n'''
+              new='''    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(sources))) as executor:\n        collected = list(executor.map(collect, sources))\n\n    # MONITOR_SECOND_PASS_V2\n    initial_failed = sum(1 for _source, _items, error in collected if error)\n    failed_indexes = [i for i, (_source, _items, error) in enumerate(collected) if error]\n    if failed_indexes:\n        time.sleep(2.0)\n        for i in failed_indexes:\n            source, old_items, old_error = collected[i]\n            retried = collect(source)\n            _source, new_items, new_error = retried\n            if not new_error or len(new_items) > len(old_items): collected[i] = retried\n            else: collected[i] = (source, old_items, f"{old_error}; retry: {new_error}")\n    recovered_after_retry = initial_failed - sum(1 for _source, _items, error in collected if error)\n\n    source_status: list[dict[str, Any]] = []\n'''
+              if old not in t: raise SystemExit('executor blok nebyl nalezen')
+              t=t.replace(old,new)
+              t=t.replace('        "failedSources": len(failed),\n        "itemsParsed": parsed_total,\n',
+                          '        "failedSources": len(failed),\n        "initialFailedSources": initial_failed,\n        "recoveredSourcesAfterRetry": recovered_after_retry,\n        "itemsParsed": parsed_total,\n')
+              p.write_text(t,encoding='utf-8')
+          PY
+          python3 -m py_compile scripts/monitor_national_kadan.py scripts/monitor_all_kadansko.py scripts/run_complete_regional_monitor.py
+
+      - name: Uložit opravu
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – monitoring repair'
+          git config user.email 'info@nasekadan.cz'
+          git add scripts/monitor_national_kadan.py scripts/monitor_all_kadansko.py
+          if ! git diff --cached --quiet; then
+            git commit -m 'Opravit retry a throttling kompletního monitoringu [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Kompletní recheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/after.json"
+          python3 scripts/run_complete_regional_monitor.py --state data/all-kadansko-monitoring-state.json --status data/all-kadansko-monitoring-status.json --output "$out"
+          cp "$out" "$RUNNER_TEMP/output.json"
+
+      - name: Vytvořit report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          python3 - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          s=json.loads(Path('data/all-kadansko-monitoring-status.json').read_text(encoding='utf-8'))
+          o=json.loads(Path(os.environ['RUNNER_TEMP']+'/output.json').read_text(encoding='utf-8'))
+          r={
+            'generatedAt':datetime.now(timezone.utc).isoformat(),
+            'sourceCount':s.get('sourceCount'),'checkedSources':s.get('checkedSources'),'failedSources':s.get('failedSources'),
+            'initialFailedSources':s.get('initialFailedSources'),'recoveredSourcesAfterRetry':s.get('recoveredSourcesAfterRetry'),
+            'itemsParsed':s.get('itemsParsed'),'uniqueItems':s.get('uniqueItems'),'newAlerts':s.get('newAlerts'),
+            'alerts':o.get('alerts') or [],'failed':[x for x in s.get('sourceStatus',[]) if x.get('status')=='failed'],
+            'coverage':s.get('coverage') or {}
+          }
+          Path('reports/monitoring-repair-latest.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          Path(os.environ['RUNNER_TEMP']+'/summary.json').write_text(json.dumps(r,ensure_ascii=False),encoding='utf-8')
+          PY
+
+      - name: Uložit recheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          git pull --rebase origin main || true
+          git add data/all-kadansko-monitoring-state.json data/all-kadansko-monitoring-status.json reports/monitoring-repair-latest.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Prověřit celý monitoring po opravě [skip ci]'
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Výsledek do issue
+        if: always()
+        uses: actions/github-script@v7
         with:
           script: |
-            const fs=require('fs');
-            const body='Opravný monitoring byl explicitně spuštěn.\n```json\n'+fs.readFileSync(process.env.RUNNER_TEMP+'/run.json','utf8')+'\n```';
+            const fs=require('fs'), p=process.env.RUNNER_TEMP+'/summary.json';
+            let body='❌ Oprava nedoběhla do reportu.';
+            if(fs.existsSync(p)){
+              const r=JSON.parse(fs.readFileSync(p,'utf8'));
+              const alerts=(r.alerts||[]).slice(0,12).map(a=>`- ${a.title} — ${a.sourceName||''}`).join('\n')||'- žádné';
+              const failed=(r.failed||[]).slice(0,20).map(a=>`- ${a.name}: ${a.error}`).join('\n')||'- žádné';
+              body=`✅ Kompletní recheck dokončen.\n\n**Zdroje:** ${r.checkedSources}/${r.sourceCount}\n**Po opravě selhalo:** ${r.failedSources}\n**Retry obnovilo:** ${r.recoveredSourcesAfterRetry}/${r.initialFailedSources}\n**Nové alerty:** ${r.newAlerts}\n\n### Alerty\n${alerts}\n\n### Zbývající chyby\n${failed}`;
+            }
             await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,body});
-            await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
+            if(fs.existsSync(p)) await github.rest.issues.update({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.issue.number,state:'closed',state_reason:'completed'});
