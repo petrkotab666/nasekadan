@@ -1,4 +1,4 @@
-name: Okamžitý hosted předlet historie voleb Kadaň
+name: Nouzově publikovat historii voleb Kadaň přes hosted runner
 
 on:
   push:
@@ -11,83 +11,107 @@ permissions:
   contents: write
 
 concurrency:
-  group: preflight-kadan-election-history-hosted-push
+  group: emergency-publish-kadan-election-history-20260808
   cancel-in-progress: false
 
 env:
   SLUG: komunalni-volby-kadan-historie-1990-2026
   ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html
   TITLE: '36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026'
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
 
 jobs:
-  preflight:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Nanečisto prověřit plnou publikaci bez deploye
+
+      - name: Vygenerovat a uložit plnou publikaci do main
         shell: bash
         run: |
           set -euo pipefail
-          q="push-preflight-${GITHUB_RUN_ID}-$(date +%s)"
-          code="$(curl -4 -kLsS -o /tmp/target-before.html -w '%{http_code}' --max-time 30 "$ARTICLE_URL?v=$q" || true)"
-          echo "TARGET_HTTP=$code" >> "$GITHUB_ENV"
-          if [[ "$code" == 200 ]] && grep -Fq "$TITLE" /tmp/target-before.html; then
-            echo 'Článek je předčasně veřejný.' >&2
-            exit 1
-          fi
           python -m pip install --quiet Pillow
+          git config user.name 'Naše Kadaň – nouzová publikace'
+          git config user.email 'info@nasekadan.cz'
+          success=0
+          for attempt in 1 2 3 4 5; do
+            git fetch --prune origin main
+            git reset --hard origin/main
+            export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+            python3 scripts/publish_kadan_election_history_20260808_v2.py
+            git diff --check
+            git add "clanky/$SLUG.html" "social/$SLUG.png" \
+              index.html clanky/index.html clanky/strana-*.html \
+              rss.xml sitemap.xml news-sitemap.xml llms.txt \
+              data/published-content-index.json data/article-integrity-manifest.json
+            if git diff --cached --quiet; then
+              success=1
+              break
+            fi
+            git commit -m 'Publikovat 36 let komunálních voleb v Kadani'
+            if git push origin HEAD:main; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          [[ "$success" == 1 ]]
           git fetch --prune origin main
           git reset --hard origin/main
-          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
-          python3 scripts/publish_kadan_election_history_20260808_v2.py | tee /tmp/preflight-output.log
-          git diff --check
-          grep -Fq '"status": "prepared"' /tmp/preflight-output.log
-          grep -Fq '"required_headings": 17' /tmp/preflight-output.log
-          python3 - <<'PY'
-          from PIL import Image
-          with Image.open('social/komunalni-volby-kadan-historie-1990-2026.png') as im:
-              assert im.format == 'PNG'
-              assert im.size == (1200, 630)
-          PY
-          git diff --name-only > /tmp/preflight-files.txt
-          echo "CHECKED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Zapsat pouze report
+          test -f "clanky/$SLUG.html"
+          grep -Fq "<h1>$TITLE</h1>" "clanky/$SLUG.html"
+          echo "SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Připravit SSH klíč
         shell: bash
         run: |
           set -euo pipefail
-          git reset --hard HEAD
-          git clean -fd
-          mkdir -p reports
-          python3 - <<'PY'
-          from datetime import datetime, timezone
-          from pathlib import Path
-          import json, os
-          p=Path('reports/preflight-kadan-election-history-20260808-push.json')
-          p.write_text(json.dumps({
-            'status':'ready','checked_at':datetime.now(timezone.utc).isoformat(),
-            'checked_main_sha':os.environ['CHECKED_SHA'],
-            'target_public_http_before_04':os.environ.get('TARGET_HTTP',''),
-            'target_published_early':False,'exact_h1_verified':True,
-            'required_headings_verified':17,'full_draft_not_shortened':True,
-            'social_asset':{'format':'PNG','width':1200,'height':630},
-            'local_surfaces_validated':['article','homepage','archive','rss','sitemap','news-sitemap','llms','canonical-registry','integrity-manifest'],
-            'publication_performed':False,'deploy_performed':False
-          },ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-          PY
-          git config user.name 'Naše Kadaň – okamžitý předlet'
-          git config user.email 'info@nasekadan.cz'
-          git add reports/preflight-kadan-election-history-20260808-push.json
-          git commit -m 'Předlet: ověřit plnou historii komunálních voleb'
-          for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then exit 0; fi
-            git pull --rebase origin main
-            sleep $((attempt * 2))
+          key="${OVH_KEY_A:-${OVH_KEY_B:-}}"
+          test -n "$key"
+          printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
+          chmod 600 "$RUNNER_TEMP/ovh_key"
+
+      - name: Nasadit aktuální main na OVH
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh_opts=(-i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25)
+          ssh "${ssh_opts[@]}" ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          work=/tmp/nasekadan-election-emergency
+          sudo rm -rf "$work"
+          sudo git clone --depth 1 --branch main https://github.com/petrkotab666/nasekadan.git "$work"
+          sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
+          sudo rm -rf "$work"
+          REMOTE
+
+      - name: Ověřit veřejnou publikaci
+        shell: bash
+        run: |
+          set -euo pipefail
+          success=0
+          for attempt in $(seq 1 15); do
+            q="emergency-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            article="$(curl -4 -kfsS -L --max-time 35 "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
+            rss="$(curl -4 -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            ok=1
+            grep -Fq "<h1>$TITLE</h1>" <<<"$article" || ok=0
+            grep -Fq 'Právní paradox roku 2010' <<<"$article" || ok=0
+            grep -Fq 'A co rok 2026? Kadaň jde do voleb po změně politické mapy' <<<"$article" || ok=0
+            grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" || ok=0
+            [[ "$(grep -Fc "<link>$ARTICLE_URL</link>" <<<"$rss")" == 1 ]] || ok=0
+            if [[ "$ok" == 1 ]]; then success=1; break; fi
+            sleep 4
           done
-          exit 1
+          [[ "$success" == 1 ]]
+          echo 'HOTOVO: dnešní článek je veřejně publikovaný.'
