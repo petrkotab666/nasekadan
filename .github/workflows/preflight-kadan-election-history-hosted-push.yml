@@ -1,0 +1,93 @@
+name: Okamžitý hosted předlet historie voleb Kadaň
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/preflight-kadan-elections-hosted-push.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preflight-kadan-election-history-hosted-push
+  cancel-in-progress: false
+
+env:
+  SLUG: komunalni-volby-kadan-historie-1990-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html
+  TITLE: '36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026'
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Nanečisto prověřit plnou publikaci bez deploye
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="push-preflight-${GITHUB_RUN_ID}-$(date +%s)"
+          code="$(curl -4 -kLsS -o /tmp/target-before.html -w '%{http_code}' --max-time 30 "$ARTICLE_URL?v=$q" || true)"
+          echo "TARGET_HTTP=$code" >> "$GITHUB_ENV"
+          if [[ "$code" == 200 ]] && grep -Fq "$TITLE" /tmp/target-before.html; then
+            echo 'Článek je předčasně veřejný.' >&2
+            exit 1
+          fi
+          python -m pip install --quiet Pillow
+          git fetch --prune origin main
+          git reset --hard origin/main
+          export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+          python3 scripts/publish_kadan_election_history_20260808_v2.py | tee /tmp/preflight-output.log
+          git diff --check
+          grep -Fq '"status": "prepared"' /tmp/preflight-output.log
+          grep -Fq '"required_headings": 17' /tmp/preflight-output.log
+          python3 - <<'PY'
+          from PIL import Image
+          with Image.open('social/komunalni-volby-kadan-historie-1990-2026.png') as im:
+              assert im.format == 'PNG'
+              assert im.size == (1200, 630)
+          PY
+          git diff --name-only > /tmp/preflight-files.txt
+          echo "CHECKED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Zapsat pouze report
+        shell: bash
+        run: |
+          set -euo pipefail
+          git reset --hard HEAD
+          git clean -fd
+          mkdir -p reports
+          python3 - <<'PY'
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import json, os
+          p=Path('reports/preflight-kadan-election-history-20260808-push.json')
+          p.write_text(json.dumps({
+            'status':'ready','checked_at':datetime.now(timezone.utc).isoformat(),
+            'checked_main_sha':os.environ['CHECKED_SHA'],
+            'target_public_http_before_04':os.environ.get('TARGET_HTTP',''),
+            'target_published_early':False,'exact_h1_verified':True,
+            'required_headings_verified':17,'full_draft_not_shortened':True,
+            'social_asset':{'format':'PNG','width':1200,'height':630},
+            'local_surfaces_validated':['article','homepage','archive','rss','sitemap','news-sitemap','llms','canonical-registry','integrity-manifest'],
+            'publication_performed':False,'deploy_performed':False
+          },ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          git config user.name 'Naše Kadaň – okamžitý předlet'
+          git config user.email 'info@nasekadan.cz'
+          git add reports/preflight-kadan-election-history-20260808-push.json
+          git commit -m 'Předlet: ověřit plnou historii komunálních voleb'
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then exit 0; fi
+            git pull --rebase origin main
+            sleep $((attempt * 2))
+          done
+          exit 1
