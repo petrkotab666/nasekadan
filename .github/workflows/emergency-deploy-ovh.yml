@@ -1,4 +1,4 @@
-name: Nouzově nasadit Naše Kadaň na OVH
+name: Nouzově nasadit aktuální Naše Kadaň na OVH
 
 on:
   push:
@@ -9,58 +9,38 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: nasekadan-election-emergency-20260808
+  group: nasekadan-emergency-production
   cancel-in-progress: false
 
 env:
-  SLUG: komunalni-volby-kadan-historie-1990-2026
-  ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html
-  TITLE: '36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026'
   OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
   OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
 
-      - name: Přestavět dnešní článek a všechny publikační povrchy
+      - name: Ověřit, že main už obsahuje správný archiv
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --quiet Pillow
-          git config user.name 'Naše Kadaň – nouzová publikace'
-          git config user.email 'info@nasekadan.cz'
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
-            python3 scripts/publish_kadan_election_history_20260808_v2.py
-            git diff --check
-            git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
-            if git diff --cached --quiet; then break; fi
-            git commit -m 'Dokončit dnešní článek o 36 letech komunálních voleb'
-            if git push origin HEAD:main; then break; fi
-            sleep $((attempt*3))
-          done
-          git fetch origin main
-          git reset --hard origin/main
-          test -f "clanky/$SLUG.html"
-          test -f "social/$SLUG.png"
-          grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" index.html
-          grep -Fq "$SLUG.html" clanky/index.html
-          grep -Fq "$ARTICLE_URL" rss.xml
+          test -f clanky/novy-hrbitov-kadan-architektonicka-studie-2026.html
+          test -f clanky/komunalni-volby-kadan-historie-1990-2026.html
+          grep -Fq 'novy-hrbitov-kadan-architektonicka-studie-2026.html' index.html
+          grep -Fq 'novy-hrbitov-kadan-architektonicka-studie-2026.html' clanky/index.html
+          grep -Fq 'komunalni-volby-kadan-historie-1990-2026.html' clanky/index.html
+          grep -Fq 'novy-hrbitov-kadan-architektonicka-studie-2026.html' rss.xml
+          grep -Fq 'novy-hrbitov-kadan-architektonicka-studie-2026.html' sitemap.xml
+          grep -Fq 'novy-hrbitov-kadan-architektonicka-studie-2026.html' news-sitemap.xml
 
       - name: Připravit SSH klíč
         shell: bash
@@ -71,47 +51,48 @@ jobs:
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
 
-      - name: Přenést a atomicky nasadit celý main
+      - name: Přenést a atomicky nasadit celý aktuální main
         shell: bash
         run: |
           set -euo pipefail
           tar --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-election-emergency.tgz
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-emergency-current-main.tgz
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          work=/tmp/nasekadan-election-emergency
+          work=/tmp/nasekadan-emergency-current-main
           rm -rf "$work" && mkdir -p "$work"
-          tar -xzf /tmp/nasekadan-election-emergency.tgz -C "$work"
+          tar -xzf /tmp/nasekadan-emergency-current-main.tgz -C "$work"
           chmod +x "$work/deploy/sync-production.sh"
           sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
-          rm -rf "$work" /tmp/nasekadan-election-emergency.tgz
+          rm -rf "$work" /tmp/nasekadan-emergency-current-main.tgz
           REMOTE
 
-      - name: Veřejná kontrola
+      - name: Veřejná kontrola titulky a všech publikačních povrchů
         shell: bash
         run: |
           set -euo pipefail
+          hrbitov='novy-hrbitov-kadan-architektonicka-studie-2026.html'
+          volby='komunalni-volby-kadan-historie-1990-2026.html'
           ok=0
           for attempt in $(seq 1 15); do
-            q="emergency-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
-            article="$(curl -4 -kfsSL --max-time 35 "$ARTICLE_URL?v=$q" || true)"
+            q="emergency-current-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
             home="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
             archive="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/?v=$q" || true)"
             rss="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
-            if grep -Fq "<h1>$TITLE</h1>" <<<"$article" \
-              && grep -Fq 'Právní paradox roku 2010' <<<"$article" \
-              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
-              && grep -Fq "$SLUG.html" <<<"$archive" \
-              && [[ "$(grep -Fc "<link>$ARTICLE_URL</link>" <<<"$rss")" == 1 ]]; then
-              ok=1; break
+            sitemap="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            if grep -Fq "$hrbitov" <<<"$home" \
+              && grep -Fq "$hrbitov" <<<"$archive" \
+              && grep -Fq "$volby" <<<"$archive" \
+              && grep -Fq "$hrbitov" <<<"$rss" \
+              && grep -Fq "$hrbitov" <<<"$sitemap" \
+              && grep -Fq "$hrbitov" <<<"$news"; then
+              ok=1
+              break
             fi
             sleep 4
           done
           test "$ok" = 1
-          curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/social/$SLUG.png?v=${GITHUB_RUN_ID}" -o /tmp/social.png
-          python3 - <<'PY'
-          from PIL import Image
-          with Image.open('/tmp/social.png') as im:
-              assert im.format == 'PNG' and im.size == (1200,630)
-          PY
-          echo 'HOTOVO: článek, titulka, archiv, RSS a PNG jsou veřejně ověřené.'
+          curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/$hrbitov?v=${GITHUB_RUN_ID}" >/dev/null
+          curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/$volby?v=${GITHUB_RUN_ID}" >/dev/null
+          echo 'HOTOVO: aktuální main je veřejně ověřen na titulce, v archivu, RSS, sitemapě a news-sitemapě.'
