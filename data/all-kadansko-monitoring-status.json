@@ -1,21 +1,23 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-08T15:37:32.770452+00:00",
+  "checkedAt": "2026-08-08T16:47:58.270119+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 175,
-  "failedSources": 38,
-  "itemsParsed": 16685,
-  "uniqueItems": 10400,
-  "newAlerts": 0,
+  "checkedSources": 199,
+  "failedSources": 14,
+  "initialFailedSources": 14,
+  "recoveredSourcesAfterRetry": 0,
+  "itemsParsed": 17218,
+  "uniqueItems": 10907,
+  "newAlerts": 1,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 884,
+    "genericTitle": 887,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 2,
-    "notEditoriallySignificant": 44,
+    "broadWithoutLocalMatch": 6,
+    "notEditoriallySignificant": 41,
     "notFreshOrUndated": 0,
-    "duplicate": 5401,
+    "duplicate": 5424,
     "deferredByCap": 0
   },
   "coverage": {
@@ -168,7 +170,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "error": "HTTPError: HTTP Error 429: Too Many Requests; retry: HTTPError: HTTP Error 429: Too Many Requests"
     },
     {
       "name": "Městská knihovna",
@@ -257,7 +259,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 403: Forbidden"
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: HTTPError: HTTP Error 403: Forbidden"
     },
     {
       "name": "FBC DDM Kati Kadaň",
@@ -306,7 +308,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 403: Forbidden"
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: HTTPError: HTTP Error 403: Forbidden"
     },
     {
       "name": "Vzdělávání na Kadaňsku",
@@ -321,9 +323,8 @@
       "url": "https://6mskadan.webnode.cz/",
       "category": "Mateřské školy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "IncompleteRead: IncompleteRead(0 bytes read)"
+      "status": "checked",
+      "itemsParsed": 12
     },
     {
       "name": "MŠ Olgy Havlové Kadaň",
@@ -371,7 +372,7 @@
       "category": "Základní školy",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 244
+      "itemsParsed": 245
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -380,7 +381,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 403: Forbidden"
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: URLError: <urlopen error timed out>"
     },
     {
       "name": "ZŠ Chomutovská Kadaň",
@@ -429,7 +430,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 404: Not Found"
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
     },
     {
       "name": "Astronomicko přírodovědná observatoř Kadaň",
@@ -478,7 +479,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 404: Not found"
+      "error": "HTTPError: HTTP Error 404: Not found; retry: HTTPError: HTTP Error 404: Not found"
     },
     {
       "name": "Muzeum a galerie Most – program",
@@ -503,7 +504,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 404: Not Found"
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
     },
     {
       "name": "Let It Roll 2026 – Jezero Most",
@@ -544,7 +545,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno -2] Name or service not known>"
+      "error": "URLError: <urlopen error [Errno -2] Name or service not known>; retry: URLError: <urlopen error [Errno -2] Name or service not known>"
     },
     {
       "name": "Policie ČR – Ústecký kraj",
@@ -592,7 +593,7 @@
       "category": "Elektřina a odstávky",
       "tier": "utility",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 30
     },
     {
       "name": "Povodí Ohře",
@@ -607,9 +608,8 @@
       "url": "https://vystrahy.chmi.cz/",
       "category": "Počasí a výstrahy",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Dopravníinfo.cz",
@@ -618,7 +618,7 @@
       "tier": "transport",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error timed out>"
+      "error": "URLError: <urlopen error timed out>; retry: URLError: <urlopen error timed out>"
     },
     {
       "name": "ŘSD – Ústecký kraj",
@@ -659,7 +659,7 @@
       "tier": "utility",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 404: Not Found"
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
     },
     {
       "name": "Český rozhlas Sever",
@@ -675,7 +675,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 265
+      "itemsParsed": 266
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -699,7 +699,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 29
+      "itemsParsed": 28
     },
     {
       "name": "Sociální monitoring – ARG a hudba v Kadani",
@@ -722,9 +722,8 @@
       "url": "https://www.instagram.com/restaurant_pub_lidak",
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 11
     },
     {
       "name": "Sociální monitoring – Liďák Kadaň a nové akce",
@@ -732,7 +731,7 @@
       "category": "Kultura a volný čas – sociální zdroje",
       "tier": "organization",
       "status": "checked",
-      "itemsParsed": 27
+      "itemsParsed": 26
     },
     {
       "name": "Volby.cz – oficiální volební výsledky a kandidáti",
@@ -885,7 +884,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 403: Forbidden"
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: HTTPError: HTTP Error 403: Forbidden"
     },
     {
       "name": "Tenisový klub Kadaň",
@@ -966,7 +965,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>; retry: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -1007,61 +1006,55 @@
       "tier": "municipality",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno -2] Name or service not known>"
+      "error": "URLError: <urlopen error [Errno -2] Name or service not known>; retry: URLError: <urlopen error [Errno -2] Name or service not known>"
     },
     {
       "name": "Google News – Kadaň a Klášterec",
       "url": "https://news.google.com/rss/search?q=%28%22Kada%C5%88%22+OR+%22Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – Kadaň a Klášterec",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 12
     },
     {
       "name": "Google News – Domašín, Chbany, Libědice, Mašťov a Račetice",
       "url": "https://news.google.com/rss/search?q=%28Doma%C5%A1%C3%ADn+OR+Chbany+OR+Lib%C4%9Bdice+OR+Ma%C5%A1%C5%A5ov+OR+Ra%C4%8Detice%29+%28Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – jižní část Kadaňska",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 1
     },
     {
       "name": "Google News – Kovářská, Měděnec, Okounov, Perštejn a Kryštofovy Hamry",
       "url": "https://news.google.com/rss/search?q=%28Kov%C3%A1%C5%99sk%C3%A1+OR+M%C4%9Bd%C4%9Bnec+OR+Okounov+OR+Per%C5%A1tejn+OR+%22Kry%C5%A1tofovy+Hamry%22%29+%28%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – Krušné hory a Ohře",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 0
     },
     {
       "name": "Google News – Pětipsy, Radonice, Rokle, Veliká Ves a Vilémov",
       "url": "https://news.google.com/rss/search?q=%28P%C4%9Btipsy+OR+Radonice+OR+Rokle+OR+%22Velik%C3%A1+Ves%22+OR+Vil%C3%A9mov%29+%28Chomutov+OR+Kada%C5%88+OR+%C3%9Asteck%C3%BD%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – východní část Kadaňska",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 3
     },
     {
       "name": "Google News – Vejprty a Loučná pod Klínovcem",
       "url": "https://news.google.com/rss/search?q=%28Vejprty+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22%29+%28%C3%9Asteck%C3%BD+OR+Chomutov+OR+Kada%C5%88%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – horská část Kadaňska",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 1
     },
     {
       "name": "Google News – kadaňské organizace a služby",
       "url": "https://news.google.com/rss/search?q=%28%22Nemocnice+Kada%C5%88%22+OR+%22Technick%C3%A9+slu%C5%BEby+Kada%C5%88%22+OR+%22Kultura+Kada%C5%88%22+OR+%22M%C4%9Bstsk%C3%A1+policie+Kada%C5%88%22+OR+%22Sportovn%C3%AD+za%C5%99%C3%ADzen%C3%AD+Kada%C5%88%22%29+when%3A14d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – organizace a služby",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 3
     },
     {
       "name": "Chomutov – oficiální web",
@@ -1094,7 +1087,7 @@
       "tier": "municipality",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 404: Not Found"
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
     },
     {
       "name": "Vejprty – oficiální web",
@@ -1422,7 +1415,7 @@
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
       "status": "checked",
-      "itemsParsed": 161
+      "itemsParsed": 160
     },
     {
       "name": "Louny – oficiální web",
@@ -1701,9 +1694,8 @@
       "url": "https://www.instagram.com/zamekpolaky",
       "category": "culture",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 429: Too Many Requests"
+      "status": "checked",
+      "itemsParsed": 11
     },
     {
       "name": "Hasištejn",
@@ -1734,126 +1726,112 @@
       "url": "https://news.google.com/rss/search?q=%28%22Annaberg-Buchholz%22+OR+%22Aquasv%C4%9Bt+Chomutov%22+OR+%22Blatno+u+Chomutova%22+OR+%22Bolebo%C5%99%22+OR+%22Bo%C5%BE%C3%AD+Dar%22+OR+%22B%C3%A4renstein%22+OR+%22B%C3%ADlence%22+OR+%22B%C5%99ezno+u+Chomutova%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 2
     },
     {
       "name": "Google News – široký region 2",
       "url": "https://news.google.com/rss/search?q=%28%22Chbany%22+OR+%22Chomutov%22+OR+%22Chr%C3%A1m+Chmele+a+Piva%22+OR+%22Doln%C3%AD+Pooh%C5%99%C3%AD+%E2%80%93+region%C3%A1ln%C3%AD+kalend%C3%A1%C5%99%22+OR+%22Doma%C5%A1%C3%ADn%22+OR+%22Drou%C5%BEkovice%22+OR+%22Hasi%C5%A1tejn%22+OR+%22Hora+Svat%C3%A9ho+%C5%A0ebesti%C3%A1na%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 39
     },
     {
       "name": "Google News – široký region 3",
       "url": "https://news.google.com/rss/search?q=%28%22Horn%C3%AD+Hal%C5%BEe%22+OR+%22Horn%C3%AD+hrad%22+OR+%22Ho%C5%99enice%22+OR+%22Hru%C5%A1ovany%22+OR+%22H%C3%A1j%22+OR+%22Infocentrum+%C5%BDatec+%E2%80%93+kalend%C3%A1%C5%99+akc%C3%AD%22+OR+%22Jirkov%22+OR+%22J%C3%A1chymov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 30
     },
     {
       "name": "Google News – široký region 4",
       "url": "https://news.google.com/rss/search?q=%28%22Kada%C5%88sk%C3%BD+Rohozec%22+OR+%22Kalek%22+OR+%22Kamencov%C3%A9+jezero+Chomutov%22+OR+%22Kamenn%C3%A9%22+OR+%22Karlovy+Vary%22+OR+%22Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22+OR+%22Kojet%C3%ADn%22+OR+%22Kotlina%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 73
     },
     {
       "name": "Google News – široký region 5",
       "url": "https://news.google.com/rss/search?q=%28%22Kov%C3%A1%C5%99sk%C3%A1%22+OR+%22Kry%C5%A1tofovy+Hamry%22+OR+%22Kr%C3%A1sn%C3%BD+Dv%C5%AFr%22+OR+%22Kulturn%C3%AD+centrum+Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22+OR+%22Kulturn%C3%AD%2C+sportovn%C3%AD+a+volno%C4%8Dasov%C3%A1+za%C5%99%C3%ADzen%C3%AD+Chomutov%22+OR+%22KVIZ+Jirkov%22+OR+%22K%C5%99imov%22+OR+%22Lib%C4%9Bdice%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 3
     },
     {
       "name": "Google News – široký region 6",
       "url": "https://news.google.com/rss/search?q=%28%22Litv%C3%ADnov%22+OR+%22Louny%22+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22+OR+%22Lubenec%22+OR+%22Mal%C3%A9+Krhovice%22+OR+%22Ma%C5%A1%C5%A5ov%22+OR+%22Mi%C5%99etice+u+Vint%C3%AD%C5%99ova%22+OR+%22Most%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 100
     },
     {
       "name": "Google News – široký region 7",
       "url": "https://news.google.com/rss/search?q=%28%22M%C3%A1jov%C3%BD+Chmelfest+%C5%BDatec%22+OR+%22M%C3%A1lkov%22+OR+%22M%C3%ADsto%22+OR+%22M%C3%BDtinka%22+OR+%22M%C4%9Bd%C4%9Bnec%22+OR+%22M%C4%9Bsto+Podbo%C5%99any+%E2%80%93+kalend%C3%A1%C5%99+akc%C3%AD%22+OR+%22M%C4%9Bsto+Vejprty+%E2%80%93+kalend%C3%A1%C5%99+akc%C3%AD%22+OR+%22M%C4%9Bstsk%C3%A9+divadlo+%C5%BDatec%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 100
     },
     {
       "name": "Google News – široký region 8",
       "url": "https://news.google.com/rss/search?q=%28%22Nepomy%C5%A1l%22+OR+%22Nezabylice%22+OR+%22Obec+Chbany+%E2%80%93+kulturn%C3%AD+a+obecn%C3%AD+akce+v%C4%8Detn%C4%9B+Pol%C3%A1k%C5%AF%22+OR+%22Oberwiesenthal%22+OR+%22Oblastn%C3%AD+muzeum+v+Chomutov%C4%9B%22+OR+%22Obrovice%22+OR+%22Okounov%22+OR+%22Ostrov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 71
     },
     {
       "name": "Google News – široký region 9",
       "url": "https://news.google.com/rss/search?q=%28%22Otvice%22+OR+%22Per%C5%A1tejn%22+OR+%22Pesvice%22+OR+%22Podbo%C5%99any%22+OR+%22Pol%C3%A1ky%22+OR+%22P%C4%9Btipsy%22+OR+%22P%C5%99eskaky%22+OR+%22Radechov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 21
     },
     {
       "name": "Google News – široký region 10",
       "url": "https://news.google.com/rss/search?q=%28%22Radonice+u+Kadan%C4%9B%22+OR+%22Ra%C4%8Detice%22+OR+%22Region%C3%A1ln%C3%AD+muzeum+K.+A.+Pol%C3%A1nka+v+%C5%BDatci%22+OR+%22Rokle%22+OR+%22Roztyly%22+OR+%22Sedlec+u+Radonic%22+OR+%22Slavnosti+cibule+Ra%C4%8Detice%22+OR+%22Sob%C4%9Bsuky%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 5
     },
     {
       "name": "Google News – široký region 11",
       "url": "https://news.google.com/rss/search?q=%28%22Spo%C5%99ice%22+OR+%22Strup%C4%8Dice%22+OR+%22Vadkovice%22+OR+%22Vejprty%22+OR+%22Velik%C3%A1+Ves%22+OR+%22Vikletice%22+OR+%22Vil%C3%A9mov+u+Kadan%C4%9B%22+OR+%22Vint%C3%AD%C5%99ov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 4
     },
     {
       "name": "Google News – široký region 12",
       "url": "https://news.google.com/rss/search?q=%28%22Vojn%C3%ADn%22+OR+%22Vroutek%22+OR+%22Vrskma%C5%88%22+OR+%22Vysok%C3%A1+Pec%22+OR+%22V%C3%BDslun%C3%AD%22+OR+%22V%C5%A1estudy%22+OR+%22Zoopark+Chomutov%22+OR+%22Z%C3%A1mek+Kl%C3%A1%C5%A1terec+nad+Oh%C5%99%C3%AD%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 15
     },
     {
       "name": "Google News – široký region 13",
       "url": "https://news.google.com/rss/search?q=%28%22Z%C3%A1mek+Kr%C3%A1sn%C3%BD+Dv%C5%AFr%22+OR+%22Z%C3%A1mek+Pol%C3%A1ky%22+OR+%22Z%C3%A1mek+%C4%8Cerven%C3%BD+Hr%C3%A1dek%22+OR+%22%C3%9Adlice%22+OR+%22%C4%8Cejkovice%22+OR+%22%C4%8Cernovice+u+Chomutova%22+OR+%22%C5%BDatec%22+OR+%22%C5%BDateck%C3%A1+Do%C4%8Desn%C3%A1%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 16
     },
     {
       "name": "Google News – široký region 14",
       "url": "https://news.google.com/rss/search?q=%28%22%C5%BDateck%C3%BD+pivovar+%2F+Sedm%C3%BD+schod%22+OR+%22%C5%BDdov%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
       "category": "Média – široký region",
       "tier": "aggregator",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "HTTPError: HTTP Error 503: Service Unavailable"
+      "status": "checked",
+      "itemsParsed": 0
     }
   ]
 }

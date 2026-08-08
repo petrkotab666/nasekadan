@@ -1,0 +1,253 @@
+{
+  "generatedAt": "2026-08-08T16:55:15.369728+00:00",
+  "repair": "retry+host-throttling+slow-second-pass-v2",
+  "sourceCount": 213,
+  "checkedSources": 199,
+  "failedSources": 14,
+  "initialFailedSources": 14,
+  "recoveredSourcesAfterRetry": 0,
+  "itemsParsed": 17218,
+  "uniqueItems": 10907,
+  "newAlerts": 1,
+  "alerts": [
+    {
+      "title": "Pátrání na jezeře Most má tragický konec. Policie našla tělo osmadvacetiletého muže - e-Mostecko.cz",
+      "url": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQXzRMQ2RWUGZyckFzSnBrV0E2Q2I2THZBeHRHMlVoODFmMGtzVUEwSE1iVUlJa0ozTkVTTEFNY1ZKRkVSbThScUFOUmlBV0hIRUNBb1ZQRDFubE9hRXhDU2xoWmtjanVEenViUm0wNHhWLW5tU2pPVTFpa0wyNXBVM3NuWXVqcEJJRjdnT29NaXhxQ1V0SFcwZ05Jd0xqcTdBS09DUDVxa0VRQ2VOc1lrbHl6VFRmZHFfaUVRdnVSOG9mRk1sSnc?oc=5",
+      "description": "Pátrání na jezeře Most má tragický konec. Policie našla tělo osmadvacetiletého muže e-Mostecko.cz",
+      "published": "2026-08-06T05:53:33+00:00",
+      "sourceName": "Google News – široký region 6",
+      "sourceUrl": "https://news.google.com/rss/search?q=%28%22Litv%C3%ADnov%22+OR+%22Louny%22+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22+OR+%22Lubenec%22+OR+%22Mal%C3%A9+Krhovice%22+OR+%22Ma%C5%A1%C5%A5ov%22+OR+%22Mi%C5%99etice+u+Vint%C3%AD%C5%99ova%22+OR+%22Most%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
+      "category": "Média – široký region",
+      "tier": "aggregator",
+      "quality": 119,
+      "sourcePriority": 30,
+      "localMatches": [
+        "most"
+      ],
+      "severity": "high",
+      "fingerprint": "2a9c13c50880d94aa44a"
+    }
+  ],
+  "failed": [
+    {
+      "name": "Kino Hvězda",
+      "url": "https://www.kinokadan.cz/cely-program",
+      "category": "Kino",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests; retry: HTTPError: HTTP Error 429: Too Many Requests"
+    },
+    {
+      "name": "SK Kadaň",
+      "url": "https://www.skkadan.cz/",
+      "category": "Sport",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: HTTPError: HTTP Error 403: Forbidden"
+    },
+    {
+      "name": "Světlo Kadaň",
+      "url": "https://www.svetlokadanzs.cz/",
+      "category": "Sociální služby",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: HTTPError: HTTP Error 403: Forbidden"
+    },
+    {
+      "name": "ZŠ Školní Kadaň",
+      "url": "https://1zskadan.cz/",
+      "category": "Základní školy",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: URLError: <urlopen error timed out>"
+    },
+    {
+      "name": "Gymnázium Kadaň",
+      "url": "https://www.gymka.cz/news",
+      "category": "Střední školy",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
+    },
+    {
+      "name": "Městské divadlo Most – program",
+      "url": "https://www.divadlo-most.cz/cz/program",
+      "category": "Regionální kultura – Most",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not found; retry: HTTPError: HTTP Error 404: Not found"
+    },
+    {
+      "name": "Let It Roll – akce",
+      "url": "https://letitroll.cz/akce",
+      "category": "Velké regionální festivaly",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
+    },
+    {
+      "name": "Docela velké divadlo Litvínov",
+      "url": "https://www.docela-velke-divadlo.cz/",
+      "category": "Regionální kultura – Litvínov",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno -2] Name or service not known>; retry: URLError: <urlopen error [Errno -2] Name or service not known>"
+    },
+    {
+      "name": "Dopravníinfo.cz",
+      "url": "https://www.dopravniinfo.cz/",
+      "category": "Silniční doprava",
+      "tier": "transport",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>; retry: URLError: <urlopen error timed out>"
+    },
+    {
+      "name": "Severočeské vodovody a kanalizace – události",
+      "url": "https://www.scvk.cz/udalosti",
+      "category": "Voda a havárie",
+      "tier": "utility",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
+    },
+    {
+      "name": "Fotbalový klub Tatran Kadaň",
+      "url": "https://www.fotbal.cz/souteze/club/club/5425d203-ea24-490c-801f-4b5f3a5d7d84",
+      "category": "Sportovní organizace a kluby",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 403: Forbidden; retry: HTTPError: HTTP Error 403: Forbidden"
+    },
+    {
+      "name": "Římskokatolická farnost Kadaň",
+      "url": "https://farnostkadan.cz/",
+      "category": "Bezpečnost, záchranné složky a veřejné instituce",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>; retry: URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+    },
+    {
+      "name": "Chomutov – městský web",
+      "url": "https://www.mesto-chomutov.cz/",
+      "category": "Okolní města",
+      "tier": "municipality",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno -2] Name or service not known>; retry: URLError: <urlopen error [Errno -2] Name or service not known>"
+    },
+    {
+      "name": "Podbořany – oficiální web",
+      "url": "https://www.podborany.net/cs",
+      "category": "Města a obce širokého regionu",
+      "tier": "municipality",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
+    }
+  ],
+  "coverage": {
+    "directoryOrganizations": 65,
+    "directoryOrganizationsWithUrl": 65,
+    "monitoredDirectoryOrganizations": 65,
+    "missingDirectoryOrganizations": [],
+    "coveragePercent": 100.0,
+    "manualUniqueSources": 80,
+    "directoryUniqueSourcesAdded": 25,
+    "totalUniqueSources": 105,
+    "directoryIsCanonicalRegistry": true,
+    "extraSources": 108,
+    "completeSourceCount": 213,
+    "scopeMunicipalities": [
+      "Klášterec nad Ohří",
+      "Chomutov",
+      "Jirkov",
+      "Žatec",
+      "Podbořany",
+      "Vejprty",
+      "Chbany",
+      "Račetice",
+      "Radonice u Kadaně",
+      "Vilémov u Kadaně",
+      "Mašťov",
+      "Měděnec",
+      "Perštejn",
+      "Libědice",
+      "Rokle",
+      "Veliká Ves",
+      "Domašín",
+      "Okounov",
+      "Místo",
+      "Výsluní",
+      "Kovářská",
+      "Kryštofovy Hamry",
+      "Březno u Chomutova",
+      "Droužkovice",
+      "Údlice",
+      "Otvice",
+      "Spořice",
+      "Málkov",
+      "Černovice u Chomutova",
+      "Nezabylice",
+      "Pesvice",
+      "Vrskmaň",
+      "Vysoká Pec",
+      "Boleboř",
+      "Blatno u Chomutova",
+      "Kalek",
+      "Hora Svatého Šebestiána",
+      "Křimov",
+      "Strupčice",
+      "Hrušovany",
+      "Všestudy",
+      "Bílence",
+      "Krásný Dvůr",
+      "Nepomyšl",
+      "Vroutek",
+      "Lubenec",
+      "Most",
+      "Litvínov",
+      "Louny",
+      "Ostrov",
+      "Jáchymov",
+      "Karlovy Vary",
+      "Boží Dar",
+      "Bärenstein",
+      "Annaberg-Buchholz",
+      "Oberwiesenthal",
+      "Pětipsy",
+      "Loučná pod Klínovcem"
+    ],
+    "regionalMunicipalities": 58,
+    "regionalNamedInstitutions": 25,
+    "regionalRegistryUpdatedAt": "2026-08-04",
+    "regionalRegistryComplete": true,
+    "regionalSourceEntries": 110,
+    "regionalLocalTerms": 106,
+    "supplementedMunicipalities": [
+      "Pětipsy",
+      "Loučná pod Klínovcem"
+    ],
+    "mandatoryRegionalSupplements": [
+      "Loučná pod Klínovcem",
+      "Pětipsy"
+    ],
+    "completeHourlyMonitoring": true,
+    "monitoringPolicy": {
+      "primarySchedule": "hourly",
+      "selfHealingWatchdog": true,
+      "automaticFailedRunRetry": true,
+      "emergencyIssueTrigger": true
+    }
+  }
+}
