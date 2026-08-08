@@ -7,87 +7,62 @@ on:
       - emergency-deploy-trigger.txt
       - .github/workflows/emergency-deploy-ovh.yml
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - emergency-deploy-trigger.txt
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
-  group: nasekadan-header-emergency
-  cancel-in-progress: true
+  group: nasekadan-election-emergency-20260808
+  cancel-in-progress: false
+
+env:
+  SLUG: komunalni-volby-kadan-historie-1990-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html
+  TITLE: '36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026'
+  OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
+  OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
-      OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
-      ARTICLE_URL: https://nasekadan.cz/clanky/slovan-druhy-pokus.html
+    timeout-minutes: 45
     steps:
-      - name: Stáhnout aktuální main
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Vložit opravu přímo do článku a stylů
-        id: patch
+      - name: Přestavět dnešní článek a všechny publikační povrchy
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          rule='''
-
-/* HEADER-BRAND-VISIBILITY-20260805 */
-.head .logo > span:not(.logo-mark){color:var(--ink,#13232d)!important}
-.head .logo > span:not(.logo-mark) b{color:var(--red,#a9232b)!important}
-'''
-          for name in ('style.css','footer.css'):
-              p=Path(name); t=p.read_text(encoding='utf-8')
-              if 'HEADER-BRAND-VISIBILITY-20260805' not in t:
-                  p.write_text(t.rstrip()+rule+'\n',encoding='utf-8',newline='\n')
-          p=Path('clanky/slovan-druhy-pokus.html')
-          t=p.read_text(encoding='utf-8')
-          inline='''
-  <style id="HEADER-BRAND-INLINE-20260805">
-    header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}
-    header[data-site-header="v1"] .head .logo > span:not(.logo-mark) b{color:#a9232b!important}
-  </style>
-'''
-          if 'HEADER-BRAND-INLINE-20260805' not in t:
-              p.write_text(t.replace('</head>',inline+'</head>',1),encoding='utf-8',newline='\n')
-          final=p.read_text(encoding='utf-8')
-          assert 'HEADER-BRAND-INLINE-20260805' in final
-          assert '<span>NAŠE <b>KADAŇ</b></span>' in final
-          PY
-          changed=false
-          if ! git diff --quiet -- clanky/slovan-druhy-pokus.html style.css footer.css; then changed=true; fi
-          echo "changed=$changed" >> "$GITHUB_OUTPUT"
-
-      - name: Uložit opravu do main
-        if: steps.patch.outputs.changed == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'Naše Kadaň – nouzová oprava'
+          python -m pip install --quiet Pillow
+          git config user.name 'Naše Kadaň – nouzová publikace'
           git config user.email 'info@nasekadan.cz'
-          git add clanky/slovan-druhy-pokus.html style.css footer.css
-          git commit -m 'Vynutit celý název Naše Kadaň přímo v článku'
           for attempt in 1 2 3 4 5; do
-            if git push origin HEAD:main; then exit 0; fi
             git fetch origin main
-            git rebase origin/main
+            git reset --hard origin/main
+            export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+            python3 scripts/publish_kadan_election_history_20260808_v2.py
+            git diff --check
+            git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+            if git diff --cached --quiet; then break; fi
+            git commit -m 'Dokončit dnešní článek o 36 letech komunálních voleb'
+            if git push origin HEAD:main; then break; fi
             sleep $((attempt*3))
           done
-          exit 1
+          git fetch origin main
+          git reset --hard origin/main
+          test -f "clanky/$SLUG.html"
+          test -f "social/$SLUG.png"
+          grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" index.html
+          grep -Fq "$SLUG.html" clanky/index.html
+          grep -Fq "$ARTICLE_URL" rss.xml
 
-      - name: Nasadit opravený článek a styly přímo na OVH
+      - name: Připravit SSH klíč
         shell: bash
         run: |
           set -euo pipefail
@@ -95,75 +70,48 @@ jobs:
           test -n "$key"
           printf '%s\n' "$key" | tr -d '\r' > "$RUNNER_TEMP/ovh_key"
           chmod 600 "$RUNNER_TEMP/ovh_key"
-          mkdir -p "$RUNNER_TEMP/header-hotfix/clanky"
-          cp clanky/slovan-druhy-pokus.html "$RUNNER_TEMP/header-hotfix/clanky/"
-          cp style.css footer.css "$RUNNER_TEMP/header-hotfix/"
-          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -r "$RUNNER_TEMP/header-hotfix" ubuntu@57.129.43.215:/tmp/nasekadan-header-hotfix
+
+      - name: Přenést a atomicky nasadit celý main
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude=research --exclude=node_modules -czf "$RUNNER_TEMP/nasekadan-main.tgz" .
+          scp -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 "$RUNNER_TEMP/nasekadan-main.tgz" ubuntu@57.129.43.215:/tmp/nasekadan-election-emergency.tgz
           ssh -i "$RUNNER_TEMP/ovh_key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 ubuntu@57.129.43.215 'bash -s' <<'REMOTE'
           set -euo pipefail
-          src=/tmp/nasekadan-header-hotfix
-          root=/var/www/nasekadan
-          sudo install -d -m 0755 "$root/clanky"
-          sudo install -m 0644 "$src/clanky/slovan-druhy-pokus.html" "$root/clanky/slovan-druhy-pokus.html"
-          sudo install -m 0644 "$src/style.css" "$root/style.css"
-          sudo install -m 0644 "$src/footer.css" "$root/footer.css"
-          if sudo docker inspect nasekadan-web >/dev/null 2>&1; then
-            sudo docker exec nasekadan-web mkdir -p /usr/share/nginx/html/clanky
-            sudo docker cp "$src/clanky/slovan-druhy-pokus.html" nasekadan-web:/usr/share/nginx/html/clanky/slovan-druhy-pokus.html
-            sudo docker cp "$src/style.css" nasekadan-web:/usr/share/nginx/html/style.css
-            sudo docker cp "$src/footer.css" nasekadan-web:/usr/share/nginx/html/footer.css
-          fi
-          rm -rf "$src"
+          work=/tmp/nasekadan-election-emergency
+          rm -rf "$work" && mkdir -p "$work"
+          tar -xzf /tmp/nasekadan-election-emergency.tgz -C "$work"
+          chmod +x "$work/deploy/sync-production.sh"
+          sudo env GITHUB_WORKSPACE="$work" NASEKADAN_SKIP_AUTOMATION_INSTALL=1 bash "$work/deploy/sync-production.sh"
+          rm -rf "$work" /tmp/nasekadan-election-emergency.tgz
           REMOTE
 
-      - name: Veřejně ověřit celý název
-        id: verify
+      - name: Veřejná kontrola
         shell: bash
         run: |
           set -euo pipefail
           ok=0
-          for attempt in 1 2 3 4 5 6 7 8; do
-            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
-            curl -4 -kfsS -L --max-time 40 "$ARTICLE_URL?v=$q" -o /tmp/article.html || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/style.css?v=$q" -o /tmp/style.css || true
-            curl -4 -kfsS -L --max-time 40 "https://nasekadan.cz/footer.css?v=$q" -o /tmp/footer.css || true
-            python3 - <<'PY' && ok=1 && break || true
-          from pathlib import Path
-          html=Path('/tmp/article.html').read_text(encoding='utf-8',errors='replace')
-          style=Path('/tmp/style.css').read_text(encoding='utf-8',errors='replace')
-          footer=Path('/tmp/footer.css').read_text(encoding='utf-8',errors='replace')
-          assert 'HEADER-BRAND-INLINE-20260805' in html
-          assert '<span>NAŠE <b>KADAŇ</b></span>' in html
-          assert 'header[data-site-header="v1"] .head .logo > span:not(.logo-mark){color:#13232d!important}' in html
-          assert 'HEADER-BRAND-VISIBILITY-20260805' in style or 'HEADER-BRAND-VISIBILITY-20260805' in footer
-          PY
-            sleep $((attempt*4))
+          for attempt in $(seq 1 15); do
+            q="emergency-${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            article="$(curl -4 -kfsSL --max-time 35 "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            if grep -Fq "<h1>$TITLE</h1>" <<<"$article" \
+              && grep -Fq 'Právní paradox roku 2010' <<<"$article" \
+              && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+              && grep -Fq "$SLUG.html" <<<"$archive" \
+              && [[ "$(grep -Fc "<link>$ARTICLE_URL</link>" <<<"$rss")" == 1 ]]; then
+              ok=1; break
+            fi
+            sleep 4
           done
           test "$ok" = 1
-
-      - name: Zapsat veřejný důkaz
-        if: github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p reports
+          curl -4 -kfsSL --max-time 35 "https://nasekadan.cz/social/$SLUG.png?v=${GITHUB_RUN_ID}" -o /tmp/social.png
           python3 - <<'PY'
-          import json,datetime,os
-          data={'status':'passed','checkedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'article':'https://nasekadan.cz/clanky/slovan-druhy-pokus.html','visibleBrand':'NAŠE KADAŇ','runId':os.environ.get('GITHUB_RUN_ID','')}
-          open('reports/header-brand-live-status.json','w',encoding='utf-8').write(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+          from PIL import Image
+          with Image.open('/tmp/social.png') as im:
+              assert im.format == 'PNG' and im.size == (1200,630)
           PY
-          git config user.name 'Naše Kadaň – veřejná kontrola'
-          git config user.email 'info@nasekadan.cz'
-          git add reports/header-brand-live-status.json
-          git diff --cached --quiet && exit 0
-          git commit -m 'Potvrdit veřejně celý název Naše Kadaň [skip ci]'
-          git push origin HEAD:main
-
-      - name: Oznámit výsledek v PR
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const ok='${{ job.status }}' === 'success';
-            await github.rest.issues.createComment({owner:context.repo.owner,repo:context.repo.repo,issue_number:context.payload.pull_request.number,body:ok?`Celý název NAŠE KADAŇ je nasazen na OVH a veřejně ověřen. Běh: ${context.runId}.`:`Nouzová oprava nebo veřejná kontrola selhala. Běh: ${context.runId}.`});
+          echo 'HOTOVO: článek, titulka, archiv, RSS a PNG jsou veřejně ověřené.'
