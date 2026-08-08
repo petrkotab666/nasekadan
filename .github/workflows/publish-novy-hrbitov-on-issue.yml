@@ -59,7 +59,10 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – nový hřbitov'
           git config user.email 'info@nasekadan.cz'
-          git add "clanky/$SLUG.html" "social/$SLUG.png" index.html clanky/index.html clanky/strana-*.html rss.xml sitemap.xml news-sitemap.xml llms.txt data/published-content-index.json data/article-integrity-manifest.json
+          # Publikační normalizátor může legitimně upravit i další již existující stránku.
+          # Uložíme proto atomicky celý jeho ověřený výstup, aby po commitu nezůstaly
+          # nestagované změny a rebase nebyl blokovaný.
+          git add -A
           if ! git diff --cached --quiet; then
             git commit -m 'Publikovat článek o novém hřbitově v Kadani'
             pushed=0
