@@ -1,0 +1,163 @@
+name: Publikovat historii komunálních voleb Kadaň 2026
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'data/publish-kadan-elections-20260808.trigger'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-kadan-election-history-20260808
+  cancel-in-progress: false
+
+env:
+  SLUG: komunalni-volby-kadan-historie-1990-2026
+  ARTICLE_URL: https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html
+  TITLE: '36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026'
+
+jobs:
+  publish:
+    runs-on: [self-hosted, ovh, lastminuteslevy]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Ověřit, zda už není publikace kompletní
+        id: precheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          q="pre-${GITHUB_RUN_ID}-$(date +%s)"
+          article="$(curl -kfsS -L --max-time 25 "$ARTICLE_URL?v=$q" || true)"
+          home="$(curl -kfsS -L --max-time 25 "https://nasekadan.cz/?v=$q" || true)"
+          rss="$(curl -kfsS -L --max-time 25 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+          complete=0
+          if grep -Fq "$TITLE" <<<"$article" \
+            && grep -Fq 'Právní paradox roku 2010' <<<"$article" \
+            && grep -Fq 'A co rok 2026? Kadaň jde do voleb po změně politické mapy' <<<"$article" \
+            && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
+            && [[ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]]; then
+            complete=1
+          fi
+          echo "complete=$complete" >> "$GITHUB_OUTPUT"
+
+      - name: Vygenerovat a atomicky uložit plnou zdrojovou publikaci
+        if: steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Naše Kadaň – historie voleb'
+          git config user.email 'info@nasekadan.cz'
+          success=0
+          for attempt in 1 2 3 4 5; do
+            git fetch --prune origin main
+            git reset --hard origin/main
+            export ARTICLE_SOURCE_COMMIT="$(git rev-parse HEAD)"
+            python3 scripts/publish_kadan_election_history_20260808.py
+            git diff --check
+            git add "clanky/$SLUG.html" "social/$SLUG.png" \
+              index.html clanky/index.html clanky/strana-*.html \
+              rss.xml sitemap.xml news-sitemap.xml llms.txt \
+              data/published-content-index.json data/article-integrity-manifest.json
+            if git diff --cached --quiet; then
+              success=1
+              break
+            fi
+            git commit -m 'Publikovat 36 let komunálních voleb v Kadani'
+            if git push origin HEAD:main; then
+              success=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+          [[ "$success" == 1 ]]
+          git fetch --prune origin main
+          git reset --hard origin/main
+          echo "CONTENT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Kanonicky nasadit aktuální main na OVH
+        if: steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NASEKADAN_SKIP_AUTOMATION_INSTALL=1
+          bash deploy/sync-production.sh
+          echo "DEPLOYED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Veřejně ověřit úplný článek, grafiku i všechny kanály
+        if: steps.precheck.outputs.complete != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            'Výsledky voleb od roku 1990'
+            '1990: první svobodné komunální volby'
+            '1994: nastupuje ODS'
+            '1998: jediná novodobá porážka ODS'
+            '2002: návrat ODS a začátek Kulhánkovy éry'
+            '2006: ODS prudce posiluje'
+            '2010: téměř polovina hlasů — a největší volební aféra'
+            'Právní paradox roku 2010'
+            'Krupka změnila právní pohled'
+            'Trestní zákon tehdy na kupování hlasů nestačil'
+            '2014: ODS drží Kadaň, podezření se vrací'
+            '2018: vrchol dominance ODS'
+            '2022: konec dvacetileté Kulhánkovy éry'
+            'Čtyři starostové po revoluci'
+            'Co ukazuje více než třicet let voleb'
+            'A co rok 2026? Kadaň jde do voleb po změně politické mapy'
+            'Zdroje a ověření'
+          )
+          success=0
+          for attempt in $(seq 1 12); do
+            q="${GITHUB_RUN_ID}-$(date +%s)-$attempt"
+            article="$(curl -kfsS -L --max-time 35 "$ARTICLE_URL?v=$q" || true)"
+            home="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/?v=$q" || true)"
+            archive="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/clanky/?v=$q" || true)"
+            rss="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/rss.xml?v=$q" || true)"
+            sitemap="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/sitemap.xml?v=$q" || true)"
+            news="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
+            llms="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/llms.txt?v=$q" || true)"
+            registry="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/data/published-content-index.json?v=$q" || true)"
+            health="$(curl -kfsS -L --max-time 35 "https://nasekadan.cz/deployment-health.txt?v=$q" || true)"
+            ok=1
+            grep -Fq "<h1>$TITLE</h1>" <<<"$article" || ok=0
+            grep -Fq '<meta name="robots" content="index,follow' <<<"$article" || ok=0
+            grep -Fq "<link rel=\"canonical\" href=\"$ARTICLE_URL\">" <<<"$article" || ok=0
+            grep -Fq "og:image\" content=\"https://nasekadan.cz/social/$SLUG.png" <<<"$article" || ok=0
+            for heading in "${required[@]}"; do grep -Fq "$heading" <<<"$article" || ok=0; done
+            grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" || ok=0
+            grep -Fq "$SLUG.html" <<<"$archive" || ok=0
+            [[ "$(grep -o "$SLUG.html" <<<"$rss" | wc -l | tr -d ' ')" == 1 ]] || ok=0
+            [[ "$(grep -o "$SLUG.html" <<<"$sitemap" | wc -l | tr -d ' ')" == 1 ]] || ok=0
+            [[ "$(grep -o "$SLUG.html" <<<"$news" | wc -l | tr -d ' ')" == 1 ]] || ok=0
+            grep -Fq "$SLUG.html" <<<"$llms" || ok=0
+            grep -Fq "$SLUG.html" <<<"$registry" || ok=0
+            grep -Fq "source=$DEPLOYED_SHA" <<<"$health" || ok=0
+            if [[ "$ok" == 1 ]]; then
+              curl -kfsS -L --max-time 35 "https://nasekadan.cz/social/$SLUG.png?v=$q" -o /tmp/kadan-elections-social.png
+              python3 - <<'PY'
+          from PIL import Image
+          p='/tmp/kadan-elections-social.png'
+          with Image.open(p) as im:
+              assert im.format == 'PNG', im.format
+              assert im.size == (1200, 630), im.size
+          PY
+              success=1
+              break
+            fi
+            sleep $((attempt * 4))
+          done
+          [[ "$success" == 1 ]]
+          echo "HOTOVO: plný článek, 1200x630 PNG, titulka, archiv, RSS, sitemap, news sitemap, llms, registr a deployment-health jsou veřejně ověřené."
+
+      - name: Už bylo správně zveřejněno
+        if: steps.precheck.outputs.complete == '1'
+        run: echo 'Publikace už byla veřejně kompletní; nevytvářím duplicitní commit ani deploy.'
