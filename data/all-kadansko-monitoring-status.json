@@ -1,21 +1,21 @@
 {
   "version": 3,
-  "checkedAt": "2026-08-08T03:56:27.754696+00:00",
+  "checkedAt": "2026-08-08T04:16:39.642956+00:00",
   "bootstrap": false,
   "sourceCount": 213,
-  "checkedSources": 194,
-  "failedSources": 19,
-  "itemsParsed": 16833,
-  "uniqueItems": 10601,
+  "checkedSources": 188,
+  "failedSources": 25,
+  "itemsParsed": 16472,
+  "uniqueItems": 10551,
   "newAlerts": 0,
   "alertsCapped": false,
   "suppressed": {
-    "genericTitle": 880,
+    "genericTitle": 824,
     "missingUrl": 0,
-    "broadWithoutLocalMatch": 7,
-    "notEditoriallySignificant": 46,
+    "broadWithoutLocalMatch": 5,
+    "notEditoriallySignificant": 45,
     "notFreshOrUndated": 0,
-    "duplicate": 5352,
+    "duplicate": 5097,
     "deferredByCap": 0
   },
   "coverage": {
@@ -313,8 +313,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/",
       "category": "Školství",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 42
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "MŠ Husova Kadaň",
@@ -369,8 +370,9 @@
       "url": "https://www.2zskadan.cz/",
       "category": "Základní školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 245
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "ZŠ Školní Kadaň",
@@ -459,9 +461,8 @@
       "url": "https://www.mesto-most.cz/vismo/kalendar-akci.asp?id_org=9959",
       "category": "Regionální kultura – Most",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 124
     },
     {
       "name": "Sportovní areály Most – akce",
@@ -518,9 +519,8 @@
       "url": "https://www.mulitvinov.cz/",
       "category": "Regionální kultura – Litvínov",
       "tier": "organization",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 82
     },
     {
       "name": "MAS Naděje – kalendář akcí Mostecka a Litvínovska",
@@ -568,8 +568,9 @@
       "url": "https://www.zzsuk.cz/aktuality",
       "category": "Záchranná služba",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 81
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Portál krizového řízení Ústeckého kraje",
@@ -649,8 +650,9 @@
       "url": "https://www.dopravauk.cz/",
       "category": "Veřejná doprava",
       "tier": "transport",
-      "status": "checked",
-      "itemsParsed": 0
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Severočeské vodovody a kanalizace – události",
@@ -675,7 +677,7 @@
       "category": "Regionální média",
       "tier": "regional_media",
       "status": "checked",
-      "itemsParsed": 265
+      "itemsParsed": 266
     },
     {
       "name": "Autokemp Prunéřov – aktuality",
@@ -843,8 +845,9 @@
       "url": "https://www.vzdelavani-kadansko.cz/subjekty.php",
       "category": "Základní, střední a umělecké školy",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 85
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Domovy sociálních služeb Kadaň a Mašťov",
@@ -900,8 +903,9 @@
       "url": "https://www.tjvskadan.cz/",
       "category": "Sportovní organizace a kluby",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 24
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Gymnastika Kadaň – SK Kosagym",
@@ -956,8 +960,9 @@
       "url": "https://www.zzsuk.cz/",
       "category": "Bezpečnost, záchranné složky a veřejné instituce",
       "tier": "emergency",
-      "status": "checked",
-      "itemsParsed": 72
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Římskokatolická farnost Kadaň",
@@ -966,7 +971,7 @@
       "tier": "organization",
       "status": "failed",
       "itemsParsed": 0,
-      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: Hostname mismatch, certificate is not valid for 'farnostkadan.cz'. (_ssl.c:1000)>"
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Město Kadaň – úřední deska",
@@ -1415,9 +1420,8 @@
       "url": "https://www.mesto-most.cz/",
       "category": "Města a obce širokého regionu",
       "tier": "municipality",
-      "status": "failed",
-      "itemsParsed": 0,
-      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
+      "status": "checked",
+      "itemsParsed": 161
     },
     {
       "name": "Louny – oficiální web",
@@ -1632,8 +1636,9 @@
       "url": "https://www.slavnosticibule.cz/",
       "category": "major-recurring-event",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 5
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Slavnosti cibule Račetice – doplňkový zdroj 1",
@@ -1713,8 +1718,9 @@
       "url": "https://hornihrad.cz/",
       "category": "castle-events",
       "tier": "organization",
-      "status": "checked",
-      "itemsParsed": 176
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "URLError: <urlopen error [Errno 101] Network is unreachable>"
     },
     {
       "name": "Dolní Poohří – regionální kalendář",
@@ -1738,7 +1744,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 42
+      "itemsParsed": 41
     },
     {
       "name": "Google News – široký region 3",
@@ -1786,7 +1792,7 @@
       "category": "Média – široký region",
       "tier": "aggregator",
       "status": "checked",
-      "itemsParsed": 74
+      "itemsParsed": 76
     },
     {
       "name": "Google News – široký region 9",
