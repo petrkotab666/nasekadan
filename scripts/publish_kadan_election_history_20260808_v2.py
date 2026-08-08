@@ -31,7 +31,6 @@ def ensure_election_sitemap() -> None:
     if loc_count(path) == 1:
         return
     text = path.read_text(encoding="utf-8")
-    # Odstranit případné starší duplicity této jediné URL a vložit ji právě jednou.
     root = ET.fromstring(text)
     for parent in list(root):
         loc = next((n for n in list(parent) if n.tag.rsplit("}", 1)[-1] == "loc"), None)
@@ -50,11 +49,31 @@ def ensure_election_sitemap() -> None:
         f.write("\n")
 
 
+def clean_generated_whitespace() -> None:
+    """Generátory některých povrchů nechávají mezery na konci řádků; commit musí být čistý."""
+    paths = [
+        ROOT / "index.html",
+        ROOT / "clanky/index.html",
+        ROOT / "rss.xml",
+        ROOT / "sitemap.xml",
+        ROOT / "news-sitemap.xml",
+        ROOT / "llms.txt",
+        pub.ARTICLE,
+    ]
+    paths.extend(sorted((ROOT / "clanky").glob("strana-*.html")))
+    for path in paths:
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        cleaned = "\n".join(line.rstrip() for line in text.splitlines()) + "\n"
+        if cleaned != text:
+            path.write_text(cleaned, encoding="utf-8", newline="\n")
+
+
 def validate_v2() -> None:
     ensure_election_sitemap()
-    # Původní generátor sestaví manifest před normalizací konstrukce článků.
-    # Obnova tady garantuje, že hash/bytes v manifestu odpovídají skutečně
-    # finální podobě souborů, která půjde do commitu a na produkci.
+    clean_generated_whitespace()
+    # Manifest musí vzniknout až nad skutečně finálními bajty souborů.
     helper.rebuild_integrity_manifest()
 
     text = pub.ARTICLE.read_text(encoding="utf-8")
