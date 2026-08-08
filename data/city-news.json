@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-08T02:23:14.334236+00:00",
+  "generatedAt": "2026-08-08T07:16:47.745094+00:00",
   "sources": [
     "Město Kadaň (15)",
     "Městský GIS Kadaň (9)",
@@ -14,7 +14,7 @@
     "Městské muzeum v Kadani – veřejný Facebook (0)",
     "Nemocnice Kadaň (15)",
     "Městská policie Kadaň (5)",
-    "Technické služby Kadaň (15)",
+    "Technické služby Kadaň (0)",
     "Kabelová televize Kadaň (15)",
     "Tepelné hospodářství Kadaň (6)",
     "Sportovní zařízení Kadaň (15)",
@@ -38,7 +38,7 @@
     "ZŠ Na Podlesí Kadaň (15)",
     "ZŠ a MŠ při nemocnici Kadaň (15)",
     "ZAČÍT SPOLU Kadaň (10)",
-    "ZUŠ Klementa Slavického Kadaň (15)",
+    "ZUŠ Klementa Slavického Kadaň (0)",
     "Gymnázium Kadaň (0)",
     "Astronomicko přírodovědná observatoř Kadaň (15)",
     "Observatoř Kadaň – veřejný Facebook (0)",
@@ -99,7 +99,7 @@
     "Tenisový klub Kadaň (15)",
     "TJ Vodní sporty Kadaň (13)",
     "Gymnastika Kadaň – SK Kosagym (15)",
-    "Karate klub Kadaň a Klášterec (15)",
+    "Karate klub Kadaň a Klášterec (0)",
     "BK DDM Kadaň (15)",
     "Sportovní klub policie Kadaň (6)",
     "Policie ČR – Obvodní oddělení Kadaň (15)",
@@ -109,10 +109,12 @@
   ],
   "errors": [
     "Kino Hvězda: HTTPError: HTTP Error 429: Too Many Requests",
+    "Technické služby Kadaň: URLError: <urlopen error timed out>",
     "SK Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Světlo Kadaň: HTTPError: HTTP Error 403: Forbidden",
     "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "ZŠ Školní Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "ZUŠ Klementa Slavického Kadaň: URLError: <urlopen error timed out>",
     "Gymnázium Kadaň: HTTPError: HTTP Error 404: Not Found",
     "Let It Roll – akce: HTTPError: HTTP Error 404: Not Found",
     "Docela velké divadlo Litvínov: URLError: <urlopen error [Errno -2] Name or service not known>",
@@ -123,6 +125,7 @@
     "Liďák Kadaň – Instagram: HTTPError: HTTP Error 429: Too Many Requests",
     "Vzdělávání na Kadaňsku: URLError: <urlopen error [Errno 101] Network is unreachable>",
     "Fotbalový klub Tatran Kadaň: HTTPError: HTTP Error 403: Forbidden",
+    "Karate klub Kadaň a Klášterec: HTTPError: HTTP Error 401: Unauthorized",
     "Římskokatolická farnost Kadaň: URLError: <urlopen error timed out>"
   ],
   "sourceStatus": [
@@ -236,8 +239,9 @@
       "url": "https://www.tskadan.cz/",
       "category": "Městské služby",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Kabelová televize Kadaň",
@@ -432,8 +436,9 @@
       "url": "https://www.zus-kadan.cz/",
       "category": "Umělecké školy",
       "origin": "manual_registry",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "URLError: <urlopen error timed out>"
     },
     {
       "name": "Gymnázium Kadaň",
@@ -930,8 +935,9 @@
       "url": "https://karateklubkadan.cz/wp2/",
       "category": "Sportovní organizace a kluby",
       "origin": "organization_directory",
-      "status": "checked",
-      "itemsFound": 15
+      "status": "failed",
+      "itemsFound": 0,
+      "error": "HTTPError: HTTP Error 401: Unauthorized"
     },
     {
       "name": "BK DDM Kadaň",
@@ -1465,15 +1471,6 @@
       "sourceName": "Úřad práce ČR – kontaktní pracoviště Kadaň"
     },
     {
-      "id": "dabbedf42a3c",
-      "title": "Žádosti o poskytnutí informací dle zákona č. 106/1999 Sb.",
-      "date": "",
-      "category": "Městské služby",
-      "description": "\"Blokové čištění města\">Blokové čištění města Údržba zeleně a cyklostezek Ochrana osobních údajů Povinně zveřejňované informace",
-      "source": "https://www.tskadan.cz/sekce/33/zadosti-o-poskytnuti-informaci-dle-zakona-c-1061999-sb",
-      "sourceName": "Technické služby Kadaň"
-    },
-    {
       "id": "51daedb36c20",
       "title": "Ženy Black",
       "date": "",
@@ -1508,6 +1505,15 @@
       "description": ">Praha hlavní nádraží Železniční uzel Praha  Praha - Beroun Digitalizace Dopravní komplex Smíchov",
       "source": "https://www.spravazeleznic.cz/https&",
       "sourceName": "Správa železnic – cestující"
+    },
+    {
+      "id": "e201579d0c55",
+      "title": "Žatecký a lounský deník",
+      "date": "",
+      "category": "Regionální média",
+      "description": "div> Kadaň ožije historií. Císařský den připomene příjezd Karla IV. <div class=\"flex flex-col gap-1 w",
+      "source": "https://zatecky.denik.cz/",
+      "sourceName": "Chomutovský deník"
     },
     {
       "id": "5ca5ff6f19a8",
