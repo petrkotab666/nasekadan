@@ -1,20 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-08T13:04:10Z",
-  "last_quick_check_at": "2026-08-08T13:04:10Z",
-  "last_deep_check_at": "2026-08-08T11:36:19Z",
+  "updated_at": "2026-08-08T17:01:32Z",
+  "last_quick_check_at": "2026-08-08T17:01:32Z",
+  "last_deep_check_at": "2026-08-08T16:47:58.270119Z",
   "canonical_registry": {
     "paths": [
       "data/organizations.json",
       "data/city-sources.json",
       "data/regional-sources.json"
     ],
+    "all_loaded_this_run": true,
     "directory_is_canonical_registry": true,
     "directory_organizations": 65,
     "monitored_directory_organizations": 65,
-    "coverage_percent": 100.0,
-    "missing_directory_organizations": [],
+    "coverage_percent_formal": 100.0,
     "regional_discovery": {
       "last_full_official_url_discovery_at": "2026-08-04T07:04:29Z",
       "unresolved_discover_official_url_entries": 0
@@ -22,63 +22,76 @@
   },
   "complete_monitor": {
     "status_path": "data/all-kadansko-monitoring-status.json",
-    "checked_at": "2026-08-08T11:36:19.209238+00:00",
+    "checked_at": "2026-08-08T16:47:58.270119Z",
     "source_count": 213,
-    "checked_sources": 175,
-    "failed_sources": 38,
-    "items_parsed": 16342,
-    "unique_items": 10126,
-    "new_alerts": 0,
-    "failed_sources_require_fallback": true
+    "checked_sources": 199,
+    "failed_sources": 14,
+    "items_parsed": 17218,
+    "unique_items": 10907,
+    "raw_new_alerts": 1,
+    "editorially_new_user_alerts": 0,
+    "failed_sources_require_fallback": true,
+    "can_declare_no_news": false,
+    "can_declare_no_news_reason": "Čtrnáct povinných zdrojů v posledním úplném průchodu stále selhalo a některé veřejné sociální profily vracejí nulový výstup; bez záložního ověření nelze tvrdit úplné pokrytí."
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed_before_repair_trigger": "a14948fd0bb1e5ca647dd3ba400a17053805d6d3",
-    "repair_trigger_commit": "276416b358e82c0cf450917b01d3d95c81d748da"
+    "main_sha_observed": "6dfbbb264791f00159b5ebc83aa75e081b91a1cc",
+    "monitoring_state_update_commit": "5bc38e3e74addd78a200d0056ceedea36b532a1b"
   },
   "production": {
-    "homepage_search_visibility_checked": true,
-    "archive_search_visibility_checked": true,
+    "checked_at": "2026-08-08T17:01:32Z",
+    "homepage_live_checked": true,
+    "archive_live_checked": true,
+    "homepage_latest_article": "Kadaň posouvá plán nového hřbitova. Architektonická studie bude stát 580 tisíc korun",
+    "homepage_latest_article_time": "2026-08-08T11:21:00+02:00",
+    "archive_latest_article": "36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026",
+    "archive_latest_article_time": "2026-08-08T04:00:00+02:00",
+    "homepage_archive_consistent": false,
+    "current_incident_fingerprint": "production-stale-main-20260808-1057",
+    "github_issue": 828,
+    "issue_reopened_this_run": true,
+    "pending_alert_updated_this_run": true,
     "cache_busting_direct_https_checked": false,
-    "cache_busting_failure": "Veřejné webové načtení bylo dostupné bez spolehlivého cache-busting query; přímé article URL vracely interní chybu nástroje. Titulní strana a archiv však byly načteny živě a oba stále končily článkem ze 7. srpna 2026.",
-    "last_known_repair_fingerprint": "production-stale-main-20260808-1057",
-    "repair_already_attempted": true,
-    "state_changed_since_previous_repair": true,
-    "latest_repair_trigger_commit": "276416b358e82c0cf450917b01d3d95c81d748da",
-    "repeat_deploy_without_new_evidence": false,
-    "public_latest_article_date_seen": "2026-08-07T04:00:00+02:00",
-    "main_contains_newer_publications": true
+    "rss_direct_check": "tool_internal_error",
+    "sitemap_direct_check": "tool_internal_error",
+    "deployment_health_direct_check": "tool_internal_error",
+    "repair_attempt_this_run": "none",
+    "repair_decision": "Do not repeat deploy: the same pending production incident already has a canonical self-hosted OVH repair route and current trigger requirements; live verification shows only partial recovery."
   },
   "quick_check": {
-    "extraordinary_events": "no_new_verified_threshold_event",
-    "courts_and_cases": "no_new_publicly_indexed_movement",
-    "institutions_and_documents": "no_new_verified_threshold_development_requiring_user_alert",
-    "petition": "small_change_only_below_notification_threshold",
-    "transport_and_outages": "no_new_verified_threshold_event",
-    "culture": "no_new_large_or_material_change_requiring_alert",
-    "technical": "known_production_stale_fingerprint_reverified_and_single_state_changed_repair_triggered"
+    "extraordinary_events": "no_new_verified_threshold_event_found",
+    "courts_and_cases": "no_new_verified_threshold_movement_found",
+    "institutions_and_documents": "no_new_verified_threshold_development_requiring_user_content_alert",
+    "transport_and_outages": "no_new_verified_threshold_event_found",
+    "culture": "ordinary_weekend_items_only_for_cultural_overview",
+    "technical": "production_partial_sync_persists_archive_missing_latest_cemetery_article"
+  },
+  "known_blind_spots": {
+    "failed_source_count": 14,
+    "examples": [
+      "Kino Hvězda – HTTP 429",
+      "SK Kadaň – HTTP 403",
+      "Světlo Kadaň – HTTP 403",
+      "ZŠ Školní Kadaň – HTTP 403 / timeout"
+    ],
+    "zero_output_examples": [
+      "Liďák Kadaň – veřejný Facebook",
+      "Městské muzeum v Kadani – veřejný Facebook"
+    ]
   },
   "duplicate_fingerprints_suppressed": [
-    "surface-water-ban-kadan-chomutov-update-20260803",
-    "ii225-zeleznicni-prejezd-smer-kadan-20260803",
-    "zimni-stadion-ochlazeni-klasterec-kadan-20260803",
-    "night-train-outages-kadan-klasterec-august-2026",
-    "josef-suchy-klasterec-u18-kanada-hlinka-20260804",
-    "nemocnice-kadan-kriticky-nedostatek-krve-0-rh-minus-20260804",
-    "kadan-zimni-stadion-ochlazeni-potvrzeno-20260804",
-    "komunalni-volby-kadan-kandidaty-lhuta-20260804",
-    "jezero-most-druhy-pohresovany-patrani-20260807",
-    "production-stale-main-20260807-evening",
-    "production-stale-main-20260808-1057",
-    "klasterec-minifestacek-lodenice-20260808"
+    "novy-hrbitov-architektonicka-studie-20260804",
+    "hotel-svoboda-dostupne-bydleni-2-20260807",
+    "production-stale-main-20260808-1057"
   ],
   "new_significant_fingerprints": [],
   "notes": [
-    "Povinně byly načteny všechny tři kanonické registry z aktuálního main: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Regionální registr nemá žádné nevyřešené položky discoverOfficialUrl; poslední úplná discovery oficiálních URL je evidována 4. srpna 2026.",
-    "Poslední kompletní regionální průchod skončil 8. srpna 2026 v 11:36 UTC: 213 zdrojů, 175 úspěšně kontrolovaných, 38 chybujících, 16 342 položek, 10 126 unikátních položek a 0 nových alertů.",
-    "Čerstvá rychlá kontrola mimořádností, dopravy, institucí, soudních stop, petice a velkých akcí neodhalila nový ověřený nález nad redakční práh.",
-    "Veřejná produkce byla znovu ověřena jako zastaralá vůči main; jde o již existující fingerprint production-stale-main-20260808-1057 a issue #828, proto nevznikl duplicitní alert.",
-    "Protože se od předchozího opravného pokusu main prokazatelně změnil a obsahuje další publikaci z 8. srpna, byl proveden právě jeden nový kanonický monotónní trigger přes self-hosted OVH workflow: commit 276416b358e82c0cf450917b01d3d95c81d748da. Další paralelní deploy v tomto běhu nebyl spuštěn."
+    "Povinně byly načteny všechny tři kanonické registry z aktuálního main.",
+    "Poslední úplný regionální průchod z 18:47 místního času zkontroloval 199 z 213 zdrojů a eviduje 14 selhání.",
+    "Automatický raw alert z úplného průchodu nepředstavuje nový obsahový alert pro uživatele po redakční deduplikaci; hřbitov je už publikovaný a evidovaný.",
+    "Čerstvá webová kontrola mimořádností, dopravy a veřejných institucí nenašla nový ověřený obsahový nález nad redakční práh.",
+    "Na produkci však trvá technický nesoulad: homepage obsahuje článek o novém hřbitovu z 11:21, archiv jej stále neobsahuje. Issue #828 bylo znovu otevřeno a pending fingerprint aktualizován.",
+    "Další deploy nebyl spuštěn, protože stejný incident už má aktivní kanonickou opravnou cestu a při nezměněném stavu se nesmí paralelně opakovat."
   ]
 }
