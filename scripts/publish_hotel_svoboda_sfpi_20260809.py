@@ -125,7 +125,7 @@ def article_html() -> str:
 
 <h2>Projektová dokumentace je hotová a stavební povolení vydané</h2>
 <p>Nejnovější oficiální plán investiční výstavby města posouvá projekt Svobody o důležitý krok dál. U obnovy čp. 122 – bývalého hotelu Svoboda – už uvádí, že <strong>projektová dokumentace je dokončená a bylo vydáno stavební povolení</strong>. Město zároveň připravuje podklady pro soutěž na dodavatele projektové dokumentace vybavení interiéru knihovny.</p>
-<p>To ale ještě neznamená, že je vybraný stavební dodavatel celé rekonstrukce. Ve veřejně dohledaných zakázkách a smluvních záznamech jsme zatím nenašli soutěž na hlavního zhotovitele přestavby Svobody ani smlouvu, která by stanovila cenu celé stavby a pevný termín zahájení.</p>
+<p>To ale ještě neznamená, že je vybraný stavební dodavatel celé rekonstrukce. Veřejné podklady zatím neukazují soutěž na hlavního zhotovitele přestavby Svobody ani smlouvu, která by stanovila cenu celé stavby a pevný termín zahájení.</p>
 <div class="callout"><strong>Tři miliony nejsou cena rekonstrukce.</strong><p>V podkladech k zastupitelstvu z 25. června 2026 je u řádku „rekonstrukce objektu Svoboda – investice“ částka 3 miliony korun. Jde o letošní rozpočtovou položku. Samotný investiční plán u Svobody – na rozdíl od některých jiných městských projektů – současnou celkovou cenu díla neuvádí.</p></div>
 
 <h2>Byty a knihovna nejsou dvě soupeřící varianty</h2>
@@ -145,7 +145,7 @@ def article_html() -> str:
 
 <h2>Kolik bytů nakonec vznikne? Veřejné číslo se v čase měnilo</h2>
 <p>Právě počet bytů je příklad, proč není bezpečné přebírat staré plány jako dnešní stav. Při koupi domu na konci roku 2023 se veřejně mluvilo až o přibližně <strong>30 bytech</strong>. V červnu 2024 starosta Jan Losenický Českému rozhlasu popsal představu přibližně <strong>20 bytů, možná i více</strong>, převážně 2+1. O měsíc později vedoucí investičního odboru Jan Hnídek hovořil už o <strong>zhruba 25 bytových jednotkách</strong> – 1+1, 2+1 a případně 2+kk či 3+kk.</p>
-<p>V září 2025 se navíc veřejně objevila informace, že knihovna, původně plánovaná hlavně do přízemí, se má rozšířit <strong>i do části prvního patra</strong>. Dispozice domu se tedy proti prvním představám měnila. Proto stará čísla 20, 25 ani 30 nevydáváme za současný počet bytů. Hotová projektová dokumentace by už konečné číslo měla obsahovat, ale v dosud veřejně dostupných podkladech jsme ho nenašli.</p>
+<p>V září 2025 se navíc veřejně objevila informace, že knihovna, původně plánovaná hlavně do přízemí, se má rozšířit <strong>i do části prvního patra</strong>. Dispozice domu se tedy proti prvním představám měnila. Proto stará čísla 20, 25 ani 30 nevydáváme za současný počet bytů. Konečný počet bytů zatím město ve zveřejněných podkladech neuvedlo.</p>
 
 <h2>Co už má projekt za sebou – a kolik stojí jednotlivé kroky</h2>
 <table class="money-table"><thead><tr><th>Krok</th><th>Veřejně dohledatelná částka</th></tr></thead><tbody>
@@ -159,7 +159,7 @@ def article_html() -> str:
 <tr><td>Příprava žádosti „Dostupné bydlení 2“, srpen 2026</td><td><strong>130 tis. Kč bez DPH</strong></td></tr>
 </tbody></table>
 <p>Tyto částky se nesmějí mechanicky sečíst jako „cena Svobody“. Část představuje kupní cenu nemovitosti, část administraci dotací, část projektování a tři miliony jsou rozpočtová položka pro konkrétní rok. Navíc původní a pozdější hodnotu smlouvy KAP ATELIER nelze sčítat mezi sebou.</p>
-<p>Historicky vedení města po koupi domu pracovalo s velmi hrubým odhadem přestavby přibližně <strong>100 až 200 milionů korun</strong>. Ten pochází ještě z doby před hotovou projektovou dokumentací a před změnami dispozic, takže jej nelze používat jako dnešní stavební rozpočet. Současnou celkovou cenu jsme ve veřejných dokumentech zatím nedoložili.</p>
+<p>Historicky vedení města po koupi domu pracovalo s velmi hrubým odhadem přestavby přibližně <strong>100 až 200 milionů korun</strong>. Ten pochází ještě z doby před hotovou projektovou dokumentací a před změnami dispozic, takže jej nelze používat jako dnešní stavební rozpočet. Současnou celkovou cenu město ve zveřejněných dokumentech zatím neuvedlo.</p>
 
 <h2>„Dostupné bydlení 2“ nejspíš míří na nový program 2.0. Přesnou výzvu ale objednávka neříká</h2>
 <p>Ministerstvo pro místní rozvoj 18. června 2026 představilo nový program <strong>Dostupné nájemní bydlení 2.0</strong> s alokací 5,8 miliardy korun z IROP a Operačního programu Spravedlivá transformace. Ministerstvo u obecného nastavení uvádí kombinaci zvýhodněného úvěru a dotace, podporu až do 85 procent způsobilých nákladů, dotační složku 15 až 30 procent a úvěr se splatností až 40 let a úrokem kolem jednoho procenta.</p>
@@ -179,10 +179,10 @@ def article_html() -> str:
 </div>
 
 <h2>Co stále chybí k úplnému účtu</h2>
-<p>Po hlubším průchodu už můžeme odškrtnout stavební povolení a stav projektové dokumentace. Čtyři klíčové údaje ale nadále veřejně chybějí: <strong>konečný počet bytů podle hotového projektu, současný položkový rozpočet celé rekonstrukce, přesná částka žádaná v programu dostupného bydlení a harmonogram soutěže a stavebních prací</strong>.</p>
-<p>Nejcennějšími dalšími dokumenty jsou proto aktuální výkresová a souhrnná technická zpráva hotové projektové dokumentace, položkový rozpočet, příloha srpnové objednávky k „Dostupnému bydlení 2“ a zadávací podklady budoucí soutěže na zhotovitele. Část příloh v Registru smluv není prohledávatelná běžným fulltextem; jejich názvy a metadata jsme dohledali, ale údaje, které nejsou skutečně čitelné, do článku nedoplňujeme odhadem.</p>
+<p>Stavební povolení a dokončení projektové dokumentace jsou už doložené. Nadále však nejsou zveřejněné čtyři klíčové údaje: <strong>konečný počet bytů podle hotového projektu, současný položkový rozpočet celé rekonstrukce, přesná částka žádaná v programu dostupného bydlení a harmonogram soutěže a stavebních prací</strong>.</p>
+<p>Pro úplný obraz budou rozhodující zejména konečná dispozice domu, položkový rozpočet, parametry připravované žádosti na dostupné bydlení a zadávací podmínky budoucí soutěže na zhotovitele. Do jejich zveřejnění nelze přesnou cenu stavby ani termín zahájení prací spolehlivě určit.</p>
 
-<div class="sources"><h2>Zdroje a ověření</h2><p>Stav projektové dokumentace a stavebního povolení vychází z oficiálního Plánu investiční výstavby města Kadaně pro rok 2026. Smluvní a objednávkové částky jsme porovnali s Registrem smluv. Dotační historii jsme ověřili v konečném seznamu MMR k výzvě NPO a v příloze výběrové komise Operačního programu Spravedlivá transformace. Historické počty bytů používáme pouze jako časovou osu vývoje návrhu, nikoli jako současný stav.</p><ul>{sources}</ul></div>
+<div class="sources"><h2>Zdroje a ověření</h2><p>Stav projektové dokumentace a stavebního povolení vychází z oficiálního Plánu investiční výstavby města Kadaně pro rok 2026. Zdrojem smluvních a objednávkových částek je Registr smluv. Dotační historie vychází z konečného seznamu MMR k výzvě NPO a z přílohy výběrové komise Operačního programu Spravedlivá transformace. Historické počty bytů jsou uvedeny pouze jako časová osa vývoje návrhu, nikoli jako současný stav.</p><ul>{sources}</ul></div>
 </article><aside class="sticky"><div class="sidebox"><h3>Co už je jisté</h3><ul><li>projektová dokumentace je hotová</li><li>stavební povolení je vydané</li><li>objekt má kombinovat byty a knihovnu</li><li>město v roce 2026 připravuje dvě nové dotační žádosti</li></ul></div><div class="sidebox"><h3>Co stále nevíme</h3><ul><li>konečný počet bytů</li><li>celkovou cenu rekonstrukce</li><li>částku žádanou na dostupné bydlení</li><li>termín soutěže a zahájení stavby</li></ul></div><div data-promos data-context="sidebar"></div></aside></main>
 {footer()}<script src="/site.js" defer></script><script src="/reklamy.js?v=20260728-vaseuklizecka-guaranteed-3"></script><script src="/ad-spacing-guard.js?v=20260730-pojistime-rotation-4" defer></script><script src="/reklamy-oprava-obrazku.js?v=20260730-pojistime-rotation-4"></script><script src="/obsah-doplnky.js?v=20260730-pojistime-rotation-4"></script></body></html>'''
 
