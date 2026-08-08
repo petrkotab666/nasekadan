@@ -12,6 +12,19 @@ import publish_kadan_election_history_20260808 as pub
 import publish_gymnastika_kadan_20260806 as helper
 
 
+def loc_count(path: Path) -> int:
+    """Počítá cílovou URL strukturálně, bez závislosti na XML prefixu/formatování."""
+    root = ET.parse(path).getroot()
+    count = 0
+    for node in root.iter():
+        if node.tag.rsplit("}", 1)[-1] != "loc":
+            continue
+        value = (node.text or "").strip().rstrip("/")
+        if value == pub.URL.rstrip("/") or value.endswith("/" + pub.ARTICLE_REL):
+            count += 1
+    return count
+
+
 def validate_v2() -> None:
     # Původní generátor sestaví manifest před normalizací konstrukce článků.
     # Obnova tady garantuje, že hash/bytes v manifestu odpovídají skutečně
@@ -23,8 +36,6 @@ def validate_v2() -> None:
         if f">{heading}</h2>" not in text:
             raise RuntimeError(f"Po transformaci chybí kapitola: {heading}")
     rss = (ROOT / "rss.xml").read_text(encoding="utf-8")
-    sitemap = (ROOT / "sitemap.xml").read_text(encoding="utf-8")
-    news = (ROOT / "news-sitemap.xml").read_text(encoding="utf-8")
     checks = {
         "h1": text.count(f"<h1>{pub.TITLE}</h1>") == 1,
         "indexable": "noindex" not in text.lower(),
@@ -35,8 +46,8 @@ def validate_v2() -> None:
         "archive": pub.ARTICLE_REL in (ROOT / "clanky/index.html").read_text(encoding="utf-8"),
         "rss_link_once": rss.count(f"<link>{pub.URL}</link>") == 1,
         "rss_guid_once": rss.count(f'<guid isPermaLink="true">{pub.URL}</guid>') == 1,
-        "sitemap_loc_once": sitemap.count(f"<loc>{pub.URL}</loc>") == 1,
-        "news_loc_once": news.count(f"<loc>{pub.URL}</loc>") == 1,
+        "sitemap_loc_once": loc_count(ROOT / "sitemap.xml") == 1,
+        "news_loc_once": loc_count(ROOT / "news-sitemap.xml") == 1,
         "llms": pub.ARTICLE_REL in (ROOT / "llms.txt").read_text(encoding="utf-8"),
         "registry": pub.URL in (ROOT / "data/published-content-index.json").read_text(encoding="utf-8"),
         "manifest": pub.URL in (ROOT / "data/article-integrity-manifest.json").read_text(encoding="utf-8"),
