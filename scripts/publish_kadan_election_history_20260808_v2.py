@@ -25,7 +25,33 @@ def loc_count(path: Path) -> int:
     return count
 
 
+def ensure_election_sitemap() -> None:
+    """Helper je původně z Gymnastiky, proto volební URL doplňujeme explicitně."""
+    path = ROOT / "sitemap.xml"
+    if loc_count(path) == 1:
+        return
+    text = path.read_text(encoding="utf-8")
+    # Odstranit případné starší duplicity této jediné URL a vložit ji právě jednou.
+    root = ET.fromstring(text)
+    for parent in list(root):
+        loc = next((n for n in list(parent) if n.tag.rsplit("}", 1)[-1] == "loc"), None)
+        if loc is not None and ((loc.text or "").strip().rstrip("/") == pub.URL.rstrip("/")):
+            root.remove(parent)
+    ns = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
+    def q(name: str) -> str:
+        return f"{{{ns}}}{name}" if ns else name
+    url = ET.SubElement(root, q("url"))
+    ET.SubElement(url, q("loc")).text = pub.URL
+    ET.SubElement(url, q("lastmod")).text = "2026-08-08"
+    if ns:
+        ET.register_namespace("", ns)
+    ET.ElementTree(root).write(path, encoding="unicode", xml_declaration=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write("\n")
+
+
 def validate_v2() -> None:
+    ensure_election_sitemap()
     # Původní generátor sestaví manifest před normalizací konstrukce článků.
     # Obnova tady garantuje, že hash/bytes v manifestu odpovídají skutečně
     # finální podobě souborů, která půjde do commitu a na produkci.
