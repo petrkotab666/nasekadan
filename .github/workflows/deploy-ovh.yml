@@ -59,14 +59,18 @@ jobs:
           q="monotonic-${GITHUB_RUN_ID}-$(date +%s)"
           base='https://nasekadan.cz'
           curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/published-articles-manifest.json?$q" -o /tmp/manifest.json
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/?$q" -o /tmp/home.html
           curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/clanky/?$q" -o /tmp/archive.html
           curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/rss.xml?$q" -o /tmp/rss.xml
           curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/sitemap.xml?$q" -o /tmp/sitemap.xml
+          curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/news-sitemap.xml?$q" -o /tmp/news-sitemap.xml
           python3 - <<'PY'
           import json
           from pathlib import Path
           p=json.loads(Path('/tmp/manifest.json').read_text(encoding='utf-8'))
           required={
+            'clanky/komunalni-volby-kadan-historie-1990-2026.html',
+            'clanky/novy-hrbitov-kadan-architektonicka-studie-2026.html',
             'clanky/zzs-kadan-garaz-mycka-2026.html',
             'clanky/slavie-kadan-epp-plavci-120-tisic-2026.html',
             'clanky/od-hlubin-k-nebi-kadan.html',
@@ -78,7 +82,10 @@ jobs:
           assert p.get('article_count',0) >= len(required)
           print('Veřejný manifest článků:',p['article_count'])
           PY
+          grep -Fq "novy-hrbitov-kadan-architektonicka-studie-2026.html" /tmp/home.html
           for slug in \
+            komunalni-volby-kadan-historie-1990-2026.html \
+            novy-hrbitov-kadan-architektonicka-studie-2026.html \
             zzs-kadan-garaz-mycka-2026.html \
             slavie-kadan-epp-plavci-120-tisic-2026.html \
             od-hlubin-k-nebi-kadan.html \
@@ -87,6 +94,7 @@ jobs:
             grep -Fq "$slug" /tmp/archive.html
             grep -Fq "$slug" /tmp/rss.xml
             grep -Fq "$slug" /tmp/sitemap.xml
+            grep -Fq "$slug" /tmp/news-sitemap.xml
             curl -kfsS --max-time 25 --resolve nasekadan.cz:443:127.0.0.1 "$base/clanky/$slug?$q" >/dev/null
           done
 
