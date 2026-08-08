@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "monitor": "central-kadan-editorial",
-  "updated_at": "2026-08-08T07:01:28Z",
-  "last_quick_check_at": "2026-08-08T07:01:28Z",
-  "last_deep_check_at": "2026-08-08T05:49:18Z",
+  "updated_at": "2026-08-08T13:04:10Z",
+  "last_quick_check_at": "2026-08-08T13:04:10Z",
+  "last_deep_check_at": "2026-08-08T11:36:19Z",
   "canonical_registry": {
     "paths": [
       "data/organizations.json",
@@ -22,36 +22,41 @@
   },
   "complete_monitor": {
     "status_path": "data/all-kadansko-monitoring-status.json",
-    "checked_at": "2026-08-08T05:49:18.560150+00:00",
+    "checked_at": "2026-08-08T11:36:19.209238+00:00",
     "source_count": 213,
-    "checked_sources": 191,
-    "failed_sources": 22,
-    "items_parsed": 16869,
-    "unique_items": 10702,
+    "checked_sources": 175,
+    "failed_sources": 38,
+    "items_parsed": 16342,
+    "unique_items": 10126,
     "new_alerts": 0,
     "failed_sources_require_fallback": true
   },
   "repository": {
     "full_name": "petrkotab666/nasekadan",
-    "main_sha_observed": "0c78369df07b5edce3b3d4d0b0405c6ceab5054c"
+    "main_sha_observed_before_repair_trigger": "a14948fd0bb1e5ca647dd3ba400a17053805d6d3",
+    "repair_trigger_commit": "276416b358e82c0cf450917b01d3d95c81d748da"
   },
   "production": {
     "homepage_search_visibility_checked": true,
     "archive_search_visibility_checked": true,
     "cache_busting_direct_https_checked": false,
-    "cache_busting_failure": "web open odmítl neindexované query URL jako unsafe; container DNS pro nasekadan.cz byl dočasně nedostupný",
-    "last_known_repair_fingerprint": "production-stale-main-20260807-evening",
+    "cache_busting_failure": "Veřejné webové načtení bylo dostupné bez spolehlivého cache-busting query; přímé article URL vracely interní chybu nástroje. Titulní strana a archiv však byly načteny živě a oba stále končily článkem ze 7. srpna 2026.",
+    "last_known_repair_fingerprint": "production-stale-main-20260808-1057",
     "repair_already_attempted": true,
-    "repeat_deploy_without_new_evidence": false
+    "state_changed_since_previous_repair": true,
+    "latest_repair_trigger_commit": "276416b358e82c0cf450917b01d3d95c81d748da",
+    "repeat_deploy_without_new_evidence": false,
+    "public_latest_article_date_seen": "2026-08-07T04:00:00+02:00",
+    "main_contains_newer_publications": true
   },
   "quick_check": {
     "extraordinary_events": "no_new_verified_threshold_event",
     "courts_and_cases": "no_new_publicly_indexed_movement",
     "institutions_and_documents": "no_new_verified_threshold_development_requiring_user_alert",
-    "petition": "no_reliably_verified_threshold_event",
+    "petition": "small_change_only_below_notification_threshold",
     "transport_and_outages": "no_new_verified_threshold_event",
     "culture": "no_new_large_or_material_change_requiring_alert",
-    "technical": "no_new_distinct_failure_verified_beyond_known_production_fingerprint"
+    "technical": "known_production_stale_fingerprint_reverified_and_single_state_changed_repair_triggered"
   },
   "duplicate_fingerprints_suppressed": [
     "surface-water-ban-kadan-chomutov-update-20260803",
@@ -64,15 +69,16 @@
     "komunalni-volby-kadan-kandidaty-lhuta-20260804",
     "jezero-most-druhy-pohresovany-patrani-20260807",
     "production-stale-main-20260807-evening",
+    "production-stale-main-20260808-1057",
     "klasterec-minifestacek-lodenice-20260808"
   ],
   "new_significant_fingerprints": [],
   "notes": [
     "Povinně byly načteny všechny tři kanonické registry z aktuálního main: data/organizations.json, data/city-sources.json a data/regional-sources.json.",
-    "Poslední kompletní regionální běh skončil 8. srpna 2026 v 05:49 UTC: 213 zdrojů, 191 úspěšně kontrolovaných, 22 chybujících, 16 869 položek, 10 702 unikátních položek a 0 nových alertů.",
-    "Následná čerstvá webová kontrola bezpečnostních, hasičských, zdravotnických, dopravních, městských a regionálních stop do 07:01 UTC neodhalila žádnou novou ověřenou událost s dostatečným redakčním prahem.",
-    "Minifestáček v Loděnici je již zapracovaný do aktuálního kulturního přehledu, proto byl deduplikován jako běžná kulturní položka a nevytváří nový alert.",
-    "Veřejně indexované soudní a volební dotazy neukázaly nový ověřený procesní pohyb nad práh upozornění.",
-    "Čerstvé cache-busting HTTPS ověření produkčních endpointů nebylo v tomto běhu technicky možné; bez nového odlišného důkazu nebyl opakován dříve provedený kanonický deploy."
+    "Regionální registr nemá žádné nevyřešené položky discoverOfficialUrl; poslední úplná discovery oficiálních URL je evidována 4. srpna 2026.",
+    "Poslední kompletní regionální průchod skončil 8. srpna 2026 v 11:36 UTC: 213 zdrojů, 175 úspěšně kontrolovaných, 38 chybujících, 16 342 položek, 10 126 unikátních položek a 0 nových alertů.",
+    "Čerstvá rychlá kontrola mimořádností, dopravy, institucí, soudních stop, petice a velkých akcí neodhalila nový ověřený nález nad redakční práh.",
+    "Veřejná produkce byla znovu ověřena jako zastaralá vůči main; jde o již existující fingerprint production-stale-main-20260808-1057 a issue #828, proto nevznikl duplicitní alert.",
+    "Protože se od předchozího opravného pokusu main prokazatelně změnil a obsahuje další publikaci z 8. srpna, byl proveden právě jeden nový kanonický monotónní trigger přes self-hosted OVH workflow: commit 276416b358e82c0cf450917b01d3d95c81d748da. Další paralelní deploy v tomto běhu nebyl spuštěn."
   ]
 }
