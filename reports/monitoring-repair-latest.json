@@ -1,33 +1,15 @@
 {
-  "generatedAt": "2026-08-08T16:55:15.369728+00:00",
+  "generatedAt": "2026-08-08T17:08:08.380905+00:00",
   "repair": "retry+host-throttling+slow-second-pass-v2",
   "sourceCount": 213,
-  "checkedSources": 199,
-  "failedSources": 14,
-  "initialFailedSources": 14,
+  "checkedSources": 197,
+  "failedSources": 16,
+  "initialFailedSources": 16,
   "recoveredSourcesAfterRetry": 0,
-  "itemsParsed": 17218,
-  "uniqueItems": 10907,
-  "newAlerts": 1,
-  "alerts": [
-    {
-      "title": "Pátrání na jezeře Most má tragický konec. Policie našla tělo osmadvacetiletého muže - e-Mostecko.cz",
-      "url": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQXzRMQ2RWUGZyckFzSnBrV0E2Q2I2THZBeHRHMlVoODFmMGtzVUEwSE1iVUlJa0ozTkVTTEFNY1ZKRkVSbThScUFOUmlBV0hIRUNBb1ZQRDFubE9hRXhDU2xoWmtjanVEenViUm0wNHhWLW5tU2pPVTFpa0wyNXBVM3NuWXVqcEJJRjdnT29NaXhxQ1V0SFcwZ05Jd0xqcTdBS09DUDVxa0VRQ2VOc1lrbHl6VFRmZHFfaUVRdnVSOG9mRk1sSnc?oc=5",
-      "description": "Pátrání na jezeře Most má tragický konec. Policie našla tělo osmadvacetiletého muže e-Mostecko.cz",
-      "published": "2026-08-06T05:53:33+00:00",
-      "sourceName": "Google News – široký region 6",
-      "sourceUrl": "https://news.google.com/rss/search?q=%28%22Litv%C3%ADnov%22+OR+%22Louny%22+OR+%22Lou%C4%8Dn%C3%A1+pod+Kl%C3%ADnovcem%22+OR+%22Lubenec%22+OR+%22Mal%C3%A9+Krhovice%22+OR+%22Ma%C5%A1%C5%A5ov%22+OR+%22Mi%C5%99etice+u+Vint%C3%AD%C5%99ova%22+OR+%22Most%22%29+when%3A7d&hl=cs&gl=CZ&ceid=CZ%3Acs",
-      "category": "Média – široký region",
-      "tier": "aggregator",
-      "quality": 119,
-      "sourcePriority": 30,
-      "localMatches": [
-        "most"
-      ],
-      "severity": "high",
-      "fingerprint": "2a9c13c50880d94aa44a"
-    }
-  ],
+  "itemsParsed": 17202,
+  "uniqueItems": 10894,
+  "newAlerts": 0,
+  "alerts": [],
   "failed": [
     {
       "name": "Kino Hvězda",
@@ -120,6 +102,15 @@
       "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
     },
     {
+      "name": "Liďák Kadaň – Instagram",
+      "url": "https://www.instagram.com/restaurant_pub_lidak",
+      "category": "Kultura a volný čas – sociální zdroje",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests; retry: HTTPError: HTTP Error 429: Too Many Requests"
+    },
+    {
       "name": "Fotbalový klub Tatran Kadaň",
       "url": "https://www.fotbal.cz/souteze/club/club/5425d203-ea24-490c-801f-4b5f3a5d7d84",
       "category": "Sportovní organizace a kluby",
@@ -154,6 +145,15 @@
       "status": "failed",
       "itemsParsed": 0,
       "error": "HTTPError: HTTP Error 404: Not Found; retry: HTTPError: HTTP Error 404: Not Found"
+    },
+    {
+      "name": "Zámek Poláky – doplňkový zdroj 3",
+      "url": "https://www.instagram.com/zamekpolaky",
+      "category": "culture",
+      "tier": "organization",
+      "status": "failed",
+      "itemsParsed": 0,
+      "error": "HTTPError: HTTP Error 429: Too Many Requests; retry: HTTPError: HTTP Error 429: Too Many Requests"
     }
   ],
   "coverage": {
