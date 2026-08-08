@@ -1,0 +1,14 @@
+{
+  "fingerprint": "production-stale-main-20260808-1057",
+  "type": "technical-production-stale",
+  "detectedAt": "2026-08-08T10:57:38+02:00",
+  "status": "pending",
+  "severity": "high",
+  "summary": "Veřejná produkce Naše Kadaň zaostává za aktuálním main; dnešní článek o komunálních volbách není v živém archivu.",
+  "publicArchive": "https://nasekadan.cz/clanky/",
+  "expectedMain": "04955c29e533e36be27bb0844f736bd76603ce0d",
+  "affectedArticle": "https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html",
+  "repairAttemptCommit": "04955c29e533e36be27bb0844f736bd76603ce0d",
+  "githubIssue": 828,
+  "nextStep": "Zkontrolovat production-content-watchdog, self-hosted OVH runner a deploy/sync-production.sh; další automatický deploy provést až po změně stavu."
+}
