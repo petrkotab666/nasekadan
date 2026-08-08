@@ -43,6 +43,11 @@ jobs:
           python3 scripts/update_avies_oswald_context.py
           python3 scripts/enforce_homepage_latest_order.py
 
+          grep -Fq 'data-arc-med-correction="2026-08-08"' clanky/arc-med-nemocnice-kadan.html
+          grep -Fq '16&nbsp;000&nbsp;000 Kč' clanky/arc-med-nemocnice-kadan.html
+          ! grep -Fq 'veřejný záznam proto sám o sobě nepotvrzuje částku 16 milionů korun' clanky/arc-med-nemocnice-kadan.html
+          ! grep -Fq 'Úplná smlouva o převodu všech podílů včetně příloh a přesného splátkového kalendáře.' clanky/arc-med-nemocnice-kadan.html
+
           git config user.name 'nasekadan-publication-bot'
           git config user.email 'nasekadan-publication-bot@users.noreply.github.com'
           git add clanky/arc-med-nemocnice-kadan.html clanky/avies-nemocnice-kadan.html index.html
@@ -110,7 +115,11 @@ jobs:
           grep -Fq 'data-arc-med-hero' /var/www/nasekadan/index.html
           grep -Fq 'data-promos data-context="sidebar"' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           grep -Fq '/reklamy-sidebar.js?' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          grep -Fq 'data-arc-med-correction="2026-08-08"' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          grep -Fq '16&nbsp;000&nbsp;000 Kč' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           grep -Fq 'data-oswald-avies-context' /var/www/nasekadan/clanky/avies-nemocnice-kadan.html
+          ! grep -Fq 'veřejný záznam proto sám o sobě nepotvrzuje částku 16 milionů korun' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
+          ! grep -Fq 'Úplná smlouva o převodu všech podílů včetně příloh a přesného splátkového kalendáře.' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           ! grep -Fq 'static-article-ads' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           ! grep -Fq 'Pracovní verze' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
           ! grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK' /var/www/nasekadan/clanky/arc-med-nemocnice-kadan.html
@@ -129,14 +138,39 @@ jobs:
               && grep -Fq 'index,follow' <<<"$arc" \
               && grep -Fq 'data-promos data-context="sidebar"' <<<"$arc" \
               && grep -Fq '/reklamy-sidebar.js?' <<<"$arc" \
+              && grep -Fq 'data-arc-med-correction="2026-08-08"' <<<"$arc" \
+              && grep -Fq '16&nbsp;000&nbsp;000 Kč' <<<"$arc" \
               && grep -Fq 'selectVariedAds' <<<"$sidebar" \
               && grep -Fq 'data-oswald-avies-context' <<<"$avies" \
+              && ! grep -Fq 'veřejný záznam proto sám o sobě nepotvrzuje částku 16 milionů korun' <<<"$arc" \
+              && ! grep -Fq 'Úplná smlouva o převodu všech podílů včetně příloh a přesného splátkového kalendáře.' <<<"$arc" \
               && ! grep -Fq 'static-article-ads' <<<"$arc" \
               && ! grep -Fq 'Pracovní verze' <<<"$arc" \
               && ! grep -Fq 'PŘIPRAVOVANÝ ČLÁNEK' <<<"$arc"; then
-              echo 'ARC-MED je veřejný, reklamy se střídají a AVIES obsahuje vazbu na Radka Oswalda.'
+              echo 'ARC-MED je veřejný a opravený podle zveřejněné smlouvy; reklamy i AVIES jsou v pořádku.'
               exit 0
             fi
             sleep 5
           done
           exit 1
+
+      - name: Zapsat potvrzení úspěšného nasazení ARC-MED
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git reset --hard origin/main
+          mkdir -p .github/deploy-status
+          cat > .github/deploy-status/arc-med-contract-fix-20260808.txt <<EOF
+          ARC-MED contract correction deployed and live-verified.
+          Workflow source commit: $GITHUB_SHA
+          Verified UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          Required marker: data-arc-med-correction="2026-08-08"
+          Old incorrect statements: absent
+          EOF
+          git config user.name 'nasekadan-publication-bot'
+          git config user.email 'nasekadan-publication-bot@users.noreply.github.com'
+          git add .github/deploy-status/arc-med-contract-fix-20260808.txt
+          git commit -m 'Potvrdit ostré nasazení opravy ARC-MED'
+          git pull --rebase origin main
+          git push origin HEAD:main
