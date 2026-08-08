@@ -15,7 +15,7 @@ concurrency:
 env:
   SLUG: hotel-svoboda-dostupne-bydleni-knihovna-2026
   PUBLIC_URL: https://nasekadan.cz/clanky/hotel-svoboda-dostupne-bydleni-knihovna-2026.html
-  TITLE: 'Byty i knihovna ve Svobodě: Kadaň připravuje novou žádost na dostupné bydlení'
+  TITLE: 'Svoboda má stavební povolení. Kadaň chystá byty i knihovnu a připravuje dvě dotační žádosti'
   OVH_KEY_A: ${{ secrets.OVH_SSH_PRIVATE_KEY }}
   OVH_KEY_B: ${{ secrets.KEY_OVH_SSH_PRIVATE_KEY }}
   OVH_KEY_C: ${{ secrets.OVH_SSH_KEY }}
@@ -57,7 +57,10 @@ jobs:
           article="$(curl -4 -kfsSL --max-time 30 "$PUBLIC_URL?v=$q" || true)"
           home="$(curl -4 -kfsSL --max-time 30 "https://nasekadan.cz/?v=$q" || true)"
           complete=0
-          if grep -Fq "<h1>$TITLE</h1>" <<<"$article" && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home"; then complete=1; fi
+          if grep -Fq "<h1>$TITLE</h1>" <<<"$article" \
+            && grep -Fq 'stavební povolení' <<<"$article" \
+            && grep -Fq '971 025 Kč' <<<"$article" \
+            && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home"; then complete=1; fi
           echo "complete=$complete" >> "$GITHUB_OUTPUT"
 
       - name: Vygenerovat článek, sociální grafiku a všechny kanály
@@ -83,10 +86,9 @@ jobs:
           set -euo pipefail
           git config user.name 'Naše Kadaň – Hotel Svoboda'
           git config user.email 'info@nasekadan.cz'
-          # Uložit atomicky celý ověřený výstup publikačních normalizátorů.
           git add -A
           if ! git diff --cached --quiet; then
-            git commit -m 'Publikovat Hotel Svoboda: byty, knihovna a SFPI'
+            git commit -m 'Publikovat Hotel Svoboda: stavební povolení, byty a knihovna'
             pushed=0
             for attempt in 1 2 3 4 5; do
               if git pull --rebase origin main && git push origin HEAD:main; then pushed=1; break; fi
@@ -141,7 +143,10 @@ jobs:
             news="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/news-sitemap.xml?v=$q" || true)"
             image_size="$(curl -4 -kfsSL --max-time 40 "https://nasekadan.cz/social/$SLUG.png?v=$q" | wc -c | tr -d ' ' || true)"
             if grep -Fq "<h1>$TITLE</h1>" <<<"$article" \
-              && grep -Fq 'Čtyři čísla, která ještě potřebujeme znát' <<<"$article" \
+              && grep -Fq 'Co stále chybí k úplnému účtu' <<<"$article" \
+              && grep -Fq 'stavební povolení' <<<"$article" \
+              && grep -Fq '971 025 Kč' <<<"$article" \
+              && grep -Fq '3 mil. Kč' <<<"$article" \
               && grep -Fq "data-latest-article-href=\"/clanky/$SLUG.html\"" <<<"$home" \
               && grep -Fq "$SLUG.html" <<<"$archive" \
               && grep -Fq "$SLUG.html" <<<"$rss" \
