@@ -2,13 +2,13 @@
   "fingerprint": "production-stale-main-20260808-1057",
   "type": "technical-production-stale",
   "detectedAt": "2026-08-08T10:57:38+02:00",
-  "lastVerifiedAt": "2026-08-08T15:04:10+02:00",
+  "lastVerifiedAt": "2026-08-08T19:01:32+02:00",
   "status": "pending",
   "severity": "high",
-  "summary": "Veřejná produkce Naše Kadaň zaostává za aktuálním main; živá titulní strana i archiv stále končí článkem ze 7. srpna, zatímco main obsahuje články z 8. srpna včetně komunálních voleb a nového hřbitova.",
+  "summary": "Produkce je po předchozích opravách synchronizovaná jen částečně: titulní strana už 8. 8. 2026 v 19:01 zobrazuje článek o novém hřbitovu z 11:21, ale veřejný archiv /clanky/ stále začíná komunálními volbami z 04:00 a článek o hřbitovu v něm chybí.",
+  "publicHomepage": "https://nasekadan.cz/",
   "publicArchive": "https://nasekadan.cz/clanky/",
   "affectedArticles": [
-    "https://nasekadan.cz/clanky/komunalni-volby-kadan-historie-1990-2026.html",
     "https://nasekadan.cz/clanky/novy-hrbitov-kadan-architektonicka-studie-2026.html"
   ],
   "previousRepairAttemptCommit": "04955c29e533e36be27bb0844f736bd76603ce0d",
@@ -16,5 +16,16 @@
   "currentRepairTriggerCommit": "276416b358e82c0cf450917b01d3d95c81d748da",
   "repairRoute": ".github/water-selfhosted-trigger.txt -> deploy-ovh.yml -> self-hosted OVH monotonic production",
   "githubIssue": 828,
-  "nextStep": "Nevytvářet další paralelní deploy. Při dalším běhu ověřit živě titulku, archiv, RSS, sitemap, news-sitemap a deployment-health; při úspěšném srovnání incident uzavřít."
+  "latestObservedMainSha": "6dfbbb264791f00159b5ebc83aa75e081b91a1cc",
+  "currentPublicState": {
+    "homepageLatest": "Kadaň posouvá plán nového hřbitova. Architektonická studie bude stát 580 tisíc korun",
+    "homepageLatestPublishedAt": "2026-08-08T11:21:00+02:00",
+    "archiveLatest": "36 let komunálních voleb v Kadani: vítězové, čtyři starostové, kupování hlasů i boj o rok 2026",
+    "archiveLatestPublishedAt": "2026-08-08T04:00:00+02:00",
+    "rssDirectCheck": "tool_unreadable",
+    "sitemapDirectCheck": "tool_unreadable",
+    "deploymentHealthDirectCheck": "tool_unreadable"
+  },
+  "repairDecisionThisRun": "no_repeat_deploy",
+  "nextStep": "Nevytvářet další paralelní deploy při nezměněném incidentu. Znovu otevřít issue #828 a při dalším běhu ověřit živě titulku, archiv, RSS, sitemap, news-sitemap a deployment-health; incident uzavřít až po úplném srovnání všech povinných ploch."
 }
