@@ -4,8 +4,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import http.client
 import json
+import random
 import re
+import socket
+import threading
+import time
 import unicodedata
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
@@ -13,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
@@ -65,29 +70,73 @@ def normalize_url(value: object, base: str = "") -> str:
     return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, urlencode(query, doseq=True), ""))
 
 
-def _request(url: str, user_agent: str) -> tuple[str, str]:
+# MONITOR_RELIABLE_FETCH_V2
+_TRANSIENT_HTTP_CODES = {403, 406, 408, 425, 429, 500, 502, 503, 504}
+_HOST_SEMAPHORES: dict[str, threading.Semaphore] = {
+    # Google News při desítkách RSS dotazů vrací dočasné 503. Dva souběžné
+    # požadavky udrží průchod rychlý, ale neodpálí throttling.
+    "news.google.com": threading.Semaphore(2),
+}
+
+
+def _request(url: str, user_agent: str, timeout: int = 45) -> tuple[str, str]:
     request = Request(
         url,
         headers={
             "User-Agent": user_agent,
             "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, text/html, application/xhtml+xml",
-            "Accept-Language": "cs,en;q=0.7",
+            "Accept-Language": "cs-CZ,cs;q=0.9,en;q=0.6",
             "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
         },
     )
-    with urlopen(request, timeout=30) as response:
+    with urlopen(request, timeout=timeout) as response:
         content_type = response.headers.get_content_type() or ""
         charset = response.headers.get_content_charset() or "utf-8"
         return response.read().decode(charset, errors="replace"), content_type
 
 
 def fetch(url: str) -> tuple[str, str]:
-    try:
-        return _request(url, UA)
-    except HTTPError as exc:
-        if exc.code not in {403, 406, 429}:
-            raise
-        return _request(url, BROWSER_UA)
+    host = urlsplit(url).netloc.lower().split(':', 1)[0]
+    attempts = 5 if host == "news.google.com" else 3
+    semaphore = _HOST_SEMAPHORES.get(host)
+    last_exc: Exception | None = None
+
+    for attempt in range(attempts):
+        acquired = False
+        try:
+            if semaphore is not None:
+                semaphore.acquire()
+                acquired = True
+                # Rozprostřít RSS dotazy i v rámci dvojice workerů.
+                time.sleep(0.25 + random.random() * 0.35)
+            ua = UA if attempt == 0 else BROWSER_UA
+            timeout = 45 if attempt < 2 else 60
+            return _request(url, ua, timeout=timeout)
+        except HTTPError as exc:
+            last_exc = exc
+            if exc.code not in _TRANSIENT_HTTP_CODES:
+                raise
+            retry_after = 0.0
+            try:
+                retry_after = float(exc.headers.get('Retry-After') or 0)
+            except (TypeError, ValueError):
+                retry_after = 0.0
+        except (URLError, TimeoutError, socket.timeout, ConnectionError,
+                ConnectionResetError, http.client.IncompleteRead, OSError) as exc:
+            last_exc = exc
+            retry_after = 0.0
+        finally:
+            if acquired and semaphore is not None:
+                semaphore.release()
+
+        if attempt + 1 < attempts:
+            backoff = max(retry_after, min(12.0, 1.2 * (2 ** attempt)))
+            time.sleep(backoff + random.random() * 0.6)
+
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Nepodařilo se načíst {url}")
 
 
 def parse_datetime(value: object) -> datetime | None:

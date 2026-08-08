@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -278,6 +279,24 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(sources))) as executor:
         collected = list(executor.map(collect, sources))
 
+    # MONITOR_SECOND_PASS_V2
+    # Po prvním paralelním průchodu ještě jednou pomalu zkusit pouze selhané
+    # zdroje. Tím se jednorázový timeout/503 nestane falešným výpadkem celého
+    # monitoringu a současně nezpomalujeme zdroje, které fungují napoprvé.
+    initial_failed = sum(1 for _source, _items, error in collected if error)
+    failed_indexes = [index for index, (_source, _items, error) in enumerate(collected) if error]
+    if failed_indexes:
+        time.sleep(2.0)
+        for index in failed_indexes:
+            source, old_items, old_error = collected[index]
+            retried = collect(source)
+            _source, new_items, new_error = retried
+            if not new_error or len(new_items) > len(old_items):
+                collected[index] = retried
+            else:
+                collected[index] = (source, old_items, f"{old_error}; retry: {new_error}")
+    recovered_after_retry = initial_failed - sum(1 for _source, _items, error in collected if error)
+
     source_status: list[dict[str, Any]] = []
     parsed_total = 0
     by_url: dict[str, dict[str, Any]] = {}
@@ -392,6 +411,8 @@ def main() -> int:
         "sourceCount": len(sources),
         "checkedSources": len(sources) - len(failed),
         "failedSources": len(failed),
+        "initialFailedSources": initial_failed,
+        "recoveredSourcesAfterRetry": recovered_after_retry,
         "itemsParsed": parsed_total,
         "uniqueItems": len(candidates),
         "newAlerts": len(alerts),
